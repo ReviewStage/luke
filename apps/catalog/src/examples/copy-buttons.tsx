@@ -1,5 +1,6 @@
 import {
   BUTTON_SIZE,
+  COPY_FIELD_PROMPT,
   COPY_FIELD_WIDTH,
   COPY_LOOK,
   CopyButton,
@@ -17,9 +18,10 @@ import { CatalogSection } from "../section";
  * lands and turns to the check, one the clipboard refuses and turns to the
  * alert, compact, one with nothing to copy, and the chip look that names
  * what it copies, a branch, and a development build's chip, led by its
- * color; and a field that shows what it copies, at a control's width and
- * across its row. The catalog's copy act is
- * the browser's own clipboard; an app hands in its shell's.
+ * color; and a block that shows what it copies, at a control's width,
+ * across its row with the shell's prompt, and too long for its width. The
+ * catalog's copy act is the browser's own clipboard; an app hands in its
+ * shell's.
  */
 
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
@@ -67,7 +69,7 @@ function CopyButtons(): React.JSX.Element {
           />
         </Inline>
       </CatalogSection>
-      <CatalogSection id="copy-field" title="A field that shows what it copies">
+      <CatalogSection id="copy-field" title="A block that shows what it copies">
         <Stack gap={GAP.CONTROL}>
           <Inline gap={GAP.CONTROL}>
             <CopyField
@@ -83,6 +85,14 @@ function CopyButtons(): React.JSX.Element {
             what="command"
             copy={copyToClipboard}
             width={COPY_FIELD_WIDTH.FULL}
+            prompt={COPY_FIELD_PROMPT.SHELL}
+          />
+          <CopyField
+            label="Long command"
+            value="claude mcp add --transport http --scope user --header 'X-Workspace: acme' example https://app.example.com/api/mcp"
+            what="command"
+            copy={copyToClipboard}
+            prompt={COPY_FIELD_PROMPT.SHELL}
           />
         </Stack>
       </CatalogSection>

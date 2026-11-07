@@ -41,7 +41,7 @@ const PART_DID_NOT_LOAD = `Part of ${PRODUCT_NAME} could not load`;
 export interface StaleBuildTab {
   /** Whether the browser has a connection, without which a reload trades the surface's Reload for the browser's error page. */
   readonly online: () => boolean;
-  /** The tab's way out, which asks first while a page or a plan holds unsaved work. */
+  /** The tab's way out, which asks first while a page or a description holds unsaved work. */
   readonly leave: Pick<PageLeave, "leave">;
   /** The tab's reload. */
   readonly reload: () => void;

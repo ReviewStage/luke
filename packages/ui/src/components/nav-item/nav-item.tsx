@@ -1,9 +1,19 @@
-import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+  useContext,
+} from "react";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
+import { CountFigure } from "../count-figure/count-figure.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
+import { ListSelectionContext } from "../selection/list-selection.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -29,11 +39,14 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
  * muted, or in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
- * what waits on the reader. Its `shortcut`, the chord the app draws, stands there while it is
+ * what waits on the reader; a figure past 99 is drawn "99+" and read whole
+ * (`CountFigure`). Its `shortcut`, the chord the app draws, stands there while it is
  * hovered or has the keyboard and takes the count's and the mark's place
  * then, so showing it moves nothing. A row's `detail`, the words after its name, steps back and
  * gives way first, so the name stays whole. An `unread` row reads in the
- * heavier weight and the primary ink until it is looked at.
+ * heavier weight and the primary ink until it is looked at. A `nested` row
+ * stands under the place it belongs to, its start stepped in to where that
+ * place's name starts, as a search's rows stand under the page holding them.
  *
  * A NavItemLink is a row's look on a link, for a place with an address of
  * its own: the browser follows it, so a modified click opens it in a new tab
@@ -66,7 +79,7 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  * and chord trade places under the pointer and the keyboard.
  */
 const ROW =
-  "ui-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--ui-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-ui-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-ui-6";
+  "ui-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset data-[nested=true]:ps-nav-item-nest text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--ui-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-ui-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-ui-6";
 
 /** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
@@ -142,6 +155,8 @@ export type NavItemProps = HintProps & {
   current?: NavCurrent | undefined;
   /** Whether something arrived in it the developer has not looked at. */
   unread?: boolean | undefined;
+  /** Whether it stands under the row before it, its start stepped in to that row's name. */
+  nested?: boolean | undefined;
   /** The count at its end, left out at none. */
   count?: NavCount | undefined;
   /** A mark at its end at rest: a failed run's glyph, a pin. */
@@ -213,7 +228,7 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
           data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
           data-tone={count.tone ?? STATUS_TONE.NEUTRAL}
         >
-          {count.value}
+          <CountFigure value={count.value} />
           {count.noun === undefined ? null : (
             <span className="ui-visually-hidden"> {count.noun}</span>
           )}
@@ -255,11 +270,12 @@ export function NavItemLink({
   title?: string | undefined;
   /** Whether it opens in a tab of its own rather than in this one. */
   newTab?: boolean | undefined;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
   "aria-label"?: string | undefined;
 }): React.JSX.Element {
+  const press = pulseOnPress(onClick, PRESS_PULSE.QUIET);
   return (
     <a
       className={ROW}
@@ -270,7 +286,8 @@ export function NavItemLink({
       title={title}
       aria-label={props["aria-label"]}
       aria-current={current}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       {said(icon) ? <Glyph icon={icon} /> : null}
       <Name>{children}</Name>
@@ -286,6 +303,7 @@ export function NavItem({
   detail,
   current,
   unread,
+  nested,
   count,
   mark,
   shortcut,
@@ -298,12 +316,19 @@ export function NavItem({
 }: NavItemProps): React.JSX.Element {
   // Note that a row standing in a frame beside its ⋯ carries its menu on the frame, so a right-click on either opens it too.
   const framed = said(actions);
+  // Note that a place in a list that chooses rows is a row that cannot be chosen, so going there lets the set go where a plain press does; dropping a menu goes nowhere.
+  const selecting = useContext(ListSelectionContext);
+  const go = (event: MouseEvent<HTMLButtonElement>) => {
+    selecting?.passOver(event);
+    onClick?.(event);
+  };
   const press = (
     <button
       type="button"
       className={ROW}
       data-variant={variant}
       data-unread={unread === true ? "true" : undefined}
+      data-nested={nested === true ? "true" : undefined}
       id={props.id}
       ref={props.ref}
       disabled={props.disabled}
@@ -319,7 +344,7 @@ export function NavItem({
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
-      onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
+      onClick={pulseOnPress(menu?.onClick ?? go, PRESS_PULSE.QUIET)}
       {...withContextMenu(framed ? undefined : props.contextMenu, {
         onPointerDown: props.onPointerDown,
       })}

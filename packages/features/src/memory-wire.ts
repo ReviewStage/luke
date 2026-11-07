@@ -1,8 +1,10 @@
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
+import { trimmedText } from "./text-schema.js";
 
 /**
- * memory-wire.ts -- a workspace's memories, the settled facts its coding agents kept, as Settings reads and forgets them.
+ * memory-wire.ts -- a workspace's memories, the settled facts its coding agents kept, as Settings reads and forgets them and a member's own client keeps and searches them.
  *
  * A coding agent keeps a memory when its work settles a fact or a convention
  * worth carrying into the workspace's later work, and corrects one in place
@@ -20,6 +22,14 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * workspace's memories as they then stand, so the page draws the service's
  * word rather than its own guess, and forgetting one already gone answers
  * the list as it stands.
+ *
+ * A member's own client, such as the command-line tool, also keeps a memory
+ * in their own words (POST, `memorySaveRequestSchema`) and searches the
+ * workspace's memories by a few words (`ACCOUNT_MEMORIES_SEARCH`), as the
+ * member MCP server's `save_memory` and `search_memory` do, and only while
+ * the member has Memory on, as those tools are. A memory that looks like it
+ * holds a credential is refused before the store is reached, as an agent's
+ * is.
  */
 
 export const MEMORY_BOUNDS = {
@@ -27,12 +37,16 @@ export const MEMORY_BOUNDS = {
   MAX_CHARS: 400,
   /** The most memories one workspace keeps; past it a new one is refused until one is corrected or forgotten. */
   MAX_MEMORIES: 1_000,
+  /** The longest search read; a search is a few words, never a passage. */
+  MAX_QUERY_CHARS: 300,
 } as const;
 
 /** The query every request names its workspace in, and `DELETE` its memory. */
 export const MEMORY_QUERY = {
   WORKSPACE_ID: "workspaceId",
   ID: "id",
+  /** A search's words. */
+  QUERY: "query",
 } as const;
 
 /** A memory's id as the service mints it: the row's UUID. */
@@ -66,3 +80,44 @@ export const memoriesAnswerSchema = EffectSchema.Struct({
 });
 
 export type MemoriesAnswer = typeof memoriesAnswerSchema.Type;
+
+/** What a keep came to: a new memory, the same words already kept, or the memory it replaces corrected. */
+export const MEMORY_SAVED = {
+  KEPT: "kept",
+  ALREADY_KEPT: "already_kept",
+  CORRECTED: "corrected",
+} as const;
+
+/**
+ * A memory kept in the member's own words (POST): the workspace, the
+ * statement, and, at most, the memory it corrects, which is then rewritten
+ * in place rather than kept beside it.
+ */
+export const memorySaveRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  text: trimmedText(MEMORY_BOUNDS.MAX_CHARS),
+  replaces: EffectSchema.optionalKey(memoryIdSchema),
+});
+
+export type MemorySaveRequest = typeof memorySaveRequestSchema.Type;
+
+/** What a keep came to, and the memory as it then stands. */
+export const memorySaveAnswerSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literals(Object.values(MEMORY_SAVED)),
+  memory: memorySummarySchema,
+});
+
+export type MemorySaveAnswer = typeof memorySaveAnswerSchema.Type;
+
+/** A search's words, at most; none answers the memories kept most recently. */
+export const memorySearchQuerySchema = EffectSchema.optionalKey(
+  EffectSchema.Trim.check(EffectSchema.isMaxLength(MEMORY_BOUNDS.MAX_QUERY_CHARS)),
+);
+
+/** The memories a search found, best first, and how many the workspace holds. */
+export const memorySearchAnswerSchema = EffectSchema.Struct({
+  memories: EffectSchema.Array(memorySummarySchema),
+  total: countedNumber,
+});
+
+export type MemorySearchAnswer = typeof memorySearchAnswerSchema.Type;

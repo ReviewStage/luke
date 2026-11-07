@@ -16,10 +16,10 @@ import {
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
+  NO_DESCRIPTION_COMMENTS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
-  NO_PLAN_COMMENTS,
   NO_TRANSCRIPTS,
   UNREAD,
 } from "../app-state.js";
@@ -271,12 +271,13 @@ export function initialAppState(
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.DESCRIPTION_COMMENTS]: NO_DESCRIPTION_COMMENTS,
     [LIVE_READ.HISTORY]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true, reachable: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
+    portForwarding: null,
   };
 }

@@ -8,9 +8,9 @@ import {
   type SettingsRowsInput,
 } from "@repo/settings";
 import { BUTTON_VARIANT, Button, SettingsRow, SettingsSection } from "@repo/ui";
-import { pressAct } from "../act.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { useBusyPress } from "./busy-press.js";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { pressMutation } from "../act-mutations.js";
+import { appStateQuery, selectAccess, selectAccount } from "../use-app-state.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -31,16 +31,21 @@ const SUPPORT_ACCESS_MEANING = `A ${PRODUCT_NAME} maintainer may sign in as you,
  * and the one press that turns it, granting it for seven days or revoking
  * it. Either acts on the press, since the row's other press turns it back.
  * A grant is not offered while a maintainer is already signed in as the
- * member, since the service refuses one then; a revoke still is, and ends
- * that sign-in.
+ * member, since the service refuses one then, nor before the access is read,
+ * since a grant standing unread would be extended; a revoke still is, and
+ * ends that sign-in.
  */
 function SupportAccessRow(): React.JSX.Element {
-  const access = useAppSlice(APP_SLICE.ACCESS);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const access = useQuery({ ...appStateQuery, select: selectAccess }).data;
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const until = access?.supportAccessUntil;
   const granted = until !== undefined && until > Date.now();
   const impersonated = account?.status === ACCOUNT_STATUS.SIGNED_IN && account.impersonated;
-  const press = useBusyPress(() => pressAct(ACT_KIND.ACCOUNT_SUPPORT_ACCESS, { grant: !granted }));
+  const supportAccess = useMutation(pressMutation(ACT_KIND.ACCOUNT_SUPPORT_ACCESS));
+  const press = {
+    busy: supportAccess.isPending,
+    onPress: () => supportAccess.mutate({ grant: !granted }),
+  };
   return (
     <SettingsRow
       label="Support access"
@@ -60,7 +65,7 @@ function SupportAccessRow(): React.JSX.Element {
           >
             Revoke
           </Button>
-        ) : impersonated ? null : (
+        ) : impersonated || access === undefined || access.pending === true ? null : (
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
             busy={press.busy}
@@ -88,7 +93,6 @@ export function PrivacySection({
         page={SCHEMA_SETTINGS_PAGE.ACCOUNT}
         section={SETTING_SECTION.PRIVACY}
         view={view}
-        writes={writes}
       />
       <SupportAccessRow />
     </SettingsSection>

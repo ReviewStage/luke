@@ -26,13 +26,13 @@ import { trimmedText } from "./text-schema.js";
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
  *
  * A task is its owner's name for it and one current document: one free
- * Markdown text (`plan-document.ts`, `docs/TASKS.md`), answered as the
+ * Markdown text (`description-document.ts`, `docs/TASKS.md`), answered as the
  * document's `body` with no title line, since the name is its own, and an
  * empty `assumptions` list, since its assumptions are a section of the text;
  * the list stays on the wire because a desktop through v0.11.0 requires it.
  * The text is written by the task's notetaker and its coding agents through
  * notes, and by the developer whole. The service keeps every save as a
- * revision of the plan under the writer who made it, and a task carries its
+ * revision of the description under the writer who made it, and a task carries its
  * newest as `lastEdit`, which is what the window's "Edited by" line reads,
  * and who last changed each section as `sectionEdits`, by heading.
  * A task may name the GitHub repository it is about, `owner/name` as
@@ -43,9 +43,10 @@ import { trimmedText } from "./text-schema.js";
  * account's, so it follows it to every Mac it signs in on. Tasks are no
  * longer archived: a service that still answers a task's `archivedAt` is
  * read with the key ignored.
- * A row of the list also says, in brief, what the task's coding agents are
- * doing and what they published (`taskAgentsSummarySchema`), so the sidebar
- * can mark a task at work or with a pull request without a read per row.
+ * A row of the list also counts the task's coding agents, those at work and
+ * those failed, and the pull requests they published
+ * (`taskAgentsSummarySchema`); the agents and pull requests themselves are
+ * the list followed live's, every one of them.
  * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
  * A task may be the child of another, to any depth, which its summary names
@@ -70,7 +71,7 @@ import { trimmedText } from "./text-schema.js";
 export const TASK_BOUNDS = {
   /** The most characters a task's name may spell. */
   MAX_NAME_CHARS: 200,
-  /** A document body past this is not a plan a coding agent can take in one prompt. */
+  /** A document body past this is not a description a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
   MAX_ASSUMPTION_CHARS: 2_000,
@@ -179,21 +180,21 @@ export const workspaceIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(TASK_BOUNDS.MAX_WORKSPACE_ID_CHARS),
 );
 
-const planAssumptionSchema = EffectSchema.Struct({
+const descriptionAssumptionSchema = EffectSchema.Struct({
   /** The assumption as one plain sentence. */
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
 /** The one saved document of a task, replaced whole by every save. */
-const planDocumentSchema = EffectSchema.Struct({
-  /** The plan's whole text, as written. */
+const descriptionDocumentSchema = EffectSchema.Struct({
+  /** The description's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
-  assumptions: EffectSchema.Array(planAssumptionSchema).check(
+  assumptions: EffectSchema.Array(descriptionAssumptionSchema).check(
     EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ASSUMPTIONS),
   ),
 });
 
-export type PlanDocument = typeof planDocumentSchema.Type;
+export type DescriptionDocument = typeof descriptionDocumentSchema.Type;
 
 /** A task's repository as a request names it: a full name, or null for none. */
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
@@ -213,8 +214,9 @@ export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, the servers switched off, where it runs, and
- * the repositories it works in beside the task's, held to the same
+ * a prompt and its files, the servers switched off, where it runs, the
+ * repositories it works in beside the task's, the branch its checkout is
+ * cloned at, and its title, held to the same
  * words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
  * desktop's own Start params name it by: the `task` an agent Start's body
@@ -230,6 +232,8 @@ const taskAgentStartSchema = EffectSchema.Struct({
   disabledServers: agentStartRequestFields.disabledServers,
   runsOn: agentStartRequestFields.runsOn,
   alsoRepositories: agentStartRequestFields.alsoRepositories,
+  branch: agentStartRequestFields.branch,
+  title: agentStartRequestFields.title,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -317,13 +321,13 @@ function relationsEachOnce(request: {
  * and the account's first workspace where none is; the document starts
  * empty, and `planning` false is a task started without its planning phase,
  * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
- * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
+ * `UNTITLED_DESCRIPTION_NAME` until it is renamed. An `agent` starts a coding
  * agent on the task in the same request, as the agent's own Start would
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
  * refused, and the service refuses it without a repository, as it refuses
  * an agent's Start on a task with none, before anything is written. A
  * brief is the developer's own words about the task, which the app is handed
- * beside the plan to plan from; one left out, or nothing but whitespace,
+ * beside the description to plan from; one left out, or nothing but whitespace,
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
@@ -591,22 +595,22 @@ export const TASK_LIST_ARCHIVED = {
 } as const;
 
 /**
- * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * Who wrote a revision of a description: the developer, the notetaker on a call
  * (whom the developer knows by the app's name), a coding agent, or, for the one
- * revision a plan from before history starts with, nobody the service can
+ * revision a description from before history starts with, nobody the service can
  * name.
  */
-export const PLAN_ACTOR = {
+export const DESCRIPTION_ACTOR = {
   DEVELOPER: "developer",
   NOTETAKER: "notetaker",
   AGENT: "agent",
   EARLIER: "earlier",
 } as const;
 
-export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+export type DescriptionActor = (typeof DESCRIPTION_ACTOR)[keyof typeof DESCRIPTION_ACTOR];
 
 /** Who made a task: its member by hand, the app on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
-export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
+export type TaskCreatorActor = Exclude<DescriptionActor, typeof DESCRIPTION_ACTOR.EARLIER>;
 
 /**
  * Who made a task where its member did not make it by hand: the app on their
@@ -615,7 +619,7 @@ export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
  * from among the agents it already lists.
  */
 const taskOriginSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  actor: EffectSchema.Literals([DESCRIPTION_ACTOR.NOTETAKER, DESCRIPTION_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
@@ -736,15 +740,16 @@ const taskSummaryFields = {
   madeByRun: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
-/** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
-export const TASK_AGENTS_BOUNDS = {
-  /** The most agents a row names: those at work first, then the newest started. */
-  MAX_AGENTS: 3,
-  /** The most pull requests a row names: the newest agent's first. */
-  MAX_PULL_REQUESTS: 3,
-} as const;
+/**
+ * The most agents and the most pull requests the held list (GET) names of
+ * each task, kept for released clients only: a desktop through v0.27.0 and
+ * the command line through cli-v0.2.0 require both lists and refuse a longer
+ * one. Nothing in this build reads them; the window reads every agent and
+ * pull request of a task from the list it follows live.
+ */
+export const RELEASED_CLIENT_TASK_LINES = 3;
 
-/** One of a task's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
+/** One of a task's coding agents as the held list names it for a released client: what it is called and runs on, where it stands, since when, and who started it. */
 const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
@@ -792,7 +797,7 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
 
-/** Every pull request of one plan, uncapped, in the order its row names them: what a card naming them all reads, where the row names the first few. */
+/** Every pull request of one plan, uncapped, those still open first and the newest agent's first within each: what every reader of a task's pull requests reads. */
 export const taskPullRequestsSchema = EffectSchema.Struct({
   taskId: EffectSchema.String,
   pullRequests: EffectSchema.Array(taskPullRequestLineSchema),
@@ -832,17 +837,18 @@ export const taskAgentPinSchema = EffectSchema.Struct({
 export type TaskAgentPin = typeof taskAgentPinSchema.Type;
 
 /**
- * What a task's coding agents are doing and what they published, in brief:
+ * What a task's coding agents are doing and what they published, counted:
  * how many agents it has, how many of them are at work and how many failed,
- * the few agents the row names, and the pull requests they opened, each
- * counted once by its number. A pull request is as the service last read it
- * from GitHub, so it may trail GitHub by as long as nothing has asked.
+ * and how many pull requests they opened, each counted once by its page. The
+ * agents and pull requests themselves are read from the list the window
+ * follows live (`tasks-view.ts`'s `taskAgents` and `taskPullRequests`),
+ * every one of them, so no reader sees only some.
  */
 const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
-  /** The agents whose run failed, the archived left out. Absent from a service before it. */
+  /** The agents whose run failed with no agent started on the task since, the archived left out. Absent from a service before it. */
   failed: EffectSchema.optionalKey(countedNumber),
   /**
    * Epoch milliseconds the plan's agents last did something settled, every
@@ -851,16 +857,26 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
    * Absent from a service before it.
    */
   activityAt: EffectSchema.optionalKey(countedNumber),
-  agents: EffectSchema.Array(taskAgentLineSchema).check(
-    EffectSchema.isMaxLength(TASK_AGENTS_BOUNDS.MAX_AGENTS),
-  ),
   pullRequestTotal: countedNumber,
-  pullRequests: EffectSchema.Array(taskPullRequestLineSchema).check(
-    EffectSchema.isMaxLength(TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
-  ),
 });
 
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
+
+/**
+ * A task's agents in brief as the held list (GET) answers them: the counts,
+ * and beside them, kept for released clients (`RELEASED_CLIENT_TASK_LINES`),
+ * the few agents and pull requests a row of theirs names, those at work
+ * first and the open pull requests first.
+ */
+const heldTaskAgentsSummarySchema = EffectSchema.Struct({
+  ...taskAgentsSummarySchema.fields,
+  agents: EffectSchema.Array(taskAgentLineSchema).check(
+    EffectSchema.isMaxLength(RELEASED_CLIENT_TASK_LINES),
+  ),
+  pullRequests: EffectSchema.Array(taskPullRequestLineSchema).check(
+    EffectSchema.isMaxLength(RELEASED_CLIENT_TASK_LINES),
+  ),
+});
 
 /**
  * One row of the task list: everything but the document, and what its
@@ -873,6 +889,14 @@ export const taskSummarySchema = EffectSchema.Struct({
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;
+
+/** One row of the held list (GET), its agents in brief with the lines kept for released clients (`heldTaskAgentsSummarySchema`). */
+const heldTaskSummarySchema = EffectSchema.Struct({
+  ...taskSummaryFields,
+  agents: EffectSchema.optionalKey(heldTaskAgentsSummarySchema),
+});
+
+export type HeldTaskSummary = typeof heldTaskSummarySchema.Type;
 
 /** The most saves by coding agents a task answers, newest last; the same bound the service keeps. */
 const MAX_AGENT_EDITS = 50;
@@ -892,15 +916,15 @@ const agentEditLineSchema = EffectSchema.Struct({
  * name it holds now, a member who has since left the workspace among them.
  * The window calls the member You only where the id is its own account's.
  */
-export const planEditorSchema = memberRefSchema;
+export const descriptionEditorSchema = memberRefSchema;
 
-export type PlanEditor = typeof planEditorSchema.Type;
+export type DescriptionEditor = typeof descriptionEditorSchema.Type;
 
-/** The newest revision of a plan, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
-export const planLastEditSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+/** The newest revision of a description, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
+export const descriptionLastEditSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
-  by: EffectSchema.optionalKey(planEditorSchema),
+  by: EffectSchema.optionalKey(descriptionEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
   /** The coding agent that wrote it, which the window finds among the task's agents; absent for any other writer and from a service before it. */
@@ -911,45 +935,45 @@ export const planLastEditSchema = EffectSchema.Struct({
   duringCall: EffectSchema.Boolean,
 });
 
-export type PlanLastEdit = typeof planLastEditSchema.Type;
+export type DescriptionLastEdit = typeof descriptionLastEditSchema.Type;
 
-/** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
-export const PLAN_SECTION_BOUNDS = {
+/** Bounds on the sections of a description that is one document, as the window reads who last changed each. */
+export const DESCRIPTION_SECTION_BOUNDS = {
   /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
   MAX_HEADING_CHARS: 1_000,
-  /** The most sections a plan names a last save for. */
+  /** The most sections a description names a last save for. */
   MAX_SECTIONS: 500,
 } as const;
 
 /**
- * The revision that last changed one section of a plan that is one document,
+ * The revision that last changed one section of a description that is one document,
  * as the section's "Edited by" line reads it: the section is known by its
  * heading's words, and a heading renamed with nothing beneath it changed
  * keeps the revision that last changed them.
  */
-const planSectionEditSchema = EffectSchema.Struct({
+const descriptionSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
-    EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+    EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS),
   ),
-  ...planLastEditSchema.fields,
+  ...descriptionLastEditSchema.fields,
 });
 
-export type PlanSectionEdit = typeof planSectionEditSchema.Type;
+export type DescriptionSectionEdit = typeof descriptionSectionEditSchema.Type;
 
 /** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
-  document: planDocumentSchema,
+  document: descriptionDocumentSchema,
   /** Optional on the wire so a task from a service without the journal still reads; none is no edits. */
   agentEdits: EffectSchema.optionalKey(
     EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
   ),
   /** Absent for a task nobody has written since history began, and from a service before it. */
-  lastEdit: EffectSchema.optionalKey(planLastEditSchema),
+  lastEdit: EffectSchema.optionalKey(descriptionLastEditSchema),
   /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
-    EffectSchema.Array(planSectionEditSchema).check(
-      EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
+    EffectSchema.Array(descriptionSectionEditSchema).check(
+      EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
   /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
@@ -961,10 +985,10 @@ export const taskSchema = EffectSchema.Struct({
 export type Task = typeof taskSchema.Type;
 
 /**
- * The plan list (GET): every plan the account owns, newest started first,
- * and beside them every agent with no plan in the account's workspaces,
- * newest started first, the archived ones of each only where the query asks
- * for them. The agents are absent from a service before them.
+ * The plan list as the window draws it from the rows it follows live
+ * (`task-list-live.ts`): every plan the account reaches, newest started
+ * first, each with its agents counted, and beside them every agent with no
+ * plan in the account's workspaces, newest started first.
  */
 export const taskListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskSummarySchema),
@@ -974,6 +998,21 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
 /**
+ * The plan list (GET): every plan the account owns, newest started first,
+ * each with its agents in brief and the lines a released client requires
+ * (`heldTaskSummarySchema`), and beside them every agent with no plan in the
+ * account's workspaces, newest started first, the archived ones of each only
+ * where the query asks for them. The agents are absent from a service before
+ * them.
+ */
+export const heldTaskListAnswerSchema = EffectSchema.Struct({
+  plans: EffectSchema.Array(heldTaskSummarySchema),
+  planlessAgents: taskListAnswerSchema.fields.planlessAgents,
+});
+
+export type HeldTaskListAnswer = typeof heldTaskListAnswerSchema.Type;
+
+/**
  * The id of the transaction a write committed in, as Postgres counts it, in
  * decimal: present where the write changed a row, so the desktop following
  * the task list waits for it to arrive before it confirms the write, and
@@ -981,10 +1020,16 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
  */
 export const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+/**
+ * A started, opened, or changed task (POST, GET, PATCH), with its document
+ * as saved, and the transaction a write committed in. An open also answers
+ * the brief the developer started the task with, where they gave one, as
+ * the member MCP server's `read_task` does; a write answers none.
+ */
 export const taskAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   txid: EffectSchema.optionalKey(taskTxidSchema),
+  brief: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /**
@@ -1049,14 +1094,16 @@ export const taskDeleteAnswerSchema = EffectSchema.Struct({
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "an agent";
 
-/** How a plan's history is read: the newest revisions first, a page at a time. */
-export const PLAN_HISTORY_BOUNDS = {
+/** How a description's history is read: the newest revisions first, a page at a time. */
+export const DESCRIPTION_HISTORY_BOUNDS = {
   /** The most revisions one read of the history carries. */
   PAGE: 50,
 } as const;
 
-/** A revision's number within its plan, from one. */
-export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+/** A revision's number within its description, from one. */
+export const descriptionRevisionSeqSchema = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(1),
+);
 
 /**
  * One revision as the version history lists it: its number, who wrote it and
@@ -1064,50 +1111,50 @@ export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreat
  * of an earlier revision, which one it brought back and that revision's
  * latest save.
  */
-const planRevisionLineSchema = EffectSchema.Struct({
-  seq: planRevisionSeqSchema,
-  lastEdit: planLastEditSchema,
+const descriptionRevisionLineSchema = EffectSchema.Struct({
+  seq: descriptionRevisionSeqSchema,
+  lastEdit: descriptionLastEditSchema,
   /** The coding agent that wrote it; absent for any other writer, once the agent's row is gone, and from a service before it. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's first save. */
   startedAt: countedNumber,
   changes: countedNumber,
   restoredFrom: EffectSchema.optionalKey(
-    EffectSchema.Struct({ seq: planRevisionSeqSchema, at: countedNumber }),
+    EffectSchema.Struct({ seq: descriptionRevisionSeqSchema, at: countedNumber }),
   ),
 });
 
-export type PlanRevisionLine = typeof planRevisionLineSchema.Type;
+export type DescriptionRevisionLine = typeof descriptionRevisionLineSchema.Type;
 
 /**
- * A page of a plan's history (GET `/api/plans/{id}/revisions`), the newest
+ * A page of a description's history (GET `/api/plans/{id}/revisions`), the newest
  * first, before the revision the `before` query names where it names one;
  * `earlier` is what the next older page is read before, absent on the oldest.
  */
-export const planRevisionsAnswerSchema = EffectSchema.Struct({
-  revisions: EffectSchema.Array(planRevisionLineSchema).check(
-    EffectSchema.isMaxLength(PLAN_HISTORY_BOUNDS.PAGE),
+export const descriptionRevisionsAnswerSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(descriptionRevisionLineSchema).check(
+    EffectSchema.isMaxLength(DESCRIPTION_HISTORY_BOUNDS.PAGE),
   ),
-  earlier: EffectSchema.optionalKey(planRevisionSeqSchema),
+  earlier: EffectSchema.optionalKey(descriptionRevisionSeqSchema),
 });
 
-export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
+export type DescriptionRevisionsAnswer = typeof descriptionRevisionsAnswerSchema.Type;
 
 /**
- * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
+ * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the description
  * as it stood after the revision and as it stood before it, null for the
  * first, each formatted under the task's name as it stands now, so a rename
  * since is no difference between them.
  */
-export const planRevisionAnswerSchema = EffectSchema.Struct({
+export const descriptionRevisionAnswerSchema = EffectSchema.Struct({
   revision: EffectSchema.Struct({
-    seq: planRevisionSeqSchema,
-    document: planDocumentSchema,
-    previous: EffectSchema.NullOr(planDocumentSchema),
+    seq: descriptionRevisionSeqSchema,
+    document: descriptionDocumentSchema,
+    previous: EffectSchema.NullOr(descriptionDocumentSchema),
   }),
 });
 
-export type PlanRevisionAnswer = typeof planRevisionAnswerSchema.Type;
+export type DescriptionRevisionAnswer = typeof descriptionRevisionAnswerSchema.Type;
 
 /** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;

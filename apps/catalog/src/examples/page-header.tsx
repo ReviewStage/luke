@@ -3,7 +3,7 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * page-header.tsx -- a document's own header: a plan's title, the line
+ * page-header.tsx -- a document's own header: a description's title, the line
  * saying what it is, and its acts at the title's end; Settings' title with
  * a quiet Reset whose words end on the content's edge; and a long title in
  * a narrow column, its acts wrapping under it rather than standing outside
@@ -27,7 +27,7 @@ function PlanActions(): React.JSX.Element {
 function PageHeaders(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="page-header-plan" title="A plan's title, what it is, and its acts">
+      <CatalogSection id="page-header-plan" title="A task's title, what it is, and its acts">
         <PageHeader
           title="Launch checklist"
           description="A task in the platform workspace."

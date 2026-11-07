@@ -1,30 +1,25 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
-import { Effect, Option } from "effect";
-import { ACCOUNT_ACT_KIND } from "../contract/index.js";
+import { Cause, Effect, Option } from "effect";
+import { ACCOUNT_ACT_KIND, ACCOUNT_ACTS } from "../contract/index.js";
+import type { HostActTable } from "../host-acts.js";
 import type { HostOperator } from "../host-operator.js";
 import { actPort } from "./base.js";
+import { declaredAnswer } from "./declared-acts.js";
 
 /**
- * account-procedures.ts -- the account's asks, proxied to the host that owns the account.
+ * account-procedures.ts -- the sign-out and the deletion, answered by hand around their declared handlers.
  *
- * The sign-in flow, the refresh, the sign-out, the deletion, and the grant
- * of support access all run
- * there, and the counts of them are recorded there, ahead of the action they
- * count. What stays here is what only the client can do about them —
- * stopping the recording its renderers run before the account they file
- * under is gone.
+ * Both run on the host that owns the account, and the counts of them are
+ * recorded there, ahead of the action they count; every other account ask
+ * is relayed as declared (`contract/account.ts`). What stays here is what
+ * only the client can do about these two: asking before a sign-out loses
+ * something, and stopping the recording its renderers run before the
+ * account they file under is gone.
  */
 export interface AccountProceduresDependencies {
-  host: Pick<
-    HostOperator,
-    | "beginSignIn"
-    | "signInAgain"
-    | "cancelSignIn"
-    | "signOut"
-    | "deleteAccount"
-    | "accountSnapshot"
-    | "supportAccess"
-  >;
+  host: Pick<HostOperator, "accountSnapshot">;
+  /** The sign-out's and the deletion's handlers, which these procedures answer around. */
+  acts: Pick<HostActTable, "ACCOUNT_SIGN_OUT" | "ACCOUNT_DELETE">;
   /**
    * Asks before a sign-out while something would be lost, unsaved work,
    * answering whether to sign out. A shell that asks nothing
@@ -49,53 +44,39 @@ export interface AccountProceduresDependencies {
 }
 
 export function accountProcedures(dependencies: AccountProceduresDependencies) {
-  const { host, haltSessionReplay, resumeSessionReplay, askBeforeSignOut } = dependencies;
+  const { host, acts, haltSessionReplay, resumeSessionReplay, askBeforeSignOut } = dependencies;
   /** The halt, the host's answer, and the resume an answer that never came owes. */
-  const halted = (action: Effect.Effect<AccountSnapshot>): Effect.Effect<AccountSnapshot> =>
+  const halted = (
+    action: Effect.Effect<AccountSnapshot, unknown>,
+  ): Effect.Effect<AccountSnapshot, unknown> =>
     Effect.suspend(() => {
       haltSessionReplay();
-      return Effect.tapDefect(action, () => Effect.sync(resumeSessionReplay));
+      return Effect.tapCause(action, (cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(resumeSessionReplay),
+      );
     });
 
   return {
-    [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: actPort[
-      ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
-    ].effect(function* ({ input }) {
-      return yield* host.beginSignIn(input.provider);
-    }),
-    [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: actPort[
-      ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN
-    ].effect(function* ({ input }) {
-      return yield* host.signInAgain(input.provider);
-    }),
-    [ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: actPort[
-      ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
-    ].effect(function* () {
-      yield* host.cancelSignIn();
-    }),
     // A sign-out the developer canceled answers the account as it still
     // stands and stops nothing; where none stands, nobody is signed in and
     // the sign-out loses nothing.
     [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT].effect(
-      function* () {
+      function* ({ input }) {
         if (askBeforeSignOut !== undefined && !(yield* Effect.promise(askBeforeSignOut))) {
           const standing = yield* host.accountSnapshot();
           if (Option.isSome(standing)) return standing.value;
         }
-        return yield* halted(host.signOut());
+        return yield* halted(
+          declaredAnswer(ACCOUNT_ACTS.ACCOUNT_SIGN_OUT, acts.ACCOUNT_SIGN_OUT, input),
+        );
       },
     ),
     // A deletion that landed stands recording down for the run; the host says
     // so on its replay event, which follows this answer.
-    [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_DELETE].effect(
-      function* () {
-        return yield* halted(host.deleteAccount());
-      },
-    ),
-    [ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS]: actPort[
-      ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS
-    ].effect(function* ({ input }) {
-      return yield* host.supportAccess(input.grant);
+    [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_DELETE].effect(function* ({
+      input,
+    }) {
+      return yield* halted(declaredAnswer(ACCOUNT_ACTS.ACCOUNT_DELETE, acts.ACCOUNT_DELETE, input));
     }),
   };
 }

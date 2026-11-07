@@ -17,7 +17,6 @@
 
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
-  type Agent,
   readAgent,
   readVisibleAgent,
   readVisibleAgentWorkspace,
@@ -34,6 +33,7 @@ import {
   INBOX_STATUS,
   type InboxAnswers,
   type InboxItem,
+  type InboxRemindRequest,
   type InboxReply,
   inboxAnswerHeard,
   inboxAnswerMessage,
@@ -43,25 +43,23 @@ import {
   inboxThreadMessage,
   inboxTodoTicks,
 } from "@repo/features/inbox-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
-import { failureKind } from "@repo/runtime/effect";
 import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@repo/wire";
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
-import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import {
   accountInboxPast,
   agentInboxPast,
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
-import { titleModel } from "../agents/coder-host/model.js";
+import { deploymentTitleModel } from "../agents/coder-host/model.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { agentTakingMessage, steerAgent } from "../agents/coder-host/steer.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
-import { HostedEnvironment } from "../environment.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
+import { reconsiderRunArchive } from "../automations/run-archive.js";
+import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import {
@@ -72,7 +70,6 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
-import { providerModelOf } from "../providers/model-catalog.js";
 import { settleThreadDms } from "../slack/thread-dms.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
@@ -88,9 +85,9 @@ import {
   postInboxMessage,
   readInboxItem,
   readInboxItemHome,
+  remindInboxItem,
   retitleInboxThread,
   type StoredInboxItem,
-  snoozeInboxItem,
   startInboxThread,
   withdrawInboxAnswer,
   withdrawInboxClose,
@@ -98,51 +95,31 @@ import {
   withdrawInboxThread,
 } from "./inbox-store.js";
 
-/** How a thread started with no subject finds the model its title is generated on: the sender's own key, preferring the agent's provider; none where they saved none. */
-export type InboxTitleModelOf = (
-  userId: string,
-  preferred: ModelProvider,
-) => Effect.Effect<LanguageModel | undefined, never, DatabaseServices | HostedEnvironment>;
+/** How a thread started with no subject finds the model its title is generated on: our own key, as every title's; none where the deployment holds none. */
+export type InboxTitleModelOf = () => Effect.Effect<
+  LanguageModel | undefined,
+  never,
+  HostedEnvironment
+>;
 
-/** What the inbox asks of the deployment: who the caller is, how eve is reached to hand an answer or a message to an agent, and, for a test, the model an untitled thread's title is generated on. */
+/** What the inbox asks of the deployment: who the caller is, how an agent's sessions are reached to hand it an answer or a message, and, for a test, the model an untitled thread's title is generated on. */
 export type InboxProcedureSeams = AccountResolving & {
   readonly titleModel?: InboxTitleModelOf | undefined;
 };
 
-/** The agent-title model on the sender's own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, our key never paying for one; none where they saved no key, or it could not be read. */
-const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
-  Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const own = yield* ownKeyOf(userId, preferred, environment.providerKeyEncryptionKeys).pipe(
-      Effect.catch((failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `an inbox thread's title key could not be read: ${failureKind(failure)}`,
-          ),
-          undefined,
-        ),
-      ),
-    );
-    return own === undefined ? undefined : titleModel(own);
-  });
+/** The agent-title model on our own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, whether or not the sender saved a key; none where the deployment holds no such key. */
+const productionTitleModel: InboxTitleModelOf = () => deploymentTitleModel();
 
 /**
  * A thread started with no subject titled as an agent is, by the agent-title
- * model over the member's message on their own key, past the answer, so the
- * send waits on no model: the title its first line stood for stays where the
- * member saved no key, the call answers nothing, or its agent retitled it
- * first (`retitleInboxThread`).
+ * model over the member's message on our own key, past the answer, so
+ * the send waits on no model: the title its first line stood for stays where
+ * the deployment holds no such key, the call answers nothing, or its agent
+ * retitled it first (`retitleInboxThread`).
  */
-const retitled = (
-  seams: InboxProcedureSeams,
-  userId: string,
-  agent: Agent,
-  item: InboxItem,
-  text: string,
-) =>
+const retitled = (seams: InboxProcedureSeams, item: InboxItem, text: string) =>
   Effect.gen(function* () {
-    const preferred = providerModelOf(agent.model)?.provider ?? MODEL_PROVIDER.ANTHROPIC;
-    const model = yield* (seams.titleModel ?? productionTitleModel)(userId, preferred);
+    const model = yield* (seams.titleModel ?? productionTitleModel)();
     if (model === undefined) return;
     const title = yield* titleInboxThread(model, text);
     if (Option.isNone(title)) return;
@@ -162,6 +139,16 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 
 /** The nod a member's Got it is, as the agent hears it where it waits on the notice. */
 const NOD: InboxReply = { reply: INBOX_REPLY.ACKNOWLEDGED };
+
+/**
+ * What an item of the agent's settling asks once it is: the agent's task
+ * settled done where its work is finished, and the automation run it
+ * belongs to archived where it finished well, since an item put away
+ * unanswered wakes no agent and so no settle of its turn would.
+ */
+function settledForAgent(userId: string, agentId: string) {
+  return Effect.andThen(settleAgentTaskIfFinished(userId, agentId), reconsiderRunArchive(agentId));
+}
 
 /** Whether the item holds an ask open on its thread, which a nod never settles. */
 function holdsAsk(item: InboxItem): boolean {
@@ -235,8 +222,8 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text,
       attachments,
       clientKey,
@@ -258,7 +245,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId, chosen));
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
-  yield* settleAgentTaskIfFinished(userId, agentId);
+  yield* settledForAgent(userId, agentId);
 });
 
 /**
@@ -306,7 +293,7 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const writtenIn = txid === undefined ? {} : { txid };
   if (!inboxAnswerHeard(taken, NOD)) {
     yield* counted;
-    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    yield* settledForAgent(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
   yield* handedAnswer(
@@ -393,7 +380,7 @@ export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
-    yield* settleAgentTaskIfFinished(userId, item.agentId);
+    yield* settledForAgent(userId, item.agentId);
     return { item, outcome, ...writtenIn };
   }
   const message = inboxAnswerMessage(
@@ -506,14 +493,14 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const dmSettled = afterResponse("a closed thread's Slack DM", settleThreadDms(itemId));
   if (!taken.needsReply && !noted) {
     yield* dmSettled;
-    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    yield* settledForAgent(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, taken.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text: inboxClosedMessage(taken, note.text),
       attachments: note.files,
       clientKey,
@@ -540,7 +527,7 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
   }
   yield* dmSettled;
-  yield* settleAgentTaskIfFinished(userId, taken.agentId);
+  yield* settledForAgent(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };
 });
 
@@ -611,8 +598,8 @@ export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, item.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -688,8 +675,8 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       agentTakingMessage(userId, agentId, readVisibleAgent),
     );
     if (Option.isNone(hearing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, hearing.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, hearing.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -710,12 +697,23 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   // Note that only the write that started the thread titles it, so a repeat asks no model again.
   if (!asked.titled && outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
-    yield* afterResponse(
-      "an inbox thread's title",
-      retitled(seams, userId, agent.value, item, text),
-    );
+    yield* afterResponse("an inbox thread's title", retitled(seams, item, text));
   }
   return { item };
+});
+
+/** The item's reminder set for the member until the instant the body names, or ended where it names none: its id and read state, or not found. */
+const remindOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  input: { readonly params: { readonly id: string }; readonly body: InboxRemindRequest },
+) {
+  const itemId = yield* pathUuid(input.params.id);
+  const { until } = input.body;
+  const marked = yield* hostedStoreOrUnavailable(
+    remindInboxItem(userId, itemId, until === null ? null : new Date(until)),
+  );
+  if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return { id: itemId, ...marked };
 });
 
 /**
@@ -825,17 +823,18 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };
     }),
+    remindItem: signedIn.remindItem.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
+      return yield* remindOf(context.userId, input);
+    }),
+    // `remindItem` under the path a desktop built before the rename still calls; goes once the releases after it are out.
     snoozeItem: signedIn.snoozeItem.use(writeReceiptMiddleware).effect(function* ({
       input,
       context,
     }) {
-      const itemId = yield* pathUuid(input.params.id);
-      const { until } = input.body;
-      const marked = yield* hostedStoreOrUnavailable(
-        snoozeInboxItem(context.userId, itemId, until === null ? null : new Date(until)),
-      );
-      if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { id: itemId, unread: false, ...marked };
+      return yield* remindOf(context.userId, input);
     }),
     markAllRead: signedIn.markAllRead.use(writeReceiptMiddleware).effect(function* ({
       input,

@@ -1,0 +1,6 @@
+-- Expand step of dropping the token agents' pull request polls, "token_pull_request_poll": the modules no longer
+-- declare it, and nothing this deployment runs reads or writes it, since the scheduled sweep no longer polls the
+-- pull requests of agents on a member's own GitHub token, which are woken only through the GitHub App's webhook.
+-- Note that the table itself stays one deployment longer, because a build migrates while the deployment before it
+-- still serves and still claims its rows every minute; a later release's migration drops it
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

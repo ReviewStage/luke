@@ -1,5 +1,5 @@
 /**
- * agents-app-routes.test.ts -- the coding-agent routes' Start, list, transcript, and Stop, a blank agent, and an agent's pictures, over a fake eve and a real dialect.
+ * agents-app-routes.test.ts -- the coding-agent routes' Start, list, transcript, and Stop, a blank agent, and an agent's pictures, over a fake harness and a real dialect.
  */
 
 import assert from "node:assert/strict";
@@ -10,6 +10,7 @@ import { GITHUB_ACCOUNT_TYPE } from "@repo/database/github-installation-vocabula
 import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   archiveAgent,
+  createAgent,
   readAgent,
   readAgentByKey,
   renameAgent,
@@ -20,15 +21,15 @@ import { rewindConversation } from "@repo/database/models/conversation-rewind";
 import { registerDevice } from "@repo/database/models/device-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { conversations, messages } from "@repo/database/schemas/storage";
 import { task as taskTable } from "@repo/database/schemas/task";
-import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
@@ -50,6 +51,7 @@ import {
   agentNewestAnswerSchema,
   agentOlderAnswerSchema,
   agentPartAnswerSchema,
+  agentWorkspaceListAnswerSchema,
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   TRANSCRIPT_PARTS_QUERY,
@@ -61,7 +63,11 @@ import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
-import { TASK_STATUS, taskListAnswerSchema, taskStartAnswerSchema } from "@repo/features/task-wire";
+import {
+  heldTaskListAnswerSchema,
+  TASK_STATUS,
+  taskStartAnswerSchema,
+} from "@repo/features/task-wire";
 import type { WireBoundaryInput } from "@repo/wire";
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
@@ -94,7 +100,7 @@ import {
   type Answer,
   countedWith,
   drivenWhileStarting,
-  fakeEve,
+  fakeAgentSessions,
   freshInstallation,
   ORIGIN,
   openTask,
@@ -135,14 +141,14 @@ import {
 import { harnessFor } from "../testing/native-harness-fake.js";
 import { CODER } from "./coder-host/bounds.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { EVE_HOST_TURN } from "./eve-host/bounds.js";
+import { SESSION_TURN } from "./sessions/agent-sessions.js";
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
     "a Start whose prompt mentions a page the store cannot read is refused before any agent is made, so a retry under its key starts afresh",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, agentSessions, ask } = yield* openTask();
         const shown = yield* writePage(
           owner,
           taskPageOwner(task.id),
@@ -156,17 +162,17 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
         const answered = yield* Effect.ensuring(
           Effect.andThen(
-            sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
+            sql.unsafe("ALTER TABLE task_page_version RENAME TO task_page_version_aside"),
             ask(startAs(owner, task.id, { idempotencyKey, task: prompt })),
           ),
           Effect.orDie(
-            sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
+            sql.unsafe("ALTER TABLE task_page_version_aside RENAME TO task_page_version"),
           ),
         );
 
         assert.equal(answered.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         assert.ok(Option.isNone(yield* readAgentByKey(owner, idempotencyKey)));
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -257,6 +263,51 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a workspace's list answers a page of its bound with the next page's offset, and that page answers the rest with none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const bound = AGENT_BOUNDS.MAX_WORKSPACE_AGENTS;
+        // One past the bound of agents is written through the store, which takes about two seconds.
+        const made = new Set<string>();
+        for (let each = 0; each <= bound; each += 1) {
+          const started = yield* createAgent(owner, {
+            ...AGENT_DEFAULT_CHOICE,
+            idempotencyKey: randomUUID(),
+            taskId: task.id,
+            descriptionSnapshot: "# Invitations",
+            prompt: null,
+            repository: task.repository,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          });
+          made.add(Option.getOrThrow(started).agent.id);
+        }
+        const page = (offset: number | undefined) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          if (offset !== undefined) url.searchParams.set("offset", String(offset));
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(agentWorkspaceListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        };
+
+        const first = yield* page(undefined);
+        assert.equal(first.agents.length, bound);
+        assert.equal(first.nextOffset, bound);
+        const second = yield* page(bound);
+        assert.equal(second.agents.length, 1);
+        assert.equal(second.nextOffset, undefined);
+        assert.deepEqual(
+          new Set([...first.agents, ...second.agents].map((agent) => agent.id)),
+          made,
+          "the two pages hold every agent once",
+        );
+      }),
+  );
+
+  it.effect(
     "a workspace's list finds the agents whose title or task's name holds the words, whatever their case, a wildcard in them matched as itself",
     () =>
       Effect.gen(function* () {
@@ -290,10 +341,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
+    "a Start with no choice runs on the account's default, snapshots the description as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, agentSessions, ask } = yield* openTask();
         const key = randomUUID();
 
         const started = yield* ask(
@@ -310,36 +361,36 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.effort, AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
-        assert.equal(agent.brief, AGENT_BRIEF.PLAN);
+        assert.equal(agent.brief, AGENT_BRIEF.DESCRIPTION);
         const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
-        assert.equal(stored.value.planSnapshot, SNAPSHOT);
+        assert.equal(stored.value.descriptionSnapshot, SNAPSHOT);
         assert.equal(stored.value.prompt, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
-        const lineId = eve.opened[0]?.message.lineId ?? "";
-        assert.deepEqual(eve.opened, [
+        const lineId = agentSessions.opened[0]?.message.lineId ?? "";
+        assert.deepEqual(agentSessions.opened, [
           {
             authorization: harnessFor(owner),
             message: {
               conversationId: stored.value.conversationId,
-              turn: EVE_HOST_TURN.TYPED,
+              turn: SESSION_TURN.TYPED,
               message: SNAPSHOT,
               lineId,
             },
-            sessionId: eve.opened[0]?.sessionId ?? "",
+            sessionId: agentSessions.opened[0]?.sessionId ?? "",
           },
         ]);
         assert.equal(yield* sentLineStands(owner, stored.value.conversationId, lineId), true);
-        // The default stands: nothing was chosen.
-        assert.equal(yield* readAccountPreferences(owner), undefined);
+        // The default stands: no agent was chosen.
+        assert.equal((yield* readAccountPreferences(owner))?.agent, undefined);
       }),
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty description and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, installation, github, ask } = yield* openTask();
+        const { owner, task, agentSessions, installation, github, ask } = yield* openTask();
         const prompt = "Expire invitations after a week.";
         const asked = github.sent.length;
 
@@ -379,7 +430,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.brief, AGENT_BRIEF.PROMPT);
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.deepEqual(
-          eve.opened.map((opened) => [opened.authorization, opened.message.message]),
+          agentSessions.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[harnessFor(owner), prompt]],
         );
         assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
@@ -395,7 +446,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "over a browser's session cookie an agent's Start and a task's start naming an agent open the session through its harness acting for the cookie's account, which no other account's cookie reaches",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, eve, ask } = yield* openTask();
+        const { owner, other, task, agentSessions, ask } = yield* openTask();
         const cookie = sessionCookieOf(owner);
         const prompt = "Expire invitations after a week.";
 
@@ -440,7 +491,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(
-          eve.opened.map((opened) => [opened.authorization, opened.message.message]),
+          agentSessions.opened.map((opened) => [opened.authorization, opened.message.message]),
           [
             [harnessFor(owner), SNAPSHOT],
             [harnessFor(owner), prompt],
@@ -453,7 +504,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a task's start retried under its agent's key answers the task and the agent the first made, and starts neither again; the key named for another workspace is refused",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, agentSessions, ask } = yield* openTask();
         const team = yield* openWorkspace(owner);
         const body = {
           name: "Invitation expiry",
@@ -472,7 +523,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           request(TASKS, owner, { method: "POST", body: { ...body, workspaceId: team } }),
         );
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );
@@ -483,7 +534,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           elsewhere,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.equal(eve.opened.length, 1);
+        assert.equal(agentSessions.opened.length, 1);
         assert.deepEqual(
           listed.plans.filter((each) => each.name === body.name).map((each) => each.id),
           [first.plan.id],
@@ -492,10 +543,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start whose agent eve does not take answers the task it made with the agent's refusal, and the task stands",
+    "a task's start whose agent the harness does not take answers the task it made with the agent's refusal, and the task stands",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask } = yield* openTask({ eve: fakeEve({ reachable: false }) });
+        const { owner, task, ask } = yield* openTask({
+          agentSessions: fakeAgentSessions({ reachable: false }),
+        });
 
         const started = readAnswer(
           taskStartAnswerSchema,
@@ -547,7 +600,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           agent: { ...agent, idempotencyKey: randomUUID() },
         });
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );
@@ -588,7 +641,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a Start on a plan whose workspace's account since reinstalled the App under an id GitHub does not know is refused as a connection that lapsed, and opens nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, installation, eve, ask } = yield* openTask();
+        const { owner, task, installation, agentSessions, ask } = yield* openTask();
         const linked = yield* linkInstallation(task.workspaceId, {
           installationId: installation.id + 10_000,
           accountId: installation.accountId ?? 50_000 + installation.id,
@@ -610,7 +663,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             },
           },
         });
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -618,7 +671,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a Start naming another member's device is refused on the route, naming the device and its owner, and no agent is made for the teammate",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, eve, ask } = yield* openTask();
+        const { owner, other, task, agentSessions, ask } = yield* openTask();
         yield* joinWorkspace(task.workspaceId, other);
         const studio = randomUUID();
         yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
@@ -639,7 +692,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           },
         });
         assert.ok(Option.isNone(yield* readAgentByKey(other, theirKey)));
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -657,14 +710,14 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const team = yield* openWorkspace(owner);
         const installation = freshInstallation();
         assert.equal(yield* connectWorkspaceGitHub(team, installation), LINK_OUTCOME.LINKED);
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { ask } = yield* standing(
           new Map([
             [`Bearer ${owner}`, owner],
             [`Bearer ${teammate}`, teammate],
           ]),
           githubReaching([installation]),
-          eve,
+          agentSessions,
         );
 
         const byOwner = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -688,7 +741,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
           },
         });
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -714,7 +767,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { ask } = yield* standing(
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([installation]),
-          fakeEve(),
+          fakeAgentSessions(),
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -745,11 +798,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const team = yield* openWorkspace(owner);
         const ledgerOnly = freshInstallation([{ owner: RELAY.owner, name: "Ledger" }]);
         assert.equal(yield* connectWorkspaceGitHub(team, ledgerOnly), LINK_OUTCOME.LINKED);
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { ask } = yield* standing(
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([ledgerOnly]),
-          eve,
+          agentSessions,
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -761,7 +814,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: RELAY_FULL_NAME },
           },
         });
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -769,7 +822,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a Start while GitHub does not answer is refused as GitHub unanswered, which a retry may get past, and opens nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask({
+        const { owner, task, agentSessions, ask } = yield* openTask({
           github: (sent) =>
             new URL(sent.url).pathname.startsWith("/app/installations/")
               ? Response.json({ message: "Service Unavailable" }, { status: 503 })
@@ -782,7 +835,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           started,
           refusal(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.GITHUB_UNANSWERED),
         );
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(agentSessions.opened, []);
       }),
   );
 
@@ -806,7 +859,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.ok(Option.isSome(stored));
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const target = { userId: owner, conversationId: stored.value.conversationId };
-        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, runtimeTurnId: "turn_0" });
 
         const listed = readAnswer(
           agentListAnswerSchema,
@@ -815,7 +868,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         assert.deepEqual(
           listed.agents.map((agent) => [agent.id, agent.status]),
-          // The first has no turn yet, but its Start's line awaits the one eve opens on it.
+          // The first has no turn yet, but its Start's line awaits the one its harness opens on it.
           [
             [first.id, AGENT_STATUS.RUNNING],
             [second.id, AGENT_STATUS.RUNNING],
@@ -829,14 +882,14 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a plan's agents and inbox are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    "a plan's agents and inbox are read without its description's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const now = yield* DateTime.nowAsDate;
         // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
-          db.insert(planRevision).values({
+          db.insert(descriptionRevision).values({
             taskId: task.id,
             seq: 1_000,
             actor: sql`'a-later-writer'`,
@@ -903,7 +956,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         yield* writer.consume(target, {
           kind: RUN_EVENT.TURN_STARTED,
@@ -914,7 +967,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-        // eve's receipt takes the Start's line into the turn, as the relay does.
+        // A receipt as the retired runtime's relay wrote one takes the Start's line into the turn.
         yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
 
         const page = readAnswer(
@@ -1258,7 +1311,7 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.SPOKEN,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         const db = yield* Database;
         yield* db
@@ -1369,7 +1422,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
         );
         assert.equal(opening.messages.length, 1);
-        // Nothing stands past the Start's line, which awaits the turn eve opens on it, so the held read
+        // Nothing stands past the Start's line, which awaits the turn its harness opens on it, so the held read
         // would hold on it; this answers at once.
         const own = readAnswer(
           transcriptNowAnswerSchema,

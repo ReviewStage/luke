@@ -3,10 +3,10 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import {
   claimMacCommand,
   claimMacCommands,
-  heardFromAnotherAccount,
   macCommandResult,
   macCommandsWaiting,
   macListeningSince,
+  macOwnerOf,
   markMacListening,
   queueMacCommand,
   withdrawMacCommand,
@@ -14,6 +14,7 @@ import {
 import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
@@ -28,7 +29,6 @@ import type { UnparsedWireValue } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import { heldUntil } from "../http/held-read.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**
@@ -58,13 +58,12 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * that took a command it would not run answers why, which the call
  * answers as not run.
  *
- * An agent's call runs on the Mac of the account its conversation is
- * under, its starter's, and only while no one else has put words into that
- * conversation: a teammate who messages the agent, an agent of theirs that
- * does, a webhook's caller whose body an automation's run hands the agent,
- * or anyone who reviews or comments on its pull request, could otherwise
- * have it run their command on the starter's Mac, so such a conversation is
- * refused for the rest of its life.
+ * An agent's call runs on the Mac of the member its task is assigned to,
+ * or its starter's where it works on no task or one assigned to no one
+ * (`macOwnerOf`), so a task handed to another member hands its agents'
+ * commands to their Mac. Note that who has written to the agent decides
+ * nothing: the Mac's own setting (Ask every time by default) is the one
+ * guard.
  */
 
 const MAC_COMMAND_SERVICE = {
@@ -77,11 +76,16 @@ const MAC_COMMAND_SERVICE = {
   /**
    * How long a command may wait for a Mac to take it; one not taken by then
    * is never run. A listening Mac takes one within a poll, and a command
-   * taken inside this window ends inside the call's wait.
+   * taken inside this window ends inside the call's wait. Note that it
+   * outlasts the Mac's held-read deadline (`HOSTED_DEADLINE.HELD`, 35
+   * seconds), the follow's rest after a read that failed (`LIVE_RESTART`,
+   * 5), and the retried read's claim, because a read that hangs without
+   * an error just before a command is queued must still find it claimable
+   * once the Mac asks again.
    */
-  CLAIM_WINDOW: Duration.seconds(30),
+  CLAIM_WINDOW: Duration.seconds(60),
   /** How long past the command's own timeout a call waits for the Mac to say what it did: the claim window, and room for the answer to travel. */
-  ANSWER_GRACE: Duration.seconds(35),
+  ANSWER_GRACE: Duration.seconds(65),
 } as const;
 
 export const MAC_COMMAND_STATUS = {
@@ -101,10 +105,6 @@ const MAC_COMMAND_REFUSAL = {
   UNREADABLE:
     "Not run: `command` must be one non-empty shell command, and `timeout_seconds` a whole " +
     `number from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
-  NOT_STARTERS_OWN:
-    "Not run: someone other than the developer who started this agent has put words into it, " +
-    "such as a teammate's message, a webhook's body, or a review on its pull request, so it no " +
-    "longer runs commands on their Mac. Ask the developer to run what you need themselves.",
 } as const;
 
 /** Why a call ran nothing by its kind: no Mac that runs that kind listening, or an ask the Mac's read would refuse. */
@@ -176,7 +176,8 @@ export const RUN_ON_MAC_TOOL = {
   inputSchema: RUN_ON_MAC_INPUT,
 } as const;
 
-function notRun(reason: string): MacCommandAnswer {
+/** A call that ran nothing on the Mac, and why. */
+export function macCommandNotRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
 
@@ -192,7 +193,7 @@ export function macListening(userId: string): TaskStoreEffect<boolean> {
 
 /** What a call answers for what the Mac said: what a shell command did, or why the Mac ran nothing. */
 function answered(result: MacCommandResult): MacCommandAnswer {
-  if ("refused" in result) return notRun(result.refused);
+  if ("refused" in result) return macCommandNotRun(result.refused);
   return { status: MAC_COMMAND_STATUS.RAN, ...result };
 }
 
@@ -238,25 +239,24 @@ export function askMac(
     timeoutSeconds: ask.timeoutSeconds ?? MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS,
   });
   // A command the Mac's read would refuse is refused here, before it is queued where it would spoil that read.
-  if (Result.isFailure(asked)) return Effect.succeed(notRun(refusal.UNREADABLE));
+  if (Result.isFailure(asked)) return Effect.succeed(macCommandNotRun(refusal.UNREADABLE));
   const queued = asked.success;
   const run = Effect.gen(function* () {
-    if (!(yield* macListening(userId))) return notRun(refusal.NO_MAC);
+    if (!(yield* macListening(userId))) return macCommandNotRun(refusal.NO_MAC);
     const result = yield* queueMacCommand(userId, queued).pipe(
       Effect.andThen(awaitedResult(userId, queued)),
       Effect.ensuring(Effect.ignore(withdrawMacCommand(userId, queued.id))),
     );
-    if (Option.isNone(result)) return notRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
+    if (Option.isNone(result)) return macCommandNotRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
     return answered(result.value);
   });
-  return Effect.catch(run, () => Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
+  return Effect.catch(run, () => Effect.succeed(macCommandNotRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
 }
 
 /**
  * One `run_on_mac` call made in the conversation, whichever agent made it:
- * its input read against the tool's schema, refused where another account
- * has put words into the conversation, then run on its owner's Mac as
- * `askMac` runs it. The one door every agent's tool goes through, so each
+ * its input read against the tool's schema, then run on the Mac of its
+ * task's assignee (`macOwnerOf`) as `askMac` runs it. The one door every agent's tool goes through, so each
  * root's tool is a line.
  */
 export function runOnMacTool(
@@ -264,7 +264,8 @@ export function runOnMacTool(
   input: UnparsedWireValue,
 ): Effect.Effect<MacCommandAnswer, never, DatabaseServices> {
   const read = readInput(input);
-  if (Result.isFailure(read)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
+  if (Result.isFailure(read))
+    return Effect.succeed(macCommandNotRun(MAC_COMMAND_REFUSAL.UNREADABLE));
   const { command, timeout_seconds } = read.success;
   const kind = MAC_COMMAND_KIND.SHELL;
   const ask: MacCommandAsk =
@@ -272,11 +273,10 @@ export function runOnMacTool(
       ? { kind, command }
       : { kind, command, timeoutSeconds: timeout_seconds };
   return Effect.gen(function* () {
-    const foreign = yield* Effect.result(heardFromAnotherAccount(target));
-    // Note that a read that fails refuses, because a command run on a guess could be a stranger's.
-    if (Result.isFailure(foreign)) return notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE);
-    if (foreign.success) return notRun(MAC_COMMAND_REFUSAL.NOT_STARTERS_OWN);
-    return yield* askMac(target.userId, ask);
+    const owner = yield* Effect.result(macOwnerOf(target));
+    // Note that a read that fails refuses, because a command run on a guess could land on the wrong Mac.
+    if (Result.isFailure(owner)) return macCommandNotRun(MAC_COMMAND_REFUSAL.UNAVAILABLE);
+    return yield* askMac(owner.success, ask);
   });
 }
 

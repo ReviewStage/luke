@@ -1,15 +1,7 @@
-import { Effect } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
-import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
-import {
-  TERMINAL_REFUSAL,
-  type TerminalCreatedActAnswer,
-  type TerminalRefusal,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
-} from "./terminal-view.js";
+import { hostedCall } from "./hosted-call.js";
+import { type HostedClient, hostedClient } from "./hosted-link.js";
+import { TERMINAL_RENAMES } from "./terminal-view.js";
 import { TERMINAL_RELAY } from "./terminal-wire.js";
 
 /**
@@ -17,10 +9,11 @@ import { TERMINAL_RELAY } from "./terminal-wire.js";
  *
  * Every call is a procedure of the hosted contract over the one account
  * call (`hosted-link.ts`), so the bearer is read fresh per attempt and a
- * 401 is renewed and retried once. A refusal the tab has
- * something to say of is answered as one; anything else — the network, an
- * outage, a shape this build does not read — answers unanswered, which the
- * desktop draws as the act's own refusal. Nothing a shell printed ever
+ * 401 is renewed and retried once. Each answers what the service said or
+ * how the call failed (`hostedCall`), a refusal spelled as the tab reads it
+ * (`TERMINAL_RENAMES`); anything else — the network, an outage, a shape this
+ * build does not read — is unanswered, which the desktop draws as the act's
+ * own refusal. Nothing a shell printed ever
  * travels here: these calls carry ids and names, and the bytes travel on the
  * relay socket alone.
  */
@@ -32,21 +25,6 @@ export interface HostedTerminalClientOptions {
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
-
-/** A call the service did not answer in a shape the tab reads. */
-export const TERMINAL_UNANSWERED = { unanswered: true } as const;
-
-export type TerminalUnanswered = typeof TERMINAL_UNANSWERED;
-
-/** The service's refusals the tab has something to say of, by the service's own word for each. */
-const TERMINAL_REFUSALS: ReadonlyMap<HostedApiError, TerminalRefusal> = new Map([
-  [HOSTED_API_ERROR.NOT_FOUND, TERMINAL_REFUSAL.NOT_FOUND],
-  [HOSTED_API_ERROR.AGENT_RETIRED, TERMINAL_REFUSAL.GONE],
-  [HOSTED_API_ERROR.AGENT_NOT_READY, TERMINAL_REFUSAL.AGENT_NOT_READY],
-  [HOSTED_API_ERROR.SANDBOX_STOPPED, TERMINAL_REFUSAL.SANDBOX_STOPPED],
-  // The terminal routes' upstream is the agent's sandbox alone, Vercel Sandbox's API or tmux in it, so its failure is the sandbox's.
-  [HOSTED_API_ERROR.UPSTREAM_ERROR, TERMINAL_REFUSAL.SANDBOX_UNANSWERED],
-]);
 
 /** What one shell's relay socket asks for: the agent, the shell, and the terminal's size. */
 export interface TerminalRelayAsk {
@@ -68,24 +46,6 @@ export function terminalRelayAddress(socketOrigin: string, ask: TerminalRelayAsk
 }
 
 /**
- * A procedure's answer, the refusal it failed with where it is one the tab
- * names, and unanswered for everything else.
- */
-function terminalAnswer<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<
-  Answer | { readonly refused: TerminalRefusal } | TerminalUnanswered,
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.catch(asked, (failed) => {
-    const refused =
-      failed._tag === "HostedRefused" ? TERMINAL_REFUSALS.get(failed.refusal) : undefined;
-    return Effect.succeed(refused === undefined ? TERMINAL_UNANSWERED : { refused });
-  });
-}
-
-/**
  * The tab's reads and writes of one agent's shells, and the resume of its
  * sandbox, as the service answers them.
  */
@@ -101,53 +61,39 @@ export class HostedTerminalClient {
   }
 
   /** The agent's shells, oldest first, and where its sandbox stands; a stopped sandbox is never woken by it. */
-  list(
-    agentId: string,
-  ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return terminalAnswer(askHosted(this.#hosted.agents.terminals, { id: agentId }));
+  list(agentId: string) {
+    return hostedCall(this.#hosted.agents.terminals, { id: agentId }, { as: TERMINAL_RENAMES });
   }
 
   /** A new shell in the agent's running sandbox, named where the developer named it. */
-  create(
-    agentId: string,
-    title: string | undefined,
-  ): Effect.Effect<TerminalCreatedActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return terminalAnswer(
-      askHosted(this.#hosted.agents.openTerminal, {
-        params: { id: agentId },
-        body: title === undefined ? {} : { title },
-      }),
+  create(agentId: string, title: string | undefined) {
+    return hostedCall(
+      this.#hosted.agents.openTerminal,
+      { params: { id: agentId }, body: title === undefined ? {} : { title } },
+      { as: TERMINAL_RENAMES },
     );
   }
 
   /** One shell named anew, answering the shells as they stand after. */
-  rename(
-    agentId: string,
-    terminalId: string,
-    title: string,
-  ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return terminalAnswer(
-      askHosted(this.#hosted.agents.renameTerminal, {
-        params: { id: agentId, terminal: terminalId },
-        body: { title },
-      }),
+  rename(agentId: string, terminalId: string, title: string) {
+    return hostedCall(
+      this.#hosted.agents.renameTerminal,
+      { params: { id: agentId, terminal: terminalId }, body: { title } },
+      { as: TERMINAL_RENAMES },
     );
   }
 
   /** One shell ended, answering the shells as they stand after. */
-  kill(
-    agentId: string,
-    terminalId: string,
-  ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return terminalAnswer(
-      askHosted(this.#hosted.agents.endTerminal, { id: agentId, terminal: terminalId }),
+  kill(agentId: string, terminalId: string) {
+    return hostedCall(
+      this.#hosted.agents.endTerminal,
+      { id: agentId, terminal: terminalId },
+      { as: TERMINAL_RENAMES },
     );
   }
 
   /** The agent's stopped sandbox resumed, on the developer's click, answering where it stands after. */
-  resume(
-    agentId: string,
-  ): Effect.Effect<TerminalResumedActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return terminalAnswer(askHosted(this.#hosted.agents.sandboxResume, { id: agentId }));
+  resume(agentId: string) {
+    return hostedCall(this.#hosted.agents.sandboxResume, { id: agentId }, { as: TERMINAL_RENAMES });
   }
 }

@@ -1,28 +1,26 @@
 /**
- * repository-sandbox.ts -- a sandbox double at eve's boundary, for the tests that run an agent's checkout of the task's repository.
+ * repository-sandbox.ts -- a sandbox double at the agent machine's boundary, for the tests that run an agent's checkout of the task's repository.
  *
- * The double stands where eve's `ctx.getSandbox()` hands the shell a live
+ * The double stands where the agent machine (`agents/machine/vercel-machine.ts`) hands the shell a live
  * Vercel Sandbox: it answers each run from the contract the shell hands the
  * sandbox (`REPOSITORY_SANDBOX_CONTRACT`), keeping the one thing a sandbox
- * keeps between calls, which repository stands checked out and whether it
- * is shallow, and writing
+ * keeps between calls, which repository stands checked out, and writing
  * down every run and every firewall policy in the order they came, each
- * composed from the entries standing at its firewall as the service
- * composes them (`sandbox-firewall.ts`). A clone
+ * composed from the sources its write named as the service composes them
+ * (`sandbox-firewall.ts`), with no launch kept beside them. A clone
  * is answered as the test scripts it, and a command from the test's own
  * table. Nothing here runs a shell. Synthetic throughout.
  */
 
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import { Effect } from "effect";
-import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
-import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
-import type { RepositorySandbox } from "../agents/repository-shell.js";
-import {
-  composePolicy,
-  type FirewallEntry,
-  type FirewallSlot,
-} from "../agents/sandbox-firewall.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
+import type {
+  CommandResult,
+  RepositorySandbox,
+  SandboxRunOptions,
+} from "../agents/repository-shell.js";
+import { composePolicy, type FirewallSources } from "../agents/sandbox-firewall.js";
 import { type NetworkPolicy, OPEN_INTERNET_POLICY } from "../agents/vercel-sandbox-api.js";
 
 /** One run as the sandbox saw it. */
@@ -45,12 +43,6 @@ export interface SandboxDouble extends RepositorySandbox {
   readonly policies: NetworkPolicy[];
   /** The policy that stood while each clone ran, in order. */
   readonly policiesDuringClone: NetworkPolicy[];
-  /** The policy that stood while each deepen's fetch ran, in order. */
-  readonly policiesDuringFetch: NetworkPolicy[];
-  /** Whether the checkout standing is shallow: cloned at a depth and not deepened since. */
-  shallow: boolean;
-  /** How many fetches found the checkout shallow and deepened it. */
-  deepened: number;
   /** The repository checked out now, as the sandbox's record names it; nothing before a clone. */
   checkedOut: string | undefined;
   /** The clone's arguments, as the last clone was handed them. */
@@ -66,11 +58,11 @@ export interface SandboxDouble extends RepositorySandbox {
 }
 
 /** What a command in the checkout answers, from the test's own table; a command off the table exits 127. */
-export type CommandTable = (command: string) => SandboxCommandResult | undefined;
+export type CommandTable = (command: string) => CommandResult | undefined;
 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
-function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResult {
+function result(exitCode: number, stdout = "", stderr = ""): CommandResult {
   return { exitCode, stdout, stderr };
 }
 
@@ -81,20 +73,16 @@ export function sandboxDouble(
 ): SandboxDouble {
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
   let policy: NetworkPolicy = OPEN_INTERNET_POLICY;
-  const standing = new Map<FirewallSlot, FirewallEntry>();
-  /** The policy what stands composes, set and recorded. */
-  const composed = () =>
+  /** The policy the sources compose, set and recorded. */
+  const composed = (sources: FirewallSources) =>
     Effect.sync(() => {
-      policy = composePolicy(standing);
+      policy = composePolicy(sources, new Map());
       double.policies.push(policy);
     });
   const double: SandboxDouble = {
     runs: [],
     policies: [],
     policiesDuringClone: [],
-    policiesDuringFetch: [],
-    shallow: false,
-    deepened: 0,
     checkedOut: undefined,
     clones: [],
     extraClones: [],
@@ -104,16 +92,6 @@ export function sandboxDouble(
     run: (run: SandboxRunOptions) => {
       const env = run.env;
       double.runs.push({ command: run.command, workingDirectory: run.workingDirectory, env });
-      // A deepen's step: the fetch of the rest of its history.
-      if (env?.[VARIABLE.DEEPEN] === DEEPEN_STEP.FETCH) {
-        double.policiesDuringFetch.push(policy);
-        if (double.checkedOut === undefined) {
-          return Promise.resolve(result(128, "", "fatal: not a git repository"));
-        }
-        if (double.shallow) double.deepened += 1;
-        double.shallow = false;
-        return Promise.resolve(result(EXIT.OK));
-      }
       // The checkout probe: which repository the record names, and whether a checkout stands.
       if (env?.[VARIABLE.URL] === undefined && env?.[VARIABLE.REPOSITORY] !== undefined) {
         const standing = double.checkedOut === env[VARIABLE.REPOSITORY];
@@ -144,7 +122,6 @@ export function sandboxDouble(
           return Promise.resolve(result(scripted.exitCode, "", scripted.stderr));
         }
         double.checkedOut = env?.[VARIABLE.REPOSITORY];
-        double.shallow = env?.[VARIABLE.DEPTH] !== undefined;
         return Promise.resolve(result(EXIT.OK));
       }
       if (run.workingDirectory === PATH.CHECKOUT && double.checkedOut === undefined) {
@@ -171,18 +148,7 @@ export function sandboxDouble(
     ...(options.firewall === false
       ? undefined
       : {
-          firewall: {
-            set: (slot: FirewallSlot, entry: FirewallEntry) =>
-              Effect.andThen(
-                Effect.sync(() => standing.set(slot, entry)),
-                composed(),
-              ),
-            withdraw: (slot: FirewallSlot) =>
-              Effect.andThen(
-                Effect.sync(() => standing.delete(slot)),
-                composed(),
-              ),
-          },
+          firewall: { write: composed },
         }),
   };
   return double;

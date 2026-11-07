@@ -1,6 +1,7 @@
 import { LANDING_TONE } from "@repo/features/landing-outcome";
 import { ON_THIS_COMPUTER, oauthScopeLines } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { inviteesOf } from "@repo/features/workspace-invitation-wire";
 import {
   AuthMark,
   AuthPage,
@@ -9,6 +10,9 @@ import {
   Button,
   CONSENT_ANSWER,
   ConsentCard,
+  EMAIL_CHIP_STATE,
+  type EmailChip,
+  EmailChipsField,
   FormField,
   MARK_PROVIDER,
   ProductMark,
@@ -50,6 +54,66 @@ function ProviderChoices(): React.JSX.Element {
     <>
       <ProviderButton provider={MARK_PROVIDER.GOOGLE} name="Google" onPress={() => undefined} />
       <ProviderButton provider={MARK_PROVIDER.GITHUB} name="GitHub" onPress={() => undefined} />
+    </>
+  );
+}
+
+/** Setup's team fields as the step draws them, an address typed wrong among those to invite, left unsent. */
+function TeamFields(): React.JSX.Element {
+  const [name, setName] = useState("Acme");
+  const [typed, setTyped] = useState("");
+  const [chips, setChips] = useState<readonly EmailChip[]>([
+    {
+      id: "dana@acme.dev",
+      words: "Dana Ruiz",
+      typed: "Dana Ruiz <dana@acme.dev>",
+      state: EMAIL_CHIP_STATE.DRAFT,
+    },
+    {
+      id: "theo@acme.dev",
+      words: "theo@acme.dev",
+      typed: "theo@acme.dev",
+      state: EMAIL_CHIP_STATE.DRAFT,
+    },
+    {
+      id: "sam@gmail",
+      words: "sam@gmail",
+      typed: "sam@gmail",
+      state: EMAIL_CHIP_STATE.BAD,
+      reason: "Not an email address",
+    },
+  ]);
+  return (
+    <>
+      <FormField label="Name">
+        {(control) => <TextField field={control} value={name} onChange={setName} />}
+      </FormField>
+      <FormField label="Add teammates by email" optional>
+        {(control) => (
+          <EmailChipsField
+            field={control}
+            chips={chips}
+            typed={typed}
+            onTyped={setTyped}
+            placeholder="name@example.com"
+            onAdd={(words) =>
+              setChips((now) => [
+                ...now,
+                ...inviteesOf(words)
+                  .filter((one) => !now.some((chip) => chip.id === one.email.toLowerCase()))
+                  .map((one) => ({
+                    id: one.email.toLowerCase(),
+                    words: one.name ?? one.email,
+                    typed: one.typed,
+                    state: one.invitable ? EMAIL_CHIP_STATE.DRAFT : EMAIL_CHIP_STATE.BAD,
+                    reason: one.invitable ? undefined : "Not an email address",
+                  })),
+              ])
+            }
+            onRemove={(id) => setChips((now) => now.filter((chip) => chip.id !== id))}
+          />
+        )}
+      </FormField>
     </>
   );
 }
@@ -206,14 +270,7 @@ function AuthPages(): React.JSX.Element {
               mark={<Mark />}
               title="Connect GitHub"
               description="Agents work in your repositories and open pull requests."
-              foot={
-                <AuthStepFoot
-                  at={3}
-                  total={4}
-                  onBack={IGNORE}
-                  next={{ label: "Continue", onPress: IGNORE, disabled: true }}
-                />
-              }
+              foot={<AuthStepFoot at={3} total={4} onBack={IGNORE} onSkip={IGNORE} />}
               exit={{ label: "Sign out", onPress: IGNORE }}
             >
               <ProviderChoices />
@@ -228,12 +285,11 @@ function AuthPages(): React.JSX.Element {
                   at={2}
                   total={5}
                   onBack={IGNORE}
-                  onSkip={IGNORE}
                   next={{ label: "Create", onPress: IGNORE }}
                 />
               }
             >
-              <EmailForm />
+              <TeamFields />
             </AuthPage>
           </div>
         </div>

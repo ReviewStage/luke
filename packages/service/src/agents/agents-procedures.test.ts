@@ -6,7 +6,7 @@ import { archiveAgent, createAgent, readAgent } from "@repo/database/models/agen
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { lapsedSandboxLeases, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { createTask } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
@@ -18,7 +18,7 @@ import {
   type TerminalSummary,
 } from "@repo/features/terminal-wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {
   recordingProductAnalytics,
@@ -29,6 +29,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
 import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { agentPortsProcedures } from "./agent-ports-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
@@ -57,6 +58,9 @@ const SHELL: TerminalSummary = {
   running: false,
 };
 
+/** The ports a running sandbox listens on. */
+const PORTS = [3000, 5173];
+
 /** A sandbox standing as given, keeping what it was asked: lists, starts, and resumes, by session. */
 function scriptedSandbox(state: SandboxState) {
   const asked: { readonly what: string; readonly sessionId: string }[] = [];
@@ -66,6 +70,12 @@ function scriptedSandbox(state: SandboxState) {
       Effect.sync(() => {
         asked.push({ what: "terminals", sessionId });
         return { sandbox: state, terminals: shells };
+      }),
+    listeningPorts: (sessionId) =>
+      Effect.sync(() => {
+        asked.push({ what: "ports", sessionId });
+        const running = state === SANDBOX_STATE.RUNNING;
+        return { running, ports: running ? PORTS : [] };
       }),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
@@ -82,8 +92,8 @@ function scriptedSandbox(state: SandboxState) {
         return SANDBOX_STATE.RUNNING;
       }),
     attach: () => Effect.die("the routes attach nothing"),
+    open: () => Effect.die("the routes open nothing"),
     setCredential: () => Effect.die("the routes set no credential"),
-    withdrawCredential: () => Effect.die("the routes withdraw no credential"),
   };
   return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }
@@ -99,7 +109,7 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       // Started blank, so no first turn is on its way and the agent can be archived at once.
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: null,
       repository: "acme/relay",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -144,7 +154,7 @@ const openTokenAgent = Effect.gen(function* () {
     idempotencyKey: `start-${randomUUID()}`,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Side\n",
+    descriptionSnapshot: "# Side\n",
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
@@ -191,7 +201,12 @@ const standing = (
         ),
       ),
     );
+    const resolveUserId = (incoming: Request) =>
+      Effect.succeed(
+        Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+      );
     const handle = hostedFetch({
+      agentPorts: agentPortsProcedures({ resolveUserId, sandbox }),
       agents: agentsProcedures({
         resolveUserId: (incoming: Request) =>
           Effect.succeed(
@@ -245,11 +260,12 @@ const standing = (
 const agentOf = (agentId: string) => `/api/agents/${agentId}`;
 const terminalsOf = (agentId: string) => `/api/agents/${agentId}/terminals`;
 const resumeOf = (agentId: string) => `/api/agents/${agentId}/sandbox/resume`;
+const portsOf = (agentId: string) => `/api/agents/${agentId}/ports`;
 const terminalOf = (agentId: string, terminalId: string) => `${terminalsOf(agentId)}/${terminalId}`;
 
 it.layer(getTestDB())("the agent terminals procedures", (it) => {
   it.effect(
-    "the agent's member lists its shells, and another account reads the agent as none",
+    "the agent's member lists its shells and ports, and another account reads the agent as none",
     () =>
       Effect.gen(function* () {
         const { userId, agent, sessionId } = yield* openAgent;
@@ -265,11 +281,21 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
 
         const listed = yield* call(terminalsOf(agent.id), "Bearer owner");
         const strangers = yield* call(terminalsOf(agent.id), "Bearer stranger");
+        const ports = yield* call(portsOf(agent.id), "Bearer owner");
+        const strangersPorts = yield* call(portsOf(agent.id), "Bearer stranger");
 
         assert.equal(listed.status, 200);
         assert.deepEqual(listed.body, { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] });
         assert.equal(strangers.status, 404);
-        assert.deepEqual(sandbox.asked, [{ what: "terminals", sessionId }]);
+        assert.deepEqual(ports, {
+          status: 200,
+          body: { running: true, ports: PORTS },
+        });
+        assert.equal(strangersPorts.status, 404);
+        assert.deepEqual(sandbox.asked, [
+          { what: "terminals", sessionId },
+          { what: "ports", sessionId },
+        ]);
       }),
   );
 
@@ -299,28 +325,20 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
       }),
   );
 
-  it.effect(
-    "a resume holds the sandbox it wakes, so the lease sweep stops it once nobody attaches",
-    () =>
-      Effect.gen(function* () {
-        const { userId, agent } = yield* openAgent;
-        const sandbox = scriptedSandbox(SANDBOX_STATE.STOPPED);
-        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
-        const at = new Date(yield* Clock.currentTimeMillis);
-        const heldBefore = yield* sandboxHeld(agent.conversationId, at);
+  it.effect("a resume holds the sandbox it wakes", () =>
+    Effect.gen(function* () {
+      const { userId, agent } = yield* openAgent;
+      const sandbox = scriptedSandbox(SANDBOX_STATE.STOPPED);
+      const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
+      const at = new Date(yield* Clock.currentTimeMillis);
+      const heldBefore = yield* sandboxHeld(agent.conversationId, at);
 
-        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+      const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
 
-        assert.equal(resumed.status, 200);
-        assert.equal(heldBefore, false);
-        assert.equal(yield* sandboxHeld(agent.conversationId, at), true);
-        const lapsedBefore = new Date(at.getTime() + Duration.toMillis(Duration.hours(1)));
-        const lapsed = yield* lapsedSandboxLeases(lapsedBefore, lapsedBefore, 50, lapsedBefore);
-        assert.ok(
-          lapsed.some((lease) => lease.conversationId === agent.conversationId),
-          "a resume nobody attached to lapses for the lease sweep",
-        );
-      }),
+      assert.equal(resumed.status, 200);
+      assert.equal(heldBefore, false);
+      assert.equal(yield* sandboxHeld(agent.conversationId, at), true);
+    }),
   );
 
   it.effect(
@@ -354,7 +372,9 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
           yield* call(resumeOf(agent.id), "Bearer reader", { method: "POST" }),
           refused,
         );
+        assert.deepEqual(yield* call(portsOf(agent.id), "Bearer reader"), refused);
         assert.equal((yield* call(terminalsOf(agent.id), "Bearer tokenless")).status, 404);
+        assert.equal((yield* call(portsOf(agent.id), "Bearer tokenless")).status, 404);
         assert.equal(sandbox.asked.length, asked, "no refused call reaches the sandbox");
       }),
   );
@@ -404,6 +424,31 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
           assert.equal(answer.status, 502);
           assert.deepEqual(answer.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
         }
+      }),
+  );
+
+  it.effect(
+    "a resume whose snapshot is gone is refused as that, and a sandbox that only stopped under a call is not",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const gone = new SandboxUnavailable({ status: 410, code: "snapshot_not_found" });
+        // Vercel answers 410 for a call to a sandbox that stopped under it too, which a resume mends.
+        const stopped = new SandboxUnavailable({ status: 410, code: "sandbox_stopped" });
+        const sandbox = Layer.succeed(AgentSandbox, {
+          ...scriptedSandbox(SANDBOX_STATE.STOPPED).service,
+          resume: () => Effect.fail(gone),
+          terminals: () => Effect.fail(stopped),
+        });
+        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox);
+
+        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+        const listed = yield* call(terminalsOf(agent.id), "Bearer owner");
+
+        assert.equal(resumed.status, 409);
+        assert.deepEqual(resumed.body, { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE });
+        assert.equal(listed.status, 502);
+        assert.deepEqual(listed.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
       }),
   );
 

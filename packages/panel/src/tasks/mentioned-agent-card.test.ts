@@ -28,7 +28,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { ActorRef } from "../actor-ref.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { listedAgent } from "../testing/tasks-control.js";
@@ -149,10 +149,9 @@ const OLDER_PULL_REQUEST = "https://github.com/acme/relay/pull/41";
 
 /**
  * Main's document as `STATE` once the task list has answered live: the
- * prorater among its tasks' agents, though the billing row's few name it
- * not, an archived one say, the sweeper on no task, the prorater's pull
- * request as its row keeps it, and the billing row naming that one and an
- * older one of the prorater's.
+ * prorater among its tasks' agents, the sweeper on no task, the prorater's
+ * pull request as its row keeps it, and the billing task's pull requests,
+ * that one and an older one of the prorater's.
  */
 const LISTED_STATE: AppStateSnapshot = {
   ...STATE,
@@ -165,30 +164,7 @@ const LISTED_STATE: AppStateSnapshot = {
         agents: {
           total: 1,
           working: 0,
-          agents: [],
           pullRequestTotal: 2,
-          pullRequests: [
-            {
-              number: SEAT_PULL_REQUEST.number,
-              title: SEAT_PULL_REQUEST.title,
-              state: SEAT_PULL_REQUEST.state,
-              checks: SEAT_PULL_REQUEST.checks,
-              additions: SEAT_PULL_REQUEST.additions,
-              deletions: SEAT_PULL_REQUEST.deletions,
-              url: SEAT_PULL_REQUEST.url,
-              agentId: PRORATE.id,
-            },
-            {
-              number: 41,
-              title: "Prorate seats on downgrade",
-              state: PULL_REQUEST_STATE.MERGED,
-              checks: CHECK_SUMMARY.PASSING,
-              additions: 30,
-              deletions: 2,
-              url: OLDER_PULL_REQUEST,
-              agentId: PRORATE.id,
-            },
-          ],
         },
       },
     ],
@@ -204,6 +180,33 @@ const LISTED_STATE: AppStateSnapshot = {
     ],
     agentPullRequests: [
       { agentId: PRORATE.id, taskId: BILLING.id, pullRequest: SEAT_PULL_REQUEST },
+    ],
+    taskPullRequests: [
+      {
+        taskId: BILLING.id,
+        pullRequests: [
+          {
+            number: SEAT_PULL_REQUEST.number,
+            title: SEAT_PULL_REQUEST.title,
+            state: SEAT_PULL_REQUEST.state,
+            checks: SEAT_PULL_REQUEST.checks,
+            additions: SEAT_PULL_REQUEST.additions,
+            deletions: SEAT_PULL_REQUEST.deletions,
+            url: SEAT_PULL_REQUEST.url,
+            agentId: PRORATE.id,
+          },
+          {
+            number: 41,
+            title: "Prorate seats on downgrade",
+            state: PULL_REQUEST_STATE.MERGED,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 30,
+            deletions: 2,
+            url: OLDER_PULL_REQUEST,
+            agentId: PRORATE.id,
+          },
+        ],
+      },
     ],
   },
 };
@@ -226,6 +229,8 @@ async function drawnElement(
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const words = createElement(WordsWorkspace, {
@@ -331,7 +336,7 @@ test("chips of agents off their task's page read nothing, and hang their tab's c
   assert.deepEqual(agentReads(), []);
 });
 
-test("a mention of an agent on another task whose model no row names, laid in a message box as an Inbox answer's is, wears the harness the task list carries", async () => {
+test("a mention of an agent on another task, laid in a message box as an Inbox answer's is, wears where it stands as the task list carries it", async () => {
   // The box stands on another task's page, whose doors know only that task's agents.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
@@ -359,13 +364,14 @@ test("a mention of an agent on another task whose model no row names, laid in a 
     LISTED_STATE,
   );
 
-  assert.ok(
-    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
-    "the box's chip wears its harness",
+  assert.equal(
+    container.querySelector(".ui-inline-ref-glyph .state-glyph")?.getAttribute("aria-label"),
+    "Working",
+    "the box's chip wears the agent at work, as the task list carries it",
   );
 });
 
-test("a mention of its own task's agent whose tile the page knows no harness of wears the harness the task list carries", async () => {
+test("a mention of its own task's agent whose tile the page knows not wears where it stands as the task list carries it", async () => {
   // The box stands on the agent's own task's page, whose agents are not yet read.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
@@ -393,9 +399,10 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
     LISTED_STATE,
   );
 
-  assert.ok(
-    container.querySelector(".ui-inline-ref-glyph .ui-harness-mark"),
-    "the box's chip wears its harness",
+  assert.equal(
+    container.querySelector(".ui-inline-ref-glyph .state-glyph")?.getAttribute("aria-label"),
+    "Working",
+    "the box's chip wears the agent at work, as the task list carries it",
   );
 });
 

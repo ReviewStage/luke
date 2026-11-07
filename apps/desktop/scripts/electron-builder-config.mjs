@@ -17,7 +17,12 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, packagedAppPath } from "./package-layout.mjs";
+import {
+  LIQUID_GLASS_ADDON,
+  NATIVE_HELPERS,
+  NODE_PTY,
+  packagedAppPath,
+} from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -110,7 +115,12 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
+      binaries: [
+        ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
+        ...NODE_PTY.binaries.map((binary) =>
+          path.join("Contents", "Resources", NODE_PTY.folder, NODE_PTY.prebuilds, binary),
+        ),
+      ],
       // The app's own scheme, which an app link's page that opens it in the app hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.

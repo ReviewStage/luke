@@ -31,9 +31,6 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(1));
       const colored = (yield* color("ts", LINE))[0] ?? [];
 
-      assert.ok(
-        colored.length > 1,
-        "a TypeScript block is colored in runs once the load succeeds",
-      );
+      assert.ok(colored.length > 1, "a TypeScript block is colored in runs once the load succeeds");
     }),
 );

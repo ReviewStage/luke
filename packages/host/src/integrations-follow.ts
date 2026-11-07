@@ -16,7 +16,6 @@ import {
   integrationLabelUnread,
 } from "@repo/features/integration-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -24,15 +23,14 @@ import {
   type HeldRows,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
-import { Duration, Effect, Queue, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, Queue, Schema, type Scope, Stream } from "effect";
 import { type AppIntegrations, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
 import { confirmWrite, followTakingRows, restarting, type TxWait } from "./live-follow.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
- * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into the sync engine's pool by their ids, GitHub's standing asked beside them, a sign-in that stands pending settled while it does, a write confirmed once the rows carry it, and a rename drawn over its account the moment it is asked.
+ * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into the sync engine's pool by their ids, GitHub's standing asked beside them, a sign-in that stands pending settled as it is drawn and as a window comes forward, a write confirmed once the rows carry it, and a rename drawn over its account the moment it is asked.
  *
  * The host follows the account's integration rows while any window holds
  * them and a while after (`heldSlice`), so a sign-in the developer finishes
@@ -47,10 +45,13 @@ import type { WindowFocus } from "./window-focus.js";
  * answered, and a GitHub ask that fails keeps the standing it last answered.
  *
  * A browser returned anywhere but the service's own callback completes
- * nothing, so while a row stands pending the host asks the service to
- * settle every sign-in under way, every `INTEGRATION_SETTLE_EVERY`, and asks
- * nothing while none does; what it settles arrives on the rows. A settle
- * also names a connected account still to be named, from its grant or its
+ * nothing, so the host asks the service to settle every sign-in under way
+ * once as a pending row is first drawn, and again as a window comes forward
+ * while one stands pending, since the developer coming back from the browser
+ * brings one forward; what it settles arrives on the rows. Note that a
+ * sign-in finished elsewhere while no window comes forward stays pending
+ * until one does, or until its row's own window lapses. A settle also
+ * names a connected account still to be named, from its grant or its
  * provider, under the service's own rule (`integrationLabelUnread`): one is
  * asked once for each such row a follow meets, and again as a window comes
  * forward, since a settle that could not read a name leaves its row as it
@@ -66,14 +67,6 @@ import type { WindowFocus } from "./window-focus.js";
 
 /** An integration account as the pool holds it, by its row's id, every write to it a change of its fields. */
 const INTEGRATION = fieldKind((row: IntegrationLiveRow) => row.id);
-
-/**
- * How often a sign-in that stands pending is settled. Note that each settle
- * asks Connect for a fresh token of every account signing in, whose rate
- * limit Connect does not document, so this stays well apart; a sign-in
- * returned to the service's own callback completes at once regardless.
- */
-export const INTEGRATION_SETTLE_EVERY = Duration.seconds(10);
 
 /** A read the service did not answer, as the client and the gate tell it. */
 interface IntegrationsUnanswered {
@@ -93,7 +86,7 @@ export interface IntegrationsFollowDependencies {
   readonly settle: Effect.Effect<void>;
   /** Whether the account gate stands open, so a follow may read. */
   readonly gate: () => boolean;
-  /** The windows coming forward, on each of which GitHub's standing is asked again. */
+  /** The windows coming forward, on each of which GitHub's standing is asked again, and a pending sign-in settled. */
   readonly focus: WindowFocus;
   /** The sync engine's pool, which the held integrations stand in while they are followed. */
   readonly pool: EntityPool;
@@ -151,8 +144,8 @@ const LiveRowsSchema = Schema.Struct({ connections: Schema.Array(Schema.Unknown)
  * `answers`: the rows as the read last answered them, drawn with the
  * providers beside them and GitHub's standing once both have answered;
  * GitHub's asked again as each window comes forward, and as `followed`'s
- * own ask is run; and the service asked to settle while a row stands
- * pending, and once for each connected row it meets still to be named,
+ * own ask is run; and the service asked to settle as a pending row is first
+ * drawn, and once for each connected row it meets still to be named, both
  * again as a window comes forward. A read
  * the service did not answer is followed again after `LIVE_RESTART`, and
  * one refused as signed out, the session another account's now, no more.
@@ -164,10 +157,11 @@ function followIntegrations(
   followed: (follow: Followed) => void,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const pending = yield* Queue.sliding<boolean>(1);
-    const unlabeled = yield* Queue.sliding<void>(1);
+    const settleAsked = yield* Queue.sliding<void>(1);
     /** The connected rows still to be named a settle was asked for, by their ids, so each is asked once until a window comes forward. */
     const labelAsked = new Set<string>();
+    /** The rows drawn pending, by their ids, so each is settled once as it is first drawn so. */
+    let pendingDrawn = new Set<string>();
     let beside: Beside | undefined;
     let github: IntegrationStatus | undefined;
     let taken = false;
@@ -182,16 +176,23 @@ function followIntegrations(
             !labelAsked.has(row.id),
         );
       for (const row of unnamed) labelAsked.add(row.id);
-      if (unnamed.length > 0) Queue.offerUnsafe(unlabeled, undefined);
+      if (unnamed.length > 0) Queue.offerUnsafe(settleAsked, undefined);
+    };
+    // Note that a row is forgotten once it stands pending no more, so a sign-in begun on it again is settled once more.
+    const askPending = () => {
+      const pending = connections
+        .rows()
+        .filter((row) => row.status === INTEGRATION_STATUS.PENDING)
+        .map((row) => row.id);
+      const fresh = pending.some((id) => !pendingDrawn.has(id));
+      pendingDrawn = new Set(pending);
+      if (fresh) Queue.offerUnsafe(settleAsked, undefined);
     };
     const draw = () => {
       if (!taken || beside === undefined || github === undefined) return;
       const rows = connections.rows();
       answers.answered(integrationStatusesOfLive(rows, beside.offered, beside.multiple, github));
-      Queue.offerUnsafe(
-        pending,
-        rows.some((row) => row.status === INTEGRATION_STATUS.PENDING),
-      );
+      askPending();
       askLabels();
     };
     const connections: HeldRows<IntegrationLiveRow> = yield* dependencies.pool.stand(INTEGRATION, {
@@ -213,10 +214,12 @@ function followIntegrations(
       txWait: () => txWait,
       github: askGithub,
     });
-    // Note that a window come forward asks again for every account still to be named, as the statuses read did on focus before the rows were followed.
+    // Note that a window come forward settles a sign-in still pending and asks again for every account still to be named, as the statuses read did on focus before the rows were followed.
     const askAgain = Effect.sync(() => {
       labelAsked.clear();
-      if (taken) askLabels();
+      if (!taken) return;
+      if (pendingDrawn.size > 0) Queue.offerUnsafe(settleAsked, undefined);
+      askLabels();
     });
     yield* Effect.forkScoped(
       Stream.make(undefined).pipe(
@@ -224,17 +227,8 @@ function followIntegrations(
         Stream.runForEach(() => Effect.andThen(askAgain, askGithub)),
       ),
     );
-    // Note that the schedule starts anew only as the rows turn pending, so a draw that changes nothing of it keeps its spacing.
-    const whilePending = Stream.fromQueue(pending).pipe(
-      Stream.changes,
-      Stream.switchMap((standing) =>
-        standing ? Stream.fromSchedule(Schedule.spaced(INTEGRATION_SETTLE_EVERY)) : Stream.empty,
-      ),
-    );
     yield* Effect.forkScoped(
-      Stream.merge(whilePending, Stream.fromQueue(unlabeled)).pipe(
-        Stream.runForEach(() => dependencies.settle),
-      ),
+      Stream.fromQueue(settleAsked).pipe(Stream.runForEach(() => dependencies.settle)),
     );
     /** Whether the service refused the read for good, the session another account's now. */
     let gone = false;
@@ -368,7 +362,7 @@ export function integrationRename(
   IntegrationLiveRow,
   FieldChange<IntegrationLiveRow>,
   IntegrationRename,
-  WireValue
+  IntegrationAccountView
 > {
   return {
     kind: INTEGRATION,
@@ -376,10 +370,10 @@ export function integrationRename(
     change: (rename) => () => ({ label: rename.label }),
     send: (rename) =>
       Effect.map(send(rename), (answer) => {
-        if ("failure" in answer) return { refused: carried<IntegrationAccountView>(answer) };
+        if ("failure" in answer) return { refused: answer };
         const kept = answer.account.label;
         return {
-          answer: carried<IntegrationAccountView>(answer),
+          answer,
           txid: carries(rename, kept) ? undefined : answer.txid,
           ...(kept === undefined ? undefined : { standsAs: () => ({ label: kept }) }),
         };

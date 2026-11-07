@@ -1,30 +1,25 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountSnapshot,
-  type SignInAnswer,
-} from "@repo/credentials/snapshot";
-import { SIGN_IN_FAILURE } from "@repo/features/words";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
+import { hostActPort } from "../testing/host-act-port.js";
 import { accountProcedures } from "./account-procedures.js";
 import type { ActSender } from "./base.js";
-import type { AccountProceduresDependencies } from "./index.js";
-import { settledAct, type TestActPort, testActPort } from "./testing.js";
+import { type SettledAct, settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
- * The account's acts, through the act port as a window calls them: a
- * sign-in reaches the host with its provider and the host's answer crosses
- * back; a sign-out or a deletion stops the recording before it runs, and
- * gives it back where the host never answered; a sign-out the developer
- * cancels at the shell's question answers the account as it stands and
- * stops nothing; and a frame this build does
- * not trust is refused each act in its own words, before the host is asked.
+ * The account's acts, through the act port as a window calls them: the
+ * asks relayed as declared answer any window of this build's own and refuse
+ * a frame it does not trust in each ask's own words; the sign-out and the
+ * deletion each stop the recording before they run, and give it back where
+ * the host never answered; and a sign-out the developer cancels at the
+ * shell's question answers the account as it stands and stops nothing.
  */
 
 const PANEL: ActSender = { sender: Symbol("window"), panel: true };
+const OTHER_WINDOW: ActSender = { sender: Symbol("other window"), panel: false };
 
 const SIGNED_IN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
@@ -37,12 +32,43 @@ const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: "Could not start signing in on this system.",
-  [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: "Sign-in didn't finish.",
-  [ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: "Could not cancel that sign-in on this system.",
   [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: "Could not sign out on this system.",
   [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: "Could not delete that account on this system.",
 } as const;
+
+/** Each relayed ask with a payload its schema takes, what any window of this build's own hears of it, and its refusal. */
+const RELAYED: readonly {
+  readonly kind: string & (typeof ACCOUNT_ACT_KIND)[keyof typeof ACCOUNT_ACT_KIND];
+  readonly payload: WireBoundaryInput;
+  readonly settled: SettledAct<WireBoundaryInput>;
+  readonly refusal: string;
+}[] = [
+  {
+    kind: ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN,
+    payload: { provider: ACCOUNT_PROVIDER.GITHUB },
+    settled: { answer: { account: SIGNED_IN } },
+    refusal: "Could not start signing in on this system.",
+  },
+  {
+    kind: ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN,
+    payload: { provider: ACCOUNT_PROVIDER.GITHUB },
+    settled: { answer: false },
+    refusal: "Sign-in didn't finish.",
+  },
+  {
+    kind: ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN,
+    payload: undefined,
+    settled: { answer: undefined },
+    refusal: "Could not cancel that sign-in on this system.",
+  },
+  {
+    kind: ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS,
+    payload: { grant: false },
+    // Note that the test's host holds no session of the service's to write a grant under, so the grant is refused before anything travels.
+    settled: { refused: "Couldn't change support access." },
+    refusal: "Couldn't change support access.",
+  },
+];
 
 let port: TestActPort<unknown> | undefined;
 
@@ -58,33 +84,21 @@ afterEach(() => {
  */
 function windowPort(
   options: {
-    trusted?: boolean;
-    ended?: Effect.Effect<AccountSnapshot>;
+    ended?: Effect.Effect<AccountSnapshot, unknown>;
     askBeforeSignOut?: () => Promise<boolean>;
-    signedIn?: SignInAnswer;
   } = {},
 ) {
   const happened: unknown[] = [];
   const ended = options.ended ?? Effect.succeed(SIGNED_OUT);
-  const signedIn = options.signedIn ?? { account: SIGNED_IN };
-  const host: AccountProceduresDependencies["host"] = {
-    beginSignIn: (provider) =>
-      Effect.sync(() => happened.push(["beginSignIn", provider])).pipe(Effect.as(signedIn)),
-    signInAgain: (provider) =>
-      Effect.sync(() => happened.push(["signInAgain", provider])).pipe(Effect.as(true)),
-    cancelSignIn: () => Effect.sync(() => void happened.push(["cancelSignIn"])),
-    signOut: () => Effect.sync(() => happened.push(["signOut"])).pipe(Effect.andThen(ended)),
-    deleteAccount: () =>
-      Effect.sync(() => happened.push(["deleteAccount"])).pipe(Effect.andThen(ended)),
-    accountSnapshot: () => Effect.succeed(Option.some(SIGNED_IN)),
-    supportAccess: (grant) =>
-      Effect.sync(() => happened.push(["supportAccess", grant])).pipe(
-        Effect.as({ supportAccessUntil: null }),
-      ),
-  };
   port = testActPort(
     accountProcedures({
-      host,
+      host: { accountSnapshot: () => Effect.succeed(Option.some(SIGNED_IN)) },
+      acts: {
+        ACCOUNT_SIGN_OUT: () =>
+          Effect.sync(() => happened.push(["signOut"])).pipe(Effect.andThen(ended)),
+        ACCOUNT_DELETE: () =>
+          Effect.sync(() => happened.push(["deleteAccount"])).pipe(Effect.andThen(ended)),
+      },
       haltSessionReplay: () => happened.push(["halt"]),
       resumeSessionReplay: () => happened.push(["resume"]),
       ...(options.askBeforeSignOut === undefined
@@ -92,7 +106,7 @@ function windowPort(
         : { askBeforeSignOut: options.askBeforeSignOut }),
     }),
   );
-  const client = port.as(PANEL, { trusted: options.trusted ?? true });
+  const client = port.as(PANEL, { trusted: true });
   return { client, happened };
 }
 
@@ -103,34 +117,6 @@ async function refusal(call: Promise<unknown>): Promise<string> {
     ? settled.refused
     : assert.fail("the call was answered rather than refused");
 }
-
-it("a sign-in reaches the host with its provider, and the host's answer crosses back", async () => {
-  const { client, happened } = windowPort();
-
-  assert.deepEqual(
-    await client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]({ provider: ACCOUNT_PROVIDER.GITHUB }),
-    { account: SIGNED_IN },
-  );
-  assert.equal(
-    await client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]({ provider: ACCOUNT_PROVIDER.GOOGLE }),
-    true,
-  );
-  assert.equal(await client[ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN](), undefined);
-  assert.deepEqual(happened, [
-    ["beginSignIn", ACCOUNT_PROVIDER.GITHUB],
-    ["signInAgain", ACCOUNT_PROVIDER.GOOGLE],
-    ["cancelSignIn"],
-  ]);
-});
-
-it("a sign-in that ended without landing crosses back as the key of why", async () => {
-  const { client } = windowPort({ signedIn: { failure: SIGN_IN_FAILURE.OFFLINE } });
-
-  assert.deepEqual(
-    await client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]({ provider: ACCOUNT_PROVIDER.GOOGLE }),
-    { failure: SIGN_IN_FAILURE.OFFLINE },
-  );
-});
 
 it("a sign-out and a deletion stop the recording before the host is asked, and answer the account as it then stands", async () => {
   const { client, happened } = windowPort();
@@ -154,8 +140,8 @@ it("a sign-out the developer agrees to at the shell's question signs out", async
   assert.deepEqual(happened, [["halt"], ["signOut"]]);
 });
 
-it("a sign-out or a deletion the host never answered gives the recording back, and is refused in the kind's own words", async () => {
-  const { client, happened } = windowPort({ ended: Effect.die(new Error("secret detail")) });
+it("a sign-out or a deletion the host refused gives the recording back, and is refused in the kind's own words", async () => {
+  const { client, happened } = windowPort({ ended: Effect.fail(new Error("secret detail")) });
 
   assert.equal(
     await refusal(client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]()),
@@ -175,37 +161,15 @@ it("a sign-out or a deletion the host never answered gives the recording back, a
   ]);
 });
 
-it("a frame this build does not trust is refused every account act in the kind's own words, and the host is not asked", async () => {
-  const { client, happened } = windowPort({ trusted: false });
+it.effect.each(RELAYED)(
+  "$kind answers a window that is no panel, and refuses a frame this build does not trust in its own words",
+  ({ kind, payload, settled, refusal }) =>
+    Effect.gen(function* () {
+      const { port: host } = yield* hostActPort({ account: SIGNED_IN });
 
-  assert.deepEqual(
-    {
-      [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: await refusal(
-        client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]({ provider: ACCOUNT_PROVIDER.GITHUB }),
-      ),
-      [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: await refusal(
-        client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]({ provider: ACCOUNT_PROVIDER.GITHUB }),
-      ),
-      [ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: await refusal(
-        client[ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN](),
-      ),
-      [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: await refusal(
-        client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT](),
-      ),
-      [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: await refusal(client[ACCOUNT_ACT_KIND.ACCOUNT_DELETE]()),
-    },
-    REFUSAL,
-  );
-  assert.deepEqual(happened, []);
-});
-
-it("a sign-in carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
-  const { client, happened } = windowPort();
-  const extra = { provider: ACCOUNT_PROVIDER.GITHUB, unexpected: true } as const;
-
-  assert.equal(
-    await refusal(client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN](extra)),
-    REFUSAL[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN],
-  );
-  assert.deepEqual(happened, []);
-});
+      assert.deepEqual(yield* host.perform({ kind, payload }, OTHER_WINDOW), settled);
+      assert.deepEqual(yield* host.perform({ kind, payload }, PANEL, { trusted: false }), {
+        refused: refusal,
+      });
+    }),
+);

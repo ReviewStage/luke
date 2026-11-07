@@ -1,22 +1,28 @@
 /**
- * tasks.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds, as procedures.
+ * tasks.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds, declared, and the procedures of the holds and the opens beside them.
  *
- * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused.
- * Each output is its value's schema flipped, so oRPC's output check encodes
- * the row's value into what crosses the port; a write that answers whether
- * the service took it answers a boolean, and one the panel reads nothing of
- * answers `void`.
+ * Only a panel draws the Tasks tab, so every ask is the panel's alone. A
+ * kind that carries nothing takes `undefined` alone, so a window calls it
+ * with no payload and one sent anything is refused. A write that answers
+ * whether the service took it answers a boolean, and one the panel reads
+ * nothing of answers `void`; a refusal or a defect of the host's is drawn as
+ * the answer each drew before it was declared: `false`, nothing, or the
+ * task calls' unanswered failure. Each hold, its Try again, and each address
+ * opened in the browser stays a procedure of its own
+ * (`act-port/tasks-procedures.ts`), as does Connect GitHub, whose page the
+ * window opens.
  */
 
 import { eventIterator, type } from "@orpc/contract";
 import {
+  ADMIN_UNANSWERED,
   adminFavoriteParamsSchema,
   adminReadAnswerSchema,
   adminReadParamsSchema,
 } from "@repo/features/admin-wire";
 import {
   codeLinesSchema,
+  TASK_CALL_FAILURE,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
   taskHistoryFollowSchema,
@@ -37,6 +43,7 @@ import {
   tasksFileParamsSchema,
   tasksFindAnswerSchema,
   tasksFindParamsSchema,
+  tasksGitHubPageAnswerSchema,
   tasksLinkStandingParamsSchema,
   tasksMarkReadParamsSchema,
   tasksMoveAnswerSchema,
@@ -68,6 +75,7 @@ import {
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@repo/features/tasks-view";
+import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import {
   COLORED_CODE_MAX_CHARS,
@@ -77,10 +85,17 @@ import {
   openableAddress,
 } from "../acts.js";
 import { actProcedure, exactInput } from "./base.js";
+import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { TASKS_ACT_KIND } from "./kinds.js";
 
 const takesNothing = exactInput(EffectSchema.Undefined);
-const takesTaskId = exactInput(EffectSchema.Struct({ taskId: exactId }));
+const taskIdParamsSchema = EffectSchema.Struct({ taskId: exactId });
+
+/** What the window draws for a task ask the host could not answer. */
+const UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** What the admin dashboard draws for a read the host could not answer. */
+const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 
 /** A text admitted as written, refused where it carries nothing or runs past `max`. */
 function exactText(max: number) {
@@ -96,46 +111,294 @@ const colorCodeParamsSchema = EffectSchema.Struct({
   code: exactText(COLORED_CODE_MAX_CHARS),
 });
 
+/** The Tasks tab's plain asks, each answered by the tasks composer. */
+export const TASKS_ACTS = declaredActs({
+  TASKS_REFRESH: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not read your tasks on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: undefined,
+  }),
+  TASKS_SELECT: hostAct({
+    input: taskIdParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not open that task on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: false,
+  }),
+  TASKS_CLOSE: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not leave that task on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: undefined,
+  }),
+  TASKS_OFFLINE_REFUSED_CLEAR: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not clear the changes made offline on this system.",
+    panelOnly: true,
+    door: ACT.LOCAL_WRITE,
+    unanswered: undefined,
+  }),
+  TASKS_START: hostAct({
+    input: tasksStartRequestSchema,
+    output: tasksStartAnswerSchema,
+    refusal: "Could not start that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_DELETE: hostAct({
+    input: taskIdParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not delete that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_RENAME: hostAct({
+    input: tasksRenameParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not rename that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_PIN: hostAct({
+    input: tasksPinParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not pin that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_MARK_READ: hostAct({
+    input: tasksMarkReadParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not mark that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_PIN_REPOSITORY: hostAct({
+    input: tasksPinRepositoryParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not pin that repository on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_WRITE_SECTION: hostAct({
+    input: tasksWriteSectionParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not change that section on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_SET_REPOSITORY: hostAct({
+    input: tasksSetRepositoryParamsSchema,
+    output: tasksSetRepositoryAnswerSchema,
+    refusal: "Could not change that task's repository on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_MOVE: hostAct({
+    input: tasksMoveParamsSchema,
+    output: tasksMoveAnswerSchema,
+    refusal: "Could not move that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_BLOCK: hostAct({
+    input: tasksBlockParamsSchema,
+    output: tasksBlockAnswerSchema,
+    refusal: "Could not change what blocks that task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_SET_PARENT: hostAct({
+    input: tasksSetParentParamsSchema,
+    output: tasksSetParentAnswerSchema,
+    refusal: "Could not change that task's parent on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_CHANGE_RELATION: hostAct({
+    input: tasksChangeRelationParamsSchema,
+    output: tasksChangeRelationAnswerSchema,
+    refusal: "Could not change that relation on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_EDIT: hostAct({
+    input: tasksEditParamsSchema,
+    output: tasksEditAnswerSchema,
+    refusal: "Could not save that edit on this system.",
+    panelOnly: true,
+    door: ACT.DOCUMENT,
+    unanswered: UNANSWERED,
+  }),
+  GITHUB_CONNECT: hostAct({
+    input: EffectSchema.Undefined,
+    output: tasksGitHubPageAnswerSchema,
+    refusal: "Could not open GitHub's connection page on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: UNANSWERED,
+    byHand: true,
+    portOutput: EffectSchema.Void,
+  }),
+  ADMIN_READ: hostAct({
+    input: adminReadParamsSchema,
+    output: adminReadAnswerSchema,
+    refusal: "Could not read the admin dashboard on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: ADMIN_READ_UNANSWERED,
+  }),
+  // Note that no held read carries the admin pages' rows, so their star has none to draw over.
+  ADMIN_FAVORITE: hostAct({
+    input: adminFavoriteParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not star that account on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: false,
+  }),
+  GITHUB_DISCONNECT: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not disconnect GitHub on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  TASKS_SET_STANDING: hostAct({
+    input: tasksSetStandingParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not change where that task stands on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: false,
+  }),
+  TASKS_FILE: hostAct({
+    input: tasksFileParamsSchema,
+    output: tasksFileAnswerSchema,
+    refusal: "Could not read that file on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_TREE: hostAct({
+    input: tasksTreeParamsSchema,
+    output: tasksTreeAnswerSchema,
+    refusal: "Could not list that folder on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_SKILLS: hostAct({
+    input: tasksSkillsParamsSchema,
+    output: tasksSkillsAnswerSchema,
+    refusal: "Could not read this repository's skills on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_BROWSER_TAB_OPEN: hostAct({
+    input: tasksBrowserTabOpenParamsSchema,
+    output: tasksBrowserTabOpenAnswerSchema,
+    refusal: "Could not open a tab in that agent's browser on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_FIND: hostAct({
+    input: tasksFindParamsSchema,
+    output: tasksFindAnswerSchema,
+    refusal: "Could not find that task on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_REVISIONS: hostAct({
+    input: tasksRevisionsParamsSchema,
+    output: tasksRevisionsAnswerSchema,
+    refusal: "Could not read that description's history on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_REVISION: hostAct({
+    input: tasksRevisionParamsSchema,
+    output: tasksRevisionAnswerSchema,
+    refusal: "Could not read that version on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_RESTORE: hostAct({
+    input: tasksRevisionParamsSchema,
+    output: EffectSchema.Boolean,
+    refusal: "Could not restore that version on this system.",
+    panelOnly: true,
+    door: ACT.DOCUMENT,
+    unanswered: false,
+  }),
+  TASKS_PAGE_SOURCE: hostAct({
+    input: tasksPageParamsSchema,
+    output: tasksPageSourceAnswerSchema,
+    refusal: "Could not read that page's source on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_PICTURE_READ: hostAct({
+    input: tasksPictureParamsSchema,
+    output: tasksPictureAnswerSchema,
+    refusal: "Could not read that picture on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_PICTURE_KEEP: hostAct({
+    input: tasksPictureKeepParamsSchema,
+    output: tasksPictureKeepAnswerSchema,
+    refusal: "Could not keep that picture on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_COMMENT_START: hostAct({
+    input: tasksCommentStartParamsSchema,
+    output: tasksCommentAnswerSchema,
+    refusal: "Could not comment on the task on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  TASKS_COMMENT_ACT: hostAct({
+    input: tasksCommentActParamsSchema,
+    output: tasksCommentAnswerSchema,
+    refusal: "Could not change the task's comment on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+});
+
 export const tasksActsContract = {
-  [TASKS_ACT_KIND.TASKS_REFRESH]: actProcedure("Could not read your tasks on this system.")
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_SELECT]: actProcedure("Could not open that task on this system.")
-    .input(takesTaskId)
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_CLOSE]: actProcedure("Could not leave that task on this system.")
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR]: actProcedure(
-    "Could not clear the changes made offline on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_START]: actProcedure("Could not start that task on this system.")
-    .input(exactInput(tasksStartRequestSchema))
-    .output(EffectSchema.flip(tasksStartAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_DELETE]: actProcedure("Could not delete that task on this system.")
-    .input(takesTaskId)
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_RENAME]: actProcedure("Could not rename that task on this system.")
-    .input(exactInput(tasksRenameParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_PIN]: actProcedure("Could not pin that task on this system.")
-    .input(exactInput(tasksPinParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_MARK_READ]: actProcedure("Could not mark that task on this system.")
-    .input(exactInput(tasksMarkReadParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: actProcedure(
-    "Could not pin that repository on this system.",
-  )
-    .input(exactInput(tasksPinRepositoryParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_WRITE_SECTION]: actProcedure(
-    "Could not change that section on this system.",
-  )
-    .input(exactInput(tasksWriteSectionParamsSchema))
-    .output(EffectSchema.Boolean),
+  ...contractOf(TASKS_ACTS),
   // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actProcedure(
     "Could not follow your GitHub repositories on this system.",
@@ -147,82 +410,21 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksRepositoriesParamsSchema))
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_SET_REPOSITORY]: actProcedure(
-    "Could not change that task's repository on this system.",
-  )
-    .input(exactInput(tasksSetRepositoryParamsSchema))
-    .output(EffectSchema.flip(tasksSetRepositoryAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_MOVE]: actProcedure("Could not move that task on this system.")
-    .input(exactInput(tasksMoveParamsSchema))
-    .output(EffectSchema.flip(tasksMoveAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_BLOCK]: actProcedure(
-    "Could not change what blocks that task on this system.",
-  )
-    .input(exactInput(tasksBlockParamsSchema))
-    .output(EffectSchema.flip(tasksBlockAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_SET_PARENT]: actProcedure(
-    "Could not change that task's parent on this system.",
-  )
-    .input(exactInput(tasksSetParentParamsSchema))
-    .output(EffectSchema.flip(tasksSetParentAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_CHANGE_RELATION]: actProcedure(
-    "Could not change that relation on this system.",
-  )
-    .input(exactInput(tasksChangeRelationParamsSchema))
-    .output(EffectSchema.flip(tasksChangeRelationAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_EDIT]: actProcedure("Could not save that edit on this system.")
-    .input(exactInput(tasksEditParamsSchema))
-    .output(EffectSchema.flip(tasksEditAnswerSchema)),
   [TASKS_ACT_KIND.GITHUB_OPEN]: actProcedure("Could not open GitHub on this system.")
     .input(exactInput(EffectSchema.Struct({ url: githubAddress })))
     .output(EffectSchema.Void),
   [TASKS_ACT_KIND.WEB_OPEN]: actProcedure("Could not open that link on this system.")
     .input(exactInput(EffectSchema.Struct({ url: openableAddress })))
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.GITHUB_CONNECT]: actProcedure(
-    "Could not open GitHub's connection page on this system.",
-  )
-    .input(takesNothing)
-    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.ADMIN_OPEN]: actProcedure("Could not open the admin dashboard on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.ADMIN_READ]: actProcedure("Could not read the admin dashboard on this system.")
-    .input(exactInput(adminReadParamsSchema))
-    .output(EffectSchema.flip(adminReadAnswerSchema)),
-  [TASKS_ACT_KIND.ADMIN_FAVORITE]: actProcedure("Could not star that account on this system.")
-    .input(exactInput(adminFavoriteParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.GITHUB_DISCONNECT]: actProcedure("Could not disconnect GitHub on this system.")
-    .input(takesNothing)
-    .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_SET_STANDING]: actProcedure(
-    "Could not change where that task stands on this system.",
-  )
-    .input(exactInput(tasksSetStandingParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_FILE]: actProcedure("Could not read that file on this system.")
-    .input(exactInput(tasksFileParamsSchema))
-    .output(EffectSchema.flip(tasksFileAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_TREE]: actProcedure("Could not list that folder on this system.")
-    .input(exactInput(tasksTreeParamsSchema))
-    .output(EffectSchema.flip(tasksTreeAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_SKILLS]: actProcedure(
-    "Could not read this repository's skills on this system.",
-  )
-    .input(exactInput(tasksSkillsParamsSchema))
-    .output(EffectSchema.flip(tasksSkillsAnswerSchema)),
   // Note that the hold's stream carries nothing: the held standing reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW]: actProcedure(
     "Could not follow that link on this system.",
   )
     .input(exactInput(tasksLinkStandingParamsSchema))
     .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actProcedure(
-    "Could not open a tab in that agent's browser on this system.",
-  )
-    .input(exactInput(tasksBrowserTabOpenParamsSchema))
-    .output(EffectSchema.flip(tasksBrowserTabOpenAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actProcedure(
     "Could not follow the task's Browser tabs on this system.",
   )
@@ -231,59 +433,34 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actProcedure("Could not color that code on this system.")
     .input(exactInput(colorCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
-  [TASKS_ACT_KIND.TASKS_FIND]: actProcedure("Could not find that task on this system.")
-    .input(exactInput(tasksFindParamsSchema))
-    .output(EffectSchema.flip(tasksFindAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_REVISIONS]: actProcedure(
-    "Could not read that plan's history on this system.",
-  )
-    .input(exactInput(tasksRevisionsParamsSchema))
-    .output(EffectSchema.flip(tasksRevisionsAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_REVISION]: actProcedure("Could not read that version on this system.")
-    .input(exactInput(tasksRevisionParamsSchema))
-    .output(EffectSchema.flip(tasksRevisionAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_RESTORE]: actProcedure("Could not restore that version on this system.")
-    .input(exactInput(tasksRevisionParamsSchema))
-    .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: actProcedure(
-    "Could not read that page's source on this system.",
-  )
-    .input(exactInput(tasksPageParamsSchema))
-    .output(EffectSchema.flip(tasksPageSourceAnswerSchema)),
   // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
-    "Could not follow that plan's pages on this system.",
+    "Could not follow that task's pages on this system.",
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<never>())),
-  // Note that the hold's stream carries nothing: the held plan reaches the panel on app state, and the stream is the window's hold on it.
+  // Note that the hold's stream carries nothing: the held description reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
-    "Could not follow that task's plan on this system.",
+    "Could not follow that task's description on this system.",
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY]: actProcedure(
-    "Could not read that task's plan again on this system.",
+    "Could not read that task's description again on this system.",
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held history reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
-    "Could not follow that plan's history on this system.",
+    "Could not follow that description's history on this system.",
   )
     .input(exactInput(taskHistoryFollowSchema))
     .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_HISTORY_RETRY]: actProcedure(
-    "Could not read that plan's history again on this system.",
+    "Could not read that description's history again on this system.",
   )
     .input(exactInput(taskHistoryFollowSchema))
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actProcedure("Could not read that picture on this system.")
-    .input(exactInput(tasksPictureParamsSchema))
-    .output(EffectSchema.flip(tasksPictureAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: actProcedure("Could not keep that picture on this system.")
-    .input(exactInput(tasksPictureKeepParamsSchema))
-    .output(EffectSchema.flip(tasksPictureKeepAnswerSchema)),
   // Note that the hold's stream carries nothing: the held comments reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actProcedure(
     "Could not follow the task's comments on this system.",
@@ -295,14 +472,4 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksCommentsFollowSchema))
     .output(EffectSchema.Void),
-  [TASKS_ACT_KIND.TASKS_COMMENT_START]: actProcedure(
-    "Could not comment on the task on this system.",
-  )
-    .input(exactInput(tasksCommentStartParamsSchema))
-    .output(EffectSchema.flip(tasksCommentAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_COMMENT_ACT]: actProcedure(
-    "Could not change the task's comment on this system.",
-  )
-    .input(exactInput(tasksCommentActParamsSchema))
-    .output(EffectSchema.flip(tasksCommentAnswerSchema)),
 };

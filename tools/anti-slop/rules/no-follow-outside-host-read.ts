@@ -12,15 +12,15 @@ import {
 import { literalText } from "../shared/test-guard.ts";
 
 /**
- * Server data reaches a surface only through `useHostRead`
- * (`packages/panel/src/use-host-read.ts`), over the app-state slice the host
+ * Server data reaches a surface only through a live read's query
+ * (`packages/panel/src/live-reads.ts`), over the app-state slice the host
  * fills for each read. Outside that module, the panel's and the design
  * system's code reads none of its own: no call of `streamFrom` or
  * `followStream`, no act kind `@repo/host`'s `PORT_ACT_USE` declares a READ,
  * however it is spelled, but as a fixture's answer or a comparison, and no
- * poll of a promise. The hook holds its reads open through one door,
- * `act-stream.ts`, which opens and polls on the hook's behalf and so is
- * excused all three; no module but the hook imports it, in any form.
+ * poll of a promise. The live reads hold their reads open through one door,
+ * `act-stream.ts`, which opens and polls on their behalf and so is
+ * excused all three; no module but those two imports it, in any form.
  */
 
 /** The Effect and Stream members that run an effect again and again: a poll, where what they run is a promise. */
@@ -64,15 +64,15 @@ export const noFollowOutsideHostReadRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow reading data a surface shows outside useHostRead, and importing the door it holds its reads open by anywhere else.",
+        "Disallow reading data a surface shows outside a live read's query, and importing the door the live reads hold their reads open by anywhere else.",
     },
     messages: {
       newRead:
-        "`{{what}}` reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) over the app-state slice the host fills for the read (`@repo/host`'s `live-collection.ts`).",
+        "`{{what}}` reads server data outside a live read's query. Read server data through a live read's query (`packages/panel/src/live-reads.ts`), over the app-state slice the host fills for the read (`@repo/host`'s `live-collection.ts`).",
       newPoll:
-        "`{{what}}` polls a promise, which reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`), which the host keeps current, rather than asking again on a timer.",
+        "`{{what}}` polls a promise, which reads server data outside a live read's query. Read server data through a live read's query (`packages/panel/src/live-reads.ts`), which the host keeps current, rather than asking again on a timer.",
       doorImport:
-        "`{{source}}` is the door `useHostRead` holds its reads open by, which no other module imports. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) instead.",
+        "`{{source}}` is the door the live reads' queries hold their reads open by, which no other module imports. Read server data through a live read's query (`packages/panel/src/live-reads.ts`) instead.",
     },
   },
   createOnce(context) {

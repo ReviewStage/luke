@@ -1,6 +1,12 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
-import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
+import type {
+  AgentAttachment,
+  AgentSummary,
+  ListedAgent,
+  TasklessAgent,
+} from "@repo/features/agent-wire";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -10,16 +16,16 @@ import {
   LINK_PLACE,
   type LinkPlace,
   type ReadLink,
+  taskLinkStep,
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
-import { planMarkdown } from "@repo/features/plan-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { agentMovedAt, agentsOfTask } from "@repo/features/task-agents-model";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
   type CodeRef,
@@ -48,7 +54,6 @@ import {
   TASK_CALL_FAILURE,
   TASK_PARENT_FAILURE,
   TASKS_READ,
-  type TasksEditAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
 import { managesWorkspace } from "@repo/features/workspace-role";
@@ -59,23 +64,21 @@ import type {
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
+  AppStateSnapshot,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS } from "@repo/settings";
+import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
+  agentTab,
+  changesTab,
+  draftTab,
+  pageTab,
   pullRequestLabelOf,
+  STRIP_TAB_KIND,
   type StripTab,
   sameTab,
+  subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@repo/ui/task-sections-model";
 import {
@@ -107,35 +110,60 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  mutationOptions,
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { absurd } from "effect";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
-  type ActHandle,
+  askAct,
   askKept,
   firstRefusal,
   KEPT,
   type Kept,
   notKept,
+  sendAct,
   unreachedAs,
 } from "../act.js";
-import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
+import { actMutation, pressMutation } from "../act-mutations.js";
+import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
+import type { AutomationsRoute } from "../automations-route.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import type { InboxAt, InboxRoute } from "../inbox-route.js";
+import {
+  descriptionDocumentQuery,
+  descriptionDocumentRetryMutation,
+  historyQuery,
+  historyRetryMutation,
+  pagesQuery,
+} from "../live-reads.js";
 import {
   beginPanelSpan,
   PANEL_SPAN,
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import type { RenameShape } from "../rename-write.js";
 import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { pressRows, ROW_WRITE, type RowDoors, type TaskRows } from "../undo-stack.js";
+import {
+  appStateIn,
+  appStateQuery,
+  selectAppSettingsView,
+  selectExperimentChoices,
+} from "../use-app-state.js";
+import type { VersionHistoryRoute } from "../version-history-route.js";
+import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -143,7 +171,9 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
+  startsOwnAgents,
 } from "./agent-model.js";
+import { inboxItemHomeQueryOptions, taskByNumberQueryOptions } from "./agent-reads.js";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -152,15 +182,26 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import type { SectionReveal } from "./description-body.js";
+import {
+  type DescriptionEditMutation,
+  descriptionEditMutation,
+} from "./description-edit-mutation.js";
+import type { RevisionSource } from "./description-history-model.js";
 import { holdsAsk } from "./inbox-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
-import type { SectionReveal } from "./plan-body.js";
-import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import type { FixturePlace } from "./tasks-fixture.js";
+import {
+  stripTabClosesIdle,
+  stripTabDrawsAgain,
+  stripTabEndsSession,
+  stripTabPin,
+  stripTabReopens,
+  TAB_PIN,
+} from "./strip-tab-kinds.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { ComposerNote } from "./use-agent-composer.js";
@@ -171,34 +212,23 @@ import {
   readAgentById,
   useAgents,
 } from "./use-agents.js";
-import { useIdleTabs } from "./use-idle-tabs.js";
 import {
-  chooseInboxTask,
-  leaveInboxTask,
-  listInboxWorkspace,
-  openTaskThread,
-} from "./use-inbox-task.js";
+  type DescriptionHistoryControl,
+  type DescriptionHistorySource,
+  type HistorySpot,
+  useDescriptionHistory,
+} from "./use-description-history.js";
+import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import {
   isOverviewTab,
   MAIN_TAB,
   type MainTab,
   type MainTabsControl,
-  type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
 import {
-  type HistorySpot,
-  type PlanHistoryControl,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "./use-plan-history.js";
-import {
   DRAWN_KINDS,
-  drawsChanges,
-  drawsSubagent,
-  drawsTerminal,
-  isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
   type SidePanelControl,
@@ -206,6 +236,8 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
+import { useEndTerminalTab } from "./use-terminal-session.js";
+import { listedAgentIn } from "./use-workspace-agents.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -230,8 +262,8 @@ import { sayRestored } from "./version-view.js";
  * or on a draft holding the words with why where the agent was refused.
  * Main is told which agent's tab is shown, so an agent that ends while the
  * developer is looking at it is not marked unseen, and the agents main says
- * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open plan's history is the
- * tab's as well (`use-plan-history.ts`): its version history, opened from
+ * ended unseen read in semibold until their tab is shown (`@repo/host/agent-notices`). The open description's history is the
+ * tab's as well (`use-description-history.ts`): its version history, opened from
  * the task's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the
  * task's place (`desktop-version-history.tsx`) until it is left or another
@@ -249,7 +281,7 @@ export type InboxChoice =
     // An item a link named by its id alone that the account may not read, which the Inbox says is missing.
     | { readonly itemId: string }
   ) & {
-    /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
+    /** Whether a link or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
     readonly opened?: true;
   };
 
@@ -280,6 +312,10 @@ interface InboxViewControl {
   readonly onOpenItem: (chosen: InboxChoice) => void;
   /** Chooses no item, which stands the list alone where the Inbox shows one column. */
   readonly onClear: () => void;
+  /** The task the list is narrowed to, none where it lists every task's items. */
+  readonly narrowed: string | undefined;
+  /** Lists every task's items again, where the list is narrowed to one; the door the task's chip over the list clears it by. */
+  readonly onWiden: () => void;
   /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
@@ -325,10 +361,9 @@ interface PersonViewControl {
   /** Opens their page in `workspaceId`, the window listing it first where it lists another; in the listed workspace where none is named. */
   readonly onOpen: (userId: string, name?: string, workspaceId?: string) => void;
   readonly onClose: () => void;
+  /** Reads their page ahead of a press the pointer says is coming, in `workspaceId`, or the listed workspace where none is named. */
+  readonly onPreload: (userId: string, workspaceId?: string) => void;
 }
-
-/** The Admin place's first view, and the one it reads as while it does not stand. */
-const ADMIN_OVERVIEW: AdminView = { kind: ADMIN_TAB.DASHBOARD };
 
 /** The places that are an agent's own, which open on its task where it has one, else on its page. */
 type AgentPlaceKind =
@@ -362,48 +397,26 @@ type TaskTabPlace =
 
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
-  INBOX: "inbox",
   AGENT: "agent",
-  PERSON: "person",
-  AUTOMATIONS: "automations",
-  BOARD: "board",
-  ADMIN: "admin",
   /** A workspace's Home or Board asked for under a step naming none of the reader's workspaces. */
   UNKNOWN_WORKSPACE: "unknown-workspace",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, a person's page, the Automations page, the Board, or a workspace not there for the reader. */
+/** One agent's page, or a workspace not there for the reader. */
 type StandIn =
-  | {
-      readonly kind: typeof STAND_IN.INBOX;
-      readonly chosen: InboxChoice | undefined;
-    }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | {
-      readonly kind: typeof STAND_IN.PERSON;
-      readonly userId: string;
-      readonly name?: string;
-      /** The workspace the page is the person's in, which it gives way to another listed in its place. */
-      readonly workspaceId: string | undefined;
-    }
-  | {
-      readonly kind: typeof STAND_IN.AUTOMATIONS;
-      readonly place: AutomationsPlace;
-      /** Whether an automation's runs stand alone over its setup, which only a narrow room draws apart; a page opened on a run's link does until said otherwise. */
-      readonly runs?: boolean | undefined;
-    }
-  | { readonly kind: typeof STAND_IN.BOARD }
-  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView }
   | { readonly kind: typeof STAND_IN.UNKNOWN_WORKSPACE };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
-interface AdminViewControl {
+export interface AdminViewControl {
   readonly open: boolean;
   /** The view standing, or the Overview while the place does not stand. */
   readonly view: AdminView;
   /** Opens the place on `view`; where none is named, on the Overview. */
   readonly onOpen: (view?: AdminView) => void;
   readonly onClose: () => void;
+  /** Reads the place ahead of a press the pointer says is coming, its chunk, charts and all. */
+  readonly onPreload: () => void;
 }
 
 /** The window's Board: whether it stands in the task's place, and the presses that open and leave it. */
@@ -411,6 +424,8 @@ interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
+  /** Reads the Board ahead of a press the pointer says is coming. */
+  readonly onPreload: () => void;
 }
 
 /** A workspace's address naming none of the reader's workspaces: whether its not-found state stands in the plan's place, and its way out. */
@@ -431,7 +446,7 @@ export const AUTOMATIONS_PAGE = {
 export type AutomationsPlace =
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.LIST;
-      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
+      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on; an opening's alone, which no address holds. */
       readonly deleted?: string;
     }
   | { readonly kind: typeof AUTOMATIONS_PAGE.RUNS }
@@ -441,7 +456,7 @@ export type AutomationsPlace =
       readonly automationId: string;
       /** The run a link named, which its runs mark and bring into view. */
       readonly runId?: string;
-      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history. */
+      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history; an opening's alone, which no address holds. */
       readonly created?: true;
     };
 
@@ -450,21 +465,9 @@ export function automationsTab(place: AutomationsPlace): boolean {
   return place.kind === AUTOMATIONS_PAGE.LIST || place.kind === AUTOMATIONS_PAGE.RUNS;
 }
 
-/** The list, where the Automations pages open with none asked for. */
-const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
-
-/** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
-function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
-  if (place === undefined) return undefined;
-  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW };
-  if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
-  return undefined;
-}
-
-/** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
-function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
-  if (automationsTab(place)) return false;
-  return runs ?? (place.kind === AUTOMATIONS_PAGE.EDIT && place.runId !== undefined);
+/** The step a workspace's address names it by: its slug, or its id where an older service answered none, as `linkOf` writes it. */
+function stepOf(workspace: Pick<Workspace, "id" | "slug">): string {
+  return workspace.slug ?? workspace.id;
 }
 
 /** The window's Automations pages: whether one stands in the task's place, which, and the presses that open, move between, and leave them. */
@@ -478,8 +481,8 @@ interface AutomationsViewControl {
    * link does, and any other does not until its Runs is chosen.
    */
   readonly runs: boolean;
-  /** Opens the page asked for, the list where none is, on its runs where `runs` says so. */
-  readonly onOpen: (place?: AutomationsPlace, runs?: boolean) => void;
+  /** Opens the page asked for, the list where none is, under the listed workspace; nothing while none is listed. */
+  readonly onOpen: (place?: AutomationsPlace) => void;
   /** Stands the page's runs alone, or its setup again; it leaves no page, so it asks nothing. */
   readonly onRuns: (shown: boolean) => void;
   readonly onClose: () => void;
@@ -499,7 +502,7 @@ export interface NewTaskAgent {
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
-  /** The repositories the agent works in beside the task's, `owner/name`, which the card offers while Several repositories is on; none where left out. */
+  /** The repositories the agent works in beside the task's, `owner/name`, which the card's repository chip picks after the task's own; none where left out. */
   readonly alsoRepositories?: readonly string[] | undefined;
 }
 
@@ -643,8 +646,13 @@ export interface TasksControl {
   onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the account's own workspace, else the first other, once one is left, and turns to the home page. */
   onLeftWorkspace: (workspaceId: string) => void;
-  /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
-  onCreateWorkspace: (name: string) => Promise<string | undefined>;
+  /**
+   * New workspace's cards, standing alone in the window in the app's place
+   * while open (`new-workspace-steps.tsx`): opened from the switcher or a
+   * phone's account menu, and put away by their own Cancel or Close. Open
+   * only for the account that opened them, so a sign-out puts them away.
+   */
+  newWorkspace: { open: boolean; onOpen: () => void; onClose: () => void };
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
   /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
@@ -664,10 +672,10 @@ export interface TasksControl {
   /** Whether the list drawn is one the service answered, rather than the empty one before the first read lands. */
   listRead: boolean;
   region: DocumentRegion;
-  /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
+  /** Copies the description drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
-  /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
-  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+  /** The writes to a description's document, as each place writing them holds its own mutation (`descriptionEditMutation`): saved, a conflict with the text as it stands now, or why not. */
+  descriptionEdit: (taskId: string) => DescriptionEditMutation;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
@@ -678,11 +686,11 @@ export interface TasksControl {
   pages: readonly PageLine[] | undefined;
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
   agents: AgentsControl;
-  /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
+  /** The open description's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task on its plan: what a chip, a link, the Tasks list, the Board, the Inbox, a crumb, or a related task's row asks. */
+  /** Opens a task on its description: what a chip, a link, the Tasks list, the Board, the Inbox, a crumb, or a related task's row asks. */
   onSelect: (taskId: string) => void;
-  /** Opens a task the developer goes back to work on, from a sidebar row, ⌘K, or Recent, on the agent waiting on them, else one at work, else the one last active, else its plan. */
+  /** Opens a task the developer goes back to work on, from a sidebar row, ⌘K, or Recent, on the agent waiting on them, else one at work, else the one last active, else its description. */
   onResume: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
@@ -697,7 +705,7 @@ export interface TasksControl {
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowTask: (taskId: string) => void;
   /** Opens a task the same way, scrolled to the section a mention or an app link names, or at its top for the task's own. */
-  onShowMention: (mention: PlanMention) => void;
+  onShowMention: (mention: DescriptionMention) => void;
   /**
    * Opens the place an app link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
@@ -730,7 +738,7 @@ export interface TasksControl {
   commentReveal:
     | { readonly planId: string; readonly thread: string; readonly ask: number }
     | undefined;
-  /** The task's page took the ask, so a later visit to the task neither opens the thread nor its Comments tab again. */
+  /** The task's page took the ask, so a later visit to the task opens the thread neither beside its words nor in its list again. */
   onCommentRevealed: (ask: number) => void;
   /** Opens the window's Inbox narrowed to one task's items, on the item named, or on nothing chosen: what a task's "needs you" count, or an agent's waiting threads, ask. */
   onShowInbox: (narrowed: { readonly taskId: string; readonly itemId?: string }) => void;
@@ -748,6 +756,8 @@ export interface TasksControl {
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the task's place, the task chosen in it, and its presses. */
   inboxView: InboxViewControl;
+  /** Says which agent's card in the column shows its threads in its transcript's place (`agent-threads.tsx`), none while it shows its transcript, so main is not told that transcript is on screen. */
+  onThreadsShown: (agentId: string | undefined) => void;
   /** One agent's page: which agent's stands in the task's place, if any, and its presses. */
   agentView: AgentViewControl;
   /** One person's page: whose stands in the plan's place, if anyone's, and its presses (`person-page.tsx`). */
@@ -809,6 +819,8 @@ export interface TasksControl {
     workspaceId: string,
     told?: { readonly quiet: boolean },
   ) => Promise<boolean>;
+  /** The same move, as a question asking it first holds its own mutation over it. */
+  moveTask: TaskMoveMutation;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Opens the New task dialog over whatever stands open, which it leaves standing; on Home, hands Home's own composer the caret instead (`newTask.homeAsks`). */
@@ -840,7 +852,7 @@ export interface TasksControl {
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
      * Starts the task on the repository given, or none, in the workspace
-     * given, with an empty plan and no call,
+     * given, with an empty description and no call,
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
@@ -868,18 +880,14 @@ export interface TasksControl {
     /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers and New task's Task relation offers its workspace's of. */
     tasks: readonly TaskSummary[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
-    onShowMention: (mention: PlanMention) => void;
+    onShowMention: (mention: DescriptionMention) => void;
   };
   /** Leaves the open task for Home (`desktop-home.tsx`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
   /** Goes to Home from wherever the tab stands: the open task left, and whatever page stands in its place put away. */
   onGoHome: () => void;
-  /**
-   * Renames a task to a name already trimmed and changed, drawn under it at
-   * once and under its old name again if the service refuses; answers
-   * whether it was renamed.
-   */
-  onRenameTask: (taskId: string, name: string) => Promise<boolean>;
+  /** The options a surface renaming a task holds its own mutation over (`taskRenameMutation`). */
+  renameTask: TaskRenameMutation;
   /**
    * Draws a name being typed for a task everywhere the task is named, before
    * any of it is saved, or none, which draws its saved name again.
@@ -932,6 +940,10 @@ export interface TasksControl {
   onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
+  /** The same delete, as a question asking it first holds its own mutation over it. */
+  deleteTask: TaskDeleteMutation;
+  /** Several deletes at once, as a selection's question holds its own mutation over them. */
+  deleteTasks: TasksDeleteMutation;
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
@@ -1015,27 +1027,26 @@ export function useLeaveGuard(onStanding?: (ask: LeaveAsk | undefined) => void):
   }, []);
 }
 
-/** The open plan's history as the window opens and draws it, over what is read of it. */
-export interface VersionHistoryControl extends PlanHistoryControl {
-  /** Whether the plan's version history takes the window in its place. */
+/** The open description's history as the window opens and draws it, over what is read of it. */
+export interface VersionHistoryControl extends DescriptionHistoryControl {
+  /** Whether the description's version history takes the window in its place. */
   open: boolean;
   /**
-   * Opens a plan's version history on the plan as it stands, or, given the
+   * Opens a description's version history on the description as it stands, or, given the
    * moment of a save, on the revision that made it, opening the task first
    * where it is not the open one.
    */
   onOpen: (taskId: string, save?: number) => void;
-  /** Opens a plan's version history where it stood when it was left, as Back and Forward go to it. */
-  onReturn: (taskId: string, spot: HistorySpot | undefined) => void;
+  /** Reads a description's version history ahead, as the pointer comes to a way into it. */
+  onPreload: (taskId: string) => void;
   /** Leaves the version history for the task, its side panel as it was. */
   onClose: () => void;
 }
 
-/** The task whose version history stands, and the save whose revision it opened on or where it stood before. */
-interface HistoryOpening {
+/** The save a version history opened on, on its task, whose revision it seeks. */
+interface HistorySeek {
   readonly taskId: string;
-  readonly save: number | undefined;
-  readonly spot: HistorySpot | undefined;
+  readonly save: number;
 }
 
 /**
@@ -1062,25 +1073,28 @@ function pinOnTask(pin: SidebarPin, taskId: string): boolean {
 /**
  * The agent a task the developer goes back to work on lands on, so they
  * arrive in the conversation: one with a thread waiting on them, a question
- * before a notice, as the Inbox lists what waits; else the agent its row
- * names that was last active, one at work counting as active now; none where
- * its row names none, so it opens on its plan. Note that the row names a few
- * of its agents, archived ones left out and those at work first
- * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
+ * before a notice, as the Inbox lists what waits; else the task's agent
+ * that was last active, one at work counting as active now, archived ones
+ * left out (`agentsOfTask`); none where it has none, so it opens on its
+ * description.
  */
 function resumingAgentOf(
   taskId: string,
-  tasks: readonly TaskSummary[],
+  agents: readonly ListedAgent[] | undefined,
   waiting: readonly AppInboxTask[],
 ): string | undefined {
   const items = waiting.find((each) => each.taskId === taskId)?.items ?? [];
   const waitingOn = items.find(holdsAsk) ?? items[0];
   if (waitingOn !== undefined) return waitingOn.agentId;
-  const lines = tasks.find((task) => task.id === taskId)?.agents?.agents ?? [];
+  const lines = agentsOfTask(agents, taskId);
   const working = lines.find((line) => agentStillWriting(line.status));
   if (working !== undefined) return working.id;
   let latest = lines[0];
-  for (const line of lines) if ((line.at ?? 0) > (latest?.at ?? 0)) latest = line;
+  for (const line of lines) {
+    if ((agentMovedAt(line) ?? 0) > (latest === undefined ? 0 : (agentMovedAt(latest) ?? 0))) {
+      latest = line;
+    }
+  }
   return latest?.id;
 }
 
@@ -1135,14 +1149,12 @@ type AgentPinAsked =
 /** No pin of an agent on a plan, the same array every render. */
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
-/** What the toast says once Copy plan has put the plan on the clipboard. */
-const TASK_COPIED_NOTE = "Plan copied";
+/** What the toast says once Copy description has put the description on the clipboard. */
+const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
-const OPENS_NEW_TASK = Atom.map(
-  APP_SETTINGS_VIEW,
-  (settings) => settings?.openNewTask ?? APP_SETTING_DEFAULTS.openNewTask,
-);
+const selectOpensNewTask = (state: AppStateSnapshot): boolean =>
+  selectAppSettingsView(state)?.openNewTask ?? APP_SETTING_DEFAULTS.openNewTask;
 
 /** What the toast says once New task started a task it did not open. */
 const TASK_STARTED_NOTE = "Task started";
@@ -1180,6 +1192,82 @@ const BLOCK_REMOVED_NOTE = "Relation removed";
 
 /** What ⌘Z's toast calls a task's rename it takes back or puts back. */
 const TASK_RENAMED_NOTE = "Task renamed";
+
+/** A task's rename as a mutation asks it: the task, and the name already trimmed and changed. */
+interface TaskRenameAsk {
+  readonly taskId: string;
+  readonly name: string;
+}
+
+/**
+ * A task's rename as each surface renaming one holds it, a mutation of its
+ * own over these options: sent through `send`, drawn under the new name at
+ * once, and under its old name again by the host where the service refuses,
+ * answering whether it was renamed. A rename the service kept is ⌘Z's to
+ * take back, through `doors`; none where nothing is drawn to take back.
+ */
+export function taskRenameMutation(
+  send: (asked: TaskRenameAsk) => Promise<boolean>,
+  doors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
+) {
+  return mutationOptions({
+    mutationKey: [ROW_WRITE.TASK_RENAME.kind],
+    mutationFn: send,
+    onMutate: (asked) =>
+      doors === undefined
+        ? undefined
+        : pressRows(ROW_WRITE.TASK_RENAME, doors, [
+            { id: asked.taskId, after: { name: asked.name } },
+          ]),
+    onSuccess: (renamed, _asked, pressed) => {
+      if (renamed) pressed?.keep(TASK_RENAMED_NOTE);
+    },
+  });
+}
+
+/** A task's rename as a surface holds it (`taskRenameMutation`). */
+export type TaskRenameMutation = ReturnType<typeof taskRenameMutation>;
+
+/** A task's delete as each place asking it holds its own mutation over it, run through `run`, answering whether it was deleted. */
+export function taskDeleteMutation(run: (taskId: string) => Promise<ActedResult>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.TASKS_DELETE], mutationFn: run });
+}
+
+/** A task's delete, as a place asking it holds it. */
+type TaskDeleteMutation = ReturnType<typeof taskDeleteMutation>;
+
+/** Several tasks deleted at once, as a selection's question holds its own mutation over them, each through `run`, answering each in the order asked. */
+export function tasksDeleteMutation(run: (taskId: string) => Promise<ActedResult>) {
+  return mutationOptions({
+    mutationKey: [ACT_KIND.TASKS_DELETE],
+    mutationFn: (taskIds: readonly string[]) => Promise.all(taskIds.map(run)),
+  });
+}
+
+/** Several tasks deleted at once, as a selection's question holds it. */
+type TasksDeleteMutation = ReturnType<typeof tasksDeleteMutation>;
+
+/** A task moved to another workspace, and whether a refusal goes unsaid, as the Move dialog says it under its list. */
+interface TaskMoveAsk {
+  readonly taskId: string;
+  readonly workspaceId: string;
+  readonly quiet: boolean;
+}
+
+/** A task's move as each place asking it holds its own mutation over it, run through `run`, answering whether it moved. */
+export function taskMoveMutation(run: (asked: TaskMoveAsk) => Promise<boolean>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.TASKS_MOVE], mutationFn: run });
+}
+
+/** A task's move, as a place asking it holds it. */
+type TaskMoveMutation = ReturnType<typeof taskMoveMutation>;
+
+/** How a task's rename is asked and read back, its refusal the answer that it was not renamed. */
+export const TASK_RENAME_SHAPE: RenameShape<boolean, TaskRenameAsk> = {
+  ask: (taskId, name) => ({ taskId, name }),
+  asked: ({ taskId, name }) => ({ subjectId: taskId, name }),
+  refused: (renamed) => !renamed,
+};
 
 /** What ⌘Z's toast calls a task's pin it takes back or puts back, by what was asked. */
 const TASK_MARKED_NOTES = {
@@ -1292,17 +1380,16 @@ function choiceAgentOf(choice: InboxChoice): string | undefined {
 
 /** Where an item stands, as the service says for one the account may read; nothing for one it may not, one that does not exist, or where the read failed. */
 function readInboxItemHome(
-  act: ActHandle["act"],
+  queryClient: QueryClient,
   itemId: string,
 ): Promise<InboxItemHome | undefined> {
-  return act(ACT_KIND.AGENTS_INBOX_ITEM_HOME, { itemId }).then(
+  return queryClient.fetchQuery(inboxItemHomeQueryOptions(itemId)).then(
     (answer) => ("failure" in answer ? undefined : answer),
     () => undefined,
   );
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act" | "press" | "tell">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1335,10 +1422,49 @@ export function useTasksTab(input: {
   leaveGuard: LeaveGuard;
   /** The room the panel's stage gives, which holds the side panel only full screen while it is narrow (`shell-room.ts`). */
   room: ShellRoom;
+  /** Admin as the router stands it, which a link to it opens (`admin-route.ts`). */
+  adminView: AdminViewControl;
+  /** The listed workspace's Board as the router stands it (`workspace-routes.ts`). */
+  boardView: BoardRoute;
+  /** A person's page as the router stands it (`workspace-routes.ts`). */
+  personView: PersonRoute;
+  /** The listed workspace's Automations pages as the router stands them (`automations-route.ts`). */
+  automationsView: AutomationsRoute;
+  /** A task's version history as the router stands it (`version-history-route.ts`). */
+  versionHistoryView: VersionHistoryRoute;
+  /** The window's Inbox as the router stands it (`inbox-route.ts`). */
+  inboxView: InboxRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
-  const { act, press, tell } = input.acts;
+  // Note that the reads below stay on `act` until they move to queries; every write is a mutation, and
+  // none invalidates a query, since what each changes comes back through app state.
+  const queryClient = useQueryClient();
+  const { mutateAsync: sendSelect } = useMutation(actMutation(ACT_KIND.TASKS_SELECT));
+  const { mutateAsync: sendGitHubConnect } = useMutation(actMutation(ACT_KIND.GITHUB_CONNECT));
+  const { mutateAsync: sendGitHubDisconnect } = useMutation(
+    actMutation(ACT_KIND.GITHUB_DISCONNECT),
+  );
+  const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
+  const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
+  const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
+  const { mutateAsync: sendRepositoryPin } = useMutation(
+    actMutation(ACT_KIND.TASKS_PIN_REPOSITORY),
+  );
+  const { mutateAsync: sendAgentPin } = useMutation(actMutation(ROW_WRITE.AGENT_PIN.kind));
+  const { mutateAsync: sendSections } = useMutation(actMutation(ACT_KIND.TASKS_WRITE_SECTION));
+  const { mutateAsync: sendStandingRow } = useMutation(actMutation(ROW_WRITE.TASK_STANDING.kind));
+  const { mutateAsync: sendTaskRepository } = useMutation(
+    actMutation(ACT_KIND.TASKS_SET_REPOSITORY),
+  );
+  const { mutateAsync: sendBlock } = useMutation(actMutation(ACT_KIND.TASKS_BLOCK));
+  const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
+  const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
+  const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
+  const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
+  // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
+  const { mutate: tellShown } = useMutation(actMutation(ACT_KIND.AGENTS_SHOWN));
+  const { mutate: refreshTasks } = useMutation(pressMutation(ACT_KIND.TASKS_REFRESH));
   const copyWithToast = useCopyToast();
   const toast = useToast();
   // The New task dialog's ask, standing while the dialog does: the preset it was opened with, if any.
@@ -1355,18 +1481,15 @@ export function useTasksTab(input: {
   const [relationMenu, setRelationMenu] = useState<TasksControl["relationMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
-  /**
-   * The task whose version history stands in the window, which it does only
-   * while that task is the one bound for, and the save whose revision it
-   * opened on, none for the plan as it stands.
-   */
-  const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  // The Admin and Automations profiles open their place at launch.
-  const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
-    launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
-  );
-  const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  /** The save whose revision a version history opened from a section's "Edited by" seeks, on its task, until it is found, given up on, or the history is left. */
+  const [historySeek, setHistorySeek] = useState<HistorySeek | undefined>(undefined);
+  const historyRoute = input.versionHistoryView;
+  /** What stands in the task's place while one does: one agent's page, or a workspace not there for the reader. */
+  const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
+  // The window's Inbox is the router's, which stands it in the task's place as its address says (`inbox-route.ts`).
+  const inboxView = input.inboxView.open ? input.inboxView : undefined;
+  // Whether anything stands in the task's place, the Inbox among them.
+  const overPlan = standIn !== undefined || inboxView !== undefined;
   // Note that the Inbox already open has no opening to time.
   const timeInboxOpen = () => {
     if (inboxView === undefined) beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
@@ -1374,6 +1497,17 @@ export function useTasksTab(input: {
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
+  // A door into a place of the window's state leaves the Inbox over it, as the router stands it when pressed.
+  const inboxNow = useRef(input.inboxView);
+  inboxNow.current = input.inboxView;
+  const closeInbox = useCallback(() => {
+    if (inboxNow.current.open) inboxNow.current.onClose();
+  }, []);
+  // Puts away whatever stands in the task's place, the Inbox among them.
+  const clearStandIn = useCallback(() => {
+    setStandIn(undefined);
+    closeInbox();
+  }, [closeInbox]);
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
   const tasksFixture = loadedTasksFixture();
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
@@ -1442,21 +1576,68 @@ export function useTasksTab(input: {
   const chooseListed = useCallback(
     (workspaceId: string) => {
       workspaceChoices.current += 1;
-      listInboxWorkspace(workspaceId);
       listWorkspace(workspaceId);
     },
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
-  // Note that a workspace listed by any other way, as the account's workspaces change, moves the Inbox's task before the window paints.
-  useLayoutEffect(() => {
-    if (listedWorkspace !== undefined) listInboxWorkspace(listedWorkspace.id);
-  }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
-  if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
-    setStandIn(undefined);
-  }
+  const personWorkspace =
+    input.personView.workspace === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.personView.workspace)?.id;
+  // Note that an address naming none of the reader's workspaces is its route's gate's to answer (`route-gates.ts`).
+  const personElsewhere =
+    input.personView.userId !== undefined &&
+    listedWorkspace !== undefined &&
+    personWorkspace !== undefined &&
+    personWorkspace !== listedWorkspace.id;
+  const closePerson = input.personView.onClose;
+  useEffect(() => {
+    if (personElsewhere) closePerson();
+  }, [personElsewhere, closePerson]);
+  // The Board is the listed workspace's, so another listed in its place stands its Board in the step's place.
+  const boardWorkspace =
+    input.boardView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.boardView.standingIn)?.id;
+  const boardElsewhere =
+    input.boardView.open &&
+    listedWorkspace !== undefined &&
+    boardWorkspace !== undefined &&
+    boardWorkspace !== listedWorkspace.id;
+  const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+  const turnBoard = input.boardView.onTurn;
+  useEffect(() => {
+    if (boardElsewhere && listedStep !== undefined) turnBoard(listedStep);
+  }, [boardElsewhere, listedStep, turnBoard]);
+  // The Automations pages are the listed workspace's too, so another listed in its place stands the same page under it in the step's place.
+  const automationsWorkspace =
+    input.automationsView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.automationsView.standingIn)?.id;
+  const automationsElsewhere =
+    listedWorkspace !== undefined &&
+    automationsWorkspace !== undefined &&
+    automationsWorkspace !== listedWorkspace.id;
+  const turnAutomations = input.automationsView.onTurn;
+  useEffect(() => {
+    if (automationsElsewhere && listedStep !== undefined) turnAutomations(listedStep);
+  }, [automationsElsewhere, listedStep, turnAutomations]);
+  // The Inbox lists the listed workspace's items alone, so another listed in its place stands that one's Inbox, on its list, in the step's place.
+  const inboxWorkspace =
+    input.inboxView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.inboxView.standingIn)?.id;
+  const inboxElsewhere =
+    listedWorkspace !== undefined &&
+    inboxWorkspace !== undefined &&
+    inboxWorkspace !== listedWorkspace.id;
+  const turnInbox = input.inboxView.onTurn;
+  useEffect(() => {
+    if (inboxElsewhere && listedStep !== undefined) turnInbox(listedStep);
+  }, [inboxElsewhere, listedStep, turnInbox]);
   const listedWorkspaceId = listedWorkspace?.id;
   const sidebar = useMemo(() => sidebarList(tasks.tasks), [tasks.tasks]);
   const listedSidebar = useMemo(
@@ -1486,24 +1667,35 @@ export function useTasksTab(input: {
     [inboxWaiting, inboxTasks, tasks.tasks, listedWorkspaceId],
   );
   const signedIn = fixture !== undefined || input.signedIn;
+  // The account New workspace's cards were opened for, which alone they stand for.
+  const [founding, setFounding] = useState<{ accountId: string | undefined } | undefined>(
+    undefined,
+  );
+  // A sign-out, or another account, puts the cards away for good, so the same account signing in again does not find them open.
+  if (founding !== undefined && (!signedIn || founding.accountId !== input.accountId)) {
+    setFounding(undefined);
+  }
   const page = tasksPage(tasks);
-  // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
+  // The open task's description is held whenever a task is open, so a task held lately draws its description in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
-  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
-  const heldPlanRows = heldPlan.rows;
-  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
-  const retryPlan = heldPlan.retry;
+  const heldDescription = useQuery(descriptionDocumentQuery(viewed.activeTaskId));
+  const heldDescriptionRows = heldDescription.data;
+  const heldDescriptionFailed = heldDescription.isError;
+  const { mutate: retryDescriptionAct } = useMutation(descriptionDocumentRetryMutation());
   const openedTaskId = viewed.activeTaskId;
+  const retryDescription = useCallback(() => {
+    if (openedTaskId !== undefined) retryDescriptionAct({ taskId: openedTaskId });
+  }, [retryDescriptionAct, openedTaskId]);
   const region = useMemo(
     () =>
       renamedRegion(
         documentRegion(
           { activeTaskId: openedTaskId },
-          { rows: heldPlanRows, failed: heldPlanFailed },
+          { rows: heldDescriptionRows, failed: heldDescriptionFailed },
         ),
         drafts,
       ),
-    [openedTaskId, heldPlanRows, heldPlanFailed, drafts],
+    [openedTaskId, heldDescriptionRows, heldDescriptionFailed, drafts],
   );
   // A started agent's tab opens selected; the column's tabs are built after
   // the agents they draw, so the opening reaches them through this late binding.
@@ -1523,7 +1715,6 @@ export function useTasksTab(input: {
   );
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useAgents({
-    acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
@@ -1535,8 +1726,8 @@ export function useTasksTab(input: {
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
-    onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
-    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
+    onStarted: (agentId) => mainRef.current?.onChoose(agentTab(agentId)),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, draftTab(draftId)),
     keywords: dictationWords,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
@@ -1550,31 +1741,36 @@ export function useTasksTab(input: {
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
   }, [tasklessAgents, listedWorkspaceId]);
-  // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
-  const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
-  const rowAgents = openRow?.agents;
-  const rowListed = openRow !== undefined;
-  const named = useMemo<NamedAgents | undefined>(() => {
-    if (!rowListed) return undefined;
-    // Note that a row names agents only for a task with one, so a row with none names a task with none.
-    if (rowAgents === undefined) return { ids: [], total: 0 };
-    const { agents: lines, total } = rowAgents;
-    return { ids: lines.map((line) => line.id), total };
-  }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
     fixture === undefined ? undefined : { tab: tasksFixture?.fixtureColumnTab(input.run) },
     viewed.activeTaskId,
     agents.agentIds,
-    named,
     agents.draft?.id,
+    input.room === SHELL_ROOM.NARROW,
   );
   mainRef.current = mainTabs;
+  // A task opens on its agents, so one with no agent's tab standing, once its agents are read,
+  // opens a new agent's draft, its composer ready; one that starts none of its own, an archived
+  // task's or a pilot's, and any in a narrow room, shows its details instead. Note that the draft
+  // is not chosen but stands as the column's last tab, which it falls to, so it is not counted
+  // viewed: an agent coming back, as a refused archive brings it, is shown again over it.
+  const columnEmpty =
+    viewed.activeTaskId !== undefined &&
+    agents.agentIds !== undefined &&
+    mainTabs.tab === undefined;
+  const opensDraft =
+    input.room !== SHELL_ROOM.NARROW &&
+    agents.onUnarchive === undefined &&
+    startsOwnAgents(agents.mode);
+  const fillColumn = useSteadyDoor(() => {
+    if (opensDraft) agents.onNewDraft();
+    else mainTabs.onChoose(MAIN_TAB.OVERVIEW);
+  });
   // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
   // among them, so its page draws them from where they stand, and a page's tab is held to them.
-  const taskPages = useHostRead(
-    LIVE_READ.PAGES,
-    viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId },
-  ).rows;
+  const taskPages = useQuery(
+    pagesQuery(viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId }),
+  ).data;
   const pages = useMemo(() => (taskPages ?? NO_PAGES).map((page) => page.id), [taskPages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
   // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
@@ -1599,21 +1795,23 @@ export function useTasksTab(input: {
   const inboxAgent = inboxChosen === undefined ? undefined : choiceAgentOf(inboxChosen);
   // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`), and that the
   // pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
-  const inboxPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView === undefined
-      ? undefined
-      : inboxTask !== undefined
-        ? { taskId: inboxTask }
-        : inboxAgent !== undefined
-          ? { agentId: inboxAgent }
-          : undefined,
-  ).rows;
+  const inboxPages = useQuery(
+    pagesQuery(
+      inboxView === undefined
+        ? undefined
+        : inboxTask !== undefined
+          ? { taskId: inboxTask }
+          : inboxAgent !== undefined
+            ? { agentId: inboxAgent }
+            : undefined,
+    ),
+  ).data;
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
-  const agentPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
-  ).rows;
+  const agentPages = useQuery(
+    pagesQuery(
+      inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
+    ),
+  ).data;
   const agentPageIds = useMemo(() => (agentPages ?? NO_PAGES).map((page) => page.id), [agentPages]);
   const inboxPageIds = useMemo(() => (inboxPages ?? NO_PAGES).map((page) => page.id), [inboxPages]);
   const inboxAgents = useMemo(
@@ -1671,6 +1869,9 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
+  // The account's experiments, which hold where a link to the description's parts lands.
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -1748,7 +1949,7 @@ export function useTasksTab(input: {
     for (const pin of sidePanel.pins) {
       if (!("task" in pin)) continue;
       const { task: taskId, tab } = pin;
-      if (tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(taskId)) continue;
+      if (tab !== SIDE_PANEL_TAB.DESCRIPTION || migratedPins.current.has(taskId)) continue;
       const pinned = tasks.tasks.find((each) => each.id === taskId);
       if (pinned === undefined) continue;
       migratedPins.current.add(taskId);
@@ -1767,9 +1968,21 @@ export function useTasksTab(input: {
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
   // Whether the column stands on screen, a fixture's among them.
-  const columnInView =
-    shown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
+  // Note that a routed place beside the sidebar, Admin, the Board, a person's page, or the Automations pages, stands over the window's state, which stays
+  // as it was under it (`admin-route.ts`, `workspace-routes.ts`), so none of it is on screen then.
+  const routedOver =
+    input.adminView.open ||
+    input.boardView.open ||
+    input.personView.userId !== undefined ||
+    input.automationsView.open;
+  const stateShown = shown && !routedOver;
+  const columnInView = stateShown && !historyRoute.open && !overPlan && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
+  // Note that the column is filled only while in view, because a blank draft out of view is let
+  // go at once (below), which would leave it empty to fill again.
+  useEffect(() => {
+    if (columnEmpty && columnInView) fillColumn();
+  }, [columnEmpty, columnInView, fillColumn]);
   // A new agent's draft opens only from the column's "+" (`main-tabs.tsx`), and one holding
   // nothing (`holdsNothing`) stands only while its tab is in view: left for another tab, another
   // task, or another place, Settings and the side panel filling the window among them, it closes,
@@ -1778,7 +1991,12 @@ export function useTasksTab(input: {
   // stood in view, because by the render that leaves it the open task's draft may be another's.
   const shownTab = mainTabs.tab;
   const draftInView =
-    columnInView && shownTab !== undefined && isDraftTab(shownTab) ? shownTab.draft : undefined;
+    columnInView &&
+    shownTab !== undefined &&
+    !isOverviewTab(shownTab) &&
+    shownTab.kind === STRIP_TAB_KIND.DRAFT
+      ? shownTab.draft
+      : undefined;
   const blankDraft =
     agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
   const columnSettled = shownTab !== undefined;
@@ -1794,47 +2012,125 @@ export function useTasksTab(input: {
       discardDraftNow.current(blankDraft);
     }
   }, [draftInView, blankDraft, columnSettled]);
+  // The agent whose card in the column shows its threads rather than its transcript, as the task's page says.
+  const [threadsShown, setThreadsShown] = useState<string | undefined>(undefined);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =
-    shown &&
+    stateShown &&
     fixture === undefined &&
     inboxView !== undefined &&
     sidePanel.open &&
     sidePanel.tab !== undefined &&
-    isTranscriptTab(sidePanel.tab)
+    typeof sidePanel.tab !== "string" &&
+    sidePanel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
       ? sidePanel.tab.transcript
       : undefined;
+  // Note that an agent's card showing its threads keeps its transcript out of sight, so its end is still unseen.
   const shownAgent =
-    shown && fixture === undefined && agentView !== undefined
+    stateShown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
       : inboxTranscript !== undefined
         ? inboxTranscript
-        : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
+        : columnShown &&
+            mainTabs.tab !== undefined &&
+            !isOverviewTab(mainTabs.tab) &&
+            mainTabs.tab.kind === STRIP_TAB_KIND.AGENT &&
+            mainTabs.tab.agent !== threadsShown
           ? mainTabs.tab.agent
           : null;
   const shownInbox =
-    shown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
+    stateShown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
   // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
   const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (reportedAgent.current === shownAgent) return;
     reportedAgent.current = shownAgent;
-    tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
-  }, [shownAgent, tell]);
+    tellShown({ agentId: shownAgent });
+  }, [shownAgent, tellShown]);
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the task takes its ask
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
-  // The version history is the task's, so another task, or none, leaves it.
-  if (historyFor !== undefined && historyFor.taskId !== boundFor) setHistoryFor(undefined);
-  // A plan the service would not hand the reader has no history to show, so its Not found stands in the history's place, as a version's link may ask for one.
+  const descriptionsOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
+  // The version history is the router's (`version-history-route.ts`), of the task its address names by its number in the
+  // workspace it names, or by its id, found among the tasks the window holds, else asked of the service as a link's is.
+  const routedStep = historyRoute.task;
+  const routedNumber =
+    routedStep === undefined
+      ? undefined
+      : taskNumberOf({ kind: LINK_PLACE.TASK, planId: routedStep });
+  const routedHome =
+    historyRoute.workspace === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, historyRoute.workspace)?.id;
+  // Note that a step naming none of the reader's workspaces, once they are read, names none of their tasks by number either.
+  const homeNamed =
+    historyRoute.workspace === undefined ||
+    viewed.workspaces.length === 0 ||
+    routedHome !== undefined;
+  const namesTask = (task: {
+    readonly id: string;
+    readonly number?: number | undefined;
+    readonly workspaceId: string;
+  }) =>
+    task.id === routedStep ||
+    (homeNamed &&
+      taskLinkStep(task) === routedStep &&
+      (routedHome === undefined || task.workspaceId === routedHome));
+  const heldTask =
+    routedStep === undefined
+      ? undefined
+      : (tasks.tasks.find(namesTask) ??
+        (region.kind === DOCUMENT_REGION.READY && namesTask(region.task)
+          ? region.task
+          : undefined));
+  const findsTask =
+    heldTask === undefined && routedNumber !== undefined && historyRoute.workspace !== undefined;
+  const found = useQuery({
+    ...taskByNumberQueryOptions(historyRoute.workspace ?? "", routedNumber ?? 0),
+    enabled: findsTask,
+    select: (answer) => ("taskId" in answer ? answer.taskId : undefined),
+  });
+  const foundTask = found.data;
+  // A number the service finds no task for has no history to show, so its step gives way to the task, opened as its link opens it, whose Not found stands.
+  const numberMissing = findsTask && !found.isPending && foundTask === undefined;
+  const routedHistoryTask =
+    routedStep === undefined
+      ? undefined
+      : (heldTask?.id ?? (routedNumber === undefined ? routedStep : foundTask));
+  // The task a version history's address names opens under it as the history lands, whatever stood in the plan's place giving way, as opening it always had them.
+  const landHistory = useRef<(taskId: string) => void>(() => undefined);
+  useEffect(() => {
+    if (routedHistoryTask === undefined) return;
+    landHistory.current(routedHistoryTask);
+    // A save sought is the opening's alone, so the history left lets it go.
+    return () => setHistorySeek(undefined);
+  }, [routedHistoryTask]);
+  // The history is the description's, which stands only while Descriptions is on (`versionHistoryRouteStands`).
   const historyOpen =
-    historyFor !== undefined &&
-    historyFor.taskId === boundFor &&
+    routedHistoryTask !== undefined &&
+    routedHistoryTask === boundFor &&
+    descriptionsOn &&
     region.kind !== DOCUMENT_REGION.MISSING;
+  // A plan the service would not hand the reader has no history to show, so its step gives way to the task, whose Not found stands, as a version's link may ask for one.
+  const historyMissing =
+    routedHistoryTask !== undefined &&
+    routedHistoryTask === tasks.activeTaskId &&
+    region.kind === DOCUMENT_REGION.MISSING;
+  const giveHistoryWay = useRef(historyRoute.onGiveWay);
+  giveHistoryWay.current = historyRoute.onGiveWay;
+  useEffect(() => {
+    if (historyMissing) giveHistoryWay.current();
+  }, [historyMissing]);
+  const showMissingTask = useRef<(taskId: string) => void>(() => undefined);
+  useEffect(() => {
+    if (!numberMissing || routedStep === undefined) return;
+    giveHistoryWay.current();
+    showMissingTask.current(routedStep);
+  }, [numberMissing, routedStep]);
   // A pin stays chosen while its task stays open, whichever of its tabs is
   // shown: once its task opens it is held there, and any other task opening
   // lets it go. Note that this reads the task open rather than the one asked
@@ -1864,12 +2160,12 @@ export function useTasksTab(input: {
     const timed = opening.current;
     if (timed === undefined || readyTask?.id !== timed.taskId) return;
     opening.current = undefined;
-    const planChars = readyTask.document.body.length;
+    const descriptionChars = readyTask.document.body.length;
     recordPanelSpan({
       name: PANEL_SPAN.TASK_OPEN,
       startedAt: timed.startedAt,
       endedAt: Date.now(),
-      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: planChars }),
+      attributes: () => ({ [PANEL_SPAN_ATTRIBUTE.DESCRIPTION_CHARS]: descriptionChars }),
     });
   }, [readyTask]);
   // Opening a task, or leaving one, is leaving the window's Inbox for it.
@@ -1878,7 +2174,7 @@ export function useTasksTab(input: {
   // launch or the next.
   const openTask = useCallback(
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
-      setStandIn(undefined);
+      clearStandIn();
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
       // open already has nothing to wait on.
@@ -1890,7 +2186,7 @@ export function useTasksTab(input: {
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
-      act(ACT_KIND.TASKS_SELECT, { taskId }).then((opened) => {
+      sendSelect({ taskId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
@@ -1898,17 +2194,17 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [act, fixture, openTaskId],
+    [sendSelect, fixture, openTaskId, clearStandIn],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
-    setStandIn(undefined);
+    clearStandIn();
     opening.current = undefined;
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
-    act(ACT_KIND.TASKS_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
-  }, [act, fixture, openTaskId]);
+    sendClose().catch(() => setAsked((held) => (held === ask ? undefined : held)));
+  }, [fixture, openTaskId, sendClose, clearStandIn]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
   const navigations = useRef(0);
@@ -1989,33 +2285,54 @@ export function useTasksTab(input: {
     },
     [tasksNow, workspacesNow, listedId, openTaskId, openTask, chooseListed, toast, leaveTask],
   );
+  landHistory.current = (taskId) => {
+    if (taskId !== boundFor) select(taskId);
+    setStandIn(undefined);
+  };
 
   // A fixture's tasks are deleted nowhere, as they are read from nowhere. A
   // delete that landed says nothing, since the task leaving the list says it;
   // a refusal is said where the question that asked it stands, or in a toast
   // where the task leaving took it away (`use-refusal-heard.ts`).
-  const deleteTask = async (taskId: string): Promise<ActedResult> => {
+  const sendDeleteTask = async (taskId: string): Promise<ActedResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await askKept(act(ACT_KIND.TASKS_DELETE, { taskId }));
+    const deleted = await askKept(sendAct(ACT_KIND.TASKS_DELETE, { taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     return { ...DELETE_REFUSED, cause: deleted.cause };
   };
+  const deleteTaskOptions = taskDeleteMutation(sendDeleteTask);
+  const { mutateAsync: deleteTask } = useMutation(deleteTaskOptions);
 
-  // The tasks the tab draws as they stand at each call, and its act, which
-  // ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
+  // The tasks the tab draws as they stand at each call, and each row write's
+  // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
-  const rowDoors: RowDoors<TasksView> = { rows: () => drawnTasks.current, act };
-
-  // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
-  // rename the service kept is ⌘Z's to take back.
-  const renameTask = async (taskId: string, name: string): Promise<boolean> => {
-    if (fixture !== undefined) return false;
-    const pressed = pressRows(ROW_WRITE.TASK_RENAME, rowDoors, [{ id: taskId, after: { name } }]);
-    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
-    if (renamed) pressed.keep(TASK_RENAMED_NOTE);
-    return renamed;
+  const drawnRows = (): TaskRows => ({
+    tasks: drawnTasks.current,
+    held: appStateIn(queryClient)?.[LIVE_READ.DESCRIPTION_DOCUMENT],
+  });
+  const renameDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> = {
+    rows: drawnRows,
+    send: sendTaskRename,
   };
+  const taskPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_PIN.kind> = {
+    rows: drawnRows,
+    send: sendTaskPin,
+  };
+  const agentPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.AGENT_PIN.kind> = {
+    rows: drawnRows,
+    send: sendAgentPin,
+  };
+  const standingDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_STANDING.kind> = {
+    rows: drawnRows,
+    send: sendStandingRow,
+  };
+
+  // A fixture's tasks are renamed nowhere, as they are read from nowhere.
+  const renameTask =
+    fixture === undefined
+      ? taskRenameMutation((asked) => sendAct(ROW_WRITE.TASK_RENAME.kind, asked), renameDoors)
+      : taskRenameMutation(() => Promise.resolve(false), undefined);
 
   // The open task as it stands when a move is answered, which may be
   // another than the one open when it was pressed.
@@ -2031,10 +2348,10 @@ export function useTasksTab(input: {
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const pinned = mark === TASK_MARK.PIN;
-    const pressed = pressRows(ROW_WRITE.TASK_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_PIN, taskPinDoors, [
       { id: taskId, after: { pinned, position: null } },
     ]);
-    return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned })).then((changed) => {
+    return askKept(sendTaskPin({ taskId, pinned })).then((changed) => {
       if (changed.kept) {
         pressed.keep(TASK_MARKED_NOTES[mark]);
         return true;
@@ -2057,7 +2374,7 @@ export function useTasksTab(input: {
   // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
+    askKept(sendRepositoryPin({ repository, pinned })).then((changed) => {
       if (changed.kept) return;
       toast({
         replayUnmasked: true,
@@ -2095,7 +2412,7 @@ export function useTasksTab(input: {
     const asked = (flights.get(agentId) ?? Promise.resolve()).then(
       (): Promise<AgentPinAsked> | AgentPinAsked =>
         accountNow.current === pressedBy
-          ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned, ...placed }).then(
+          ? sendAgentPin({ agentId, pinned, ...placed }).then(
               (answer) => ("agent" in answer ? AGENT_PIN_ASKED.CHANGED : { refused: answer }),
               (error: unknown) => ({ refused: error }),
             )
@@ -2109,7 +2426,7 @@ export function useTasksTab(input: {
   };
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const pressed = pressRows(ROW_WRITE.AGENT_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.AGENT_PIN, agentPinDoors, [
       { id: agentId, after: { pinned, position: null } },
     ]);
     askAgentPin(agentId, pinned).then((asked) => {
@@ -2181,13 +2498,13 @@ export function useTasksTab(input: {
       const flight: Promise<Kept | undefined> = agent
         ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
             accountNow.current === pressedBy
-              ? act(ACT_KIND.AGENTS_PIN, { agentId: id, pinned: true, position }).then(
+              ? sendAgentPin({ agentId: id, pinned: true, position }).then(
                   (answer) => ("agent" in answer ? KEPT : notKept(answer)),
                   notKept,
                 )
               : undefined,
           )
-        : askKept(act(ACT_KIND.TASKS_PIN, { taskId: id, pinned: true, position }));
+        : askKept(sendTaskPin({ taskId: id, pinned: true, position }));
       if (agent) flights.set(id, flight);
       return flight.then((changed) => {
         if (agent && flights.get(id) === flight) flights.delete(id);
@@ -2216,7 +2533,7 @@ export function useTasksTab(input: {
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
     const [first, ...rest] = writes;
     if (first === undefined || fixture !== undefined) return;
-    askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
+    askKept(sendSections({ writes: [first, ...rest] })).then((changed) => {
       if (changed.kept) return;
       toast({
         replayUnmasked: true,
@@ -2247,7 +2564,7 @@ export function useTasksTab(input: {
   ): Promise<Kept> => {
     // Note that the name the reader knows a member by goes with them, so main draws them by it until the list carries them.
     const named = standing.assigneeId && assigneeName !== undefined ? { assigneeName } : undefined;
-    return askKept(act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }));
+    return askKept(sendStandingRow({ taskId, ...standing, ...named }));
   };
   // Each status change is sent as one standing. Answers which tasks the
   // service kept, how many it refused, and what refused the first of them.
@@ -2272,7 +2589,7 @@ export function useTasksTab(input: {
     if (asked.length === 0) return;
     const pressed = pressRows(
       ROW_WRITE.TASK_STANDING,
-      rowDoors,
+      standingDoors,
       asked.map((change) => ({ id: change.taskId, after: { status: change.status } })),
     );
     sendStatuses(asked).then(({ landed, refused, cause }) => {
@@ -2300,12 +2617,12 @@ export function useTasksTab(input: {
   // it asks the model nothing and reads no flag.
   const pressCopy = () => {
     if (region.kind !== DOCUMENT_REGION.READY) return;
-    copyWithToast(planMarkdown(region.task), TASK_COPIED_NOTE);
+    copyWithToast(descriptionMarkdown(region.task), TASK_COPIED_NOTE);
   };
 
   // An agent that ended unseen marks its tab unread; main clears it once the
   // tab is shown.
-  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => ({ agent }));
+  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => agentTab(agent));
 
   // A fixture's repositories are read from nowhere, as its tasks are. The
   // chip lists the repositories of the workspace its task is in: the open
@@ -2348,7 +2665,6 @@ export function useTasksTab(input: {
         pictures: fixture === undefined,
         scope: workspaceId,
         manages: workspace === undefined || managesWorkspace(workspace),
-        ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
         ...(workspace?.github == null ? undefined : { connected: true }),
       };
     },
@@ -2367,7 +2683,8 @@ export function useTasksTab(input: {
     kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return act(kind).then(
+    const send = kind === ACT_KIND.GITHUB_CONNECT ? sendGitHubConnect : sendGitHubDisconnect;
+    return send().then(
       () => true,
       (refused: Error) => {
         toast({
@@ -2380,28 +2697,13 @@ export function useTasksTab(input: {
       },
     );
   };
-  // A fixture's workspaces are made, shared, and connected nowhere. A
-  // workspace made is listed at once, main's view holding it after; the
-  // invite and the connect open the browser, and a refusal of either says
-  // why in a toast, since the menu that asked has closed.
-  const createWorkspace = (name: string): Promise<string | undefined> => {
-    if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
-      (created) => {
-        switchWorkspace(created.id);
-        return undefined;
-      },
-      (refused: Error) => refused.message,
-    );
-  };
-
   // A fixture's tasks are given no repository, as they are read from nowhere.
   const setRepository = (
     taskId: string,
     repository: string | null,
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
+    return sendTaskRepository({ taskId, repository }).then(
       (answer) => ("failure" in answer ? repositoryChangeFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
@@ -2422,7 +2724,7 @@ export function useTasksTab(input: {
         : {
             assignee: assigneeId === null ? null : { userId: assigneeId, name: assigneeName ?? "" },
           };
-    const pressed = pressRows(ROW_WRITE.TASK_STANDING, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_STANDING, standingDoors, [
       { id: taskId, after: { ...rest, ...assignee } },
     ]);
     return sendStanding(taskId, standing, assigneeName).then((kept) => {
@@ -2436,7 +2738,7 @@ export function useTasksTab(input: {
   // there is to say, in a toast, since the menu that asked has closed.
   const setTaskBlock = (taskId: string, block: TaskBlockRequest, onKept?: () => void) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
+    void sendBlock({ taskId, block })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2471,7 +2773,7 @@ export function useTasksTab(input: {
   // refusal is all there is to say, in a toast.
   const setTaskParent = (taskId: string, parentTaskId: string | null, onKept?: () => void) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_SET_PARENT, { taskId, parentTaskId })
+    void sendParent({ taskId, parentTaskId })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2509,7 +2811,7 @@ export function useTasksTab(input: {
   // and the sidebar and the open document take the task the service answers.
   const changeTaskRelation = (taskId: string, relation: TaskRelationChangeRequest) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_CHANGE_RELATION, { taskId, relation })
+    void sendRelation({ taskId, relation })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) return;
@@ -2528,14 +2830,10 @@ export function useTasksTab(input: {
   // workspace's tasks and the open task must not drop out of it, but only
   // while that task is still open and no workspace was chosen since, so a
   // move answered late never undoes where the developer went meanwhile.
-  const moveTask = (
-    taskId: string,
-    workspaceId: string,
-    told?: { readonly quiet: boolean },
-  ): Promise<boolean> => {
+  const moveTaskOptions = taskMoveMutation(({ taskId, workspaceId, quiet }) => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return act(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
+    return sendAct(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2545,7 +2843,7 @@ export function useTasksTab(input: {
           }
           return true;
         }
-        if (told?.quiet !== true) {
+        if (quiet !== true) {
           toast({
             replayUnmasked: true,
             words: MOVE_REFUSED_NOTE,
@@ -2560,18 +2858,21 @@ export function useTasksTab(input: {
         }
         return false;
       });
-  };
+  });
+  const { mutateAsync: sendTaskMove } = useMutation(moveTaskOptions);
+  const moveTask = (
+    taskId: string,
+    workspaceId: string,
+    told?: { readonly quiet: boolean },
+  ): Promise<boolean> => sendTaskMove({ taskId, workspaceId, quiet: told?.quiet === true });
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
-  const edit = useCallback(
-    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
-      if (fixture !== undefined) {
-        return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-      }
-      return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
-    },
-    [fixture, act],
-  );
+  const descriptionEdit = (taskId: string) =>
+    descriptionEditMutation(taskId, (request) =>
+      fixture === undefined
+        ? sendAct(ACT_KIND.TASKS_EDIT, { taskId, edit: request })
+        : Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
   // opened first; the ask is counted so each press opens it again.
@@ -2584,66 +2885,85 @@ export function useTasksTab(input: {
   // Change repository's chip does, and comes out from under a page standing
   // in its place, such as the Board whose card asked.
   const addRelation = (taskId: string, kind: TaskRelationKind) => {
-    if (taskId !== tasks.activeTaskId || standIn !== undefined) select(taskId);
+    if (taskId !== tasks.activeTaskId || overPlan) select(taskId);
     setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 
   // A fixture's task reads its staged history through the same acts, and holds it on its staged document (`tasks-fixture.ts`).
   const historySource = useMemo(
-    (): PlanHistorySource => ({
-      readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
-      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
-      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
+    (): DescriptionHistorySource => ({
+      readPage: (taskId, before) => askAct(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
+      restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
-    [act],
+    [sendRestore],
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
-  const heldHistory = useHostRead(
-    LIVE_READ.HISTORY,
-    shown && historyOpen ? historyTaskId : undefined,
+  const historyRead = useQuery({
+    ...historyQuery(historyTaskId),
+    enabled: shown && historyOpen && historyTaskId !== undefined,
+  });
+  const { mutate: retryHistory } = useMutation(historyRetryMutation());
+  const onRetryHistory = useCallback(() => {
+    if (historyTaskId !== undefined) retryHistory({ taskId: historyTaskId });
+  }, [retryHistory, historyTaskId]);
+  const heldHistory = useMemo(
+    () => ({ rows: historyRead.data, failed: historyRead.isError, onRetry: onRetryHistory }),
+    [historyRead.data, historyRead.isError, onRetryHistory],
   );
-  const history = usePlanHistory({
+  const history = useDescriptionHistory({
     source: historySource,
     taskId: historyTaskId,
     history: heldHistory,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
-    shown: shown && historyOpen,
-    seek: historyFor?.save,
-    returnTo: historyFor?.spot,
+    at: shown && historyOpen ? historyRoute.spot : undefined,
+    seek: historySeek?.taskId === historyTaskId ? historySeek?.save : undefined,
+    narrow: input.room === SHELL_ROOM.NARROW,
+    onMove: historyRoute.onMove,
+    onSought: () => setHistorySeek(undefined),
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) => sayRestored(toast, undo),
   });
 
-  const opensNewTask = useAppSlice(OPENS_NEW_TASK);
+  const opensNewTask =
+    useQuery({ ...appStateQuery, select: selectOpensNewTask }).data ??
+    APP_SETTING_DEFAULTS.openNewTask;
   // A task opened from a list or a started task's toast, its pin no longer chosen.
   const openUnpinned = (taskId: string) => {
     setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
     select(taskId);
   };
-  // A task pressed anywhere opens on its plan, its Overview, whose head lists its agents, the one
-  // waiting on the developer first; in a narrow room the panel shuts over it, so the plan is the screen.
-  const selectListed = (taskId: string) => {
-    openUnpinned(taskId);
-    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
-    mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
-  };
   // One the developer goes back to work on, from a sidebar row, ⌘K, or Recent, lands on its
-  // agent (`resumingAgentOf`), else its plan; in a narrow room the agent stands as a screen
-  // over the plan, which its header's Back, named for the task, returns to.
+  // agent (`resumingAgentOf`); one with none, on the tab its column falls to, a new agent's draft
+  // where no agent's stands. In a narrow room the panel shuts over it, and the agent stands as a
+  // screen over the task's details, which its header's Back, named for the task, returns to, a
+  // task with no agent opening on its details.
   const resumeListed = (taskId: string) => {
     openUnpinned(taskId);
-    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
-    const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
-    mainTabs.onShow(taskId, agentId === undefined ? MAIN_TAB.OVERVIEW : { agent: agentId });
+    const narrow = input.room === SHELL_ROOM.NARROW;
+    if (narrow) sidePanel.onSetOpen(false);
+    const agentId = resumingAgentOf(taskId, tasks.taskAgents, input.inboxWaiting);
+    if (agentId !== undefined) mainTabs.onShow(taskId, agentTab(agentId));
+    else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
+  };
+  // A task pressed anywhere opens on its agents, as one gone back to does; in a narrow room on
+  // its details, whose head lists its agents, the one waiting on the developer first.
+  const selectListed = (taskId: string) => {
+    if (input.room !== SHELL_ROOM.NARROW) {
+      resumeListed(taskId);
+      return;
+    }
+    openUnpinned(taskId);
+    sidePanel.onSetOpen(false);
+    mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
-  // names no planning, so the task opens on its empty plan. New task starts the task
+  // names no planning, so the task opens on its empty description. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
@@ -2668,7 +2988,19 @@ export function useTasksTab(input: {
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
     const standingBefore = standIn;
-    const historyBefore = historyFor;
+    // Note that the Inbox standing at the press is where its address stood, which a refusal opens again.
+    const inboxBefore =
+      inboxView?.standingIn === undefined
+        ? undefined
+        : {
+            at: { workspace: inboxView.standingIn, narrowed: inboxView.narrowed },
+            chosen: inboxView.chosen,
+          };
+    // Note that a version history standing at the press is where its address stood, which a refusal opens again.
+    const historyBefore =
+      historyRoute.workspace === undefined || historyRoute.task === undefined
+        ? undefined
+        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
     // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
@@ -2689,8 +3021,8 @@ export function useTasksTab(input: {
     else if (line !== undefined) {
       setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
-      setStandIn(undefined);
-      setHistoryFor(undefined);
+      clearStandIn();
+      closeHistory();
     }
     // Note that the host opens a start's task at once, so a bare one pressed on Home's own
     // composer, whose page the task's took the place of, says its refusal in a toast, as no
@@ -2711,7 +3043,13 @@ export function useTasksTab(input: {
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
           setStandIn((now) => now ?? standingBefore);
-          setHistoryFor((now) => now ?? historyBefore);
+          if (inboxBefore !== undefined) {
+            if (inboxBefore.chosen === undefined) input.inboxView.onOpen(inboxBefore.at);
+            else input.inboxView.onChoose(inboxBefore.chosen, inboxBefore.at);
+          }
+          if (historyBefore !== undefined) {
+            historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
+          }
         }
         setNewTaskAsk({
           preset:
@@ -2725,7 +3063,7 @@ export function useTasksTab(input: {
       }
       return note;
     };
-    return act(ACT_KIND.TASKS_START, {
+    return sendTaskStart({
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
@@ -2773,8 +3111,8 @@ export function useTasksTab(input: {
         if (handed === undefined) {
           setNewTaskAsk(undefined);
           setStartingTask(undefined);
-          setStandIn(undefined);
-          setHistoryFor(undefined);
+          clearStandIn();
+          closeHistory();
           return undefined;
         }
         letGoOfPage();
@@ -2827,7 +3165,7 @@ export function useTasksTab(input: {
         attachments: handed.attachments,
         sentAt,
       });
-      mainTabs.onShow(planId, { agent: started.agent.id });
+      mainTabs.onShow(planId, agentTab(started.agent.id));
       return;
     }
     // Note that the refusal keeps the answer that said it, so the draft's tab reports the service's word for it.
@@ -2835,7 +3173,7 @@ export function useTasksTab(input: {
     const refused = { ...agentStartFailureNote(answer, planId, device), cause: answer };
     const { idempotencyKey: id, ...words } = handed;
     agents.onHandDraft(planId, { id, ...words, refused });
-    mainTabs.onShow(planId, { draft: id });
+    mainTabs.onShow(planId, draftTab(id));
   };
 
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
@@ -2844,7 +3182,7 @@ export function useTasksTab(input: {
   // A group's quick add starts a task with no agent and no call, quietly, so
   // the window stays on the Tasks page and the task lands in its group.
   const quickAdd: TasksControl["onQuickAdd"] = (name, into) =>
-    act(ACT_KIND.TASKS_START, {
+    sendTaskStart({
       name,
       ...(into.repository === undefined ? undefined : { repository: into.repository }),
       ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
@@ -2870,7 +3208,8 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    const atHome = page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined;
+    // Note that Home under a routed place is no Home on screen, so its composer is no New task there (`admin-route.ts`).
+    const atHome = page === TASKS_PAGE.HOME && !overPlan && !historyRoute.open && !routedOver;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -2878,11 +3217,51 @@ export function useTasksTab(input: {
   // away rather than leaving it to stand again on the way back.
   if (!shown && newTaskAsk !== undefined) setNewTaskAsk(undefined);
 
-  // A plan's version history opens over the task, so another task opens first.
-  const openHistory = (opening: HistoryOpening) => {
-    if (opening.taskId !== boundFor) select(opening.taskId);
+  // A description's version history opens over the task, so another task opens first.
+  // Note that a task's versions are its description's, so while Descriptions is off whatever would open them, a link to a version among them, opens the task's Overview.
+  // A task's history's address names it as its links do, under its workspace, the one a link named where the window holds no such task, else the listed one;
+  // a workspace not yet read is named by its id, as a link names one.
+  const historyAddressOf = (taskId: string, workspace: string | undefined) => {
+    const task =
+      tasksNow.find((each) => each.id === taskId) ??
+      (region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
+        ? region.task
+        : undefined);
+    const home = viewed.workspaces.find((each) => each.id === task?.workspaceId);
+    const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+    const under =
+      home === undefined ? (workspace ?? task?.workspaceId ?? listedStep) : stepOf(home);
+    return under === undefined
+      ? undefined
+      : { workspace: under, task: task === undefined ? taskId : taskLinkStep(task) };
+  };
+  // It is opened at its address (`version-history-route.ts`).
+  const openHistory = (
+    taskId: string,
+    opening: {
+      readonly save?: number | undefined;
+      readonly spot?: HistorySpot;
+      readonly workspace?: string;
+    },
+  ) => {
+    if (!descriptionsOn) {
+      showOverview({ kind: LINK_PLACE.TASK, planId: taskId });
+      return;
+    }
+    const address = historyAddressOf(taskId, opening.workspace);
+    if (address === undefined) return;
+    if (taskId !== boundFor) select(taskId);
     setStandIn(undefined);
-    setHistoryFor(opening);
+    setHistorySeek(opening.save === undefined ? undefined : { taskId, save: opening.save });
+    historyRoute.onOpen(address.workspace, address.task, opening.spot);
+  };
+  // A door into a place of the window's state leaves the version history over it.
+  const closeHistory = () => {
+    if (historyRoute.open) historyRoute.onClose();
+  };
+  // A door into a place of the window's state that the Automations pages open, a run's agent, leaves them for it, as the sidebar's presses do.
+  const leaveAutomations = () => {
+    if (input.automationsView.open) input.automationsView.onClose();
   };
 
   // A task's own tab, its Inbox, and an agent's are in its column, so a
@@ -2890,8 +3269,8 @@ export function useTasksTab(input: {
   // window over it.
   const showColumnTab = (taskId: string, tab: MainTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
-    setStandIn(undefined);
-    setHistoryFor(undefined);
+    clearStandIn();
+    closeHistory();
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(taskId, tab);
   };
@@ -2899,16 +3278,16 @@ export function useTasksTab(input: {
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
   const showPanelTab = (taskId: string, tab: SidePanelTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
-    setStandIn(undefined);
-    setHistoryFor(undefined);
+    clearStandIn();
+    closeHistory();
     sidePanel.onShow(taskId, tab);
   };
-  // The task's plan shown at the place given: its column's Overview, which
+  // The task's description shown at the place given: its column's Overview, which
   // holds it, chosen in place on the task standing, and on another task as
   // the window goes there (`route.ts`), a panel filling the window over the
   // column giving way.
   const showOverview = (place: OverviewPlace) => {
-    const standing = standIn === undefined && historyFor === undefined;
+    const standing = !overPlan && !historyRoute.open;
     const routed = route(
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
@@ -2919,15 +3298,15 @@ export function useTasksTab(input: {
       return;
     }
     if (place.planId !== tasks.activeTaskId) select(place.planId);
-    setStandIn(undefined);
-    setHistoryFor(undefined);
+    clearStandIn();
+    closeHistory();
     mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
   };
   // A link to a tab of the task standing opens it as the panel's preview, as
   // any link pressed there does; one to another task's goes there and opens
   // it as a tab of its own (`route.ts`).
   const linkPanelTab = (place: TaskTabPlace, tab: SidePanelTab) => {
-    const standing = standIn === undefined && historyFor === undefined;
+    const standing = !overPlan && !historyRoute.open;
     const routed = route(
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
@@ -2957,30 +3336,67 @@ export function useTasksTab(input: {
 
   // A version's Open lands where its writer wrote it: an agent's tab.
   const showSource = (taskId: string, source: RevisionSource) => {
-    showColumnTab(taskId, { agent: source.agentId });
+    showColumnTab(taskId, agentTab(source.agentId));
+  };
+
+  // A task named anywhere, by a chip, a link, an Inbox crumb, or a call's row, opens on its
+  // agents, its main view, as one gone back to does (`resumeListed`), a panel filling the window
+  // giving way; a task already open on its details goes back to the agents they were opened over.
+  // Only a place in its description opens the details.
+  const showTaskAgents = (taskId: string) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    clearStandIn();
+    closeHistory();
+    const returnTab = taskId === tasks.activeTaskId ? mainTabs.returnTab : undefined;
+    if (returnTab !== undefined && isOverviewTab(mainTabs.tab)) {
+      mainTabs.onChoose(returnTab);
+      return;
+    }
+    resumeListed(taskId);
   };
 
   // Each ask is its own, so the same section asked twice scrolls twice.
-  const showMention = (mention: PlanMention) => {
-    const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
-    showOverview(
-      anchor === undefined
-        ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
-        : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor },
-    );
+  // Note that a section is the description's, so while descriptions are off a mention of one opens its task's agents.
+  const showMention = (mention: DescriptionMention) => {
+    const anchor =
+      mention.kind === MENTION_KIND.SECTION && descriptionsOn ? mention.anchor : undefined;
+    if (anchor === undefined) {
+      showTaskAgents(mention.taskId);
+      return;
+    }
+    showOverview({ kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor });
     sectionAsks.current += 1;
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
+  showMissingTask.current = (taskId) => showMention({ kind: MENTION_KIND.TASK, taskId });
 
   // Whether the agent is archived, as the open task's list or the list followed live carries it.
   const archivedAgent = (agentId: string) =>
     agents.archived?.some((agent) => agent.id === agentId) === true ||
     liveAgents?.some((agent) => agent.id === agentId && agent.archivedAt !== undefined) === true;
 
-  // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
+  // What stands in the plan's place for a link, a version history or the Inbox there giving way, as each one's own door does.
   const standInFor = (standing: StandIn) => {
-    setHistoryFor(undefined);
+    closeHistory();
+    closeInbox();
     setStandIn(standing);
+  };
+  // The Inbox of the workspace `workspaceId`, the listed one where it names none of the reader's, narrowed to `narrowed`.
+  const inboxIn = (
+    workspaceId: string | undefined,
+    narrowed: string | undefined,
+  ): InboxAt | undefined => {
+    const shown = viewed.workspaces.find((each) => each.id === workspaceId) ?? listedWorkspace;
+    return shown === undefined ? undefined : { workspace: stepOf(shown), narrowed };
+  };
+  // The Inbox opened on `chosen`, or on its list where nothing is chosen, at `at`: a version history or an agent's page there giving way, as the Inbox is the router's.
+  const standInbox = (at: InboxAt | undefined, chosen: InboxChoice | undefined) => {
+    if (at === undefined) return;
+    timeInboxOpen();
+    closeHistory();
+    setStandIn(undefined);
+    if (chosen === undefined) input.inboxView.onOpen(at);
+    else input.inboxView.onChoose(chosen, at);
   };
 
   // A review thread's ask, taken by its agent's Pull request tab once drawn; each ask is its own.
@@ -3022,7 +3438,7 @@ export function useTasksTab(input: {
     } else {
       // Before the list followed live lands, an agent of another task may yet be archived, so it is read first.
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         if (agent?.archivedAt === undefined) showOnTask(planId, place);
         else openArchived(place);
@@ -3041,28 +3457,28 @@ export function useTasksTab(input: {
   const showOnTask = (planId: string, place: AgentPlace) => {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         linkPanelTab(
           { ...place, planId },
-          { subagent: place.callId, delegation: { agent: place.agentId, task: "" } },
+          subagentTab(place.callId, { agent: place.agentId, task: "" }),
         );
         return;
       case LINK_PLACE.CHANGES:
-        linkPanelTab({ ...place, planId }, { changes: sharedChangesAgent(planId, place.agentId) });
+        linkPanelTab({ ...place, planId }, changesTab(sharedChangesAgent(planId, place.agentId)));
         return;
       // A review thread opens its agent's Pull request tab on the view the link names.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(planId, place.agentId);
-        sidePanel.onPullRequestView({ changes }, place.view);
-        linkPanelTab({ ...place, planId }, { changes });
+        sidePanel.onPullRequestView(changesTab(changes), place.view);
+        linkPanelTab({ ...place, planId }, changesTab(changes));
         revealThread(changes, place);
         return;
       }
       case LINK_PLACE.AGENT:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         return;
       case LINK_PLACE.MESSAGE:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         revealMessage(place);
         return;
     }
@@ -3074,17 +3490,14 @@ export function useTasksTab(input: {
     standInFor({ kind: STAND_IN.AGENT, agentId });
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        sidePanel.onShow(agentId, {
-          subagent: place.callId,
-          delegation: { agent: agentId, task: "" },
-        });
+        sidePanel.onShow(agentId, subagentTab(place.callId, { agent: agentId, task: "" }));
         return;
       case LINK_PLACE.CHANGES:
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onShow(agentId, changesTab(agentId));
         return;
       case LINK_PLACE.PULL_REQUEST_THREAD:
-        sidePanel.onPullRequestView({ changes: agentId }, place.view);
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onPullRequestView(changesTab(agentId), place.view);
+        sidePanel.onShow(agentId, changesTab(agentId));
         revealThread(agentId, place);
         return;
       case LINK_PLACE.AGENT:
@@ -3108,41 +3521,58 @@ export function useTasksTab(input: {
       openPlace(link);
       return;
     }
+    // Note that a number the account's list holds under the workspace named opens at once, so a link to the place
+    // already standing keeps it standing rather than leaving it while the service is asked (`onStayRouted`).
+    const home = workspaceOfSlug(viewed.workspaces, link.workspace);
+    const listed = viewed.tasks.find(
+      (task) => task.workspaceId === home?.id && taskLinkStep(task) === String(number),
+    );
+    if (listed !== undefined) {
+      openPlace({ ...link, place: withTaskId(link.place, listed.id) });
+      return;
+    }
     navigations.current += 1;
     const mine = navigations.current;
     const opened = (taskId: string | undefined) => {
       if (navigations.current !== mine) return;
       openPlace(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
     };
-    act(ACT_KIND.TASKS_FIND, { workspace: link.workspace, number }).then(
+    queryClient.fetchQuery(taskByNumberQueryOptions(link.workspace, number)).then(
       (found) => opened("taskId" in found ? found.taskId : undefined),
       () => opened(undefined),
     );
+  };
+
+  // An agent's place opened by the agent as the list or the service has it: on its page where it is on no task, else on its task, or its page where it is archived there.
+  const openFoundAgent = (agent: AgentSummary, place: AgentPlace) => {
+    if (agent.planId === null) openOnAgentPage(place);
+    else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
+      openArchived(place);
+    else showOnTask(agent.planId, place);
   };
 
   /**
    * An agent's place opened on its task where it has one, else on its page.
    * Note that a link names the task only where it was written under it, so
    * one naming none finds the task by the agent: at once where the agent is
-   * the open task's or one on no task the window lists, else by reading the
-   * agent, which opens nothing where the window moved on before it answered.
+   * the open task's or one the list followed live carries, else by reading
+   * the agent, which opens nothing where the window moved on before it
+   * answered.
    */
   const openAgentPlace = (place: AgentPlace) => {
     const open = tasks.activeTaskId;
+    const listed = listedAgentIn(tasks, place.agentId);
     if (place.planId !== undefined) openOnTask(place.planId, place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openOnTask(open, place);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId)) openOnAgentPage(place);
+    else if (listed !== undefined) openFoundAgent(listed, place);
     else {
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-        else if (agent.planId === null) openOnAgentPage(place);
-        else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
-          openArchived(place);
-        else showOnTask(agent.planId, place);
+        else openFoundAgent(agent, place);
       });
     }
   };
@@ -3157,20 +3587,19 @@ export function useTasksTab(input: {
   const openInboxItemOn = (workspace: string, place: InboxItemPlace, planId: string | null) => {
     // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
     const holder = planId === null ? undefined : viewed.tasks.find((task) => task.id === planId);
-    listLinked(holder?.workspaceId ?? workspace);
-    openTaskThread(holder?.id ?? ("planId" in place ? place.planId : undefined));
-    standInFor({
-      kind: STAND_IN.INBOX,
-      chosen:
-        holder !== undefined
-          ? {
-              taskId: holder.id,
-              ...("agentId" in place ? { itemAgentId: place.agentId } : undefined),
-              itemId: place.itemId,
-              opened: true,
-            }
-          : { ...inboxChoiceOf(place), opened: true },
-    });
+    const listedId = listLinked(holder?.workspaceId ?? workspace);
+    const chosen: InboxChoice =
+      holder !== undefined
+        ? {
+            taskId: holder.id,
+            ...("agentId" in place ? { itemAgentId: place.agentId } : undefined),
+            itemId: place.itemId,
+            opened: true,
+          }
+        : { ...inboxChoiceOf(place), opened: true };
+    // Note that only the narrowing of the Inbox standing is kept, so a link opened from elsewhere opens on every task's list.
+    const narrowed = inboxView?.standingIn === undefined ? undefined : inboxView.narrowed;
+    standInbox(inboxIn(listedId, narrowed), chosen);
   };
 
   /**
@@ -3182,11 +3611,22 @@ export function useTasksTab(input: {
    * slug, which may name a workspace by a slug it has since given up.
    */
   const openInboxItemById = (place: InboxItemPlace) => {
+    // Note that the item the Inbox already stands on, once asked after, stands again at once, so the door keeps it standing rather than waiting on the service while the window leaves it;
+    // one the service did not find is asked after again below, as a link to it always asks.
+    const standing = inboxView?.chosen;
+    const asked =
+      standing !== undefined &&
+      ("taskId" in standing || "agentId" in standing || standing.opened === true);
+    if (inboxView?.standingIn !== undefined && asked && standing.itemId === place.itemId) {
+      const at = { workspace: inboxView.standingIn, narrowed: inboxView.narrowed };
+      standInbox(at, { ...standing, opened: true });
+      if ("taskId" in standing || "agentId" in standing) return;
+    }
     const mine = navigations.current;
-    readInboxItemHome(act, place.itemId).then((home) => {
+    readInboxItemHome(queryClient, place.itemId).then((home) => {
       if (navigations.current !== mine) return;
       if (home === undefined) {
-        standInFor({ kind: STAND_IN.INBOX, chosen: { itemId: place.itemId, opened: true } });
+        standInbox(inboxIn(listedWorkspace?.id, undefined), { itemId: place.itemId, opened: true });
         return;
       }
       const found = { kind: LINK_PLACE.INBOX_ITEM, agentId: home.agentId, itemId: place.itemId };
@@ -3197,31 +3637,74 @@ export function useTasksTab(input: {
   /**
    * An Inbox item opened by its task, which a link under its agent leaves
    * the reader to find by the agent, as an agent's place is found
-   * (`openAgentPlace`): at once where the agent is the open task's or one on
-   * no task the window lists, else by reading the agent, which opens nothing
-   * where the window moved on before it answered.
+   * (`openAgentPlace`): at once where the agent is the open task's or one
+   * the list followed live carries, else by reading the agent, which opens
+   * nothing where the window moved on before it answered.
    */
   const openInboxItem = (workspace: string, place: InboxItemPlace) => {
     const open = tasks.activeTaskId;
+    const listed = "agentId" in place ? listedAgentIn(tasks, place.agentId) : undefined;
     if ("planId" in place) openInboxItemOn(workspace, place, place.planId);
     else if (!("agentId" in place)) openInboxItemById(place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openInboxItemOn(workspace, place, open);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId))
-      openInboxItemOn(workspace, place, null);
+    else if (listed !== undefined) openInboxItemOn(workspace, place, listed.planId);
     else {
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         openInboxItemOn(workspace, place, agent?.planId ?? null);
       });
     }
   };
 
+  // The Board of `home`, the listed workspace where none is named, opened past whatever stood in the plan's place, which gives way to it.
+  const openBoard = (home: Pick<Workspace, "id" | "slug"> | undefined) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setStandIn(undefined);
+    input.boardView.onOpen(stepOf(shown));
+  };
+
+  /**
+   * A person's page in `home`, the listed workspace where none is named,
+   * listed first where another is, because the page reads the listed
+   * workspace's work, and only listed, as a link's place is: reopening its
+   * last plan behind the page would only hide it again.
+   */
+  const openPerson = (
+    userId: string,
+    name: string | undefined,
+    home: Pick<Workspace, "id" | "slug"> | undefined,
+  ) => {
+    const shown = home ?? listedWorkspace;
+    if (shown === undefined) return;
+    setStandIn(undefined);
+    // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
+    // asked before it, answering late, lists nothing and leaves nothing over it.
+    navigations.current += 1;
+    if (shown.id !== listedWorkspace?.id) chooseListed(shown.id);
+    input.personView.onOpen(userId, name, stepOf(shown));
+  };
+
+  /**
+   * An Automations page under the workspace whose address step is
+   * `workspace`, listed first where the account is in it, the listed one
+   * otherwise, opened past whatever stood in the plan's place, which gives
+   * way to it.
+   */
+  const openAutomations = (to: AutomationsPlace, workspace?: string) => {
+    const listedId = workspace === undefined ? listedWorkspace?.id : listLinked(workspace);
+    const shown = viewed.workspaces.find((each) => each.id === listedId) ?? listedWorkspace;
+    if (shown === undefined) return;
+    setStandIn(undefined);
+    input.automationsView.onOpen(to, stepOf(shown));
+  };
+
   // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
   const goHome = () => {
-    setHistoryFor(undefined);
-    if (boundFor === undefined) setStandIn(undefined);
+    closeHistory();
+    if (boundFor === undefined) clearStandIn();
     else leaveTask();
   };
 
@@ -3250,7 +3733,7 @@ export function useTasksTab(input: {
         }
         listLinked(workspace);
         if (place.kind === LINK_PLACE.HOME) goHome();
-        else standInFor({ kind: STAND_IN.BOARD });
+        else openBoard(workspaceOfSlug(viewed.workspaces, workspace));
         return;
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -3259,6 +3742,11 @@ export function useTasksTab(input: {
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.COMMENT:
+        // A comment is the description's, so while descriptions are off its link opens the task's agents.
+        if (!descriptionsOn) {
+          showTaskAgents(place.planId);
+          return;
+        }
         showOverview(place);
         commentAsks.current += 1;
         setCommentReveal({
@@ -3268,20 +3756,19 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.VERSION:
-        openHistory({
-          taskId: place.planId,
-          save: undefined,
-          spot: { revision: place.revision, opened: undefined },
+        openHistory(place.planId, {
+          spot: { revision: place.revision, opened: undefined, listed: false },
+          workspace,
         });
         return;
       case LINK_PLACE.PAGE:
         // A page of an agent on no task opens on that agent's page, in its panel.
         if ("agentId" in place) {
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-          sidePanel.onShow(place.agentId, { page: place.pageId });
+          sidePanel.onShow(place.agentId, pageTab(place.pageId));
           return;
         }
-        linkPanelTab(place, { page: place.pageId });
+        linkPanelTab(place, pageTab(place.pageId));
         return;
       case LINK_PLACE.WORKER:
       case LINK_PLACE.CHANGES:
@@ -3294,51 +3781,36 @@ export function useTasksTab(input: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
         const home = workspaceOfSlug(viewed.workspaces, workspace);
         listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.PERSON,
-          userId: place.userId,
-          workspaceId: home?.id ?? listedWorkspace?.id,
-        });
+        openPerson(place.userId, undefined, home);
         return;
       }
       case LINK_PLACE.INBOX: {
         // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen, narrowed to the task it names or to none.
-        listLinked(workspace);
-        if (place.planId === undefined) leaveInboxTask();
-        else chooseInboxTask(place.planId);
-        timeInboxOpen();
-        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
+        standInbox(inboxIn(listLinked(workspace), place.planId), undefined);
         return;
       }
       case LINK_PLACE.INBOX_ITEM:
         openInboxItem(workspace, place);
         return;
       case LINK_PLACE.AUTOMATIONS:
-        listLinked(workspace);
-        standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
+        openAutomations({ kind: AUTOMATIONS_PAGE.LIST }, workspace);
         return;
       case LINK_PLACE.AUTOMATION:
-        listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.AUTOMATIONS,
-          place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
-        });
+        openAutomations(
+          { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
+          workspace,
+        );
         return;
       case LINK_PLACE.AUTOMATION_RUN:
-        listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.AUTOMATIONS,
-          place: {
-            kind: AUTOMATIONS_PAGE.EDIT,
-            automationId: place.automationId,
-            runId: place.runId,
-          },
-        });
+        openAutomations(
+          { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId, runId: place.runId },
+          workspace,
+        );
         return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
       // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
       case LINK_PLACE.ADMIN:
-        standInFor({ kind: STAND_IN.ADMIN, view: adminViewOfLink(place) ?? ADMIN_OVERVIEW });
+        input.adminView.onOpen(adminViewOfLink(place));
         return;
       // Settings is the window's, not the Plans tab's, so its link is opened there.
       case LINK_PLACE.SETTINGS:
@@ -3349,8 +3821,8 @@ export function useTasksTab(input: {
   // An inbox item's code opens in its task's File tab; on a task not yet
   // open, once the host has it open, since the panel draws the open task's.
   const showFile = (taskId: string, ref: CodeRef, commit: string | undefined) => {
-    setStandIn(undefined);
-    setHistoryFor(undefined);
+    clearStandIn();
+    closeHistory();
     if (taskId === tasks.activeTaskId) {
       sidePanel.onOpenFile(ref, commit);
       return;
@@ -3379,7 +3851,7 @@ export function useTasksTab(input: {
         .filter((each) => !isOverviewTab(each))
         .findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
@@ -3397,53 +3869,78 @@ export function useTasksTab(input: {
   const dozeColumnTab = useCallback(
     (tab: MainTab) => {
       keepColumnClosed(tab);
-      if (isAgentTab(tab)) dozeMainTab(tab);
-      else closeMainTab(tab);
+      if (isOverviewTab(tab)) {
+        closeMainTab(tab);
+        return;
+      }
+      switch (tab.kind) {
+        case STRIP_TAB_KIND.AGENT:
+          dozeMainTab(tab);
+          return;
+        case STRIP_TAB_KIND.DRAFT:
+          closeMainTab(tab);
+          return;
+        default:
+          absurd(tab);
+      }
     },
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
+  const endTerminal = useEndTerminalTab();
+  // Note that a terminal tab's shell ends as its tab closes, whichever way it closes, since the tab
+  // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
+      if (stripTabEndsSession(tab)) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0) {
-        const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
+        const file =
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE
+            ? panelFiles.find((each) => each.path === tab.file)
+            : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
       closePanelTab(tab);
     },
-    [panelStrip, panelFiles, closePanelTab, viewed.activeTaskId, setClosedTabs, latestClosedTabs],
+    [
+      panelStrip,
+      panelFiles,
+      closePanelTab,
+      viewed.activeTaskId,
+      setClosedTabs,
+      latestClosedTabs,
+      endTerminal,
+    ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, never the Inbox, which the panel
   // draws no more, a Changes tab while its agent is the task's, archived or not,
-  // and a subagent's, a Terminal tab, or a page's on the strip's own
+  // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
-  const drawsAgain = (closed: ClosedTab): boolean => {
-    const { tab } = closed;
-    const agentIds = agents.agentIds;
-    if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
-      return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
-    }
-    if (tab === SIDE_PANEL_TAB.INBOX) return false;
-    if (isSubagentTab(tab))
-      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
-    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
-    // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
-    if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
-    return true;
-  };
-  const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
+  // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
+  // known before its task opens: the retired Inbox and Comments draw on none.
+  const drawsOnAnyTask = (closed: ClosedTab): boolean =>
+    closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
+    typeof closed.tab !== "string" ||
+    DRAWN_KINDS.some((kind) => kind === closed.tab);
+  const drawsAgain = (closed: ClosedTab): boolean =>
+    stripTabDrawsAgain(closed.tab, {
+      agents: agents.agentIds,
+      openAgents: mainTabs.openAgents,
+      taskAgents: agents.heldIds,
+      pages: taskPages === undefined ? undefined : pages,
+    });
+  const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
 
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's, which takes its
-  // page with it, and a cloud Browser tab's, which only the "+" opens again. The
-  // side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  // page with it, a cloud Browser tab's, which only the "+" opens again, and a terminal tab's,
+  // whose shell ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
       (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
@@ -3459,15 +3956,19 @@ export function useTasksTab(input: {
   );
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
-    shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
-  const pinnedHere = (tab: StripTab) =>
-    isAgentTab(tab)
-      ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
-      : isPinnable(tab) &&
-        viewed.activeTaskId !== undefined &&
-        sidePanel.pins.some(
-          (pin) => "task" in pin && pin.task === viewed.activeTaskId && sameTab(pin.tab, tab),
-        );
+    stateShown && page === TASKS_PAGE.DOCUMENT && !overPlan && !historyRoute.open;
+  const pinnedHere = (tab: StripTab) => {
+    const pin = stripTabPin(tab);
+    if (pin === TAB_PIN.ACCOUNT)
+      return taskAgentPins.some((each) => sameTab(agentTab(each.agentId), tab));
+    return (
+      pin === TAB_PIN.SIDEBAR &&
+      viewed.activeTaskId !== undefined &&
+      sidePanel.pins.some(
+        (each) => "task" in each && each.task === viewed.activeTaskId && sameTab(each.tab, tab),
+      )
+    );
+  };
   useIdleTabs({
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     column:
@@ -3480,11 +3981,11 @@ export function useTasksTab(input: {
             onViewedAt: mainTabs.onViewedAt,
             onIdle: dozeColumnTab,
             keeps: (tab) =>
-              isOverviewTab(tab) ||
-              isDraftTab(tab) ||
+              !stripTabClosesIdle(tab) ||
               pinnedHere(tab) ||
-              awakeAgents.includes(tab.agent) ||
-              input.unseenAgents.includes(tab.agent),
+              (!isOverviewTab(tab) &&
+                tab.kind === STRIP_TAB_KIND.AGENT &&
+                (awakeAgents.includes(tab.agent) || input.unseenAgents.includes(tab.agent))),
           },
     panel:
       inboxView !== undefined || pageAgents !== undefined
@@ -3495,7 +3996,7 @@ export function useTasksTab(input: {
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
-            keeps: (tab) => typeof tab === "string" || isCloudBrowserTab(tab) || pinnedHere(tab),
+            keeps: (tab) => !stripTabClosesIdle(tab) || pinnedHere(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,
@@ -3506,8 +4007,8 @@ export function useTasksTab(input: {
   // One the task no longer draws, read only once a reopen opened its task, opens nothing.
   const reopenHere = (closed: ClosedTab) => {
     if (!drawsAgain(closed)) return;
-    setStandIn(undefined);
-    setHistoryFor(undefined);
+    clearStandIn();
+    closeHistory();
     if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
       sidePanel.onReopen(closed.tab, closed.at, closed.file);
       return;
@@ -3523,7 +4024,7 @@ export function useTasksTab(input: {
   const reopenClosedTab = () => {
     const waiting = latestReopenFor();
     const open = waiting.length === 0 ? tasks.activeTaskId : undefined;
-    const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain);
+    const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain, drawsOnAnyTask);
     const closed = stack.at(-1);
     if (closed === undefined || (waiting.length > 0 && waiting[0]?.task !== closed.task)) return;
     setClosedTabs(stack.slice(0, -1));
@@ -3580,7 +4081,7 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, so they are passed over.
+    // Note that the description's and the Inbox's kinds of old stand nowhere in the panel now, nor a kind whose experiment is off, so they are passed over.
     const closedKind = sidePanel.closedTabs.findLast((tab) => DRAWN_KINDS.includes(tab));
     if (closedKind === undefined) sidePanel.onToggle();
     else sidePanel.onChoose(closedKind);
@@ -3600,8 +4101,8 @@ export function useTasksTab(input: {
   const starting =
     startingTask !== undefined &&
     startingTask.navigation === navigations.current &&
-    standIn === undefined &&
-    historyFor === undefined
+    !overPlan &&
+    !historyRoute.open
       ? startingTask
       : undefined;
 
@@ -3623,10 +4124,15 @@ export function useTasksTab(input: {
     workspaces: viewed.workspaces,
     workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
     // A failed read is taken as stale, so the refresh reads the workspaces again at once.
-    onRetryWorkspaces: () => press(ACT_KIND.TASKS_REFRESH),
+    onRetryWorkspaces: () => refreshTasks(),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
-    onCreateWorkspace: createWorkspace,
+    newWorkspace: {
+      open: signedIn && founding !== undefined && founding.accountId === input.accountId,
+      // Note that the cards take the window in the page's place, so a page holding unsaved work asks first, as leaving it does.
+      onOpen: guard(() => setFounding({ accountId: input.accountId })),
+      onClose: () => setFounding(undefined),
+    },
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
         page: SETTINGS_VIEW.WORKSPACE,
@@ -3642,7 +4148,7 @@ export function useTasksTab(input: {
       const next = others.find((each) => each.personal === true) ?? others[0];
       navigations.current += 1;
       if (next !== undefined) chooseListed(next.id);
-      if (boundFor === undefined) setStandIn(undefined);
+      if (boundFor === undefined) clearStandIn();
       else leaveTask();
     },
     github: viewed.github,
@@ -3654,7 +4160,7 @@ export function useTasksTab(input: {
     listRead: tasks.listStatus === TASKS_READ.READY,
     region,
     copy: { onPress: pressCopy },
-    edit,
+    descriptionEdit,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
@@ -3663,9 +4169,13 @@ export function useTasksTab(input: {
     history: {
       ...history,
       open: historyOpen,
-      onOpen: (taskId, save) => openHistory({ taskId, save, spot: undefined }),
-      onReturn: (taskId, spot) => openHistory({ taskId, save: undefined, spot }),
-      onClose: () => setHistoryFor(undefined),
+      // The history takes the window from whatever stood, so a page holding unsaved work asks first.
+      onOpen: guard((taskId: string, save?: number) => openHistory(taskId, { save })),
+      onPreload: (taskId) => {
+        const address = historyAddressOf(taskId, undefined);
+        if (address !== undefined) historyRoute.onPreload(address.workspace, address.task);
+      },
+      onClose: historyRoute.onClose,
     },
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
@@ -3691,32 +4201,24 @@ export function useTasksTab(input: {
     inboxTaskless: input.inboxTaskless,
     inboxAgents: input.inboxAgents,
     failedRuns: input.failedRuns,
+    onThreadsShown: setThreadsShown,
     // The window's Inbox stands over the task's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
       // It leaves any task it was narrowed to, so the Inbox lists every item.
-      onOpen: guard(() => {
-        timeInboxOpen();
-        setHistoryFor(undefined);
-        leaveInboxTask();
-        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
-      onChoose: (chosen) =>
-        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
+      onOpen: guard(() => standInbox(inboxIn(listedWorkspace?.id, undefined), undefined)),
+      onClose: guard(input.inboxView.onClose),
+      onChoose: (chosen) => input.inboxView.onChoose(chosen),
       onOpenItem: guard((chosen: InboxChoice) => {
-        setHistoryFor(undefined);
-        openTaskThread("taskId" in chosen ? chosen.taskId : undefined);
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
-        );
+        // Note that the Inbox standing keeps its narrowing for an item of the task it is narrowed to, as a row's choice does.
+        const narrowed = inboxView === undefined ? undefined : inboxView.narrowed;
+        standInbox(inboxIn(listedWorkspace?.id, narrowed), chosen);
       }),
-      onClear: () =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? { ...held, chosen: undefined } : held,
-        ),
+      onClear: input.inboxView.onClear,
+      narrowed: inboxView?.narrowed,
+      onWiden: input.inboxView.onWiden,
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages,
@@ -3727,71 +4229,54 @@ export function useTasksTab(input: {
       agentId: agentView?.agentId,
       pages: agentPages,
       onOpen: guard((agentId: string) => {
-        setHistoryFor(undefined);
+        closeHistory();
+        leaveAutomations();
+        closeInbox();
         setStandIn({ kind: STAND_IN.AGENT, agentId });
       }),
       onClose: guard(() => setStandIn(undefined)),
     },
-    // A person's page stands over the plan's place as an agent's does, so a version history there gives way.
+    // A person's page is the router's, which draws it in the plan's place (`workspace-routes.ts`); a version history there gives way.
     personView: {
-      userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
-      name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
-      workspaceId: standIn?.kind === STAND_IN.PERSON ? standIn.workspaceId : undefined,
+      userId: input.personView.userId,
+      name: input.personView.name,
+      workspaceId: personWorkspace,
       onOpen: guard((userId: string, name?: string, workspaceId?: string) => {
-        setHistoryFor(undefined);
-        // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
-        // asked before it, answering late, lists nothing and leaves nothing over it.
-        navigations.current += 1;
-        // Note that the workspace is listed first, because the page reads the listed workspace's
-        // work, and only listed, as a link's place is: reopening its last plan behind the page
-        // would only hide it again, and a reopen refused would take the page with it.
-        if (workspaceId !== undefined && workspaceId !== listedWorkspace?.id) {
-          chooseListed(workspaceId);
-        }
-        const opened = {
-          kind: STAND_IN.PERSON,
+        openPerson(
           userId,
-          workspaceId: workspaceId ?? listedWorkspace?.id,
-        } as const;
-        setStandIn(name === undefined ? opened : { ...opened, name });
+          name,
+          workspaceId === undefined
+            ? undefined
+            : viewed.workspaces.find((each) => each.id === workspaceId),
+        );
       }),
-      onClose: guard(() => setStandIn(undefined)),
+      onClose: guard(input.personView.onClose),
+      onPreload: (userId: string, workspaceId?: string) => {
+        const home = viewed.workspaces.find((each) => each.id === workspaceId) ?? listedWorkspace;
+        if (home !== undefined) input.personView.onPreload(userId, stepOf(home));
+      },
     },
-    // The Admin place stands over the task's place as the Inbox and an agent's page do, each giving way to the others.
-    adminView: {
-      open: standIn?.kind === STAND_IN.ADMIN,
-      view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
-      onOpen: guard((view?: AdminView) => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.ADMIN, view: view ?? ADMIN_OVERVIEW });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
-    },
-    // The Automations page stands over the task's place as the Admin place does, each giving way to the others.
+    // The Admin place is the router's, which draws it in the task's place (`admin-route.ts`).
+    adminView: { ...input.adminView, onOpen: guard(input.adminView.onOpen) },
+    // The Automations pages are the router's, which draw them in the plan's place (`automations-route.ts`); a version history there gives way.
     automationsView: {
-      open: standIn?.kind === STAND_IN.AUTOMATIONS,
-      place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
-      runs: standIn?.kind === STAND_IN.AUTOMATIONS && runsStanding(standIn.place, standIn.runs),
-      onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST, runs?: boolean) => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.AUTOMATIONS, place, runs });
-      }),
-      onRuns: (shown) =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.AUTOMATIONS && !automationsTab(held.place)
-            ? { ...held, runs: shown }
-            : held,
-        ),
-      onClose: guard(() => setStandIn(undefined)),
+      open: input.automationsView.open,
+      place: input.automationsView.place,
+      runs: input.automationsView.runs,
+      onOpen: guard((place: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) =>
+        openAutomations(place),
+      ),
+      onRuns: input.automationsView.onRuns,
+      onClose: guard(input.automationsView.onClose),
     },
-    // The Board stands over the plan's place as the Automations page does, each giving way to the others.
+    // The Board is the router's, which draws it in the plan's place (`workspace-routes.ts`).
     boardView: {
-      open: standIn?.kind === STAND_IN.BOARD,
-      onOpen: guard(() => {
-        setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.BOARD });
-      }),
-      onClose: guard(() => setStandIn(undefined)),
+      open: input.boardView.open,
+      onOpen: guard(() => openBoard(listedWorkspace)),
+      onClose: guard(input.boardView.onClose),
+      onPreload: () => {
+        if (listedWorkspace !== undefined) input.boardView.onPreload(stepOf(listedWorkspace));
+      },
     },
     unknownWorkspace: {
       open: standIn?.kind === STAND_IN.UNKNOWN_WORKSPACE,
@@ -3800,8 +4285,8 @@ export function useTasksTab(input: {
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
-    // The call card's way back lands where the task's call bar is in sight.
-    onShowTask: guard((taskId: string) => showOverview({ kind: LINK_PLACE.TASK, planId: taskId })),
+    // A task named by an Inbox item or a call's row opens on its agents.
+    onShowTask: guard(showTaskAgents),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),
@@ -3822,27 +4307,26 @@ export function useTasksTab(input: {
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard(
       ({ taskId, itemId }: { readonly taskId: string; readonly itemId?: string }) => {
-        timeInboxOpen();
-        setHistoryFor(undefined);
-        chooseInboxTask(taskId);
         const chosen = itemId === undefined ? undefined : { taskId, itemId, opened: true as const };
-        setStandIn({ kind: STAND_IN.INBOX, chosen });
+        const home = viewed.tasks.find((task) => task.id === taskId)?.workspaceId;
+        standInbox(inboxIn(home ?? listedWorkspace?.id, taskId), chosen);
       },
     ),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;
       setChosen({ pin, over: openTaskId });
-      setHistoryFor(undefined);
+      closeHistory();
       // A tab pinned on an agent's own page opens that page, its panel on the tab.
       if ("agent" in pin) {
+        closeInbox();
         setStandIn({ kind: STAND_IN.AGENT, agentId: pin.agent });
         sidePanel.onShow(pin.agent, pin.tab);
         return;
       }
       if (pin.task !== tasks.activeTaskId) select(pin.task);
-      setStandIn(undefined);
-      if (!isAgentTab(tab)) {
+      clearStandIn();
+      if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.AGENT) {
         sidePanel.onShow(pin.task, tab);
         return;
       }
@@ -3864,6 +4348,7 @@ export function useTasksTab(input: {
     onRemoveTaskParent: removeTaskParent,
     onChangeTaskRelation: changeTaskRelation,
     onMoveTask: moveTask,
+    moveTask: moveTaskOptions,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.
       const workspaceId =
@@ -3877,8 +4362,8 @@ export function useTasksTab(input: {
         ...(workspaceId === undefined ? undefined : { workspaceId }),
       });
     },
-    onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
-    onRetryDocument: retryPlan,
+    onRetryList: () => refreshTasks(),
+    onRetryDocument: retryDescription,
     onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {
@@ -3912,7 +4397,7 @@ export function useTasksTab(input: {
     },
     onLeaveTask: guard(() => leaveTask()),
     onGoHome: guard(goHome),
-    onRenameTask: renameTask,
+    renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
     onSettleTasks: settleTasks,
@@ -3926,6 +4411,8 @@ export function useTasksTab(input: {
     listedPullRequests: tasks.agentPullRequests,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
+    deleteTask: deleteTaskOptions,
+    deleteTasks: tasksDeleteMutation(sendDeleteTask),
     back,
     leaveGuard,
   });

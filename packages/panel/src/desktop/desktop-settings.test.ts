@@ -16,7 +16,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -43,14 +43,14 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first and no experiment is on. */
 const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Integrations", "Vespin MCP", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "Vespin MCP", "Vespin CLI", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -117,7 +117,6 @@ function settingsProps(
   return {
     account: ACCOUNT,
     onSignOut: () => Promise.resolve(),
-    onDeleteAccount: accepted,
     view,
     onViewChange,
     microphone: {
@@ -320,39 +319,6 @@ test("Settings names its page once, by the page's own header, which also holds t
   );
 });
 
-test("a page group's head folds its pages, its one chevron turning with the fold, and a press brings them back", () => {
-  const page = mount(createElement(SettingsHarness));
-  const head = (name: string) =>
-    [
-      ...page.querySelectorAll<HTMLButtonElement>(
-        'nav[aria-label="Settings pages"] button[aria-expanded]',
-      ),
-    ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
-  const account = head("Account");
-  const turns = () => [...account.querySelectorAll(".ui-disclosure-turn")];
-  assert.equal(turns().length, 1, "the head draws one chevron");
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["true", "true"],
-  );
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
-
-  act(() => account.click());
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["false", "false"],
-  );
-  assert.ok(!pageButtons(page).some((each) => each.textContent === "Account"));
-  assert.ok(
-    pageButtons(page).some((each) => each.textContent === "Workspace"),
-    "the other groups stand",
-  );
-
-  act(() => account.click());
-  assert.equal(turns()[0]?.getAttribute("data-open"), "true");
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
-});
-
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   assert.deepEqual(
@@ -370,11 +336,7 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
 
   handState(experimentsOn(EXPERIMENT.MEMORY));
   const on = mount(createElement(SettingsHarness));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
+  await vi.waitFor(() => expect(pageGroups(on)[0]?.rows).toEqual(["Workspace", "Memory"]));
   assert.equal(shownTitle(on), "Account");
   openPage(on, "Memory");
   assert.equal(shownTitle(on), "Memory");
@@ -388,9 +350,7 @@ test("the sidebar lists Hosts under Account after Agents, and its search finds i
   const experiments = experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST);
   handState(experiments);
   const on = mount(createElement(SettingsHarness, { stored: settingsView({ experiments }) }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  await vi.waitFor(() => expect(pageGroups(on)[1]?.rows).toContain("Hosts"));
 
   assert.deepEqual(pageGroups(on)[1]?.rows, [
     "Account",
@@ -398,6 +358,7 @@ test("the sidebar lists Hosts under Account after Agents, and its search finds i
     "Hosts",
     "Integrations",
     "Vespin MCP",
+    "Vespin CLI",
     "Experimental",
   ]);
   openPage(on, "Hosts");
@@ -649,7 +610,7 @@ function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
 }
 
 const SIDEBAR_SEARCH = "Search settings";
-const PAGE_SEARCH = "Search integrations and tools";
+const PAGE_SEARCH = "Search integrations";
 
 /** Presses the sidebar's result named `name` under the Integrations page's heading. */
 function openIntegrationResult(page: HTMLElement, name: string): void {
@@ -779,6 +740,42 @@ test("a sidebar result that opens an integration hands its query to the page's s
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });
 
+/** Presses `key` in `field`, with Shift where `shift`. */
+function pressIn(field: HTMLElement, key: string, shift = false): void {
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: shift, bubbles: true }));
+  });
+}
+
+/** The words of the result the sidebar's search names lit. */
+function litResult(page: HTMLElement, field: HTMLElement): string | null | undefined {
+  const id = field.getAttribute("aria-activedescendant");
+  return id === null ? undefined : page.ownerDocument.getElementById(id)?.textContent;
+}
+
+test("the sidebar's search walks its results from the field, Tab and the arrows each showing the result's page with the caret left in the field", () => {
+  // Note that the landing asks whether the row is drawn and scrolls to it, neither of which jsdom can do, so every row here is drawn and stays put.
+  const stood = { checkVisibility: () => true, scrollIntoView: () => undefined };
+  for (const [name, value] of Object.entries(stood)) {
+    Object.defineProperty(HTMLElement.prototype, name, { value, configurable: true });
+  }
+  onTestFinished(() => {
+    for (const name of Object.keys(stood)) Reflect.deleteProperty(HTMLElement.prototype, name);
+  });
+  const page = mount(createElement(SettingsHarness));
+  const field = fieldNamed(page, SIDEBAR_SEARCH) ?? assert.fail("the sidebar's search");
+  typeInto(field, "theme");
+
+  pressIn(field, "Tab");
+  assert.equal(litResult(page, field), "Appearance");
+  assert.equal(shownTitle(page), "Appearance");
+  pressIn(field, "ArrowDown");
+  assert.equal(litResult(page, field), "Theme");
+  pressIn(field, "Tab", true);
+  assert.equal(litResult(page, field), "Appearance");
+  assert.ok(document.activeElement === field, "the caret stays in the search");
+});
+
 test("the Integrations page's search is cleared when another page is turned to", () => {
   const page = mount(createElement(SettingsHarness));
   openPage(page, "Integrations");
@@ -802,7 +799,7 @@ test("on a phone the page list is headed by its way out alone, named for the ste
         ...NO_HISTORY,
         canGoBack: true,
         steps: {
-          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "routed", of: "/acme/inbox" } }],
           forward: [],
         },
       },

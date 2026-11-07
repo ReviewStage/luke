@@ -14,7 +14,7 @@ import {
  * The names an account at a provider goes by: a first account is named
  * after its provider, so every name stored before a second was possible
  * keeps naming it; another takes the lowest free place; and nothing that is
- * not a provider and its place reads as a connection, whatever eve or a
+ * not a provider and its place reads as a connection, whatever an agent or a
  * window sends.
  */
 

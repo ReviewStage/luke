@@ -324,7 +324,7 @@ it.effect(
 );
 
 it.effect(
-  "the bearer resolutions the Mac's commands and eve's channels take never read the session a cookie names",
+  "the bearer resolutions the Mac's commands take, and the one beneath them, never read the session a cookie names",
   () =>
     Effect.gen(function* () {
       const { plugin, ada, adaCookie, userInfo } = yield* openAccounts;

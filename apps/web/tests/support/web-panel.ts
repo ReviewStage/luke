@@ -6,21 +6,21 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import "@repo/panel/testing/match-media";
 import "@repo/panel/testing/resize-observer";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { initialAppState } from "@repo/host/client";
 import { PUSH_METHOD } from "@repo/host/contract";
-import { App } from "@repo/panel/app";
 import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
-import { installWindowHistory } from "@repo/panel/navigation-history";
+import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
+import { onRegistry, readAppState } from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
+import { QueryClient } from "@tanstack/react-query";
+import { createBrowserHistory, type RouterHistory } from "@tanstack/react-router";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { browserHistory } from "../../src/app/browser-history";
 import { withLoadLink } from "../../src/app/load-link";
 import { webPlatform } from "../../src/app/web-platform";
 
@@ -30,11 +30,16 @@ declare global {
 
 const roots: Root[] = [];
 
-/** Takes down every panel drawn so far. */
+/** The tab's router history, made as the doors are installed, as the web root makes it. */
+let tabHistory: RouterHistory | undefined;
+
+/** Takes down every panel drawn so far, and stops the tab's history following the browser. */
 export function unmountPanels(): void {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
+  tabHistory?.destroy();
+  tabHistory = undefined;
   document.body.innerHTML = "";
 }
 
@@ -106,28 +111,31 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
 /**
  * Installs the tab's doors as the web root does, the fixture's bridge
  * saying the tab's address as a link and the tab's own history, before the
- * test reads the panel's state (`appStateFirstRead`) and draws it.
+ * test reads the panel's state (`drawPanel`) and draws it.
  */
 export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  installAppBridge(withLoadLink(fixtureBridge(profile)));
+  tabHistory?.destroy();
+  tabHistory = createBrowserHistory();
+  installAppBridge(withLoadLink(fixtureBridge(profile), tabHistory));
   // Nothing counts a surface event here: no host stands behind the fixture.
   installAppPlatform(webPlatform({ recordSurfaceEvent: () => undefined }));
-  installWindowHistory(browserHistory());
 }
 
 /** The panel drawn in the tab once its state is read, as the web root draws it. */
 export async function drawPanel() {
   // A fixture run's window is drawn once its synthetic tasks have landed; they land before this one draws.
   await loadTasksFixture();
+  // The document is in the test's client before the window draws, as the tab's root's `ensureQueryData` leaves it.
+  await readAppState();
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
   roots.push(root);
+  assert.ok(tabHistory !== undefined, "the tab's doors are installed");
+  const router = createPanelRouter(tabHistory, new QueryClient());
   await act(async () =>
-    root.render(
-      createElement(RegistryContext.Provider, { value: rendererRegistry }, createElement(App)),
-    ),
+    root.render(onRegistry(rendererRegistry, createElement(PanelRouterProvider, { router }))),
   );
   await settle();
   const buttonOf = (label: string) =>

@@ -1,21 +1,29 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import {
+  type DescriptionMention,
   encodeMention,
   MENTION_KIND,
   type MentionLines,
-  type PlanMention,
 } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
 import { backToWords, readFailedWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
-import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  changesTab,
+  pageTab,
+  STRIP_TAB_KIND,
+  type StripTab,
+  sameTab,
+  transcriptTab,
+} from "@repo/ui/tab-strip-model";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -27,7 +35,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { ADDRESS, type Address, addressOf, HERE, ROUTE, route, THING } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
-import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -53,7 +61,7 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
-  useSavedPlanText,
+  useSavedDescriptionText,
 } from "../tasks/task-mentions.js";
 import {
   cardTitle,
@@ -65,7 +73,6 @@ import type { AgentsControl } from "../tasks/use-agents.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
-import { leaveInboxTask, openTaskThread, useInboxTask } from "../tasks/use-inbox-task.js";
 import { OpenAddressesHere, type OpenAddressHere, placeOfMention } from "../tasks/use-open-link.js";
 import {
   type FileReads,
@@ -74,7 +81,8 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { useCloudTerminalTab } from "../tasks/use-terminal-session.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -97,17 +105,14 @@ import { taskCardOf } from "./task-card.js";
  * It stands in the task's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
- * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the oldest
- * first, Needs you, the questions alone that wait on their answer, Needs
- * you, the open threads that wait on them, or All,
- * everything, of everyone's, theirs, or one teammate's, as the developer
- * last chose; Needs
- * you is the Inbox's one name for an item not yet answered
- * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A task's status never hides its items: the Inbox is a feed
+ * workspace the sidebar lists that main says holds one, needing the
+ * developer or settled, each task read whole as main says it changed
+ * (`use-holder-inbox-items.ts`), in one run, the latest changed first, in
+ * the scope the developer last chose: Needs you, the questions alone that
+ * wait on their answer; Open, what is not done; All, everything; or
+ * Reminders, of everyone's, theirs, or one teammate's. The sidebar's Inbox
+ * row counts the open threads that wait on the developer, a question or an
+ * update not yet opened (`places-waiting.ts`). A task's status never hides its items: the Inbox is a feed
  * of what the agents got done, so an item of a task done or canceled is
  * listed and counted as any other until it is read or answered, its row
  * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
@@ -134,7 +139,7 @@ import { taskCardOf } from "./task-card.js";
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and,
- * for an item of a task, what the task's page offers besides: its plan
+ * for an item of a task, what the task's page offers besides: its description
  * and sections as saved, its pages, its agents, and their pull requests
  * (`heldTaskMentions`); and
  * its skills are read through its holder and drawn as chips that open
@@ -198,11 +203,11 @@ export const DesktopInbox = memo(function DesktopInbox({
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   // A task chosen narrows the Inbox to its own items, which a chip over the list names and clears.
-  const narrowedTask = useInboxTask();
-  const narrowedTaskName = tasks.tasks.find((task) => task.id === narrowedTask)?.name;
+  const narrowedTask = tasks.inboxView.narrowed;
+  const narrowedTaskRow = tasks.tasks.find((task) => task.id === narrowedTask);
+  const narrowedTaskName = narrowedTaskRow?.name;
   const {
     view,
-    act,
     choices,
     openAutomation,
     failed,
@@ -232,7 +237,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     reading,
     choose,
     clear,
-    closeItem,
+    resolveItems,
     onRetry,
   } = useInboxListing(tasks, narrowedTask);
   const unread = useMemo(() => anyUnread(standing), [standing]);
@@ -284,32 +289,16 @@ export const DesktopInbox = memo(function DesktopInbox({
   // An item's box starts a new thread with its agent, which opens in its place.
   const { startInboxThread } = agents;
   const newThread: InboxNewThread | undefined = tasks.signedIn
-    ? {
-        onStart: (item, start) =>
-          startInboxThread({
-            agentId: item.agentId,
-            text: start.text,
-            ...(start.attachments.length === 0 ? undefined : { attachments: start.attachments }),
-            clientKey: start.clientKey,
-          })
-            .catch(
-              (): AgentInboxMessagedView => ({
-                failure: AGENT_CALL_FAILURE.UNANSWERED,
-              }),
-            )
-            .then((answer) => {
-              if ("failure" in answer) return messageFailureWords(answer.failure);
-              const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
-              view.onChoose({
-                ...(holder?.kind === INBOX_HOLDER.TASK
-                  ? { taskId: holder.task.id }
-                  : { agentId: item.agentId }),
-                itemId: answer.item.id,
-                opened: true,
-              });
-              return undefined;
-            }),
-      }
+    ? startedThreads(startInboxThread, (item, itemId) => {
+        const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
+        view.onChoose({
+          ...(holder?.kind === INBOX_HOLDER.TASK
+            ? { taskId: holder.task.id }
+            : { agentId: item.agentId }),
+          itemId,
+          opened: true,
+        });
+      })
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
@@ -365,13 +354,13 @@ export const DesktopInbox = memo(function DesktopInbox({
       case THING.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move;
         // another task's, a subtask's among them, opens here too, read on that task, so the reader stays on the item.
-        sidePanel.onPreview({ page: thing.pageId }, thing.place);
+        sidePanel.onPreview(pageTab(thing.pageId), thing.place);
         return true;
       case THING.CHANGES:
-        sidePanel.onPreview({ changes: thing.agentId });
+        sidePanel.onPreview(changesTab(thing.agentId));
         return true;
       case THING.TRANSCRIPT:
-        sidePanel.onPreview({ transcript: thing.agentId });
+        sidePanel.onPreview(transcriptTab(thing.agentId));
         // A message is brought into view as the transcript beside the item lands, as its tab on the task brings it.
         if (thing.messageId !== undefined) {
           tasks.onRevealMessage({
@@ -425,7 +414,7 @@ export const DesktopInbox = memo(function DesktopInbox({
               ? undefined
               : { agentId, itemId, opened: true };
         if (choice === undefined) return false;
-        openTaskThread(holder);
+        // Note that the Inbox's door widens a list narrowed to another task, so the list it opens in holds it (`inbox-route.ts`).
         view.onChoose(choice);
         return true;
       }
@@ -440,11 +429,11 @@ export const DesktopInbox = memo(function DesktopInbox({
     if (!openHere(address)) elsewhere();
   };
   // A task or a section a mention names opens as a link to it would.
-  const openMention = (mention: PlanMention) =>
+  const openMention = (mention: DescriptionMention) =>
     openPlaceHere(placeOfMention(mention), () => tasks.onShowMention(mention));
-  // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
+  // An item of a task offers what the task's page does: its description and sections as saved, its pages, its agents, and their pull requests.
   const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
-  const planText = useSavedPlanText(heldTask);
+  const descriptionText = useSavedDescriptionText(heldTask);
   const mentions =
     place === undefined
       ? undefined
@@ -455,7 +444,7 @@ export const DesktopInbox = memo(function DesktopInbox({
         : heldTaskMentions(
             heldTask,
             place.workspace,
-            planText,
+            descriptionText,
             { pages: view.pages, agents: named, readAgents: readMentionAgents },
             { onOpenTask: openMention, onOpenFile: openMentionedFile },
           );
@@ -477,7 +466,10 @@ export const DesktopInbox = memo(function DesktopInbox({
   });
   // ⌘O opens what holds the keys in its full place: the agent the panel shows while it holds them, in its task; else the item shown, in its task, or on its agent's page where it has none.
   const panelAgent =
-    sideFocused && sidePanel.tab !== undefined && isTranscriptTab(sidePanel.tab)
+    sideFocused &&
+    sidePanel.tab !== undefined &&
+    typeof sidePanel.tab !== "string" &&
+    sidePanel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
       ? sidePanel.tab.transcript
       : undefined;
   const openInTask = (): (() => void) | undefined => {
@@ -546,14 +538,13 @@ export const DesktopInbox = memo(function DesktopInbox({
               }
               doors={{
                 ...paneDoors(tasks, listed.holder, {
-                  act,
                   panelFor,
                   place,
                   openPlace: openPlaceHere,
                 }),
                 onMark: markItem,
-                onClose: closeItem,
-                onSnooze: marks.onSnooze,
+                onClose: resolveItems,
+                onRemind: marks.onRemind,
               }}
             />
           </TaskMentions>
@@ -623,7 +614,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                   columns={columns.shown}
                   rows={columns.rows}
                   head={{
-                    shown: tasks.shown,
+                    // Note that a panel filling the window covers the list, so H and E stand down under it.
+                    shown: tasks.shown && !sidePanel.fullScreen,
                     // Note that a task's items are listed whole, so its Inbox offers no view's menu.
                     view: narrowedTask === undefined ? choices : undefined,
                     search,
@@ -641,7 +633,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                     task:
                       narrowedTask === undefined
                         ? undefined
-                        : { name: narrowedTaskName, onClear: leaveInboxTask },
+                        : {
+                            name: narrowedTaskName,
+                            status: narrowedTaskRow?.status,
+                            onClear: tasks.inboxView.onWiden,
+                          },
                   }}
                   models={named.models}
                   readerId={tasks.me}
@@ -663,8 +659,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                   }
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                  onClose={closeItem}
-                  onSnooze={marks.onSnooze}
+                  onClose={resolveItems}
+                  onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />
                 {chosen === undefined ? (
@@ -741,6 +737,38 @@ function DraftedInboxPane({
   const live = { ...control, ...useInboxCardDrafts(control, scope) };
   useNodOnOpen({ shown: opened, readerId, control: live });
   return <InboxPane {...pane} control={live} />;
+}
+
+/**
+ * What an item's box starts a new thread with instead of a reply: a thread
+ * with the item's agent, its words and files sent under the key the box
+ * minted, opened through `onStarted` once the service took it, or the words
+ * of why it did not, a send no answer came back for among them. An agent's
+ * card offers the same (`agent-threads.tsx`).
+ */
+export function startedThreads(
+  start: AgentsControl["startInboxThread"],
+  onStarted: (item: InboxItem, itemId: string) => void,
+): InboxNewThread {
+  return {
+    onStart: (item, begun) =>
+      start({
+        agentId: item.agentId,
+        text: begun.text,
+        ...(begun.attachments.length === 0 ? undefined : { attachments: begun.attachments }),
+        clientKey: begun.clientKey,
+      })
+        .catch(
+          (): AgentInboxMessagedView => ({
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+          }),
+        )
+        .then((answer) => {
+          if ("failure" in answer) return messageFailureWords(answer.failure);
+          onStarted(item, answer.item.id);
+          return undefined;
+        }),
+  };
 }
 
 /** A file the item names as its code names it: its path, and its lines where it names them. */
@@ -820,19 +848,22 @@ function InboxSidePanel({
   pages: TasksControl["inboxView"]["pages"];
   agents: AgentsControl;
   views: TabViews;
-  /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
+  /** What the item's box offers an `@`, which every tab beside it offers too: an agent's composer, and a page's comments. */
   mentions: TaskMentionsValue | undefined;
   /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
-  const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
+  const cloudTerminalTab = useCloudTerminalTab();
+  const terminals =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
   // A row opens what it names as a link to it would beside the item (`route.ts`): an agent of the
   // item's task reads beside it as the panel's preview, and any other task or agent is gone to.
   const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.PAGE:
-        return panel.onPreview({ page: target.page });
+        return panel.onPreview(pageTab(target.page));
       case TOOL_TARGET.TASK:
         return openPlace(placeOfTaskTarget(target), () =>
           target.agent === undefined
@@ -849,7 +880,7 @@ function InboxSidePanel({
               tasks.onShowAgent(taskId, agent),
             );
       }
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         if (taskId === undefined) return;
         return openPlace({ kind: LINK_PLACE.TASK, planId: taskId }, () => tasks.onShowTask(taskId));
       case TOOL_TARGET.INBOX:
@@ -866,7 +897,11 @@ function InboxSidePanel({
     agents,
     held: views.held,
     chosen: (opened) =>
-      isAgentTab(opened) && panel.tab !== undefined && isTranscriptTab(panel.tab)
+      typeof opened !== "string" &&
+      opened.kind === STRIP_TAB_KIND.AGENT &&
+      panel.tab !== undefined &&
+      typeof panel.tab !== "string" &&
+      panel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
     pages: taskId === undefined ? undefined : { taskId },
@@ -882,60 +917,61 @@ function InboxSidePanel({
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);
     return (
-      <TaskMentions value={mentions}>
-        <AgentPane
-          label={agent === undefined ? undefined : agentName(agent, agents.models)}
-          tabbed={false}
-          tab={{ agent: agentId }}
-          agents={agents}
-          shown={tasks.shown}
-          views={views}
-          // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
-          onOpenDelegation={(agent, callId, _task, status) => {
-            views.onWorkerStatus(callId, status);
-            if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
-          }}
-          onOpenPullRequest={(agent) =>
-            showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
-          }
-          onOpenTarget={openTarget}
-          cards={cards}
-        />
-      </TaskMentions>
+      <AgentPane
+        label={agent === undefined ? undefined : agentName(agent, agents.models)}
+        tabbed={false}
+        tab={agentTab(agentId)}
+        agents={agents}
+        shown={tasks.shown}
+        views={views}
+        // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
+        onOpenDelegation={(agent, callId, _task, status) => {
+          views.onWorkerStatus(callId, status);
+          if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
+        }}
+        onOpenPullRequest={(agent) =>
+          showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
+        }
+        onOpenTarget={openTarget}
+        cards={cards}
+      />
     );
   };
+  // Note that every tab beside the item reads the mentions its box offers, so a page's comment is written in the box's editor, its quotes as blocks, as on the task.
   return (
-    <SidePanel
-      {...drawing}
-      unread={NO_UNREAD}
-      holder={SIDE_PANEL_HOLDER.INBOX}
-      taskId={panelFor ?? ""}
-      onAgent={taskId === undefined && panelFor !== undefined}
-      repository={repository}
-      repositoryPlace={repositoryPlace}
-      pages={pages}
-      agents={agents}
-      openAgents={NO_OPEN_AGENTS}
-      shownAgent={undefined}
-      views={views}
-      shown={tasks.shown}
-      focused={focused}
-      onOpenTarget={openTarget}
-      transcript={taskId === undefined ? undefined : transcript}
-      transcriptDoors={
-        taskId === undefined
-          ? undefined
-          : {
-              // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
-              onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
-              onOpenTerminal: terminals
-                ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
-                : undefined,
-            }
-      }
-      phone={phone}
-      taskOfTab={tasks}
-    />
+    <TaskMentions value={mentions}>
+      <SidePanel
+        {...drawing}
+        unread={NO_UNREAD}
+        holder={SIDE_PANEL_HOLDER.INBOX}
+        taskId={panelFor ?? ""}
+        onAgent={taskId === undefined && panelFor !== undefined}
+        repository={repository}
+        repositoryPlace={repositoryPlace}
+        pages={pages}
+        agents={agents}
+        openAgents={NO_OPEN_AGENTS}
+        shownAgent={undefined}
+        views={views}
+        shown={tasks.shown}
+        focused={focused}
+        onOpenTarget={openTarget}
+        transcript={taskId === undefined ? undefined : transcript}
+        transcriptDoors={
+          taskId === undefined
+            ? undefined
+            : {
+                // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
+                onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
+                onOpenTerminal: terminals
+                  ? (agentId) => tasks.onShowPanelTab(taskId, cloudTerminalTab(agentId))
+                  : undefined,
+              }
+        }
+        phone={phone}
+        taskOfTab={tasks}
+      />
+    </TaskMentions>
   );
 }
 
@@ -945,18 +981,14 @@ function InboxSidePanel({
  * panel beside the Inbox, which stands for the agent and reads it the same
  * way; nothing read or opened until both are known.
  */
-function tasklessCode(
-  tasks: TasksControl,
-  act: ReturnType<typeof useAct>["act"],
-  place: TasklessPlace | undefined,
-): InboxCodeDoors {
+function tasklessCode(tasks: TasksControl, place: TasklessPlace | undefined): InboxCodeDoors {
   if (place === undefined || place.repository === null) {
-    return { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined };
+    return { repository: null, place: undefined, onOpenFile: () => undefined };
   }
   const { workspaceId, repository } = place;
   return {
     repository,
-    readFile: (window) => act(ACT_KIND.TASKS_FILE, { workspaceId, repository, ...window }),
+    place: { workspaceId, repository },
     onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit, repositoryReads(place)),
   };
 }
@@ -974,13 +1006,13 @@ function repositoryReads(place: TasklessPlace | undefined): FileReads | undefine
  * the panel stands for the task; an automation's open its page where the
  * Automations experiment is on, its agents' own pages, and its agent's
  * files, read through its workspace and repository (`answerPlace`), in the
- * panel beside the Inbox, which stands for that agent.
+ * panel beside the Inbox, which stands for that agent. An agent's card
+ * hands its threads the same doors (`agent-threads.tsx`).
  */
-function paneDoors(
+export function paneDoors(
   tasks: TasksControl,
   holder: InboxHolder,
   seams: {
-    act: ReturnType<typeof useAct>["act"];
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
     /** Opens a place a part of the item names as a link to it would beside the item (`route.ts`), else through the door given. */
@@ -1011,7 +1043,7 @@ function paneDoors(
       onOpenAgent: (agentId) => openAgent(task.id, agentId),
       code: {
         repository: task.repository,
-        readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+        place: { taskId: task.id },
         // Note that code is a link like any other: beside the item it opens as the panel's preview.
         onOpenFile: (ref, commit) =>
           seams.panelFor === task.id
@@ -1029,6 +1061,6 @@ function paneDoors(
     taskCard: undefined,
     onOpenAgent: (agentId) =>
       seams.openPlace({ kind: LINK_PLACE.AGENT, agentId }, () => tasks.agentView.onOpen(agentId)),
-    code: tasklessCode(tasks, seams.act, seams.place),
+    code: tasklessCode(tasks, seams.place),
   };
 }

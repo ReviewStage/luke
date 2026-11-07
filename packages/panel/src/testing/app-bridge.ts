@@ -3,6 +3,9 @@
  */
 
 import { ORPCError } from "@orpc/client";
+import type { AgentChangesAnswerView } from "@repo/features/agent-view";
+import type { TaskFileRequest } from "@repo/features/task-wire";
+import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { AppBridge } from "@repo/host/bridge";
 import {
   ACCOUNT_ASK_ACT_KIND,
@@ -39,7 +42,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a description's or a page's comments, a task's description history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's description. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_TRANSCRIPT
@@ -140,9 +143,9 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * the account's beats, hosts, models, integrations, provider keys, or GitHub token,
  * an agent's or a server's tools, the outside MCP clients, a workspace's
  * memories, skills, or repositories, a link's standing, the automations'
- * lists and histories, a plan's or a page's comments, a task's plan
+ * lists and histories, a description's or a page's comments, a task's description
  * history, the run that started an agent, a workspace's people, token
- * repositories, own integrations, or Slack channels, or a task's plan, is
+ * repositories, own integrations, or Slack channels, or a task's description, is
  * held quietly, and an automations', the integrations', the memories', the
  * skills', a repository list's, a workspace's integrations', its Slack
  * channels', the models', the preferences', or a transcript's Try again taken, since what
@@ -202,6 +205,42 @@ export function openingLinks(
       opened({ kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url } });
       return Promise.resolve();
     },
+  };
+}
+
+/**
+ * The act port's file read answered through `read`, which hears each window
+ * of a file as the surface asked it, the place it is read through left out,
+ * for a test to spread into its `fakeActPort`.
+ */
+export function readingFiles(
+  read: (request: TaskFileRequest) => Promise<TasksFileAnswer>,
+): Pick<FakeActPort, typeof TASKS_ACT_KIND.TASKS_FILE> {
+  return {
+    [TASKS_ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw, ref }) =>
+      read({
+        path,
+        firstLine,
+        lastLine,
+        ...(raw === undefined ? undefined : { raw }),
+        ...(ref === undefined ? undefined : { ref }),
+      }),
+  };
+}
+
+/**
+ * The act port's read of an agent's changes answered through `read`, which
+ * hears the agent and the pull request's number where a tab names one, for a
+ * test to spread into its `fakeActPort`.
+ */
+export function answeringChanges(
+  read: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>,
+): Pick<FakeActPort, typeof AGENT_ACT_KIND.AGENTS_CHANGES> {
+  return {
+    [AGENT_ACT_KIND.AGENTS_CHANGES]: (payload) =>
+      "number" in payload && payload.number !== undefined
+        ? read(payload.agentId, payload.number)
+        : read(payload.agentId),
   };
 }
 

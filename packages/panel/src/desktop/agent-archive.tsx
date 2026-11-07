@@ -22,10 +22,12 @@ import {
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useState } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { confirmFailure } from "../failure-report.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/agent-model.js";
@@ -40,10 +42,9 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
 import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
- * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
+ * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents, each a row with its Unarchive: listed under Archived in the tab bar's History (`agent-history.tsx`), and folded under Archived at the foot of a phone's Overview agents.
  *
- * Archive stands in an agent's tab menu and in the menu of its row in
- * the task's summary, and for an agent with no task in its page's ⋯ and its
+ * Archive stands in an agent's tab menu, and for an agent with no task in its page's ⋯ and its
  * sidebar row's menu, whose Unarchive stands in its place once archived
  * (`useAgentUnarchive`). The reader's own agent is archived at once, at
  * rest or working, since the toast's Undo brings it back with its
@@ -56,8 +57,8 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * asked about first like any other, a button that pressed it held busy while
  * the read is out. Archived, which is drawn at once, before the service
  * answers, and put back where it refuses, unless it was asked about, whose
- * dialog stands until the answer to say a refusal, the agent leaves its tab, the
- * summary, the "+" menu, and the sidebar's card and marks, while its
+ * dialog stands until the answer to say a refusal, the agent leaves its tab
+ * and the sidebar's card and marks for History's Archived, while its
  * transcript and its pull request are kept, ⌘K still finds it, saying it is
  * archived and opening its own page, and a toast offers Undo
  * (`use-agents.ts`).
@@ -67,7 +68,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * chevron while hovered or reached from the keyboard, and folded, the count
  * after its name, the rows unrolling as they fade in and fading out as it
  * folds.
- * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
+ * Unfolded, and in History, each archived agent is a muted row in the summary's shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, as the sidebar task
  * rows' Pin and Archive do, a ⋯ beside it: at rest they take no room, the name running the
@@ -167,9 +168,15 @@ export function useAgentArchive(
     surface: FAILURE_SURFACE.AGENT_ARCHIVE,
     about: { agentId: agent.id },
   });
+  const archiving = useMutation(agents.archiveAgent);
+  const confirmAct = useConfirmAct(archiving, {
+    send: () =>
+      archiving.mutateAsync({ agentId: agent.id, archived: true, asked: true }).then(heard),
+    answered: sameAnswer,
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => agents.onArchive(agent.id, true, { asked: true }).then(heard),
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);
@@ -207,7 +214,7 @@ export function useAgentArchive(
 const ARCHIVED_THING = "Archived agent";
 
 /** One archived agent: its glyph and name, muted, hanging its card, opening its own page on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
-function ArchivedAgentRow({
+export function ArchivedAgentRow({
   agent,
   agents,
   shown,
@@ -266,7 +273,7 @@ function ArchivedAgentRow({
   );
 }
 
-/** The task's archived agents, folded away under Archived at the foot of its Coding agents; nothing while none is archived. */
+/** The task's archived agents, folded away under Archived at the foot of a phone's Overview agents; nothing while none is archived. */
 export function ArchivedAgents({
   agents,
   shown,

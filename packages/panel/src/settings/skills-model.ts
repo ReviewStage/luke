@@ -59,8 +59,6 @@ export const SKILLS_LINE = {
   INSTALL_FOR: "Install for",
   ONLY_YOU: "Only you",
   VIEW: "Open",
-  SHARE: "Share with workspace",
-  UPDATE: "Update",
   REMOVE: "Delete",
   FILES: "Files",
   VIEW_FAILED: "The skill could not be read.",
@@ -96,8 +94,6 @@ export interface SkillRow {
   readonly source: TaskSkillSource;
   /** Where its files came from, and who installed it where that is someone else. */
   readonly line: string;
-  /** Whether it is read from GitHub, so may be updated. */
-  readonly fromGitHub: boolean;
 }
 
 /** The page's two groups, the workspace's first; a group with no rows is still listed, for its heading. */
@@ -132,7 +128,6 @@ function rowOf(
       installer === undefined
         ? sourceLine(skill.source)
         : `${sourceLine(skill.source)} · by ${installer}`,
-    fromGitHub: skill.source.type === INSTALLED_SKILL_SOURCE.GITHUB,
   };
 }
 
@@ -159,8 +154,6 @@ export function skillGroups(
 /** What a row's ⋯ may hold. */
 export const SKILL_ACTION = {
   VIEW: "view",
-  SHARE: "share",
-  UPDATE: "update",
   REMOVE: "remove",
 } as const;
 
@@ -168,23 +161,12 @@ export type SkillAction = (typeof SKILL_ACTION)[keyof typeof SKILL_ACTION];
 
 /**
  * What a row's ⋯ holds: View for every row, since anyone who sees a skill
- * may read it, Share with workspace for the account's own skill outside a
- * personal workspace, and Update for a GitHub skill; then, a rule apart,
- * Remove. A row the account may not change holds View alone.
+ * may read it; then, a rule apart, Remove. A row the account may not
+ * remove holds View alone.
  */
-export function skillActions(
-  row: SkillRow,
-  workspace: Pick<Workspace, "personal">,
-): readonly (readonly SkillAction[])[] {
-  const { skill } = row;
-  if (!skill.manageable) return [[SKILL_ACTION.VIEW]];
-  const shareable = skill.scope === INSTALLED_SKILL_SCOPE.PERSONAL && workspace.personal !== true;
-  const acts = [
-    SKILL_ACTION.VIEW,
-    ...(shareable ? [SKILL_ACTION.SHARE] : []),
-    ...(row.fromGitHub ? [SKILL_ACTION.UPDATE] : []),
-  ];
-  return [acts, [SKILL_ACTION.REMOVE]];
+export function skillActions(row: SkillRow): readonly (readonly SkillAction[])[] {
+  if (!row.skill.manageable) return [[SKILL_ACTION.VIEW]];
+  return [[SKILL_ACTION.VIEW], [SKILL_ACTION.REMOVE]];
 }
 
 /**
@@ -214,24 +196,6 @@ export function removeQuestion(
   };
 }
 
-/** What Share with workspace asks first: it moves the skill, so it says who gains it and that it leaves the account's own. */
-export function shareQuestion(
-  skillName: string,
-  workspace: Pick<Workspace, "name">,
-): {
-  readonly title: string;
-  readonly body: string;
-  readonly verb: string;
-  readonly running: string;
-} {
-  return {
-    title: `Share ${skillName} with ${workspace.name}?`,
-    body: `${everyoneIn(workspace)} will get ${skillName}. It leaves your personal skills.`,
-    verb: SKILLS_LINE.SHARE,
-    running: "Sharing",
-  };
-}
-
 /**
  * A skill's `SKILL.md` as Markdown that draws it as written: one fenced
  * block, its fence a backtick longer than any run of them in the text, so
@@ -252,12 +216,12 @@ const FAILURE_WORDS = {
   [INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND]: () =>
     "That skill or workspace is no longer yours to reach.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED]: () =>
-    "Only whoever installed this skill, or the workspace's owners and admins, can change it.",
+    "Only whoever installed this skill, or the workspace's owners and admins, can remove it.",
   [INSTALLED_SKILL_CALL_FAILURE.INVALID]: () =>
     "The skill could not be installed. Check what you pasted.",
   [INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN]: (skill: string) =>
     `${skill} is already installed there. Remove it first, or install for the other scope.`,
-  [INSTALLED_SKILL_CALL_FAILURE.UNREACHABLE]: () =>
+  [INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: () =>
     "That repository or branch could not be reached on GitHub. A private repository needs the workspace's GitHub connected.",
   [INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED]: () =>
     "GitHub didn't answer, or is limiting requests. Try again later.",
@@ -275,18 +239,6 @@ export function failureLine(
   failed: Pick<InstalledSkillFailedView, "failure" | "skillName">,
 ): string {
   return FAILURE_WORDS[failed.failure](failed.skillName ?? "This skill");
-}
-
-/** Why a share was refused: a name the workspace already holds is said for that workspace, the rest as any call says them. */
-export function shareFailureLine(
-  failed: Pick<InstalledSkillFailedView, "failure" | "skillName">,
-  skillName: string,
-  workspace: Pick<Workspace, "name">,
-): string {
-  if (failed.failure === INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN) {
-    return `${workspace.name} already has a skill named ${skillName}. Remove one of them first.`;
-  }
-  return failureLine(failed);
 }
 
 /* ----- The dialog ----- */

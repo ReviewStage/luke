@@ -43,6 +43,10 @@
     "dest": "/api/default.js?route=hosts/install-script"
   },
   {
+    "src": "/r8v3",
+    "dest": "/api/default.js?route=envelopes/forward"
+  },
+  {
     "src": "/\\.well-known/oauth-protected-resource/api/mcp",
     "dest": "/api/member-mcp.js?route=mcp/resource-metadata"
   },
@@ -121,6 +125,14 @@
   {
     "src": "/api/agents/runner-token",
     "dest": "/api/default.js?route=agents/runner-token"
+  },
+  {
+    "src": "/api/agents/runner-transcripts",
+    "dest": "/api/default.js?route=agents/runner-transcripts"
+  },
+  {
+    "src": "/api/envelopes/forward",
+    "dest": "/api/default.js?route=envelopes/forward"
   },
   {
     "src": "/api/github/install",
@@ -205,6 +217,14 @@
   {
     "src": "/api/terminal/sessions\\.js",
     "dest": "/api/terminal/sessions.js"
+  },
+  {
+    "src": "/api/terminal/tunnels",
+    "dest": "/api/terminal/tunnels"
+  },
+  {
+    "src": "/api/terminal/tunnels\\.js",
+    "dest": "/api/terminal/tunnels.js"
   },
   {
     "src": "/api/(.*)",

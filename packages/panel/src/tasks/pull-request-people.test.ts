@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { AgentChangesAnswerView } from "@repo/features/agent-view";
 import {
   AGENT_AUTHOR,
   AGENT_STATUS,
@@ -14,20 +15,22 @@ import {
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { tabCard } from "../desktop/tab-card.js";
-import { MemberDirectory } from "../member-directory.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { answeringChanges, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { useChangesPeople } from "./changes-people.js";
 import { PullRequestCard, peopleOf } from "./pull-request-card.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * pull-request-people.test.ts -- an agent's pull request's card says who
@@ -93,7 +96,7 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({});
-  fakeActPort({});
+  fakeActPort(answeringChanges(changesNaming(PEOPLE)));
   handMembers(() => ({ rows: { members: [CHARLES] } }));
 });
 
@@ -111,50 +114,51 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(MemberDirectory, {
-          workspace: WORKSPACE,
-          readerId: "user-dana",
-          children: element,
-        }),
+        withPeopleRead({ workspace: WORKSPACE, readerId: "user-dana" }, element),
       ),
     ),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await peopleRead();
   return container;
 }
 
-/** The plan's agents, the one whose pull request it is among them, its changes naming the people given. */
-function controlNaming(people: AgentChangesPeople) {
+/** The agent's changes as the service answers them, naming the people given. */
+function changesNaming(people: AgentChangesPeople): () => Promise<AgentChangesAnswerView> {
+  return () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PULL_REQUEST.url,
+        truncated: false,
+        files: [
+          {
+            path: "src/expiry.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 1,
+            deletions: 0,
+            omitted: null,
+            patch: "@@ -1 +1,2 @@\n const a = 1;\n+const b = 2;\n",
+          },
+        ],
+        ...people,
+      },
+    });
+}
+
+/** The plan's agents, the one whose pull request it is among them. */
+function controlNaming(): AgentsControl {
   return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
     pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
-    readChanges: () =>
-      Promise.resolve({
-        pullRequest: {
-          url: PULL_REQUEST.url,
-          truncated: false,
-          files: [
-            {
-              path: "src/expiry.ts",
-              previousPath: null,
-              status: CHANGED_FILE_STATUS.MODIFIED,
-              additions: 1,
-              deletions: 0,
-              omitted: null,
-              patch: "@@ -1 +1,2 @@\n const a = 1;\n+const b = 2;\n",
-            },
-          ],
-          ...people,
-        },
-      }),
   });
 }
 
-const control = controlNaming(PEOPLE);
+const control = controlNaming();
 
 /** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
@@ -214,6 +218,8 @@ test("a pull request's card says who opened it and lists its reviewers by where 
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: AgentChangesPeople) => {
+    // Note that each draw's window holds the members anew, so the host lays them for it.
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const drawn = await draw(card(people));
     const row = drawn.querySelector(".ui-hover-card-row");
     const named = [
@@ -246,17 +252,21 @@ test("a pull request's tab card says who opened it and its reviewers once its ta
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
+  // Note that each draw's window holds the members anew, so the host lays them for it.
+  handMembers(() => ({ rows: { members: [CHARLES] } }));
   const read = await draw(card(PEOPLE));
   assert.match(read.textContent ?? "", /Opened by luke-agent/u);
   assert.equal(read.querySelectorAll('[aria-label="Reviewers"] > li').length, 4);
 });
 
 test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
-  const names = async (readChanges: typeof control.readChanges) => {
+  const names = async (readChanges: () => Promise<AgentChangesAnswerView>) => {
+    fakeActPort(answeringChanges(readChanges));
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const tab = await draw(
       createElement(ChangesTabReading, {
         agentId: AGENT.id,
-        control: { ...control, readChanges },
+        control,
         shown: true,
         repository: "acme/relay",
         tree: { open: false, onToggle: () => undefined },
@@ -274,7 +284,33 @@ test("Files changed names nobody, with files or without, since the Pull request 
       pullRequest: { url: PULL_REQUEST.url, truncated: false, files: [], ...PEOPLE },
     });
 
-  assert.deepEqual([await names(control.readChanges), await names(noFiles)], [false, false]);
+  assert.deepEqual([await names(changesNaming(PEOPLE)), await names(noFiles)], [false, false]);
+});
+
+test("the people an agent's Changes tab read are named on its pull request's card wherever it hangs", async () => {
+  /** The agent's pull request's card, hung apart from its tab, naming whom the tab read. */
+  function HungCard(): ReactElement {
+    return card(peopleOf(useChangesPeople(AGENT.id), PULL_REQUEST));
+  }
+  const strip = await draw(
+    createElement(
+      Fragment,
+      null,
+      createElement(ChangesTabReading, {
+        agentId: AGENT.id,
+        control,
+        shown: true,
+        repository: "acme/relay",
+        tree: { open: false, onToggle: () => undefined },
+      }),
+      createElement(HungCard),
+    ),
+  );
+
+  await vi.waitFor(() =>
+    assert.equal(strip.querySelector('[aria-label="Reviewers"]') !== null, true),
+  );
+  assert.equal(reviewerRows(strip).length, 4);
 });
 
 test("a card says the people its tab read only for the pull request they were read for", () => {

@@ -9,26 +9,16 @@ import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillIdParams,
   type InstalledSkillRemovedView,
-  type InstalledSkillShareParams,
-  type InstalledSkillToggleParams,
-  type InstalledSkillUpdatedView,
-  type InstalledSkillUpdateParams,
-  type InstalledSkillView,
 } from "@repo/features/installed-skill-view";
-import { INSTALLED_SKILL_SCOPE } from "@repo/features/installed-skill-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
   fieldKind,
   type HeldRows,
-  type Refused,
   ROW_GONE,
   type WriteDeclaration,
-  type Written,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppHostReads, type AppInstalledSkills, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -45,23 +35,21 @@ import {
  *
  * Settings › Skills holds its workspace's skills, the workspace's and the
  * reader's own, and the host follows them while any window holds them and a
- * while after (`heldSlice`), so a skill a teammate installs, toggles, or
- * removes draws on every open page within the service's coalesce window.
+ * while after (`heldSlice`), so a skill a teammate installs or removes draws
+ * on every open page within the service's coalesce window.
  * Each skill is one row of the pool (`@repo/sync`), by its id, however many
  * workspaces' reads hold it: a personal skill stands in every held
  * workspace's read, so one write to it draws in each. Each workspace draws
  * the rows it holds as the held read answers them
  * (`@repo/features/installed-skill-live`), but those another workspace's
- * scope names, as a skill shared into another workspace is until its read
- * answers without it.
+ * scope names.
  *
- * A toggle, a share, and a removal are writes the pool draws over their
- * skill at once, standing until every read holding it carries the
- * transaction, and taken back where the service refused them. An update and
- * an install draw from their answers, since the service reads the paste or
- * the GitHub folder afresh and mints the ids: an update stands as the skill
- * it answered, and an install's skills are made rows every held read whose
- * scope they are in shows, each standing until those reads carry it.
+ * A removal is a write the pool draws over its skill at once, standing
+ * until every read holding it carries the transaction, and taken back where
+ * the service refused it. An install draws from its answer, since the
+ * service reads the paste afresh and mints the ids: its skills are made rows
+ * every held read whose scope they are in shows, each standing until those
+ * reads carry it.
  *
  * A read the service did not answer is told unanswered and asked for again
  * after `LIVE_RESTART`, as a follow that stops is. One of a workspace the
@@ -215,98 +203,23 @@ export function heldInstalledSkills(
 /** A change to a skill's row. */
 type SkillChange = FieldChange<InstalledSkillLiveRow>;
 
-/** A toggle's or a share's answer: the skill as the service says it now stands, or the write refused. */
-function settledAs(
-  answer: InstalledSkillView,
-): Written<SkillChange, WireValue> | Refused<WireValue, SkillChange> {
-  return "skill" in answer
-    ? {
-        answer: carried<InstalledSkillView>(answer),
-        txid: answer.txid,
-        taken: () => skillRowOf(answer.skill),
-      }
-    : { refused: carried<InstalledSkillView>(answer) };
-}
-
-/** A skill turned on or off, drawn so at once over every read holding it, sent as `send` asks. */
-export function skillEnabled(
-  send: (toggle: InstalledSkillToggleParams) => Effect.Effect<InstalledSkillView>,
-): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillToggleParams, WireValue> {
-  return {
-    kind: INSTALLED_SKILL,
-    keys: (toggle) => [toggle.skillId],
-    change: (toggle) => () => ({ enabled: toggle.enabled }),
-    send: (toggle) => Effect.map(send(toggle), settledAs),
-  };
-}
-
-/**
- * The account's own skill shared with a workspace, drawn at once as that
- * workspace's, installed by the account, who may manage it, sent as `send`
- * asks. Note that a read of another workspace holding it stops showing it
- * at once, since its scope is no longer that read's.
- */
-export function skillShared(
-  send: (share: InstalledSkillShareParams) => Effect.Effect<InstalledSkillView>,
-  readerId: () => string | undefined,
-): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillShareParams, WireValue> {
-  return {
-    kind: INSTALLED_SKILL,
-    keys: (share) => [share.skillId],
-    change: (share) => {
-      const installedBy = readerId() ?? null;
-      return () => ({
-        scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
-        workspaceId: share.workspaceId,
-        installedBy,
-        manageable: true,
-      });
-    },
-    send: (share) => Effect.map(send(share), settledAs),
-  };
-}
-
 /** A skill removed, gone at once from every read holding it, sent as `send` asks; a refusal puts it back. */
 export function skillRemoved(
   send: (removal: InstalledSkillIdParams) => Effect.Effect<InstalledSkillRemovedView>,
-): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillIdParams, WireValue> {
+): WriteDeclaration<
+  InstalledSkillLiveRow,
+  SkillChange,
+  InstalledSkillIdParams,
+  InstalledSkillRemovedView
+> {
   return {
     kind: INSTALLED_SKILL,
     keys: (removal) => [removal.skillId],
     change: () => () => ROW_GONE,
     send: (removal) =>
       Effect.map(send(removal), (answer) =>
-        "id" in answer
-          ? { answer: carried<InstalledSkillRemovedView>(answer), txid: answer.txid }
-          : { refused: carried<InstalledSkillRemovedView>(answer) },
+        "id" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
-  };
-}
-
-/**
- * A skill's files read again at its ref, drawn as the service answered it
- * the moment it answers and standing so until every read holding it carries
- * the transaction. Note that nothing is drawn before, since only the service
- * reads what the folder now holds.
- */
-export function skillUpdated(
-  send: (update: InstalledSkillUpdateParams) => Effect.Effect<InstalledSkillUpdatedView>,
-): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillUpdateParams, WireValue> {
-  return {
-    kind: INSTALLED_SKILL,
-    keys: (update) => [update.skillId],
-    change: () => () => ({}),
-    send: (update) =>
-      Effect.map(send(update), (answer) => {
-        if (!("skill" in answer)) return { refused: carried<InstalledSkillUpdatedView>(answer) };
-        const updated: SkillChange = () => skillRowOf(answer.skill);
-        return {
-          answer: carried<InstalledSkillUpdatedView>(answer),
-          txid: answer.txid,
-          taken: updated,
-          standsAs: updated,
-        };
-      }),
   };
 }
 

@@ -27,6 +27,7 @@
     --ui-duration-pane: 1ms;
     --ui-duration-fast: 1ms;
     --ui-duration-shape: 1ms;
+    --ui-duration-showcase: 1ms;
     --ui-row-stagger: 0ms;
     --ui-loop-motion: paused;
     --ui-scroll-glide: auto;

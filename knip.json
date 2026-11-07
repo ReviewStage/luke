@@ -28,6 +28,10 @@
       "entry": ["src/main.ts", "scripts/*.ts"],
       "project": ["src/**", "scripts/**"]
     },
+    "apps/cli": {
+      "entry": ["src/main.ts", "scripts/*.ts"],
+      "project": ["src/**", "scripts/**"]
+    },
     "apps/catalog": {
       "project": ["src/**"],
       "ignoreDependencies": ["playwright"]
@@ -77,6 +81,10 @@
       "ignoreDependencies": ["playwright", "vite"]
     },
     "packages/brand": {
+      "project": ["src/**", "scripts/**"]
+    },
+    "packages/settings": {
+      "entry": ["scripts/*.ts"],
       "project": ["src/**", "scripts/**"]
     }
   },

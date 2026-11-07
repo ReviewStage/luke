@@ -12,7 +12,7 @@ import { Effect, Redacted, Result } from "effect";
 /**
  * Our key pays for no coding agent (`agent-runtime-choice.ts`), and for
  * no call beside one either, so a suite whose account starts or messages an
- * agent on eve saves its own API keys first. The keys are sealed under a
+ * agent saves its own API keys first. The keys are sealed under a
  * ring of the suite's own (`AGENT_KEY_RING`), which a suite that opens them,
  * as a title or chapters do, hands its deployment; a step that would open
  * them is otherwise a provider call no suite makes, so the ring the

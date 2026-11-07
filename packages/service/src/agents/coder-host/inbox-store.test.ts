@@ -81,8 +81,8 @@ import {
   postInboxThread,
   readInboxAttachment,
   readInboxItem,
+  remindInboxItem,
   replyInboxItem,
-  snoozeInboxItem,
   taskInboxItems,
   taskInboxLiveStatements,
   withdrawInboxAnswer,
@@ -126,7 +126,7 @@ const openAgentIn = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -244,7 +244,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Sweep the flaky tests.",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
@@ -330,14 +330,24 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "the account's items stamp every open item and the settled ones of the last week, and carry whole only those changed since the reader's instant",
+    "the account's items stamp every open item, the settled ones of the last week, an old notice nodded to this week among them, and those the reader set a reminder on, and carry whole only those changed since the reader's instant",
     () =>
       Effect.gen(function* () {
         const { agent } = yield* openAgentIn;
         yield* post(agent, { ...SETTINGS, key: "stale" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
+        const reminded = yield* post(agent, { ...SETTINGS, key: "reminded" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "reminded", "Done another way")));
+        // The reminder is weighed on the database's clock, so it stands come due by the read.
+        yield* remindInboxItem(agent.userId, reminded.id, new Date("2001-01-01T09:00:00Z"));
         const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
+        const notice = yield* post(agent, { key: "merged", title: "Merged", body: "On main." });
         yield* TestClock.adjust(Duration.days(8));
+        assert.ok(
+          Option.isSome(
+            yield* acknowledgeInboxItem(agent.userId, notice.id, notice.revision, randomUUID()),
+          ),
+        );
         const lately = yield* post(agent, { ...SETTINGS, key: "lately" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "lately", "Done another way")));
         const fresh = yield* post(agent, { ...SETTINGS, key: "fresh" });
@@ -346,7 +356,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           yield* accountItemIdsOf(agent.userId, now, now - Duration.toMillis(Duration.days(7))),
           {
-            stamps: [waiting.id, lately.id, fresh.id].toSorted(),
+            stamps: [reminded.id, waiting.id, notice.id, lately.id, fresh.id].toSorted(),
             items: [lately.id, fresh.id].toSorted(),
           },
         );
@@ -455,7 +465,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Billing export\n",
+          descriptionSnapshot: "# Billing export\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1050,7 +1060,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           effort: "high",
           repository: "acme/relay",
           githubAccess: GITHUB_ACCESS.APP,
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1288,7 +1298,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(messaged.updatedAt > answered.updatedAt, "and moves when it last changed");
 
         const closed = Option.getOrThrow(yield* closeInboxItem(agent, "closing", "Not needed."));
-        assert.equal(closed.settledAt, closed.updatedAt);
+        assert.equal(closed.settledAt, yield* Clock.currentTimeMillis);
+        assert.ok(
+          closed.updatedAt < (closed.settledAt ?? 0),
+          "an agent's close leaves its last change",
+        );
         // As an item settled before the stamp was kept stands.
         yield* Database.use((db) =>
           db.update(inboxItem).set({ settledAt: null }).where(eq(inboxItem.id, closed.id)),
@@ -1359,7 +1373,7 @@ const postedId = (agent: InboxAgent, key: string) =>
 
 it.layer(getTestDB())("an inbox item's read state", (it) => {
   it.effect(
-    "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read",
+    "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read but the agent withdrawing its ask",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1397,12 +1411,11 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           "one member's read leaves another's unread",
         );
 
-        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a close, a post under its key.
+        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a post under its key.
         const changes = [
           replyInboxItem(agent, SETTINGS.key, "Still needed."),
           answerDone(teammate, posted),
           post(agent),
-          closeInboxItem(agent, SETTINGS.key, "Done another way."),
         ];
         for (const change of changes) {
           yield* markInboxItemRead(agent.userId, id);
@@ -1411,6 +1424,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           yield* change;
           assert.equal(yield* unreadFor(agent.userId, id), true);
         }
+
+        // The agent withdrawing its ask asks nothing of the reader, so it leaves the item read.
+        yield* markInboxItemRead(agent.userId, id);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* closeInboxItem(agent, SETTINGS.key, "Done another way.");
+        assert.equal(yield* unreadFor(agent.userId, id), false);
       }),
   );
 
@@ -1469,6 +1488,16 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [true, false],
         );
+        const markedOf = (reader: string) =>
+          Effect.map(
+            readInboxItem(reader, id),
+            (found) => Option.getOrThrow(found).item.markedUnread,
+          );
+        assert.deepEqual(
+          [yield* markedOf(agent.userId), yield* markedOf(teammate)],
+          [true, undefined],
+          "the read says whose mark it is, which Open reads on a closed thread",
+        );
         yield* TestClock.adjust(Duration.seconds(1));
         yield* postInboxMessage(agent.userId, id, { text: "Later.", clientKey: randomUUID() });
         assert.equal(yield* unreadFor(teammate, id), true, "the message is news to the teammate");
@@ -1498,7 +1527,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "a snooze marks the item read for its member alone and holds until a change wakes it or it comes due, and a read then takes it off",
+    "a reminder is its member's alone and leaves whether the item is read as it stands: a read or a mark never ends it, a change ends it, and canceling it brings it back now",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1508,66 +1537,71 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* openWorkspace(outsider);
         const id = yield* postedId(agent, SETTINGS.key);
         const taskId = agent.taskId ?? "";
-        const snoozedFor = (userId: string) =>
+        const reminderFor = (userId: string) =>
           Effect.map(
             taskInboxItems(userId, taskId),
-            (items) => items.find((item) => item.id === id)?.snoozedUntil,
+            (items) => items.find((item) => item.id === id)?.remindAt,
           );
-        // The store's clock is the test's, while the snooze is weighed on the database's, so ahead is far off and due is long past.
+        // The store's clock is the test's, while the reminder is weighed on the database's, so ahead is far off and due is long past.
         const ahead = new Date("2999-01-01T09:00:00Z");
         const due = new Date("2001-01-01T09:00:00Z");
+        assert.equal(yield* unreadFor(agent.userId, id), true);
 
-        const snoozed = yield* snoozeInboxItem(agent.userId, id, ahead);
-        assert.match(snoozed === false ? "" : (snoozed.txid ?? ""), /^\d+$/u);
-        assert.deepEqual(
-          [yield* snoozedFor(agent.userId), yield* unreadFor(agent.userId, id)],
-          [ahead.getTime(), false],
-          "snoozing marks it read for its member",
-        );
-        assert.deepEqual(
-          [yield* snoozedFor(teammate), yield* unreadFor(teammate, id)],
-          [undefined, true],
-          "a teammate's item is neither snoozed nor read",
-        );
-        assert.deepEqual(yield* markInboxItemRead(agent.userId, id), {});
+        const reminded = yield* remindInboxItem(agent.userId, id, ahead);
+        assert.match(reminded === false ? "" : (reminded.txid ?? ""), /^\d+$/u);
         assert.equal(
-          yield* snoozedFor(agent.userId),
-          ahead.getTime(),
-          "opening a snoozed item nothing woke leaves it snoozed",
+          reminded === false ? undefined : reminded.unread,
+          true,
+          "it answers the item unread",
+        );
+        assert.deepEqual(
+          [yield* reminderFor(agent.userId), yield* unreadFor(agent.userId, id)],
+          [ahead.getTime(), true],
+          "setting a reminder on an unread item leaves it unread",
+        );
+        assert.deepEqual(
+          [yield* reminderFor(teammate), yield* unreadFor(teammate, id)],
+          [undefined, true],
+          "a teammate's item has no reminder",
+        );
+        yield* markInboxItemRead(agent.userId, id);
+        yield* markInboxItemUnread(agent.userId, id);
+        yield* markInboxItemRead(agent.userId, id);
+        assert.deepEqual(
+          [yield* reminderFor(agent.userId), yield* unreadFor(agent.userId, id)],
+          [ahead.getTime(), false],
+          "reading it and marking it leave the reminder standing",
         );
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* replyInboxItem(agent, SETTINGS.key, "Still needed.");
-        assert.equal(yield* unreadFor(agent.userId, id), true, "a change wakes it, unread");
-        yield* markInboxItemRead(agent.userId, id);
-        assert.equal(
-          yield* snoozedFor(agent.userId),
-          undefined,
-          "reading it then takes the snooze off",
-        );
+        assert.equal(yield* reminderFor(agent.userId), undefined, "a change ends it");
 
-        yield* snoozeInboxItem(agent.userId, id, due);
-        const read = yield* markInboxItemRead(agent.userId, id);
-        assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
-        assert.equal(
-          yield* snoozedFor(agent.userId),
-          undefined,
-          "a read once it came due takes it off",
-        );
-        yield* snoozeInboxItem(agent.userId, id, due);
+        yield* remindInboxItem(agent.userId, id, due);
         assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
-        assert.equal(yield* snoozedFor(agent.userId), undefined, "so does marking every item read");
+        assert.equal(
+          yield* reminderFor(agent.userId),
+          due.getTime(),
+          "a reminder come due stands as it came due, through marking every item read",
+        );
 
-        yield* snoozeInboxItem(agent.userId, id, ahead);
-        yield* snoozeInboxItem(agent.userId, id, null);
-        assert.equal(yield* snoozedFor(agent.userId), undefined, "a snooze of none ends it");
+        yield* remindInboxItem(agent.userId, id, ahead);
+        yield* remindInboxItem(agent.userId, id, null);
+        const ended = yield* reminderFor(agent.userId);
+        assert.ok(
+          ended !== undefined && ended < ahead.getTime(),
+          "canceling a reminder brings the item back now rather than forgetting when",
+        );
+        yield* markInboxItemRead(teammate, id);
+        yield* remindInboxItem(teammate, id, null);
+        assert.equal(yield* reminderFor(teammate), undefined, "canceling no reminder makes none");
 
         assert.equal(
-          yield* snoozeInboxItem(outsider, id, ahead),
+          yield* remindInboxItem(outsider, id, ahead),
           false,
           "an outsider reaches no item",
         );
-        assert.equal(yield* snoozeInboxItem(agent.userId, randomUUID(), ahead), false);
+        assert.equal(yield* remindInboxItem(agent.userId, randomUUID(), ahead), false);
       }),
   );
 
@@ -1714,7 +1748,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "each task the account's read lists counts the questions waiting on the reader, a settled task's among them, never a notice or a settled item read or not, alike live and held, and no one counts another's",
+    "each task the account's read lists counts the open items waiting on the reader, a question or a notice not yet opened, a settled task's among them, never a settled item read or not, alike live and held, and no one counts another's",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1732,7 +1766,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               model: "anthropic/claude-opus-5.5",
               effort: "high",
               repository: "acme/relay",
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: null,
               runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
             });
@@ -1743,10 +1777,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const shelved = yield* startTask(owner, { name: "Shelved work" });
         const shelvedAgent = yield* agentOn(owner, shelved.id);
 
-        // The owner's open ask counts; their open notice, unread, asks nothing.
+        // The owner's open ask counts, and so does their open notice, not yet opened.
         yield* postedId(agent, "ask");
         yield* post(agent, { ...NOTICE, key: "notice" });
-        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither is a question now.
+        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither waits on them now.
         const followedItem = yield* postedItem(agent, "followed");
         const followed = followedItem.id;
         for (const item of [followedItem, yield* postedItem(agent, "seen")]) {
@@ -1770,10 +1804,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         assert.deepEqual(
           toDoOf(held),
           new Map([
-            [taskId, 1],
+            [taskId, 2],
             [shelved.id, 1],
           ]),
-          "the ask alone, not the teammate's beside it; and the settled task's open ask",
+          "the ask and the notice, not the teammate's ask beside them; and the settled task's open ask",
         );
         assert.equal(
           toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
@@ -1786,7 +1820,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(owner, followed);
         const read = yield* accountInboxPast(owner, held.cursor);
         assert.notEqual(read.cursor, held.cursor);
-        assert.equal(toDoOf(read).get(taskId), 1);
+        assert.equal(toDoOf(read).get(taskId), 2);
       }),
   );
 });

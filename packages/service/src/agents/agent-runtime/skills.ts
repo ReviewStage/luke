@@ -13,7 +13,7 @@
  * files it names can be found; its body is handed as markdown alone, since
  * the checkout holds its files. An installed skill is read from the store
  * (`installed-skill-store.ts`'s `sessionInstalledSkills`), while the member
- * has the Skills experiment on (`EXPERIMENT.SKILLS`): the enabled ones
+ * has the Skills experiment on (`EXPERIMENT.SKILLS`): the ones
  * of the workspace the agent works in, where its member is one of it, and
  * the member's own personal ones, which follow them into every workspace.
  * Its supporting files are handed beside its body, for the launch to write
@@ -117,7 +117,7 @@ function installedAgentSkill(skill: InstalledSkillWithFiles): AgentSkill | undef
 }
 
 /**
- * The enabled skills the member installed into the app, as a session is offered them:
+ * The skills the member installed into the app, as a session is offered them:
  * the workspace's, where the agent's workspace is one the member is still
  * in, then the member's own personal ones, each with its supporting files.
  * None while the member has the Skills experiment off, and none where the

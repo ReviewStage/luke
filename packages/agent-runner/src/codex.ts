@@ -42,7 +42,13 @@
  * launch (`RUNNER_ENV.CODEX_TOKEN`), and the sandbox's firewall sets the
  * plan's token in its place on OpenAI's API, renewed by the service, so no
  * token enters the sandbox; on a host it asks the service at the config's
- * `tokenUrl` under the runner's bearer. Codex keeps
+ * `tokenUrl` under the runner's bearer. A plan connected through Codex's
+ * own device-code login has a token only Codex's ChatGPT backend accepts,
+ * so where the launch's environment names that backend
+ * (`RUNNER_ENV.CODEX_PLAN_BACKEND`) the provider sends there, naming the
+ * workspace the plan pays from as Codex's ChatGPT sign-in does
+ * (`CHATGPT_BACKEND_PROVIDER`), its token from the same command and, in a
+ * sandbox, swapped in at the firewall on that host. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
@@ -63,6 +69,15 @@
  * (`codex-protocol/bundled-models.ts`) with the Ultrafast tier listed on
  * every model, which leaves the service's catalog, which offers an
  * Ultrafast version only where OpenAI prices one, the one gate on it.
+ *
+ * Subagents. A plan's launch hands app-server a catalog of its own too: the
+ * pinned release's with no model naming a `multi_agent_version`, which is
+ * what has Codex offer its subagent tools whatever its features say. OpenAI
+ * refuses a plan's request that carries an `agent_message` item
+ * (`subscription_sharing_unsupported_capability`), and a spawned subagent's
+ * first request carries its task as one, as the parent's history carries
+ * the subagent's answer, so one spawn would fail every later turn of the
+ * thread.
  *
  * Sandbox. Codex runs no sandbox of its own, `danger-full-access` with
  * approval `never` (https://learn.chatgpt.com/docs/sandboxing), set as the
@@ -95,19 +110,27 @@ import type {
   UserInput,
 } from "./codex-protocol/v2/index.js";
 import {
+  mirrorRollout,
+  openRolloutMirror,
+  type RolloutMirror,
+  restoreRollouts,
+} from "./codex-rollout.js";
+import {
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
-import { SANDBOX_TOOL_ENV } from "./pins.js";
+import { CODEX_PIN, SANDBOX_TOOL_ENV } from "./pins.js";
 import {
   CODEX_EFFORT,
   CODEX_ERROR_INFO,
+  CODEX_PLAN_BACKEND,
   CODEX_TOKEN_COMMAND,
   type CodexConfig,
   type CodexEffort,
+  type CodexPlanBackend,
   type ContentBlock,
   codexErrorKind,
   INPUT_LINE,
@@ -119,6 +142,7 @@ import {
   RUNNER_WARM,
   type RunnerEnd,
 } from "./protocol.js";
+import { transcriptStore } from "./transcripts.js";
 
 /**
  * OpenAI's documented provider for a ChatGPT plan's token
@@ -128,6 +152,23 @@ const CHATGPT_PROVIDER = {
   ID: "openai_chatgpt_plan",
   NAME: "ChatGPT plan",
   BASE_URL: "https://api.openai.com/v1",
+} as const;
+
+/**
+ * Codex's ChatGPT backend, for a plan's token Codex's own device-code login
+ * was issued, which OpenAI's API refuses: the base URL Codex's built-in
+ * ChatGPT sign-in sends to (Codex 0.163.0's `CHATGPT_CODEX_BASE_URL`), and
+ * the headers it adds there that a provider of ours must name itself. Codex
+ * sends the workspace's header beside its bearer for that sign-in alone,
+ * and the `version` header from its built-in provider's `http_headers`;
+ * `originator` and `User-Agent` it sends for every provider, so ours
+ * carries them as they are.
+ */
+const CHATGPT_BACKEND_PROVIDER = {
+  ID: "chatgpt_backend_plan",
+  NAME: "ChatGPT plan",
+  BASE_URL: "https://chatgpt.com/backend-api/codex",
+  HEADER: { ACCOUNT: "ChatGPT-Account-ID", VERSION: "version" },
 } as const;
 
 /**
@@ -181,6 +222,7 @@ const METHOD = {
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
+  THREAD_FORK: "thread/fork",
   THREAD_TURNS_LIST: "thread/turns/list",
   THREAD_REVERT: "thread/revert",
   TURN_START: "turn/start",
@@ -229,7 +271,12 @@ interface Outgoing {
 }
 
 /** The fields of an answer the controller reads. */
-const ThreadAnswerSchema = Schema.Struct({ thread: Schema.Struct({ id: Schema.String }) });
+const ThreadAnswerSchema = Schema.Struct({
+  thread: Schema.Struct({
+    id: Schema.String,
+    path: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+});
 const TurnAnswerSchema = Schema.Struct({ turn: Schema.Struct({ id: Schema.String }) });
 /** A page of a thread's turns as the rewind reads it: each turn's id and its user messages' client ids. */
 const TurnsPageSchema = Schema.Struct({
@@ -297,7 +344,7 @@ const ULTRAFAST_CATALOG_TIER = {
   description: "Fastest speed, highest usage",
 } as const;
 
-/** The file an API-key launch writes its catalog to, in a folder of its own it removes as it ends. */
+/** The file a launch writes its catalog to, in a folder of its own it removes as it ends. */
 const CATALOG_FILE = { PREFIX: "vespin-codex-", NAME: "models.json" } as const;
 
 /** The tier a turn names for the speed keys given; null, the standard tier, for neither. */
@@ -319,12 +366,17 @@ const CatalogSchema = Schema.Struct({
   ),
 });
 
+/** The pinned release's bundled catalog, as this file reads it. */
+function bundledCatalog() {
+  return Schema.decodeUnknownSync(CatalogSchema)(JSON.parse(CODEX_BUNDLED_MODELS_JSON));
+}
+
 /**
  * The pinned release's bundled catalog with the Ultrafast tier listed on
  * every model that lists none, as Codex's `model_catalog_json` reads it.
  */
 function ultrafastCatalog(): string {
-  const catalog = Schema.decodeUnknownSync(CatalogSchema)(JSON.parse(CODEX_BUNDLED_MODELS_JSON));
+  const catalog = bundledCatalog();
   const isUltrafast = (tier: unknown) =>
     typeof tier === "object" && tier !== null && "id" in tier && tier.id === SERVICE_TIER.ULTRAFAST;
   const models = catalog.models.map((model) => {
@@ -336,16 +388,30 @@ function ultrafastCatalog(): string {
   return JSON.stringify({ ...catalog, models });
 }
 
-/** The Ultrafast catalog written to a folder of the launch's own, which the launch's scope removes; its absolute path, as `model_catalog_json` takes it. */
-const ultrafastCatalogFile = Effect.acquireRelease(
-  Effect.sync(() => {
-    const folder = mkdtempSync(join(tmpdir(), CATALOG_FILE.PREFIX));
-    const file = join(folder, CATALOG_FILE.NAME);
-    writeFileSync(file, ultrafastCatalog());
-    return { folder, file };
-  }),
-  ({ folder }) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-).pipe(Effect.map(({ file }) => file));
+/**
+ * The pinned release's bundled catalog with no model naming a
+ * `multi_agent_version`, so Codex offers no subagent tools on the plan
+ * (the file header's Subagents), as Codex's `model_catalog_json` reads it.
+ */
+function planCatalog(): string {
+  const catalog = bundledCatalog();
+  const models = catalog.models.map((model) =>
+    Object.fromEntries(Object.entries(model).filter(([key]) => key !== "multi_agent_version")),
+  );
+  return JSON.stringify({ ...catalog, models });
+}
+
+/** The catalog given written to a folder of the launch's own, which the launch's scope removes; its absolute path, as `model_catalog_json` takes it. */
+const catalogFile = (catalog: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const folder = mkdtempSync(join(tmpdir(), CATALOG_FILE.PREFIX));
+      const file = join(folder, CATALOG_FILE.NAME);
+      writeFileSync(file, catalog);
+      return { folder, file };
+    }),
+    ({ folder }) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  ).pipe(Effect.map(({ file }) => file));
 
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
@@ -365,22 +431,56 @@ const CODEX_AUTH = {
   API_KEY: "api_key",
 } as const;
 
-type CodexAuth =
-  | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
+type CodexAuth = (
   | {
-      readonly kind: typeof CODEX_AUTH.API_KEY;
-      /** The catalog app-server reads in place of its bundled one (`ultrafastCatalogFile`). */
-      readonly catalog: string;
-    };
+      readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND;
+      readonly command: TokenCommand;
+      /** Where the plan's token is sent (`RUNNER_ENV.CODEX_PLAN_BACKEND`). */
+      readonly backend: CodexPlanBackend;
+      /** The workspace the plan pays from, where its starter named one (`RUNNER_ENV.CHATGPT_ACCOUNT_ID`). */
+      readonly chatgptAccountId: string | undefined;
+    }
+  | { readonly kind: typeof CODEX_AUTH.API_KEY }
+) & {
+  /** The catalog app-server reads in place of its bundled one (`catalogFile`): `planCatalog` on the plan, `ultrafastCatalog` on an API key. */
+  readonly catalog: string;
+};
+
+/**
+ * The headers our provider adds on Codex's ChatGPT backend, as Codex's
+ * ChatGPT sign-in sends them there: its pinned version, and the workspace
+ * where the plan names one; none on OpenAI's API.
+ */
+function backendHeaders(auth: CodexAuth): string | undefined {
+  if (auth.kind !== CODEX_AUTH.TOKEN_COMMAND || auth.backend !== CODEX_PLAN_BACKEND.CHATGPT) {
+    return undefined;
+  }
+  const { HEADER } = CHATGPT_BACKEND_PROVIDER;
+  const headers: (readonly [string, string])[] = [
+    ...(auth.chatgptAccountId === undefined
+      ? []
+      : ([[HEADER.ACCOUNT, auth.chatgptAccountId]] as const)),
+    [HEADER.VERSION, CODEX_PIN.VERSION],
+  ];
+  return `{ ${headers.map(([name, value]) => `${toml(name)} = ${toml(value)}`).join(", ")} }`;
+}
 
 /**
  * How our provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
- * key; and its own name.
+ * key; its own name; where it sends its requests, Codex's ChatGPT backend
+ * with the headers it reads there for a device-code plan's token, OpenAI's
+ * API for every other; and the catalog the launch wrote for it.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
-  const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
+  const named =
+    auth.kind === CODEX_AUTH.API_KEY
+      ? { ...API_KEY_PROVIDER, BASE_URL: CHATGPT_PROVIDER.BASE_URL }
+      : auth.backend === CODEX_PLAN_BACKEND.CHATGPT
+        ? CHATGPT_BACKEND_PROVIDER
+        : CHATGPT_PROVIDER;
   const provider = `model_providers.${named.ID}`;
+  const headers = backendHeaders(auth);
   const credential: (readonly [string, string])[] =
     auth.kind === CODEX_AUTH.API_KEY
       ? [[`${provider}.env_key`, toml(RUNNER_ENV.OPENAI_API_KEY)]]
@@ -396,8 +496,9 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
   return [
     ["model_provider", toml(named.ID)],
     [`${provider}.name`, toml(named.NAME)],
-    [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
+    [`${provider}.base_url`, toml(named.BASE_URL)],
     ...credential,
+    ...(headers === undefined ? [] : ([[`${provider}.http_headers`, headers]] as const)),
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
@@ -405,12 +506,8 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
     // (https://learn.chatgpt.com/docs/agent-configuration/speed). On an API key alone an Ultrafast one runs on the
     // `ultrafast` tier, which its own feature turns on and our catalog lists.
     ["features.fast_mode", "true"],
-    ...(auth.kind === CODEX_AUTH.API_KEY
-      ? ([
-          ["features.ultrafast_mode", "true"],
-          ["model_catalog_json", toml(auth.catalog)],
-        ] as const)
-      : []),
+    ...(auth.kind === CODEX_AUTH.API_KEY ? ([["features.ultrafast_mode", "true"]] as const) : []),
+    ["model_catalog_json", toml(auth.catalog)],
   ];
 }
 
@@ -527,6 +624,8 @@ interface CodexLaunch {
   stopping: boolean;
   /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
   warm: boolean;
+  /** The thread's rollout as the store mirrors it, where the config names the store. */
+  readonly mirror: RolloutMirror | undefined;
 }
 
 /**
@@ -584,18 +683,25 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
 
 /**
  * Starts app-server in a scope of its own and opens the thread on it:
- * `thread/resume` where there is a thread to continue, `thread/start`
- * otherwise. Answers the server, its scope, and the thread's id.
+ * `thread/fork` where the thread is another agent's, `thread/resume` where
+ * there is a thread to continue, `thread/start` otherwise. Answers the
+ * server, its scope, the thread's id, and its rollout's path where
+ * app-server named one.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth">,
   threadId: string | undefined,
+  fork: boolean,
 ) {
   const { config, env } = launch.context;
   const serverScope = yield* Scope.make();
   // Note that the listener reads the thread's id from here, because a new
   // thread's notifications arrive before `thread/start` answers.
-  const seen: ThreadSeen = { context: launch.context, signals: launch.signals, threadId };
+  const seen: ThreadSeen = {
+    context: launch.context,
+    signals: launch.signals,
+    threadId: fork ? undefined : threadId,
+  };
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
@@ -630,7 +736,13 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
     const answer =
       threadId === undefined
         ? yield* server.request(METHOD.THREAD_START, thread)
-        : yield* server.request(METHOD.THREAD_RESUME, { ...thread, threadId, excludeTurns: true });
+        : fork
+          ? yield* server.request(METHOD.THREAD_FORK, { ...thread, threadId, excludeTurns: true })
+          : yield* server.request(METHOD.THREAD_RESUME, {
+              ...thread,
+              threadId,
+              excludeTurns: true,
+            });
     const opened = decodeThreadAnswer(answer);
     if (Option.isNone(opened)) {
       return yield* new AppServerError({
@@ -639,12 +751,12 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       });
     }
     seen.threadId = opened.value.thread.id;
-    return opened.value.thread.id;
+    return opened.value.thread;
   });
   const openedThread = yield* opened.pipe(
     Effect.tapError(() => Scope.close(serverScope, Exit.void)),
   );
-  return { server, serverScope, threadId: openedThread };
+  return { server, serverScope, threadId: openedThread.id, path: openedThread.path ?? undefined };
 });
 
 /** How many turns a page of the rewind's read back from the thread's end holds. */
@@ -825,6 +937,14 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   }
 });
 
+/** The rollout's new lines sent to the store, where the launch mirrors it; one the store did not take goes with the next. */
+function mirrored(launch: Pick<CodexLaunch, "mirror">) {
+  if (launch.mirror === undefined) return Effect.void;
+  return mirrorRollout(launch.mirror).pipe(
+    Effect.catch(() => Effect.logWarning("agent-runner: the rollout was not mirrored")),
+  );
+}
+
 /** The turn this launch ran completed: the launch ends, or its unanswered messages start the next turn. */
 const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(function* (
   launch: CodexLaunch,
@@ -832,6 +952,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
 ) {
   if (signal.turnId !== launch.turnId) return undefined;
   launch.turnId = undefined;
+  yield* mirrored(launch);
   if (launch.stopping) return ended(RUNNER_END.STOPPED);
   if (signal.status === "failed")
     return ended(RUNNER_END.FAILED, signal.error ?? "the turn failed");
@@ -900,23 +1021,44 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
   return key !== undefined && key !== "";
 }
 
+const decodePlanBackend = Schema.decodeUnknownOption(
+  Schema.Literals(Object.values(CODEX_PLAN_BACKEND)),
+);
+
 /**
- * The credential a launch's app-server runs on: the account's API key, with
- * the catalog written for it, where the environment holds it, and the
- * plan's token command otherwise, where the runner knows its own bundle;
- * none where it does not.
+ * The backend the plan's token is sent to, as the launch's starter named it:
+ * OpenAI's API where it named none; none where it named one this runner
+ * does not know.
  */
-function authOf(
+function planBackendOf(context: LaunchContext<CodexConfig>): CodexPlanBackend | undefined {
+  const named = context.env[RUNNER_ENV.CODEX_PLAN_BACKEND];
+  if (named === undefined || named === "") return CODEX_PLAN_BACKEND.OPENAI_API;
+  return Option.getOrUndefined(decodePlanBackend(named));
+}
+
+/**
+ * The credential a launch's app-server runs on, with the catalog written for
+ * it: the account's API key where the environment holds it, and the plan's
+ * token command otherwise, on the backend given, where the runner knows its
+ * own bundle; none where it does not.
+ */
+const authOf = Effect.fn("agent-runner/codexAuthOf")(function* (
   context: LaunchContext<CodexConfig>,
-  catalog: string | undefined,
-): CodexAuth | undefined {
-  if (catalog !== undefined) return { kind: CODEX_AUTH.API_KEY, catalog };
+  backend: CodexPlanBackend,
+) {
+  if (onApiKey(context)) {
+    return { kind: CODEX_AUTH.API_KEY, catalog: yield* catalogFile(ultrafastCatalog()) } as const;
+  }
   if (context.self === undefined) return undefined;
+  const chatgptAccountId = context.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID];
   return {
     kind: CODEX_AUTH.TOKEN_COMMAND,
     command: { self: context.self, tokenUrl: context.config.tokenUrl },
-  };
-}
+    backend,
+    chatgptAccountId: chatgptAccountId === "" ? undefined : chatgptAccountId,
+    catalog: yield* catalogFile(planCatalog()),
+  } as const;
+});
 
 /**
  * The PATH app-server runs with: the one given, behind the folder of tools
@@ -937,8 +1079,11 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const catalog = onApiKey(context) ? yield* ultrafastCatalogFile : undefined;
-  const auth = authOf(context, catalog);
+  const backend = planBackendOf(context);
+  if (backend === undefined) {
+    return ended(RUNNER_END.FAILED, "the plan's backend is not one this runner knows");
+  }
+  const auth: CodexAuth | undefined = yield* authOf(context, backend);
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
@@ -947,13 +1092,36 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
+  // A thread resumed or forked has its rollout written back where the sandbox no longer holds it.
+  const codexHome = context.env.CODEX_HOME;
+  const store =
+    config.transcriptsUrl === undefined || codexHome === undefined
+      ? undefined
+      : { store: transcriptStore(config.transcriptsUrl, context.bearer), codexHome };
+  if (store !== undefined && config.threadId !== undefined) {
+    const restored = yield* restoreRollouts(store.store, store.codexHome, config.threadId).pipe(
+      Effect.result,
+    );
+    if (restored._tag === "Failure") {
+      return ended(RUNNER_END.FAILED, "the thread's rollout could not be read from the service");
+    }
+  }
   const opened = yield* openAppServer(
     { context, signals, model: config.model, auth },
     config.threadId,
+    config.fork === true,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
     return ended(RUNNER_END.FAILED, `${opened.failure.method}: ${opened.failure.detail}`);
   }
+  const { path, ...server } = opened.success;
+  const mirror =
+    store === undefined || path === undefined
+      ? undefined
+      : yield* openRolloutMirror(store.store, store.codexHome, server.threadId, path).pipe(
+          Effect.option,
+          Effect.map(Option.getOrUndefined),
+        );
   if (config.threadId !== undefined && config.rewindBefore !== undefined) {
     yield* revertedBefore(opened.success.server, opened.success.threadId, config.rewindBefore).pipe(
       Effect.catch((error) =>
@@ -964,7 +1132,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   const launch: CodexLaunch = {
     context,
     signals,
-    ...opened.success,
+    ...server,
     turnId: undefined,
     sent: new Map(),
     waiting: [],
@@ -975,6 +1143,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     tier: serviceTierOf(config.fast, config.ultrafast),
     stopping: false,
     warm: false,
+    mirror,
   };
 
   // The service's lines join the signals in a loop of their own, so a line is
@@ -1004,5 +1173,6 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   // App-server ends before the launch's last event, so nothing it emits on
   // the way down is numbered after it.
   yield* Scope.close(launch.serverScope, Exit.void);
+  yield* mirrored(launch);
   return outcome;
 });

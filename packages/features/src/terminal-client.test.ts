@@ -1,22 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
+import { fakeCloudApi } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
-import { HOSTED_API_ERROR } from "./service-wire.js";
-import {
-  HostedTerminalClient,
-  TERMINAL_UNANSWERED,
-  terminalRelayAddress,
-} from "./terminal-client.js";
-import { TERMINAL_REFUSAL } from "./terminal-view.js";
+import { HostedTerminalClient, terminalRelayAddress } from "./terminal-client.js";
 import { SANDBOX_STATE } from "./terminal-wire.js";
 
 /**
  * A coding agent's terminals as the host asks the service for them, over a
  * service that answers from a script: each call travels to its own path
- * with its own body and answers what the service said; each refusal the
- * tab reads is answered as one, and any other as unanswered; and the relay
+ * with its own body and answers what the service said; and the relay
  * address names the agent, the shell, and the size on the socket origin.
  * Synthetic ids throughout.
  */
@@ -82,30 +75,6 @@ it.effect(
         ],
       );
     }),
-);
-
-it.effect("each refusal the tab reads is answered as one, and any other as unanswered", () =>
-  Effect.gen(function* () {
-    const refusals = [
-      [HOSTED_API_ERROR.NOT_FOUND, { refused: TERMINAL_REFUSAL.NOT_FOUND }],
-      [HOSTED_API_ERROR.AGENT_RETIRED, { refused: TERMINAL_REFUSAL.GONE }],
-      [HOSTED_API_ERROR.AGENT_NOT_READY, { refused: TERMINAL_REFUSAL.AGENT_NOT_READY }],
-      [HOSTED_API_ERROR.SANDBOX_STOPPED, { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED }],
-      [HOSTED_API_ERROR.UPSTREAM_ERROR, { refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED }],
-      [HOSTED_API_ERROR.UNAVAILABLE, TERMINAL_UNANSWERED],
-    ] as const;
-
-    for (const [error, answer] of refusals) {
-      const refusing = fakeCloudApi({
-        [`POST /api/agents/${AGENT_ID}/terminals`]: {
-          answer: () => ({ error }),
-          status: HTTP_STATUS.CONFLICT,
-        },
-      });
-      const refused = yield* Effect.provide(client().create(AGENT_ID, undefined), refusing.layer);
-      assert.deepEqual(refused, answer, error);
-    }
-  }),
 );
 
 it("the relay address names the agent, the shell, and the size on the socket origin", () => {

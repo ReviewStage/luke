@@ -8,23 +8,25 @@ import {
   type AdminCostAccount,
   type AdminCostModel,
 } from "@repo/features/admin-cost-wire";
-import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCompact, formatCount, formatUsd } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { readFailedWords } from "@repo/features/words";
+import { QuietWords, TEXT_ELEMENT, TEXT_TONE, Text } from "@repo/ui";
+import { formatTrendMove } from "@repo/ui/admin-format";
 import {
+  createDataTableColumnHelper,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
-  type DataTableColumn,
-  QuietWords,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  Text,
-} from "@repo/ui";
-import { formatTrendMove } from "@repo/ui/admin-format";
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminCostQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { CostChart, CostChartSkeleton } from "../charts/cost-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
@@ -32,9 +34,7 @@ import { AdminViewOptions, windowWords } from "../chrome/controls.js";
 import { PageNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 const COST_ERROR = readFailedWords("cost");
 
@@ -116,24 +116,26 @@ const ACCOUNT_COLUMN = {
   PER_MERGED: "per-merged",
 } as const;
 
-const MODEL_COLUMNS: readonly DataTableColumn<AdminCostModel>[] = [
-  {
-    key: MODEL_COLUMN.MODEL,
-    label: "Model",
-    cell: (row) => row.model ?? "No model recorded",
-  },
-  {
-    key: MODEL_COLUMN.SPEND,
-    label: LIST_PRICE,
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (row) =>
+const modelColumn = createDataTableColumnHelper<AdminCostModel>();
+
+const MODEL_COLUMNS = modelColumn.columns([
+  modelColumn.display({
+    id: MODEL_COLUMN.MODEL,
+    header: "Model",
+    cell: ({ row: { original: row } }) => row.model ?? "No model recorded",
+  }),
+  modelColumn.display({
+    id: MODEL_COLUMN.SPEND,
+    header: LIST_PRICE,
+    meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+    cell: ({ row: { original: row } }) =>
       row.spendUsd === null ? <QuietWords>Unpriced</QuietWords> : formatUsd(row.spendUsd),
-  },
-  {
-    key: MODEL_COLUMN.TOKENS,
-    label: "Tokens",
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (row) => (
+  }),
+  modelColumn.display({
+    id: MODEL_COLUMN.TOKENS,
+    header: "Tokens",
+    meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+    cell: ({ row: { original: row } }) => (
       <>
         {formatCompact(row.pricedTokens + row.unpricedTokens)}
         {row.unpricedTokens > 0 && row.pricedTokens > 0 ? (
@@ -144,23 +146,23 @@ const MODEL_COLUMNS: readonly DataTableColumn<AdminCostModel>[] = [
         ) : null}
       </>
     ),
-  },
-];
+  }),
+]);
 
-function accountColumns(
-  onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminCostAccount>[] {
-  return [
-    {
-      key: ACCOUNT_COLUMN.ACCOUNT,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    {
-      key: ACCOUNT_COLUMN.SPEND,
-      label: LIST_PRICE,
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => (
+const accountColumn = createDataTableColumnHelper<AdminCostAccount>();
+
+function accountColumns(onOpen: (id: string) => void): DataTableColumns<AdminCostAccount> {
+  return accountColumn.columns([
+    accountColumn.display({
+      id: ACCOUNT_COLUMN.ACCOUNT,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    accountColumn.display({
+      id: ACCOUNT_COLUMN.SPEND,
+      header: LIST_PRICE,
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => (
         <>
           {formatUsd(row.spendUsd)}
           {row.unpricedTokens > 0 ? (
@@ -170,20 +172,20 @@ function accountColumns(
           ) : null}
         </>
       ),
-    },
-    {
-      key: ACCOUNT_COLUMN.MERGED,
-      label: "PRs merged",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatCount(row.mergedPullRequests),
-    },
-    {
-      key: ACCOUNT_COLUMN.PER_MERGED,
-      label: "Per merged PR",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => usdOrNone(row.spendPerMergedPullRequestUsd),
-    },
-  ];
+    }),
+    accountColumn.display({
+      id: ACCOUNT_COLUMN.MERGED,
+      header: "PRs merged",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatCount(row.mergedPullRequests),
+    }),
+    accountColumn.display({
+      id: ACCOUNT_COLUMN.PER_MERGED,
+      header: "Per merged PR",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => usdOrNone(row.spendPerMergedPullRequestUsd),
+    }),
+  ]);
 }
 
 /** A list price per minute as its provider writes it, to the fraction of a cent it names. */
@@ -220,6 +222,7 @@ function CostSections({
   cost: AdminCost | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
+  const accountTableColumns = useMemo(() => accountColumns(onOpenAccount), [onOpenAccount]);
   return (
     <>
       <AdminSection>
@@ -249,7 +252,7 @@ function CostSections({
             label={`${LIST_PRICE} by model`}
             columns={MODEL_COLUMNS}
             rows={cost.byModel}
-            rowKey={(row) => row.model ?? ""}
+            getRowId={(row) => row.model ?? ""}
             empty="No model tokens recorded in this window yet."
             minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           />
@@ -260,7 +263,7 @@ function CostSections({
         {cost === undefined ? (
           <DataTableSkeleton
             label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
-            columns={accountColumns(onOpenAccount)}
+            columns={accountTableColumns}
             rows={ADMIN_COST_TOP_ACCOUNTS_LIMIT}
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             cells={{ [ACCOUNT_COLUMN.ACCOUNT]: <AccountCellSkeleton /> }}
@@ -269,9 +272,9 @@ function CostSections({
           <>
             <DataTable
               label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
-              columns={accountColumns(onOpenAccount)}
+              columns={accountTableColumns}
               rows={cost.topAccounts}
-              rowKey={(row) => row.id}
+              getRowId={(row) => row.id}
               empty="No priced usage recorded in this window yet."
               minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
               onRowPress={(row) => onOpenAccount(row.id)}
@@ -306,12 +309,9 @@ export function CostScreen({
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
   const query = windowedReadQuery(hideAdmins, windowDays);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.COST, query: query },
-    (signal) => reads.cost(query, signal),
-    COST_ERROR,
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminCostQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const controls = (
     <AdminViewOptions
       windowDays={windowDays}
@@ -322,7 +322,7 @@ export function CostScreen({
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

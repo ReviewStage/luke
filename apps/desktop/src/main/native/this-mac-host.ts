@@ -1,9 +1,11 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import { DEVICE_ARCH } from "@repo/features/device-agent-wire";
 import { DARWIN_HOST } from "@repo/host/daemon";
 import { ThisMacHost, type ThisMacHostSeam } from "@repo/host/effect";
 import { Duration, Effect, Layer, Option, Result, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { app } from "electron";
 
 /**
@@ -47,20 +49,33 @@ function macOsTakesHost(version: string): boolean {
   return major > needMajor || (major === needMajor && minor >= needMinor);
 }
 
-/** The command given run once, its input on stdin where it is given some: nothing where it exited 0, or the words it failed with. */
-const ran = (command: string, args: readonly string[], within: Duration.Duration, input?: string) =>
+/**
+ * The command given run once, its input on stdin where it is given some: what
+ * it printed where it exited 0, or the words it failed with. Note that the
+ * `vespin` command's install runs through this too (`./cli-install.ts`), so
+ * both installs run their script the same way.
+ */
+export const printed = (
+  command: string,
+  args: readonly string[],
+  within: Duration.Duration,
+  input?: string,
+): Effect.Effect<Result.Result<string, string>, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(command, [...args], {
         stdin: input === undefined ? "ignore" : Stream.make(new TextEncoder().encode(input)),
       });
-      const [, said] = yield* Effect.all(
-        [Stream.runDrain(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
+      const [out, said] = yield* Effect.all(
+        [
+          Stream.mkString(Stream.decodeText(handle.stdout)),
+          Stream.mkString(Stream.decodeText(handle.stderr)),
+        ],
         { concurrency: "unbounded" },
       );
       const code = Number(yield* handle.exitCode);
       return code === 0
-        ? Result.succeed<void>(undefined)
+        ? Result.succeed(out)
         : Result.fail(said.trim() || `${command} ${args.join(" ")} exited ${code}`);
     }),
   ).pipe(
@@ -73,7 +88,17 @@ const ran = (command: string, args: readonly string[], within: Duration.Duration
     Effect.catch((failure) => Effect.succeed(Result.fail(`${command}: ${String(failure)}`))),
   );
 
+/** The command given run once, as `printed` runs it: nothing where it exited 0, or the words it failed with. */
+const ran = (command: string, args: readonly string[], within: Duration.Duration, input?: string) =>
+  Effect.map(
+    printed(command, args, within, input),
+    Result.map((): void => undefined),
+  );
+
 const launchctl = (args: readonly string[]) => ran("launchctl", args, ANSWER_WITHIN.LAUNCHD);
+
+/** The install's own command, by the link the install script makes under the home (`HOST_COMMAND`). */
+const INSTALL_COMMAND = ".local/bin/vespin-host";
 
 /** The account install as This Mac's host, for the user the app runs as. */
 function thisMacHost(): ThisMacHostSeam {
@@ -101,6 +126,13 @@ function thisMacHost(): ThisMacHostSeam {
       return (yield* loaded)
         ? Result.fail(`launchd still holds ${LABEL}`)
         : Result.succeed<void>(undefined);
+    }),
+    // Note that its input is no terminal, so it asks nothing, and that a Mac enrolled whose install never landed has no command and nothing to uninstall.
+    uninstall: Effect.suspend(() => {
+      const command = path.join(os.homedir(), INSTALL_COMMAND);
+      return existsSync(command)
+        ? ran(command, ["uninstall"], ANSWER_WITHIN.INSTALL)
+        : Effect.succeed(Result.succeed<void>(undefined));
     }),
   };
 }

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { FAILURE_KIND, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@repo/features/words";
-import { type ActSender, accountAskProcedures } from "@repo/host/act-port";
+import { type ActSender, declaredActProcedures } from "@repo/host/act-port";
 import { type TestActPort, testActPort } from "@repo/host/act-port/testing";
 import { ACT_KIND } from "@repo/host/acts";
+import { ACCOUNT_ASK_ACTS } from "@repo/host/contract";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect } from "effect";
 import { afterEach, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import { askAct, askActResult } from "./act.js";
 import { installActPortClient } from "./app-bridge.js";
 import { installShownFailureReporter, reportShownFailure } from "./failure-report.js";
 import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
+import { testQueryClientNow } from "./testing/copy-feedback.js";
 
 /**
  * The act door, against the port's own server: a refusal reaches the caller
@@ -32,33 +33,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** This window's act port, served the account asks' procedures alone, standing as `actor`. */
+/** This window's act port, served the two account asks these cases call, standing as `actor`. */
 function openActPort(actor: ActSender): void {
-  const noKeys = () => Effect.succeed({ keys: [] });
-  const noToken = () => Effect.succeed({ token: null });
-  const unanswered = () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   const port = testActPort(
-    accountAskProcedures({
-      host: {
-        providerKeysFollow: () => Effect.void,
-        providerKeysUnfollow: () => Effect.void,
-        providerKeysRetry: () => Effect.void,
-        providerKeySave: noKeys,
-        providerKeyRemove: noKeys,
-        providerKeyForAgents: noKeys,
-        chatGptSignIn: noKeys,
-        chatGptSignInCancel: () => Effect.void,
-        githubTokenFollow: () => Effect.void,
-        githubTokenUnfollow: () => Effect.void,
-        githubTokenRetry: () => Effect.void,
-        githubTokenSave: noToken,
-        githubTokenRemove: noToken,
-        memoriesFollow: () => Effect.void,
-        memoriesUnfollow: () => Effect.void,
-        memoriesRetry: () => Effect.void,
-        memoryForget: unanswered,
-        dictationTranscribe: unanswered,
-      },
+    declaredActProcedures(ACCOUNT_ASK_ACTS, {
+      PROVIDER_KEYS_REMOVE: () => Effect.succeed({ keys: [] }),
+      GITHUB_TOKEN_REMOVE: () => Effect.succeed({ token: null }),
     }),
   );
   ports.push(port);
@@ -112,7 +92,7 @@ it("a row reading an act's answer is told the fixed sentence for a transport fai
   const uninstall = installShownFailureReporter((report) => {
     kinds.push(report.kind);
     return undefined;
-  });
+  }, testQueryClientNow());
   const reasonFor = async (failure: Error) => {
     fakeActPort({ [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => Promise.reject(failure) });
     const answer = await askActResult(

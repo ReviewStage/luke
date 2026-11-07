@@ -27,11 +27,12 @@ import { CatalogSection } from "../section";
 
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
- * the one shown, one unavailable, one unread; a place whose ⋯ comes in
+ * the one shown, one unavailable, one unread; counts past 99 drawn 99+; a place whose ⋯ comes in
  * over its count under the pointer; an account's menu trigger;
  * links with addresses of their own; long names in a narrow column;
- * steps read in order, their names on two lines over a meta line; and
- * rows while the places they list are read.
+ * steps read in order, their names on two lines over a meta line; a
+ * search's rows nested under the page holding them; and rows while the
+ * places they list are read.
  */
 
 /** A chord as an app draws one, hidden from a reader since the row names it. */
@@ -166,11 +167,58 @@ function Steps(): React.JSX.Element {
   );
 }
 
+/** A search's finds: each page by its glyph, the rows it holds nested under it, one found row the place shown. */
+function Nested(): React.JSX.Element {
+  const [shown, setShown] = useState("theme");
+  const find = (id: string) => ({
+    current: shown === id ? NAV_CURRENT.LOCATION : undefined,
+    onClick: () => setShown(id),
+  });
+  return (
+    <div className="catalog-narrow">
+      <NavItem icon={<GearIcon />} {...find("appearance")}>
+        Appearance
+      </NavItem>
+      <NavItem nested {...find("theme")}>
+        Theme
+      </NavItem>
+      <NavItem nested {...find("font")}>
+        Font size
+      </NavItem>
+      <NavItem icon={<InboxIcon />} {...find("inbox")}>
+        Inbox
+      </NavItem>
+      <NavItem nested icon={<FolderIcon />} {...find("folders")}>
+        Folders
+      </NavItem>
+    </div>
+  );
+}
+
 function NavItems(): React.JSX.Element {
   return (
     <>
       <CatalogSection id="nav-item-places" title="Places, with counts, marks, and chords">
         <Places />
+      </CatalogSection>
+      <CatalogSection
+        id="nav-item-capped"
+        title="Counts past 99 are drawn 99+ and still read whole: 99 stands as it is, 128 draws 99+"
+      >
+        <div className="catalog-narrow">
+          <NavItem
+            icon={<FolderIcon />}
+            count={{ value: 99, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+          >
+            Inbox
+          </NavItem>
+          <NavItem
+            icon={<FolderIcon />}
+            count={{ value: 128, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+          >
+            Overview
+          </NavItem>
+        </div>
       </CatalogSection>
       <CatalogSection id="nav-item-actions" title="A place with a ⋯ of its own">
         <WithActions />
@@ -193,6 +241,9 @@ function NavItems(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="nav-item-steps" title="Steps read in order, over a meta line">
         <Steps />
+      </CatalogSection>
+      <CatalogSection id="nav-item-nested" title="Rows nested under the page holding them">
+        <Nested />
       </CatalogSection>
     </>
   );

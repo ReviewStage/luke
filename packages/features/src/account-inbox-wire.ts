@@ -93,7 +93,9 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Until when the reader snoozed the item, in epoch milliseconds, which marked it read for them; null where they did not, and absent from a service before snoozing. */
+  /** When the reader's reminder on the item comes due, in epoch milliseconds, while nothing has changed on it since; null where they set none or a change ended it, and absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** `remindAt` under the key a desktop from before the rename reads, which the service still fills and no client reads: the key goes with the minimum supported desktop version. */
   snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
@@ -104,10 +106,13 @@ export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
   /**
-   * How many of the task's items are questions waiting on the reader: open,
-   * holding an ask (`asking`), and waiting on them (`waitsOn`); a notice or
-   * a settled item never counts, read or not. Absent from a service before
-   * it, which the desktop counts as it did before, by the open items alone.
+   * How many of the task's items wait on the reader: open, an ask not
+   * answered or a notice not acknowledged, and waiting on them (`waitsOn`);
+   * a settled item never counts, read or not. Note that one whose reminder
+   * the reader set for later still counts, since the count is read live,
+   * where no clock is, so the reader leaves it out on its own side (`remindAt`).
+   * Absent from a service before it, which the desktop counts as it did
+   * before, by the open items alone.
    */
   toDo: EffectSchema.optionalKey(countedNumber),
   updatedAt: countedNumber,
@@ -149,7 +154,9 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Until when the reader snoozed the item, as a task's item says it, and on the same terms. */
+  /** When the reader's reminder on the item comes due, as a task's item says it, and on the same terms. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** `remindAt` under the key a desktop from before the rename reads, as a task's item carries it, and on the same terms. */
   snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 

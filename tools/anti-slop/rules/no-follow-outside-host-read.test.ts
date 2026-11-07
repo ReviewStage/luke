@@ -12,7 +12,7 @@ const REPOSITORY_ROOT = path.resolve(
   "..",
   "..",
 );
-const HOOK_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/use-host-read.ts");
+const LIVE_READS_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/live-reads.ts");
 const DOOR_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/act-stream.ts");
 const NEW_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/not-on-the-list.ts");
 const NEW_UI_FILE = path.join(REPOSITORY_ROOT, "packages/ui/src/not-on-the-list.ts");
@@ -25,9 +25,9 @@ const tester = new RuleTester();
 
 tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
   valid: [
-    // The hook's own module opens what it reads.
-    { code: STREAM, filename: HOOK_FILE },
-    // The hook's door opens and polls what the hook holds.
+    // The live reads' module opens what their queries hold.
+    { code: STREAM, filename: LIVE_READS_FILE },
+    // The live reads' door opens and polls what their queries hold.
     {
       code: [
         "const next = Effect.tryPromise({ try: () => stream.next(), catch: unheard });",
@@ -100,7 +100,7 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       filename: NEW_UI_FILE,
       errors: [{ messageId: "newPoll" }],
     },
-    // The hook's door reached from anywhere else: under an alias, re-exported, imported late, or required.
+    // The live reads' door reached from anywhere else: under an alias, re-exported, imported late, or required.
     {
       code: [
         'import { streamFrom as hold } from "../act-stream.js";',

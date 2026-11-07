@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PullRequestLine, taskCardOf } from "./task-card.js";
 
@@ -146,16 +146,18 @@ test("a pull request's line on the card counts its size as every figure is count
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PullRequestLine, {
-        pullRequest: {
-          number: 7,
-          title: "Add invitations",
-          state: PULL_REQUEST_STATE.OPEN,
-          checks: CHECK_SUMMARY.PASSING,
-          additions: 1234,
-          deletions: 56,
-        },
-      }),
+      withQueryClient(
+        createElement(PullRequestLine, {
+          pullRequest: {
+            number: 7,
+            title: "Add invitations",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 1234,
+            deletions: 56,
+          },
+        }),
+      ),
     ),
   );
   assert.deepEqual(

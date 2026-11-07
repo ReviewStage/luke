@@ -50,7 +50,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.OPENAI_KEY_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -64,6 +63,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: HOSTED_HTTP_STATUS.BAD_REQUEST,
@@ -79,6 +79,9 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
   [HOSTED_API_ERROR.ALREADY_WRITTEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.MEMORY_OFF]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.MEMORY_CREDENTIAL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.MEMORY_FULL]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -148,10 +151,8 @@ export const HOSTED_REFUSAL = {
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
   /** The agent's session is still coming up; the same message a moment later is taken. */
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
-  /** The agent's session has ended for good, as every agent's that ran on eve has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
+  /** The agent's session has ended for good, as every agent's on the retired runtime has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
-  /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
-  AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
   /** The agent runs on a native harness this function cannot reach; nothing was written. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
@@ -174,6 +175,8 @@ export const HOSTED_REFUSAL = {
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
+  /** The coding agent's sandbox can never resume, its snapshot and saved files gone; nothing was resumed. */
+  SANDBOX_SNAPSHOT_GONE: { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE },
   /** A skill of that name is already installed in the scope asked; nothing was installed. */
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
   /** A skill's files were refused; nothing was installed. */
@@ -203,6 +206,12 @@ export const HOSTED_REFUSAL = {
   HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
   /** A write sent again under an idempotency key it was taken under before; nothing ran again. */
   ALREADY_WRITTEN: { error: HOSTED_API_ERROR.ALREADY_WRITTEN },
+  /** The member has Memory off; nothing was read or written. */
+  MEMORY_OFF: { error: HOSTED_API_ERROR.MEMORY_OFF },
+  /** A memory's words look like a credential; nothing was written. */
+  MEMORY_CREDENTIAL: { error: HOSTED_API_ERROR.MEMORY_CREDENTIAL },
+  /** The workspace holds as many memories as it may; nothing was written. */
+  MEMORY_FULL: { error: HOSTED_API_ERROR.MEMORY_FULL },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

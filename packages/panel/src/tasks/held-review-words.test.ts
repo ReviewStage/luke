@@ -15,6 +15,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { PendingComment } from "./pending-comments.js";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions.js";
 
@@ -89,20 +91,34 @@ function draw(): HTMLElement {
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement(ThreadWritesProvider, {
-        value: { agentId: "agent-1", onWritten: () => undefined },
-        children: [
-          createElement(ThreadActions, { key: "thread", thread: THREAD }),
-          createElement(PendingComment, {
-            key: "pending",
-            draft: PENDING,
-            words: createElement("p", null, PENDING.body),
-          }),
-        ],
-      }),
+      withQueryClient(
+        createElement(ThreadWritesProvider, {
+          value: { agentId: "agent-1", onWritten: () => undefined },
+          children: [
+            createElement(ThreadActions, { key: "thread", thread: THREAD }),
+            createElement(PendingComment, {
+              key: "pending",
+              draft: PENDING,
+              head: { person: PENDING.by, at: PENDING.at, now: PENDING.at },
+              words: createElement("p", null, PENDING.body),
+            }),
+          ],
+        }),
+      ),
     ),
   );
   return container;
+}
+
+/** Opens the pending comment's edit from its ⋯, as the member would. */
+function pendingEdit(container: HTMLElement): void {
+  act(() =>
+    (
+      container.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the pending comment offers its ⋯")
+    ).click(),
+  );
+  chooseMenuItem("Edit");
 }
 
 /** The button of the given words. */
@@ -168,12 +184,12 @@ test("a reply typed and let go with Esc is there when Reply… opens again, and 
 test("a pending comment's edit typed and let go with Esc is there when Edit opens again, and saving it lets the words go", async () => {
   const container = draw();
 
-  act(() => button(container, "Edit").click());
+  pendingEdit(container);
   typeAtEnd(box(container, "Pending comment"), ", and more");
   await esc(box(container, "Pending comment"));
   assert.equal(container.querySelector('.ProseMirror[aria-label^="Pending"]'), null);
 
-  act(() => button(container, "Edit").click());
+  pendingEdit(container);
   assert.match(box(container, "Pending comment").textContent ?? "", /Pending words, and more/u);
 
   act(() => button(container, "Save").click());
@@ -186,7 +202,7 @@ test("a pending comment's edit typed and let go with Esc is there when Edit open
     },
   ]);
 
-  act(() => button(container, "Edit").click());
+  pendingEdit(container);
   assert.equal(
     box(container, "Pending comment").textContent,
     "Pending words",
@@ -228,7 +244,7 @@ test("Enter sends a reply and saves an edit, and Shift+Enter sends neither", asy
   await settle();
   assert.deepEqual(actionsSent(), [PULL_REQUEST_ACTION.REPLY_TO_THREAD]);
 
-  act(() => button(container, "Edit").click());
+  pendingEdit(container);
   typeAtEnd(box(container, "Pending comment"), "!");
   press(box(container, "Pending comment"), { key: "Enter" });
   await settle();

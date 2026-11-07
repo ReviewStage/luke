@@ -71,6 +71,35 @@ export function AutomationDirectory({
   return <ShelfContext.Provider value={shelf}>{children}</ShelfContext.Provider>;
 }
 
+/**
+ * Holds the workspace's automations for everything inside it while
+ * `wanted` holds, in the workspace and with the way to a page of the
+ * directory standing around it, which a place inside reads where the
+ * place around it does not: a transcript holding an automation's lines,
+ * on an agent no automation started.
+ */
+export function AutomationsWanted({
+  wanted,
+  children,
+}: {
+  wanted: boolean;
+  children: ReactNode;
+}): ReactNode {
+  const outer = useContext(ShelfContext);
+  if (!wanted || outer === undefined || outer.reading || outer.workspaceId === undefined) {
+    return children;
+  }
+  return (
+    <AutomationDirectory
+      workspace={{ id: outer.workspaceId, name: outer.workspaceName ?? "" }}
+      wanted
+      onOpen={outer.onOpen}
+    >
+      {children}
+    </AutomationDirectory>
+  );
+}
+
 /** The automation `automationId` names, as the directory standing around the caller knows it; none while the list is unread, or it lists no such automation. */
 export function useAutomation(automationId: string | undefined): KnownAutomation | undefined {
   const shelf = useContext(ShelfContext);

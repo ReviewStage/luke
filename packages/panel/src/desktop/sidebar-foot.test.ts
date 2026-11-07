@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
@@ -14,8 +15,13 @@ import { useAppCommand } from "../app-commands.js";
 import { OpenPersonProvider } from "../person-door.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
+import { onRegistry, settleQueries, startQueriesAfresh } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
@@ -53,6 +59,22 @@ afterEach(() => {
   document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
+
+/**
+ * Hands the window main's document with `patch` on a Query client of its own,
+ * so no document an earlier mount read stands in for it, and waits for the
+ * foot to draw it and for what Query notifies beside it.
+ */
+async function footOn(
+  patch: Partial<AppStateSnapshot>,
+  options: Parameters<typeof mount>[1] = {},
+): Promise<void> {
+  startQueriesAfresh();
+  handState({}, patch);
+  mount(DEAN, options);
+  await stateArrived();
+  await settleQueries();
+}
 
 /** Lets the window's document, handed through the bridge's promise, reach what is drawn. */
 async function stateArrived(): Promise<void> {
@@ -203,7 +225,7 @@ test("the account's menu opens Keyboard shortcuts and the changelog, each closin
   await stateArrived();
   for (const label of ["Keyboard shortcuts", "Changelog"]) {
     act(() => button.click());
-    act(() => accountItem(label).click());
+    await act(async () => accountItem(label).click());
     assert.equal(accountMenu(), null);
   }
 
@@ -240,7 +262,7 @@ test("Contact us flies out its own menu beside the account's, which stands whole
   assert.equal(contact.getAttribute("aria-expanded"), "true");
 });
 
-test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", () => {
+test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", async () => {
   const button = mount(DEAN);
   act(() => button.click());
   for (const key of ["ArrowLeft", "Escape"]) {
@@ -250,14 +272,18 @@ test("Left or Escape closes Contact us's menu alone, and choosing in it closes b
     );
     assert.equal(contactMenu(), null, `${key} closes the submenu`);
     assert.ok(accountMenu(), `and ${key} leaves the account's menu standing`);
-    assert.equal(document.activeElement, accountItem("Contact us"), "focus back on Contact us");
+    assert.equal(
+      document.activeElement === accountItem("Contact us"),
+      true,
+      "focus back on Contact us",
+    );
   }
 
   act(() => accountItem("Contact us").click());
   const email = [...(contactMenu()?.querySelectorAll("button") ?? [])].find(
     (item) => item.textContent === "Email",
   );
-  act(() => email?.click());
+  await act(async () => email?.click());
   assert.equal(accountMenu(), null);
   assert.equal(contactMenu(), null, "the submenu goes with the menu");
   assert.deepEqual(sent, [{ kind: ACT_KIND.CONTACT_EMAIL }]);
@@ -329,7 +355,7 @@ test("Sign out signs the account out on the press, with no question first", asyn
   await act(async () => accountItem("Sign out").click());
 
   assert.equal(signOuts, 1);
-  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]') === null, true);
 });
 
 test("a Sign out that fails says so in a toast, and the account is still signed in", async () => {
@@ -403,11 +429,7 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     latestVersion: "1.1.0",
   };
   const restartShown = async (capabilities: readonly HostCapability[]) => {
-    handCapabilities(capabilities);
-    mount(DEAN, { update: ready });
-    await act(async () => {
-      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-    });
+    await footOn({ run: { ...stateWith({}, {}).run, capabilities } }, { update: ready });
     const shown = [...document.querySelectorAll("button")].some(
       (button) => button.textContent === "Restart",
     );
@@ -424,11 +446,7 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
 
 test("the Mac offline says so in the foot, and nothing does while it is online", async () => {
   const offlineShown = async (online: boolean) => {
-    handState({}, { network: { online, reachable: true } });
-    mount(DEAN);
-    await act(async () => {
-      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-    });
+    await footOn({ network: { online, reachable: true } });
     const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
@@ -437,45 +455,4 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
 
   assert.equal(await offlineShown(false), "Offline");
   assert.equal(await offlineShown(true), null);
-});
-
-test("a development build's branch row hides the branch, and its hidden row brings it back", async () => {
-  const asked: unknown[] = [];
-  const run = {
-    profile: "test",
-    packaged: false,
-    platform: "darwin",
-    capabilities: DESKTOP_CAPABILITIES,
-    appVersion: "1.0.0",
-    captureMode: false,
-    fixtureMode: false,
-    accountRequired: false,
-    commit: { sha: "a10eee5", dirty: false, branch: "feat/demo" },
-  };
-  const footWith = async (hidden: boolean) => {
-    handState({}, { run, window: { fullScreen: false, buildLabelHidden: hidden } });
-    fakeActPortAnswering((request) => {
-      if (request.kind === ACT_KIND.WINDOW_SHOW_BUILD_LABEL) asked.push(request.payload);
-      return Promise.resolve(undefined);
-    });
-    mount(DEAN);
-    await stateArrived();
-  };
-  const pressNamed = async (name: string) => {
-    const button = [...document.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === name || each.textContent === name,
-    );
-    await act(async () => (button ?? assert.fail(`the foot offers ${name}`)).click());
-  };
-
-  await footWith(false);
-  assert.ok(document.body.textContent?.includes("feat/demo"));
-  await pressNamed("Hide branch");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  await footWith(true);
-  assert.ok(!document.body.textContent?.includes("feat/demo"));
-  await pressNamed("Show branch");
-
-  assert.deepEqual(asked, [{ shown: false }, { shown: true }]);
 });

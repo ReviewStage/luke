@@ -15,6 +15,7 @@ import {
   TextField,
   useConfirmDialog,
 } from "@repo/ui";
+import type { ConfirmAct } from "@repo/ui/confirm-state";
 import { useRef, useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -31,14 +32,28 @@ import { CatalogSection } from "../section";
  * (`FootQuestion`): a key's Remove, refused the first time.
  */
 
-/** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@repo/ui`. */
-type ActionResult = Awaited<ReturnType<Parameters<typeof useConfirmDialog>[1]>>;
+/** What a confirming act answers, as `useConfirmDialog` reads it, so the catalog needs nothing beyond `@repo/ui`. */
+type ActionResult = NonNullable<ConfirmAct["refused"]>;
 
 const ACCEPTED: ActionResult = { status: "accepted" };
 
 /** An act refused, saying why. */
 function refused(reason: string): ActionResult {
   return { status: "rejected", reason };
+}
+
+/** An act answered at once by `answer`, its refusal held as a caller's mutation holds one, until it is let go. */
+function useAnsweredAct(answer: () => ActionResult): ConfirmAct {
+  const [answered, setAnswered] = useState<ActionResult | undefined>(undefined);
+  return {
+    run: () => {
+      setAnswered(answer());
+      return Promise.resolve();
+    },
+    busy: false,
+    refused: answered,
+    reset: () => setAnswered(undefined),
+  };
 }
 
 /** A button that asks `question` before its act, which answers with `answer`. */
@@ -56,7 +71,7 @@ function Asking({
 }): React.JSX.Element {
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () => Promise.resolve(answer()),
+    useAnsweredAct(answer),
     () => CATALOG_FAILURE,
   );
   return (
@@ -97,7 +112,7 @@ function Named(): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () => Promise.resolve(name.trim() === "" ? refused("Name the new owner.") : ACCEPTED),
+    useAnsweredAct(() => (name.trim() === "" ? refused("Name the new owner.") : ACCEPTED)),
     () => CATALOG_FAILURE,
   );
   return (
@@ -146,14 +161,14 @@ function KeyInADialog(): React.JSX.Element {
   const [triedOnce, setTriedOnce] = useState(false);
   const removal = useConfirmDialog(
     { subject: key, surfaceOpen: open },
-    () => {
+    useAnsweredAct(() => {
       if (!triedOnce) {
         setTriedOnce(true);
-        return Promise.resolve(refused("The keychain is locked. Unlock it and try again."));
+        return refused("The keychain is locked. Unlock it and try again.");
       }
       setKey(false);
-      return Promise.resolve(ACCEPTED);
-    },
+      return ACCEPTED;
+    }),
     () => CATALOG_FAILURE,
   );
   return (
@@ -226,7 +241,7 @@ function ConfirmDialogs(): React.JSX.Element {
           question={{
             title:
               "Delete “Quarterly planning for the platform team’s migration to the new build system”?",
-            body: "The task, its plan, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
+            body: "The task, its description, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
             verb: "Delete task",
             running: "Deleting",
             loss: CONFIRM_LOSS.IRREVERSIBLE,

@@ -1,10 +1,10 @@
 /**
  * standing-context.ts -- the task as it stands, handed to an agent's turn beside its instructions.
  *
- * What a coding agent is handed on a turn where its plan changed since its
+ * What a coding agent is handed on a turn where its description changed since its
  * last turn (`../coder-host/turn-context.ts`): the developer's own time, the
- * task's name and brief, its saved document, the agents' recent notes on it,
- * and the open comment threads. It is data,
+ * task's name and brief, and, where its starter has Descriptions on, its saved
+ * document, the agents' recent notes on it, and the open comment threads. It is data,
  * read again as each turn opens and remembered by none, so a turn reads
  * what was saved since the last one rather than a stale copy.
  */
@@ -12,8 +12,8 @@
 import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
-import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
-import { NOTE_KIND, type PlanAgentEdit } from "@repo/features/plan-template";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import { NOTE_KIND, type DescriptionAgentEdit } from "@repo/features/description-notes";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -38,7 +38,7 @@ function noteWords(words: string): string {
 }
 
 /** One note an agent took, in a line: what it did, where, and its words, the text it replaced or deleted among them. */
-function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
+function agentNoteLine(note: DescriptionAgentEdit["notes"][number]): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;
@@ -71,7 +71,7 @@ function briefText(stored: StoredTask): readonly string[] {
 /** The zone a turn reads the day in where the developer's window named none. */
 const UTC_ZONE = "UTC";
 
-/** The language the developer's time is said in, as the plan's dates are (`date-mention.ts`). */
+/** The language the developer's time is said in, as the description's dates are (`date-mention.ts`). */
 const TIME_LOCALE = "en-US";
 
 /** A date names no workspace or repository, so its mention is written under none. */
@@ -86,7 +86,7 @@ export interface TurnClock {
 /**
  * The developer's own time as the turn opens: the weekday, the date, and the
  * time in their zone, the zone's name and offset, and the time in UTC beside
- * them, then today as the date mention the plan writes it, so the agent counts
+ * them, then today as the date mention the description writes it, so the agent counts
  * "Friday" from their today rather than UTC's and spells a time at their
  * offset. A turn whose window named no zone, a desktop released before it
  * sent one, reads UTC and says so.
@@ -130,15 +130,18 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * developer's own time and today (`developerTimeText`), the plan's name, the
  * developer's brief where they wrote one as they started it, the saved
  * document as JSON, the newest saves coding agents made on it (so the agent can
- * raise what an agent asked or decided), and the plan's open comment threads
+ * raise what an agent asked or decided), and the description's open comment threads
  * (so the agent can raise what a member asked), each read again
  * every turn so what the agent saved is what the next turn reads. A task that no
- * longer stands gets the heading and the developer's time alone.
+ * longer stands gets the heading and the developer's time alone, and one
+ * whose agent's starter has Descriptions off (`../descriptions-on.ts`) its name and brief
+ * without the description, its notes, or threads.
  */
 export function standingContext(
   stored: StoredTask | undefined,
   clock: TurnClock,
-  comments: readonly PlanCommentThread[] = [],
+  comments: readonly DescriptionCommentThread[] = [],
+  descriptionsOn = true,
 ): string {
   const heading = [
     `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
@@ -146,13 +149,13 @@ export function standingContext(
   ].join("\n");
   if (!stored) return heading;
   const { task } = stored;
-  return [
-    heading,
-    `Name: ${task.name}`,
-    ...briefText(stored),
-    DOCUMENT_MARKER,
-    JSON.stringify(task.document),
-    ...agentEditsText(stored.agentEdits),
-    ...openThreadsText(comments),
-  ].join("\n");
+  const description = descriptionsOn
+    ? [
+        DOCUMENT_MARKER,
+        JSON.stringify(task.document),
+        ...agentEditsText(stored.agentEdits),
+        ...openThreadsText(comments),
+      ]
+    : [];
+  return [heading, `Name: ${task.name}`, ...briefText(stored), ...description].join("\n");
 }

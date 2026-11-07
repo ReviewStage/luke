@@ -4,12 +4,12 @@
    line's press does not cover the next's words. The time is drawn whole
    (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
-  .plan-byline [data-actor-ref] {
+  .description-byline [data-actor-ref] {
     position: relative;
     overflow: visible;
   }
 
-  .plan-byline [data-actor-ref]::before {
+  .description-byline [data-actor-ref]::before {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -21,24 +21,24 @@
 }
 
 /* Who last changed a section, and when: the writer's face and a few
-   letters at the end of its heading's row (`plan-body.tsx`'s `bylineOf`).
-   `--plan-byline-room` holds a face and the widest of those letters, a date
-   such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
+   letters at the end of its heading's row (`description-body.tsx`'s `bylineOf`).
+   `--description-byline-room` holds a face and the widest of those letters, a date
+   such as "Sep 30"; `--description-unit-row-room` is what the row takes of the
    column with its ⋯, which hangs `--ui-space-6` past the column's edge.
-   The theme reads both (`plan-byline-room`, `plan-unit-row`), and so does
+   The theme reads both (`description-byline-room`, `description-unit-row`), and so does
    the heading's room below. */
-.plan-body {
-  --plan-byline-room: 64px;
-  --plan-unit-row-room: calc(
-    var(--plan-byline-room) +
+.description-body {
+  --description-byline-room: 64px;
+  --description-unit-row-room: calc(
+    var(--description-byline-room) +
     var(--ui-space-4) +
     var(--ui-control-height) -
     var(--ui-space-6)
   );
 }
 
-/* A plan's task item the developer can tick from the drawn plan says so. */
-.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+/* A description's task item the developer can tick from the drawn description says so. */
+.description-unit li.task-list-item input[type="checkbox"]:enabled {
   cursor: var(--ui-cursor-press);
 }
 
@@ -46,20 +46,22 @@
    the ⋯ never stand over its words, however long it runs. The room is kept
    whether or not they are shown, and in the editor too, so no heading
    rewraps as the pointer comes and goes or as the text opens to be edited. */
-.plan-unit-attributed > .plan-unit > .ui-markdown-heading:first-child,
-.plan-document-editor .plan-unit > .ui-markdown-heading:is([data-level="1"], [data-level="2"]) {
-  padding-right: var(--plan-unit-row-room);
+.description-unit-attributed > .description-unit > .ui-markdown-heading:first-child,
+.description-document-editor
+  .description-unit
+  > .ui-markdown-heading:is([data-level="1"], [data-level="2"]) {
+  padding-right: var(--description-unit-row-room);
 }
 
-/* Where a section has no ⋯, its byline's row (`plan-body.tsx`'s
+/* Where a section has no ⋯, its byline's row (`description-body.tsx`'s
    `attributed`) keeps the ⋯'s room, so every byline ends at one edge. */
-.plan-unit-row:not(:has(.plan-unit-more)) {
+.description-unit-row:not(:has(.description-unit-more)) {
   padding-right: calc(var(--ui-control-height) + var(--ui-space-4));
 }
 
-/* A section's ⋯ (`plan-body.tsx`'s `UnitMenu`) stays drawn while its menu
+/* A section's ⋯ (`description-body.tsx`'s `UnitMenu`) stays drawn while its menu
    stands, as every ⋯ does. */
-.plan-unit-more:has([aria-expanded="true"]) {
+.description-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
@@ -79,51 +81,52 @@
   max-width: var(--ui-inline-ref-pill-stated-width);
 }
 
-/* A narrowed list stands under its kind's crumb, as an MCP server's page
-   stands under its own; a kind typed with its colon has no back arrow, so
-   its glyph keeps the rows' inset. */
+/* A narrowed list stands under its kind's crumb; a kind typed with its
+   colon has no back arrow, so its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--ui-menu-inset));
 }
 
 /* The text open in its editor, in the document's own type, so the words do
    not jump as it opens or closes. */
-.plan-document-editor > * + * {
+.description-document-editor > * + * {
   margin-top: 0.5em;
 }
 
 /* The space between two sections, resolved at the text's own size so a
    heading's own size does not scale it, as the drawn sections' gap is. */
-@property --plan-section-gap {
+@property --description-section-gap {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
 
-/* The whole text in its editor (`plan-editor/plan-editor.ts`), over the read
+/* The whole text in its editor (`description-editor/description-editor.ts`), over the read
    view's classes. TipTap draws a heading and a paragraph as elements of
    their own, where the read view draws every block as a margin-less
    paragraph, so these give them the read view's box; a heading keeps the
    read view's class and level, and a section's heading the gap the drawn
-   sections stand apart by. */
-.plan-document-text {
-  --plan-section-gap: 1.5em;
+   sections stand apart by. The margins are cleared at no weight of their
+   own (`:where`), so the spacing the two views share between a block's
+   children, a quote's paragraphs apart as the read view draws them, still
+   stands over the clearing. */
+.description-document-text {
+  --description-section-gap: 1.5em;
   caret-color: var(--accent);
   outline: none; /* no ring: a document, or a well that rings for it */
   white-space: pre-wrap;
   word-wrap: break-word;
 }
 
-.plan-document-text :is(h1, h2, h3, h4, h5, h6),
-.plan-document-text p {
+.description-document-text :where(h1, h2, h3, h4, h5, h6, p) {
   margin: 0;
 }
 
 /* Note that the first three levels keep prose's sizes (`@repo/ui`'s
    prose.css), as the read view does, so a heading does not shrink to the
    text's size as its section opens. */
-.plan-document-text :is(h4, h5, h6),
-.plan-document-text p {
+.description-document-text :is(h4, h5, h6),
+.description-document-text p {
   font-size: inherit;
 }
 
@@ -134,15 +137,15 @@
    onto the one before it. An h3 after a block keeps its own margin, as it
    does drawn, from desktop.css. */
 .desktop-document
-  .plan-document-text
+  .description-document-text
   > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
-  margin-top: max(var(--plan-section-gap), 1.6em);
+  margin-top: max(var(--description-section-gap), 1.6em);
 }
 
 /* A link the read view draws as a mention's chip wears the chip's light look
    while its section is edited, so opening the section does not turn its
    chips into underlined words; its glyph is the read view's alone. */
-.plan-document-text a.plan-mention-link {
+.description-document-text a.description-mention-link {
   padding: 0 var(--ui-tight-gap);
   color: inherit;
   border-radius: var(--ui-radius-6);
@@ -153,9 +156,9 @@
 }
 
 /* What the empty block under the caret says, drawn before its words: the
-   empty plan's own words, an empty line how to open the `/` menu, an empty
-   heading its level's name (`plan-editor.ts`'s `placeholderOf`). */
-.plan-document-text > .is-empty::before {
+   empty description's own words, an empty line how to open the `/` menu, an empty
+   heading its level's name (`description-editor.ts`'s `placeholderOf`). */
+.description-document-text > .is-empty::before {
   float: left;
   height: 0;
   color: var(--ui-color-text-muted);
@@ -163,57 +166,23 @@
   pointer-events: none;
 }
 
-/* A task item as TipTap draws it: its box in a label and its words in a block
-   of their own after it. The label stands in the bullet's gutter exactly where
-   the read view stands its box (`@repo/ui`'s prose.css), in its size and accent, so
-   the words keep their place as the section opens to be edited. */
-.plan-document-text li[data-checked] {
-  position: relative;
-  list-style: none;
-}
-
-.plan-document-text li[data-checked] > label {
-  position: absolute;
-  top: calc((1lh - 0.95em) / 2);
-  left: -1.45em;
-}
-
-.plan-document-text li[data-checked] > label > input {
-  display: block;
-  width: 0.95em;
-  height: 0.95em;
-  margin: 0;
-  font: inherit;
-  accent-color: var(--ui-color-accent);
-}
-
-.plan-document-text li[data-checked] > div {
+/* A task item as TipTap draws it: its box, which the panel draws as the read
+   view does and which stands in the read view's own place by its rules
+   (`@repo/ui`'s prose.css), and its words in a block of their own after it,
+   which start on the box's line. */
+.description-document-text li[data-checked] > div {
   margin-top: 0;
 }
 
 /* A loose task list, its items a blank line apart, opens as a list per item,
    which stand an item's gap apart, as the read view's one list does. */
-.plan-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
+.description-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
   margin-top: 0.25em;
-}
-
-/* The editor's box takes a finger's press around it on a coarse pointer, as
-   the read view's does (`@repo/ui`'s prose.css), its label holding the press. */
-@media (pointer: coarse) {
-  .plan-document-text li[data-checked] > label::before {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--ui-touch-target);
-    height: var(--ui-touch-target);
-    transform: translate(-50%, -50%);
-    content: "";
-  }
 }
 
 /* What the editor keeps byte for byte but does not draw as its own: inline
    HTML, a footnote, a link's definition, a block of HTML. */
-.plan-raw-block {
+.description-raw-block {
   margin: 0;
   color: var(--ui-color-text-muted);
   font: inherit;
@@ -224,7 +193,7 @@
    `EDITOR_NOTE_CLASS`) opens its own gap over it. Note that it is a rule
    here rather than a utility, because it has to outrank the editor's own gap
    between its children above, which a utility's layer never would. */
-.plan-editor-note {
+.description-editor-note {
   margin: var(--ui-item-gap) 0 0;
 }
 
@@ -415,7 +384,7 @@
   }
 }
 
-/* A page's comments over the page (plan-comments.tsx's PageCommentLayer):
+/* A page's comments over the page (description-comments.tsx's PageCommentLayer):
    the layer takes no press but its own; each pin's pointed corner, its
    upper right one, touches its element's top left corner, the pin beside it,
    or inside the corner where the room has none beside it, the line comment mode says stands over the page's
@@ -459,7 +428,7 @@
 /* The threads open by an element stand no taller than the room their side
    of it leaves (`--ui-popover-room`, which their float measures), so a
    card's entries scroll inside it with its reply field in view under them,
-   as an open card over the plan does, and several scroll together. */
+   as an open card over the description does, and several scroll together. */
 .page-comment-threads {
   display: flex;
   max-height: var(--ui-popover-room);
@@ -1470,19 +1439,19 @@
 
 /* A description with no words, where the member may write them, says so
    where the editor's placeholder will, in its type. */
-.pull-request-description-text.plan-document-text > * {
+.pull-request-description-text.description-document-text > * {
   margin-block: 0;
 }
 
-.pull-request-description-text.plan-document-text > * + * {
+.pull-request-description-text.description-document-text > * + * {
   margin-top: var(--ui-section-gap);
 }
 
-.pull-request-description-text.plan-document-text > :is(h1, h2):first-child {
+.pull-request-description-text.description-document-text > :is(h1, h2):first-child {
   margin-top: var(--ui-block-gap);
 }
 
-.pull-request-description-text.plan-document-text > :is(h3, h4, h5, h6):first-child {
+.pull-request-description-text.description-document-text > :is(h3, h4, h5, h6):first-child {
   margin-top: var(--ui-control-gap);
 }
 
@@ -1498,14 +1467,11 @@
   padding-left: 0;
 }
 
-.pull-request-description-text.plan-document-text li[data-checked] {
+/* A task item open in the description's editor stands its box before its
+   words' block, the box apart from them by its own margin, as drawn below. */
+.pull-request-description-text.description-document-text li[data-checked] {
   display: flex;
   align-items: baseline;
-  gap: var(--ui-item-gap);
-}
-
-.pull-request-description-text.plan-document-text li[data-checked] > label {
-  position: static;
 }
 
 /* A task list stands as GitHub draws one: its boxes, the shared read-only
@@ -1854,12 +1820,14 @@ summary button[data-tool-agent-ref]:focus-visible {
 /* Coding agents --------------------------------------------------------- */
 
 /* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
-   bubble and files faded, as words that did not go, under the failure note
-   that says so. Note that the line says so itself (`data-undelivered`)
+   bubble and files faded, as words that did not go, beside the red alert and
+   over the "Not delivered" that say so, which keep their full ink. Note that
+   the line says so itself (`data-undelivered`)
    rather than being found by a `:has()` of its note, because a `:has()`
    whose subject is any child makes the browser restyle the whole window for
    every element added under it. */
-.is-user[data-undelivered] > :not(.ui-failure-note, .ui-message-line) {
+.is-user[data-undelivered] > :not(.message-beside, .ui-message-line),
+.is-user[data-undelivered] > .message-beside > .message-content {
   opacity: 0.6;
 }
 
@@ -2280,18 +2248,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   max-width: 60%;
 }
 
-/* A tool's page, in the server page's place: its body as tall as the list
-   and the field above it together, at most, so stepping in and back keeps
-   the popover's size where the list is full, and never grows past the
-   room the window leaves. The page is a grid so the body's `ScrollArea`
-   fills that row under the head. */
-.agent-servers-tool-page .integration-tool-detail {
-  display: grid;
-  flex: none;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto clamp(200px, var(--ui-stage-height) - 280px, 440px);
-}
-
 /* A pull request's color for where it stands, in GitHub's colors: open in
    the success green, a draft in the muted ink, merged in the merged purple,
    closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
@@ -2474,7 +2430,7 @@ svg.lucide {
   object-position: top;
 }
 
-/* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
+/* A picture in the description's editor (`editor-pictures.tsx`): the read view's
    block, ringed while selected, its tools hung above it from its left edge.
    The block's top margin is the wrapper's, so the wrapper's top is the
    picture's own and the tools are measured from it. */
@@ -2534,12 +2490,12 @@ svg.lucide {
   outline-offset: 2px;
 }
 
-/* Comments on the plan (`plan-comments.tsx`) -------------------------------- */
+/* Comments on the description (`description-comments.tsx`) -------------------------------- */
 
 /* The words a thread is on, a block's whole or a few of them alike: a wash
    under them and an edge beneath, stronger while its thread is open or the
    pointer is on them. */
-.plan-comment-mark {
+.description-comment-mark {
   padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
   border-bottom: 1.5px solid var(--comment-mark-edge);
   border-radius: 2px;
@@ -2549,13 +2505,13 @@ svg.lucide {
   transition: background var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
-.plan-comment-mark[data-active="true"] {
+.description-comment-mark[data-active="true"] {
   border-bottom-color: var(--comment-mark-active-edge);
   background: var(--comment-mark-active);
 }
 
 @media (hover: hover) {
-  .plan-comment-mark:hover {
+  .description-comment-mark:hover {
     border-bottom-color: var(--comment-mark-active-edge);
     background: var(--comment-mark-active);
   }
@@ -2566,21 +2522,21 @@ svg.lucide {
    read the same in both. An open thread's mark keeps its wash and edge
    inside another's, so the open thread reads open whether its mark is the
    inner or the outer one. */
-.plan-comment-mark .plan-comment-mark:not([data-active="true"]) {
+.description-comment-mark .description-comment-mark:not([data-active="true"]) {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;
 }
 
 /* The body is the room its comments are measured and stood in. */
-.desktop-document .plan-body {
+.desktop-document .description-body {
   position: relative;
 }
 
 /* Everything the comments draw over the body, one box laid over it whole, so the
    gap the body opens between its children opens none here, and only what is
    drawn in it takes the pointer. */
-.desktop-document .plan-body > .comment-layer {
+.desktop-document .description-body > .comment-layer {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -2617,7 +2573,7 @@ svg.lucide {
 }
 
 @media (hover: hover) {
-  .plan-body:hover .comment-block-button {
+  .description-body:hover .comment-block-button {
     opacity: 1;
   }
 }
@@ -2662,6 +2618,21 @@ svg.lucide {
   flex-direction: column;
 }
 
+/* The description's comments listed in the margin's place (`DescriptionCommentList`): the
+   choice of open or resolved over the threads, each a step from the next. */
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-tight-gap);
+}
+
+/* Over the words, where the margin folds, the list stands no taller than
+   the scroller it opens in, its threads scrolling under the choice. */
+.comment-list-float {
+  min-height: 0;
+  max-height: var(--comment-card-room);
+}
+
 /* The threads on a folded line, the open one among those at rest, which
    scroll together where the float has no room for them all. */
 .comment-float-cards {
@@ -2670,7 +2641,7 @@ svg.lucide {
   gap: var(--ui-tight-gap);
 }
 
-/* An open card over the plan stands no taller than the scroller it opens
+/* An open card over the description stands no taller than the scroller it opens
    in (`--comment-card-room`, which the layer measures), so its entries
    scroll inside it and the field that answers them stays in view under
    them. */

@@ -1,6 +1,10 @@
 import type { AgentChangedFile, ReviewThread } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL_LABEL } from "@repo/features/chapters-model-choice";
+import {
+  CHAPTERS_MODEL_LABEL,
+  OPENAI_CHAPTERS_MODEL_LABEL,
+} from "@repo/features/chapters-model-choice";
 import { patchHunks } from "@repo/features/diff-hunks";
+import type { ModelProvider } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   type Chapter,
@@ -11,7 +15,10 @@ import {
   threadInChapter,
 } from "@repo/features/pull-request-chapters";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
-import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
+import {
+  type ChaptersRunsOn,
+  PULL_REQUEST_CHAPTERS_STATE,
+} from "@repo/features/pull-request-chapters-wire";
 import type { DiffLineSpan } from "../diff-view/contract.js";
 
 /**
@@ -19,7 +26,9 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  *
  * The view draws one state at a time (`chaptersShown`): the read on its way,
  * failed, or saying there is no pull request; no chapters yet, offering
- * Generate where the deployment can make them; chapters being made, by this
+ * Generate where the member can make them, on the model and key the read
+ * names, or the one they last picked where they may pick
+ * (`pickedRunsOn`); chapters being made, by this
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
  * has moved on from, or for another push than the files drawn, or for any
@@ -61,7 +70,14 @@ export type ChaptersShown =
   | { readonly kind: typeof CHAPTERS_SHOWN.READING }
   | { readonly kind: typeof CHAPTERS_SHOWN.FAILED; readonly failure: Failure }
   | { readonly kind: typeof CHAPTERS_SHOWN.NO_PULL_REQUEST }
-  | { readonly kind: typeof CHAPTERS_SHOWN.NONE; readonly generatable: boolean }
+  | {
+      readonly kind: typeof CHAPTERS_SHOWN.NONE;
+      readonly generatable: boolean;
+      /** What the member's Generate would run on; none where the service did not say. */
+      readonly runsOn: ChaptersRunsOn | undefined;
+      /** Every model the member's Generate may run on, where they saved keys of two providers; none otherwise. */
+      readonly runsOnChoices: readonly ChaptersRunsOn[] | undefined;
+    }
   | {
       readonly kind: typeof CHAPTERS_SHOWN.GENERATING;
       readonly startedAt: number;
@@ -82,10 +98,29 @@ export type ChaptersShown =
       readonly generatable: boolean;
     };
 
-/** The model that told the chapters as the view names it: its label where Generate offers it, else the id as stored. */
+/** Every chapters model's label, Claude's and OpenAI's alike, by its provider's id. */
+const MODEL_LABELS: Readonly<Record<string, string>> = {
+  ...CHAPTERS_MODEL_LABEL,
+  ...OPENAI_CHAPTERS_MODEL_LABEL,
+};
+
+/** A chapters model as the view names it, one that told them or one a Generate would run on: its label where Generate offers it, else the id as stored. */
 export function chaptersModelLabel(model: string): string {
-  const labels: Readonly<Record<string, string>> = CHAPTERS_MODEL_LABEL;
-  return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
+  return Object.hasOwn(MODEL_LABELS, model) ? (MODEL_LABELS[model] ?? model) : model;
+}
+
+/**
+ * What a Generate runs on as the view draws it: where the member may pick,
+ * the choice of the provider they last picked, which their preferences row
+ * draws the moment they pick; else, and before that row is read, what the
+ * read says.
+ */
+export function pickedRunsOn(
+  runsOn: ChaptersRunsOn | undefined,
+  choices: readonly ChaptersRunsOn[] | undefined,
+  picked: ModelProvider | undefined,
+): ChaptersRunsOn | undefined {
+  return choices?.find((choice) => choice.provider === picked) ?? runsOn;
 }
 
 /** The heads the tab's own reads hold now, each where it holds one: its pull request's, and its files'. */
@@ -119,7 +154,7 @@ function orderedChapters(chapters: readonly Chapter[]): readonly Chapter[] {
  * What the view draws from its read as it stands, and this window's own
  * Generate where one is out, which stands over whatever the read last said
  * until it answers. A read asked again after a failure stands unread until
- * it answers (`useHostRead`), so the failure gives way to the wait.
+ * it answers (`live-reads.ts`), so the failure gives way to the wait.
  */
 export function chaptersShown(
   answer: PullRequestChaptersAnswerView | undefined,
@@ -137,7 +172,12 @@ export function chaptersShown(
   const { chapters, generatable } = pullRequest;
   switch (chapters.status) {
     case PULL_REQUEST_CHAPTERS_STATE.NONE:
-      return { kind: CHAPTERS_SHOWN.NONE, generatable };
+      return {
+        kind: CHAPTERS_SHOWN.NONE,
+        generatable,
+        runsOn: pullRequest.runsOn,
+        runsOnChoices: pullRequest.runsOnChoices,
+      };
     case PULL_REQUEST_CHAPTERS_STATE.GENERATING:
       return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: chapters.startedAt, ours: false };
     case PULL_REQUEST_CHAPTERS_STATE.FAILED:

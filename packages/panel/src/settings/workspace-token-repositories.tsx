@@ -4,7 +4,6 @@ import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -18,15 +17,24 @@ import {
   SettingsLine,
   useConfirmDialog,
 } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useCallback, useState } from "react";
-import { useAct } from "../act.js";
+import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useRef, useState } from "react";
+import { actMutation, pressMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import {
+  githubTokenQuery,
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+  tokenRepositoriesQuery,
+  tokenRepositoriesRetryMutation,
+} from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
+import { CheckedRepositoryChip } from "../tasks/repository-chip.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js";
 
@@ -57,6 +65,9 @@ import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js"
 /** The words the rows and the menu say: labels and facts alone. */
 const WORDS = {
   ADD: "Add repository",
+  ADD_SEVERAL: "Add repositories",
+  MENU: "Repositories",
+  NOT_YOURS: "Added by a teammate",
   REMOVE: "Remove",
   REMOVING: "Removing",
   SEARCH: "Search repositories",
@@ -91,12 +102,13 @@ export interface TokenRepositories {
   readonly remove: (repository: string) => void;
 }
 
-/** Where the list stands, by where the host's read of it stands. */
-const TOKEN_REPOSITORIES_READ_OF = {
-  [HOST_READ_STATUS.LOADING]: TOKEN_REPOSITORIES_READ.READING,
-  [HOST_READ_STATUS.FAILED]: TOKEN_REPOSITORIES_READ.FAILED,
-  [HOST_READ_STATUS.READY]: TOKEN_REPOSITORIES_READ.READY,
-} as const satisfies Record<HostReadStatus, TokenRepositoriesRead>;
+/** Where the list stands, by where its query stands: read once it holds rows, refused where it failed before it ever had. */
+function tokenRepositoriesReadOf(
+  read: UseQueryResult<readonly WorkspaceTokenRepository[]>,
+): TokenRepositoriesRead {
+  if (read.data !== undefined) return TOKEN_REPOSITORIES_READ.READY;
+  return read.isError ? TOKEN_REPOSITORIES_READ.FAILED : TOKEN_REPOSITORIES_READ.READING;
+}
 
 /** No token repositories, while none is read. */
 const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
@@ -108,29 +120,35 @@ const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
  * listing none, because a workspace with none is a list read.
  */
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
-  const { act, press } = useAct();
-  const { rows, status, retry } = useHostRead(LIVE_READ.TOKEN_REPOSITORIES, workspaceId);
+  const { mutateAsync: changeTokenRepository } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET),
+  );
+  const { mutate: removeTokenRepository } = useMutation(
+    pressMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET),
+  );
+  const read = useQuery(tokenRepositoriesQuery(workspaceId));
+  const { mutate: retry } = useMutation(tokenRepositoriesRetryMutation());
   const change = useCallback(
     (repository: string, added: boolean) =>
-      act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, { workspaceId, repository, added }).then(
+      changeTokenRepository({ workspaceId, repository, added }).then(
         () => undefined,
         (refused: Error) => refused.message,
       ),
-    [act, workspaceId],
+    [changeTokenRepository, workspaceId],
   );
   const remove = useCallback(
     (repository: string) =>
-      void press(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, {
+      removeTokenRepository({
         workspaceId,
         repository,
         added: false,
       }),
-    [press, workspaceId],
+    [removeTokenRepository, workspaceId],
   );
   return {
-    read: TOKEN_REPOSITORIES_READ_OF[status],
-    listed: rows ?? NONE_LISTED,
-    retry,
+    read: tokenRepositoriesReadOf(read),
+    listed: read.data ?? NONE_LISTED,
+    retry: () => retry({ workspaceId }),
     change,
     remove,
   };
@@ -144,16 +162,16 @@ type Candidates =
 
 /** What the picker offers, from the workspace's repositories as the host holds them, less those already listed. */
 function candidatesOf(
-  list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
+  list: UseQueryResult<GitHubRepositoriesAnswer>,
   listed: readonly { readonly fullName: string }[],
   pictures: boolean,
 ): Candidates {
-  if (list.rows === undefined) {
-    return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
+  if (list.data === undefined) {
+    return list.isError ? { kind: "failed" } : { kind: "reading" };
   }
   const added = new Set(listed.map((one) => one.fullName.toLowerCase()));
   // A service older than `addable` lists the token's repositories among the picker's own.
-  const { addable, repositories } = list.rows;
+  const { addable, repositories } = list.data;
   const offered = addable ?? repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
   const rows = offered
     .filter((one) => !added.has(one.fullName.toLowerCase()))
@@ -172,9 +190,9 @@ export function AddTokenRepository(props: {
   repositories: TokenRepositories;
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element | null {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
-  return token.rows?.token ? <AddRepositoryMenu {...props} /> : null;
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const token = useQuery(githubTokenQuery(accountId));
+  return token.data?.token ? <AddRepositoryMenu {...props} /> : null;
 }
 
 /** The menu itself, mounted only once a token is saved, so the workspace's repositories are read for no one else. */
@@ -189,9 +207,10 @@ function AddRepositoryMenu({
 }): React.JSX.Element {
   // Note that the workspace's repositories are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`).
   const pictures = useRepositoryPictures();
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const { mutate: retry } = useMutation(repositoryListsRetryMutation());
   const read = () => {
-    if (list.status === HOST_READ_STATUS.FAILED) list.retry();
+    if (list.isError) retry(repositoryScope(workspaceId));
   };
   const candidates = candidatesOf(list, repositories.listed, pictures);
   const rows = candidates.kind === "read" ? candidates.rows : [];
@@ -214,6 +233,109 @@ function AddRepositoryMenu({
       onPick={(id) => {
         onRefused(undefined);
         repositories.change(id, true).then(onRefused, () => undefined);
+      }}
+    />
+  );
+}
+
+/** One repository the picker lists, by its whole name, with when it was last updated, which orders the list. */
+interface PickerRepository {
+  readonly fullName: string;
+  readonly updatedAt: number;
+}
+
+/**
+ * Every repository the picker lists: those the workspace already reaches on
+ * a token and those the reader's token may add, most recently updated first,
+ * so a row stays where it stood as it is added or removed; nothing while
+ * the workspace's repositories are unread.
+ */
+function pickerRepositories(
+  rows: GitHubRepositoriesAnswer | undefined,
+): readonly PickerRepository[] | undefined {
+  if (rows === undefined) return undefined;
+  const byName = new Map<string, PickerRepository>();
+  const onToken = rows.repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+  for (const one of [...onToken, ...(rows.addable ?? [])]) {
+    byName.set(one.fullName.toLowerCase(), one);
+  }
+  return [...byName.values()].sort((one, other) => other.updatedAt - one.updatedAt);
+}
+
+/**
+ * The token repositories as setup picks them (`CheckedRepositoryChip`), each
+ * added one checked. A press's check turns at once, and only a row's latest
+ * press settles it, so a late answer neither clears a later check nor says
+ * its refusal. Note that a removal here asks nothing, unlike Settings'
+ * Remove, because a check just set is taken back in the menu that set it.
+ */
+export function TokenRepositoryPicker({
+  workspaceId,
+  repositories,
+  onRefused,
+}: {
+  workspaceId: string;
+  repositories: TokenRepositories;
+  onRefused: (refusal: string | undefined) => void;
+}): React.JSX.Element {
+  const pictures = useRepositoryPictures();
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const { mutate: retry } = useMutation(repositoryListsRetryMutation());
+  // Note that a press's check is held here, keyed as no case spells the name, until the service answers it.
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const presses = useRef(new Map<string, number>());
+  const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
+  const isOn = (fullName: string) =>
+    pending.get(fullName.toLowerCase()) ?? listed.has(fullName.toLowerCase());
+  const offered = pickerRepositories(list.data);
+  const rows: MenuRow[] = (offered ?? []).map((one) => {
+    const row = repositoryMenuRow(one.fullName, pictures);
+    const held = listed.get(one.fullName.toLowerCase());
+    return held !== undefined && !held.removable ? { ...row, disabled: WORDS.NOT_YOURS } : row;
+  });
+  const settle = (key: string) =>
+    setPending((was) => {
+      const next = new Map(was);
+      next.delete(key);
+      return next;
+    });
+  const toggle = (fullName: string) => {
+    const key = fullName.toLowerCase();
+    const added = !isOn(fullName);
+    const press = (presses.current.get(key) ?? 0) + 1;
+    presses.current.set(key, press);
+    const latest = () => presses.current.get(key) === press;
+    setPending((was) => new Map(was).set(key, added));
+    onRefused(undefined);
+    repositories.change(fullName, added).then(
+      (refusal) => {
+        if (!latest()) return;
+        settle(key);
+        onRefused(refusal);
+      },
+      () => {
+        if (latest()) settle(key);
+      },
+    );
+  };
+  return (
+    <CheckedRepositoryChip
+      rows={rows}
+      picked={(offered ?? []).map((one) => one.fullName).filter(isOn)}
+      pictures={pictures}
+      empty={WORDS.ADD_SEVERAL}
+      note={
+        offered === undefined
+          ? list.isError
+            ? WORDS.NOT_READ
+            : WORDS.READING
+          : rows.length === 0
+            ? WORDS.NONE
+            : undefined
+      }
+      onToggle={toggle}
+      onOpen={() => {
+        if (list.isError) retry(repositoryScope(workspaceId));
       }}
     />
   );
@@ -268,10 +390,9 @@ function TokenOwnerRow({
     owner.repositories.some((one) => one.fullName === asked.fullName && one.removable);
   const removal = useConfirmDialog(
     { subject: standing, surfaceOpen: true },
-    () => {
+    neverBusyAct(() => {
       if (asked !== undefined) onRemove(asked.fullName);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
   const actions = owner.repositories

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { holdExits } from "../../testing/held-exits.js";
 import { Announcer } from "../announcer/announcer.js";
 import { ComboboxList, comboboxOptionId } from "../combobox/combobox.js";
@@ -29,9 +29,21 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
+/** Stands in for the browser's ResizeObserver, which jsdom lacks, since a steered list draws its rows through a run that measures them. */
+class StandInResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 function render(element: ReactElement): HTMLElement {

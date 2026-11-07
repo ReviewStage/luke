@@ -73,8 +73,8 @@
   --spacing-menu-glyph: var(--ui-menu-glyph);
   --spacing-list-gap: var(--ui-list-gap);
 
-  /* The panel's work column (`@repo/panel`: a transcript's opening line, a
-     tool's page, the find bar, the version history):
+  /* The panel's work column (`@repo/panel`: a transcript's opening line,
+     the find bar, the version history):
      the profile's spacing roles it reads beside the ones above, and its own
      glyphs, measures, and motions. */
   --spacing-ring-reach: var(--ui-focus-ring-reach);
@@ -85,8 +85,6 @@
   --font-weight-ui-regular: var(--ui-weight-regular);
   --font-weight-ui-medium: var(--ui-weight-medium);
   --font-weight-ui-semibold: var(--ui-weight-semibold);
-  --leading-tool-description: 1.5; /* off-scale: a tool's description, a step looser than a caption */
-  --shadow-tool-default: inset 0 0 0 1px var(--ui-color-border-strong);
   --grid-template-columns-version-track: 100% 100%;
   --grid-template-rows-version-track: minmax(0, 1fr);
   --animate-edit-composer-in:
@@ -123,7 +121,6 @@
   --spacing-pick-glyph-lift: calc((1lh - var(--ui-icon-12)) / 2);
   --spacing-inbox-field-short: calc(10 * var(--ui-space-16));
   --spacing-inbox-field-words: calc(var(--ui-type-body-leading) + 2 * var(--ui-item-gap));
-  --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--ui-color-input);
@@ -365,6 +362,9 @@
     var(--ui-list-row-depth, 0) *
     (var(--ui-control-icon) + var(--ui-icon-gap))
   );
+  /* A nav item nested under a place (`NavItem`'s `nested`) starts where that
+     place's name does: its row's inset, a glyph, and the glyph's gap. */
+  --spacing-nav-item-nest: calc(var(--ui-row-inset) + var(--ui-control-icon) + var(--ui-icon-gap));
 
   /* The panel's places beside the sidebar (`@repo/panel`: Automations,
      Settings, a version history, the Admin place, the sign-in): the
@@ -382,7 +382,9 @@
     2 *
     var(--ui-control-inset)
   ); /* off-scale: "12:00 PM" and its insets */
-  --spacing-copy-field: 240px; /* off-scale: a value shown to be copied, a webhook's address, a little wider than a picker */
+  /* off-scale: a value shown to be copied, a webhook's address, a little
+     wider than a picker, with the Copy nested inside its right edge. */
+  --spacing-copy-field: calc(240px + var(--ui-space-8) + var(--ui-control-height));
   --spacing-automation-runs: max(
     280px,
     calc(100% - 480px)
@@ -720,7 +722,6 @@
   --spacing-list-held: max(100%, var(--ui-list-held-height, 0px));
   /* off-scale: centers a line of words on the inline tile's 14px */
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
-  --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
   --spacing-corner-badge: var(
     --ui-space-16
@@ -732,8 +733,6 @@
     10,
     28px
   ); /* off-scale: ten icon buttons, edge to edge */
-  --text-section-size: var(--ui-type-section-size);
-  --tracking-workspace-head: -0.005em; /* off-scale: the sidebar head's name, a hair tighter */
   /* An actor's mark (`@repo/panel`'s `actor-ref.tsx`): the opaque tile a
      member who left, and a pile's count, stand on, a step of ink over the
      ground, so the face a square overlaps never shows through it; the ground
@@ -1040,16 +1039,16 @@
   --spacing-todos-dock: calc(var(--ui-stage-height) * 0.3);
   --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */
   --text-section-inline: var(--ui-type-section-size);
-  /* The plan's document (`plan-body.tsx`): a section's byline, at most a
+  /* The description (`description-body.tsx`): a section's byline, at most a
      face and a short date, and the row it shares with the ⋯, which hangs a
-     step past the column (both measured on `.plan-body`, tasks.css, where the
+     step past the column (both measured on `.description-body`, tasks.css, where the
      heading's room reads them too); the line under "Edited by" that Dismiss
      overhangs; and the still wash of the app's accent on a section changed since
      the last look. */
-  --spacing-plan-byline-room: var(--plan-byline-room);
-  --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--ui-space-6));
-  --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
-  --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
+  --spacing-description-byline-room: var(--description-byline-room);
+  --spacing-description-unit-row: calc(var(--description-unit-row-room) + var(--ui-space-6));
+  --spacing-description-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
+  --color-description-changed: color-mix(in srgb, var(--accent) 9%, transparent);
   /* A transcript (`ai-elements/`): its column's inset; a reply's reading
      leading; a bubble, the developer's and a received one alike, at most
      enough short of the column that the two sides stand apart, at a large
@@ -1161,7 +1160,7 @@
     var(--ui-stage-height) -
     320px,
     400px
-  ); /* off-scale: a list a server's page tall */
+  ); /* off-scale: the MCP servers popover's list */
   --color-chart-1: var(--ui-color-chart-1);
   --color-chart-2: var(--ui-color-chart-2);
   --color-chart-3: var(--ui-color-chart-3);
@@ -1191,7 +1190,7 @@
     auto-fit,
     minmax(min(220px, 100%), 1fr)
   ); /* off-scale: a video's bar, its play, time, scrubber, Expand, and Full screen */
-  /* The plan's comments (`plan-comments.tsx`): the margin past the column
+  /* The description's comments (`description-comments.tsx`): the margin past the column
      its cards stand in at their own width, a reply's line set in under the
      name past the writer's mark, and the quote's edge, struck where its
      words are gone. */

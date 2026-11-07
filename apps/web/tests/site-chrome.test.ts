@@ -58,16 +58,18 @@ for (const { path, page, marked } of PAGES) {
     assert.deepEqual(links(root.querySelector('header nav[aria-label="Site"]')), [
       "Vespin -> /",
       "About -> /about",
+      "Docs -> /docs",
       "Changelog -> /changelog",
       "Vespin on GitHub -> https://github.com/ReviewStage/vespin",
       `Sign in -> ${PANEL_PATH}`,
     ]);
     assert.deepEqual(links(root.querySelector("footer")), [
       "About -> /about",
+      "Docs -> /docs",
       "Changelog -> /changelog",
       "RSS -> /changelog/rss.xml",
       "Privacy -> /privacy",
-      "Contact -> mailto:founders@stagereview.app",
+      "Contact -> mailto:founders@vespin.dev",
     ]);
   });
 

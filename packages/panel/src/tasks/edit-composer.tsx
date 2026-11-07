@@ -13,9 +13,9 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "@repo/ui";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { Equal } from "effect";
-import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   DRAFT_PLACE,
   type EditPlace,
@@ -25,7 +25,7 @@ import {
 } from "../composer-drafts.js";
 import { confirmFailure } from "../failure-report.js";
 import { AgentComposer } from "./agent-composer.js";
-import { type LineAttachment, LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
+import { type LineAttachment, useLineAttachments } from "./agent-pictures.js";
 import type { PublishedDoors } from "./agent-published.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -128,7 +128,6 @@ export function EditComposer({
   words: string;
   edit: EditComposerDoors;
 }): ReactNode {
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
   const line = useLineAttachments(message);
   const place: EditPlace = { kind: DRAFT_PLACE.EDIT, agentId: edit.agentId, messageId: message.id };
   const kept = useDraft(place).draft;
@@ -191,10 +190,7 @@ export function EditComposer({
   // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog(
     { subject: edit.cuts, surfaceOpen: true },
-    () => {
-      send();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    neverBusyAct(send),
     confirmFailure(FAILURE_SURFACE.MESSAGE_EDIT),
   );
   const composer: AgentComposerControl = {
@@ -223,7 +219,6 @@ export function EditComposer({
   };
   return (
     <>
-      <LinePicturesWatch message={message} onSettled={redraw} />
       <AgentComposer
         agentId={edit.agentId}
         // Note that the box's round button sends while it is open, whatever the agent is doing.

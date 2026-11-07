@@ -1,7 +1,12 @@
-import type { AgentStatus, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import type {
+  AgentStatus,
+  AgentSummary,
+  ListedAgent,
+  TasklessAgent,
+} from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
-import type { TaskAgentLine } from "@repo/features/task-wire";
+import { agentMovedAt } from "@repo/features/task-agents-model";
 import {
   HoverCard,
   HoverCardHead,
@@ -127,19 +132,20 @@ export function agentCardReading(
   };
 }
 
-/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
+/** An agent on a task as the list followed live carries it, where no tab of it is held: its tile, where it stands and since when (`agentMovedAt`), its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
-  line: TaskAgentLine,
+  line: ListedAgent,
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject {
   const writing = agentStillWriting(line.status);
   const name = agentName(line, models);
+  const at = agentMovedAt(line);
   const reading: CardReading = {
     corner: cardCorner({
       writing,
-      startedAt: writing ? line.at : undefined,
-      movedAt: writing ? undefined : line.at,
+      startedAt: writing ? at : undefined,
+      movedAt: writing ? undefined : at,
       state: agentStateWords(line.status),
     }),
     choice: { model: line.model, effort: line.effort },
@@ -149,6 +155,32 @@ export function lineSubject(
     tile: agentActor(line, name),
   };
   return { name, tile: agentActor(line, name), read: () => reading };
+}
+
+/**
+ * An agent on a task as the list followed live carries it, as a person's
+ * page names it: its tab's card (`agentCardReading`), with no step to
+ * preview since no tab of it is held, but that a settled one last moved
+ * when `at` says, the end of its newest turn where the task's row names it.
+ */
+export function listedRowSubject(
+  agent: AgentSummary,
+  at: number,
+  agents: Pick<AgentsControl, "models" | "me" | "pullRequests">,
+): AgentSubject {
+  const name = agentName(agent, agents.models);
+  const base = agentCardReading(agent, name, NOTHING_HELD, false, agents);
+  const writing = agentStillWriting(agent.status);
+  const read = (): CardReading => ({
+    ...base(),
+    corner: cardCorner({
+      writing,
+      startedAt: agent.runStartedAt,
+      movedAt: writing ? undefined : at,
+      state: agentStateWords(agent.status),
+    }),
+  });
+  return { name, tile: agentActor(agent, name), agent, read };
 }
 
 /**

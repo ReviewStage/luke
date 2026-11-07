@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@repo/features/mention-link";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { ANNOUNCE } from "@repo/ui";
+import { ANNOUNCE, Checkbox } from "@repo/ui";
 import { AsyncResult } from "effect/reactivity";
 import {
   type ReactNode,
@@ -14,22 +14,23 @@ import {
 import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { DiagramPreview } from "../plan-diagram.js";
+import { DiagramPreview } from "../description-diagram.js";
 import {
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
+  type EditorTaskBox,
   type Finish,
   type HeadingsChange,
   type MentionNode,
   type MentionNodeDoors,
-  type PlanEditorHandle,
-  type PlanEditorModule,
-  type PlanEditorPlacement,
-  type PlanEditorProps,
+  type DescriptionEditorHandle,
+  type DescriptionEditorModule,
+  type DescriptionEditorPlacement,
+  type DescriptionEditorProps,
   SLASH_INSERT,
   type SlashBlock,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { type OwnBlock, useBlockPicker } from "./block-picker.js";
 import type { EditorPictures } from "./editor-pictures.js";
@@ -43,8 +44,8 @@ import { useNumberedTaskIdOf } from "./use-link-standing.js";
 /**
  * markdown-editor.tsx -- a Markdown document edited in place: the editor bundle's editor on its text, the format toolbar over its selection, the `/` menu under a `/`, and what each document opts into beside them.
  *
- * Every Markdown document the panel edits mounts this one editor: a plan's
- * text (`plan-document-editor.tsx`), and a pull request's description or a
+ * Every Markdown document the panel edits mounts this one editor: a description's
+ * text (`description-document-editor.tsx`), and a pull request's description or a
  * review's comment alike. The editor is TipTap, from the editor bundle
  * (`../bundle-loader.ts`); until it has loaded, the document's own drawing
  * stands (`loading`), and where it could not be loaded a note says so.
@@ -53,13 +54,13 @@ import { useNumberedTaskIdOf } from "./use-link-standing.js";
  * table's cell; a `/` at a line's start or after a space opens the block
  * menu under it (`./block-picker.tsx`); the writing chords are the editor's
  * own; and each block left untouched keeps its exact source
- * (`../plan-editor/document-source.ts`). What a document opts into beside
+ * (`../description-editor/document-source.ts`). What a document opts into beside
  * that: its mentions, drawn as their chips, with `@` picking new ones; its
  * pictures; its comment threads' words, carried as they move, and Comment on
  * the toolbar; its sections' placement, the caret opened on a section or on
  * the words a click landed on, and ↑ from the first line leaving the text; a
  * Mermaid block's preview, drawn here as the read view draws it
- * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid; and
+ * (`../description-diagram.tsx`), so the editor's bundle carries no Mermaid; and
  * rows of its own blocks in the `/` menu, with rows that do not apply to it
  * dropped. The `/` menu stands aside while the `@` list stands, as the
  * toolbar stands aside for either. The editor stands in a room of its own
@@ -83,7 +84,7 @@ const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
  * because it has to outrank the editor's own gap between its children.
  */
 export const EDITOR_NOTE_CLASS =
-  "plan-editor-note flex flex-wrap items-center gap-control-gap text-caption text-muted-foreground";
+  "description-editor-note flex flex-wrap items-center gap-control-gap text-caption text-muted-foreground";
 
 /** A document's mentions in its editor: what they open and where they are written, what the `@` list offers, and how an edit of the document's headings names them anew. */
 interface MarkdownEditorMentions {
@@ -121,7 +122,7 @@ export interface MarkdownEditorProps {
   /** Focus leaving the room for anywhere but its own toolbar and menus; none where the document stays open. */
   readonly onLeave?: (() => void) | undefined;
   /** Where the mounted editor's handle is kept, for a document that asks it more than its drafts. */
-  readonly handle?: RefObject<PlanEditorHandle | undefined> | undefined;
+  readonly handle?: RefObject<DescriptionEditorHandle | undefined> | undefined;
   /** Where the room is kept, for a document that places by it. */
   readonly room?: RefObject<HTMLElement | null> | undefined;
   /** What stands in the room until the editor's bundle has loaded: the document as drawn, so a click's point lands on the same word. */
@@ -129,7 +130,7 @@ export interface MarkdownEditorProps {
   /** What the document draws in the room under its editor, a note on its save say. */
   readonly children?: ReactNode;
   /** Where the caret goes as the editor opens; the start of the text where none is given. */
-  readonly placement?: PlanEditorPlacement | undefined;
+  readonly placement?: DescriptionEditorPlacement | undefined;
   /** ↑ from the text's first line, to what stands above it; none where nothing does. */
   readonly onLeaveUp?: (() => void) | undefined;
   /** The document's mentions; none where it takes none. */
@@ -154,9 +155,9 @@ function MountedEditor({
   props,
   handle,
 }: {
-  module: PlanEditorModule;
-  props: PlanEditorProps;
-  handle: RefObject<PlanEditorHandle | undefined>;
+  module: DescriptionEditorModule;
+  props: DescriptionEditorProps;
+  handle: RefObject<DescriptionEditorHandle | undefined>;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
@@ -188,6 +189,10 @@ function MountedEditor({
           ? undefined
           : (element, diagram) =>
               latest.current.drawDiagram?.(element, diagram) ?? (() => undefined),
+      drawTaskBox:
+        latest.current.drawTaskBox === undefined
+          ? undefined
+          : (element, box) => latest.current.drawTaskBox?.(element, box) ?? (() => undefined),
       format:
         latest.current.format === undefined
           ? undefined
@@ -239,13 +244,14 @@ export function MarkdownEditor({
   ownBlocks,
   droppedBlocks,
 }: MarkdownEditorProps): React.JSX.Element {
-  const ownHandle = useRef<PlanEditorHandle | undefined>(undefined);
+  const ownHandle = useRef<DescriptionEditorHandle | undefined>(undefined);
   const handle = givenHandle ?? ownHandle;
   const ownRoom = useRef<HTMLElement>(null);
   const room = givenRoom ?? ownRoom;
-  const module = useAtomValue(useSideBundles().planEditor);
+  const module = useAtomValue(useSideBundles().descriptionEditor);
   const chips = useEditorDrawings<DrawnMention>();
   const previews = useEditorDrawings<EditorDiagram>();
+  const taskBoxes = useEditorDrawings<EditorTaskBox>();
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const sending = pictures?.sending === true;
@@ -309,7 +315,7 @@ export function MarkdownEditor({
       </section>
     );
   }
-  const props: PlanEditorProps = {
+  const props: DescriptionEditorProps = {
     markdown,
     anchors,
     placement,
@@ -340,6 +346,7 @@ export function MarkdownEditor({
               decodeMention(target, mentions.doors.place.repository) !== undefined,
           },
     drawDiagram: diagrams ? previews.draw : undefined,
+    drawTaskBox: taskBoxes.draw,
     pictures: pictures?.pictures,
     format: toolbar.doors,
     blocks: { onTrigger: blocks.onTrigger, onKey: blocks.onKey },
@@ -383,6 +390,17 @@ export function MarkdownEditor({
           each.key,
         ),
       )}
+      {taskBoxes.drawn.map((each) =>
+        createPortal(
+          <Checkbox
+            label={each.what.label}
+            checked={each.what.checked}
+            onChange={each.what.toggle}
+          />,
+          each.element,
+          each.key,
+        ),
+      )}
     </section>
   );
 }
@@ -407,8 +425,9 @@ interface EditorDrawings<A> {
 }
 
 /**
- * What the editor asks the panel to draw, a mention or a diagram, each drawn
- * into its own element while it stands, as the composer draws its chips.
+ * What the editor asks the panel to draw, a mention, a diagram, or a task
+ * item's box, each drawn into its own element while it stands, as the
+ * composer draws its chips.
  */
 function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);

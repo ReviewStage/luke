@@ -6,8 +6,10 @@ import {
   moreLabel,
   opensMenu,
   SettingsFoldRow,
+  type SettingsFoldRun,
   SettingsRow,
   type SettingsRowControl,
+  type SettingsRowControls,
   type SettingsRowIndent,
   Tooltip,
   useMenu,
@@ -61,10 +63,14 @@ interface MenuRowWords {
   describedControl?: (control: SettingsRowControl) => ReactNode;
   /** Whether the row just arrived, which lights it once. */
   landed?: boolean;
+  /** Where its control and ⋯ stand where they would leave its words less than a legible stretch; dropped below them where none is named. */
+  controls?: SettingsRowControls;
   /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
   indent?: SettingsRowIndent;
-  /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, the chevron's name, and whether it starts open. */
-  fold?: { lines: ReactNode; label: string; defaultOpen: boolean };
+  /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, or many drawn only near the view (`run`) with its foot as `lines`, the chevron's name, and whether it starts open. */
+  fold?: { lines?: ReactNode; run?: SettingsFoldRun; label: string; defaultOpen: boolean };
+  /** The chevron of the rows the row folds under it (`SettingsRowsFold`), last at its end. */
+  chevron?: ReactNode;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -160,6 +166,7 @@ export function MenuRow({
             foldLabel={row.fold.label}
             defaultOpen={row.fold.defaultOpen}
             actions={() => more}
+            run={row.fold.run}
           >
             {row.fold.lines}
           </SettingsFoldRow>
@@ -172,6 +179,7 @@ export function MenuRow({
             description={row.description}
             error={replayMaskedError(row.error)}
             landed={row.landed}
+            controls={row.controls}
             below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (
@@ -187,6 +195,7 @@ export function MenuRow({
                     {more}
                   </div>
                 )}
+                {row.chevron}
               </>
             )}
           </SettingsRow>

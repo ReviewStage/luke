@@ -1,12 +1,13 @@
 import { storedAgentChoice } from "@repo/features/account-preferences-live";
 import { contextWindowSchema } from "@repo/features/agent-wire";
 import {
-  CHAPTERS_MODEL_LIST,
-  type ChaptersModelId,
+  CHAPTERS_PICK_LIST,
+  type ChaptersPick,
   chaptersModelFrom,
+  chaptersProviderOf,
 } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN_LIST, type LinkOpen } from "@repo/features/link-open";
-import type { ModelChoice } from "@repo/features/models-wire";
+import type { ModelChoice, ModelProvider } from "@repo/features/models-wire";
 import {
   type AccountPreferences,
   AGENT_ENTER_LIST,
@@ -52,7 +53,7 @@ export interface AccountPreferencesRow {
   /** What a click on Start runs on; none until the account chooses, which the service answers with the fallback its credentials pay for. */
   agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
-  chaptersModel: ChaptersModelId;
+  chaptersModel: ChaptersPick;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -75,8 +76,8 @@ export interface AccountPreferencesWritten extends AccountPreferencesRow {
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
  * `preferences` is the shared part; the link choice, Enter's choice, the
- * commit author, and setup finished are parts of their own, which a build that predates them
- * never sends.
+ * commit author, setup finished, and the setup place are parts of their own, which a build
+ * that predates them never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
@@ -84,8 +85,9 @@ export interface AccountPreferencesWrite {
   agentEnter?: AgentEnter;
   commitAuthor?: CommitAuthor;
   setupFinished?: boolean;
+  setupPlace?: string;
   agent?: ModelChoice;
-  chaptersModel?: ChaptersModelId;
+  chaptersModel?: ChaptersPick;
   experiments?: ExperimentChoices;
 }
 
@@ -190,6 +192,7 @@ const PREFERENCE_COLUMNS = {
   agentEnter: accountPreference.agentEnter,
   commitAuthor: accountPreference.commitAuthor,
   setupFinished: accountPreference.setupFinished,
+  setupPlace: accountPreference.setupPlace,
   agentModel: accountPreference.agentModel,
   agentEffort: accountPreference.agentEffort,
   agentContextWindow: accountPreference.agentContextWindow,
@@ -203,6 +206,7 @@ const PreferenceRowSchema = Schema.Struct({
   agentEnter: Schema.NullOr(Schema.String),
   commitAuthor: Schema.NullOr(Schema.String),
   setupFinished: Schema.NullOr(Schema.Boolean),
+  setupPlace: Schema.NullOr(Schema.String),
   agentModel: Schema.NullOr(Schema.String),
   agentEffort: Schema.NullOr(Schema.String),
   agentContextWindow: Schema.NullOr(contextWindowSchema),
@@ -226,6 +230,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         ...(row.agentEnter ? { agentEnter: row.agentEnter } : undefined),
         ...(row.commitAuthor ? { commitAuthor: row.commitAuthor } : undefined),
         ...(row.setupFinished === null ? undefined : { setupFinished: row.setupFinished }),
+        ...(row.setupPlace ? { setupPlace: row.setupPlace } : undefined),
       }) ?? {},
     agent: storedAgentChoice(row),
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
@@ -299,6 +304,15 @@ export function accountExperimentOn(
   );
 }
 
+/** Whose API key the account's chapters run on first where it saved both: the provider of the model it last picked, Anthropic's where it picked none. */
+export function accountChaptersProvider(
+  userId: string,
+): Effect.Effect<ModelProvider, StoreFailure, DatabaseServices> {
+  return Effect.map(readAccountPreferences(userId), (row) =>
+    chaptersProviderOf(chaptersModelFrom(row?.chaptersModel)),
+  );
+}
+
 const findAccess = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -349,6 +363,7 @@ const PreferenceWriteSchema = Schema.Struct({
   agentEnter: Schema.optionalKey(Schema.Literals(AGENT_ENTER_LIST)),
   commitAuthor: Schema.optionalKey(Schema.Literals(COMMIT_AUTHOR_LIST)),
   setupFinished: Schema.optionalKey(Schema.Boolean),
+  setupPlace: Schema.optionalKey(Schema.String),
   agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
@@ -356,7 +371,7 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
-  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
+  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_PICK_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   /** The instant the shared preferences part was written, where the write carries it. */
   updatedAt: Schema.optionalKey(Schema.Date),
@@ -372,6 +387,7 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
     ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
     ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
+    ...(write.setupPlace === undefined ? undefined : { setupPlace: write.setupPlace }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
     ...(write.agent === undefined
@@ -434,6 +450,7 @@ export function writeAccountPreferences(
       ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
       ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
       ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
+      ...(write.setupPlace === undefined ? undefined : { setupPlace: write.setupPlace }),
       ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),

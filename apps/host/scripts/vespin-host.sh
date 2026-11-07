@@ -1,5 +1,5 @@
 #!/bin/sh
-# vespin-host -- the host's one command: `uninstall` removes the host from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; every other command is the daemon's own (lib/vespin-host.mjs), run on the Node the release carries.
+# vespin-host -- the host's one command: `uninstall` removes the host from Vespin and from the account it is installed in, with no sudo, with its service, its agents' folders, its state and its releases; every other command is the daemon's own (lib/vespin-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/vespin-host in every release tarball, a Mac's among them
 # (scripts/release-layout.ts). The account install unpacks each release into
@@ -122,6 +122,11 @@ uninstall_account() {
     Darwin) remove_launch_agent ;;
     *) remove_user_unit ;;
   esac
+  # Note that the host leaves its account once its service has stopped and before its secret goes, so it leaves Settings › Hosts too, and that one whose service cannot be reached is still removed from the box, which says to remove it there.
+  left=no
+  if APP_HOST_STATE_ROOT="$HOME/$ACCOUNT_STATE" "$root/node/bin/node" "$root/lib/vespin-host.mjs" leave; then
+    left=yes
+  fi
   for owned in "$HOME/$ACCOUNT_STATE/$OWNED_AGENTS"/*; do
     [ -e "$owned" ] || continue
     folder="${HOME:?}/$AGENTS_FOLDER/${owned##*/}"
@@ -150,7 +155,11 @@ uninstall_account() {
   if [ "$kernel" != Darwin ] && [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null)" = yes ]; then
     printf 'Left lingering on for %s, since other services of this account may need it. Turn it off with: loginctl disable-linger\n' "$(id -un)"
   fi
-  printf 'Vespin host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
+  if [ "$left" = yes ]; then
+    printf 'Vespin host is removed from this account and from Vespin.\n'
+  else
+    printf 'Vespin host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
+  fi
 }
 
 uninstall() {

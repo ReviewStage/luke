@@ -20,33 +20,33 @@ import {
 import { Schema as EffectSchema, Option } from "effect";
 
 /**
- * attached-file-parts.ts -- the files a developer attached to a coding agent's message as the journal keeps them, and as eve's receipt of them reads back for matching.
+ * attached-file-parts.ts -- the files a developer attached to a coding agent's message as the journal keeps them, and as the retired runtime's receipt of them reads back for matching.
  *
  * The journal keeps the words as the row's first part, empty where there
  * are none, and every file after it as the SDK's file part over a `data:`
  * URL, a text file under `text/plain`, so the transcript draws a thumbnail
  * or a name for each from the row alone; an image kept beside the
- * conversation is the one exception, below. eve is handed each text file
+ * conversation is the one exception, below. The runtime is handed each text file
  * inlined under a heading and a fence (`packages/service/src/agents/attached-files.ts`),
- * and its receipt lists a line's parts the way it was handed them, so a
+ * and the retired runtime's receipt lists a line's parts the way it was handed them, so a
  * line is matched by its words, each text file inlined, and each image and
  * PDF by its mark.
  *
- * A line that mentions what eve cannot read for itself, a section of the
- * plan, carries one more text part after its words: what it named, as it
+ * A line that mentions what the agent cannot read for itself, a section of the
+ * description, carries one more text part after its words: what it named, as it
  * stood when the line was sent, under a heading of its own
  * (`packages/service/src/agents/mentioned-context.ts`). The journal keeps it as
  * a data part after the words, so the transcript draws only the words, and
- * a receipt is matched by it in the place eve was handed it.
+ * a receipt is matched by it in the place the runtime was handed it.
  *
  * An image the agent was handed is also kept beside its conversation, as a
- * tool's pictures are (`conversation-pictures.ts`), and eve is handed one
+ * tool's pictures are (`conversation-pictures.ts`), and the runtime is handed one
  * more text part right after the image's file part: the line naming the
  * kept picture's id, or why it was not kept (`keptImageLine`). The journal
  * keeps what was kept on the image's own file part, under the provider key
  * no provider reads (`keptImageMetadata`), rather than as a part of its
  * own, so the transcript draws and counts the same files it always did; a
- * receipt is matched by the line in the place eve was handed it, and a
+ * receipt is matched by the line in the place the runtime was handed it, and a
  * receipt's own row reads the id back from it. Note that a kept image's part
  * carries an empty URL rather than its bytes, as `show-image.ts` names
  * a tool's pictures, because bytes in the row ride every transcript read,
@@ -56,14 +56,14 @@ import { Schema as EffectSchema, Option } from "effect";
  * `data:` URL, so a reader takes both.
  */
 
-/** What heads the part a line's mentions are handed to eve in, which the receipt is read back by. */
+/** What heads the part a line's mentions are handed to the runtime in, which the receipt is read back by. */
 export const MENTIONED_HEADING =
   "Mentioned in this message, as it stood when the message was sent:";
 
 /** The data part the journal keeps a line's mentioned part as. */
 const MENTIONED_PART_TYPE = "data-ui-mentioned";
 
-/** Whether a text part eve was handed is a line's mentioned part rather than its words. */
+/** Whether a text part the runtime was handed is a line's mentioned part rather than its words. */
 export function isMentionedText(text: string): boolean {
   return text.startsWith(MENTIONED_HEADING);
 }
@@ -89,7 +89,7 @@ function mentionedTextOf(part: UIMessage["parts"][number]): string | undefined {
 /** What was kept of an image a coding agent was handed: the conversation's picture it was kept as, by id, or why it was not kept. */
 export type KeptImage = { readonly id: string } | { readonly omitted: PictureOmission };
 
-/** A file as eve is handed it and the journal keeps it: an image with what was kept of it, where it was kept or refused. */
+/** A file as the runtime is handed it and the journal keeps it: an image with what was kept of it, where it was kept or refused. */
 export type HandedFile = AgentAttachment & { readonly kept?: KeptImage | undefined };
 
 /** An attachment's id as the store mints it. */
@@ -116,14 +116,14 @@ export function keptImageOf(part: FileUIPart): KeptImage | undefined {
   return "attachmentId" in kept ? { id: kept.attachmentId } : { omitted: kept.omitted };
 }
 
-/** The line eve is handed right after an image: the attachment it was kept as, or why it was not kept. */
+/** The line the runtime is handed right after an image: the attachment it was kept as, or why it was not kept. */
 export function keptImageLine(name: string, kept: KeptImage): string {
   return "id" in kept
     ? `Image ${name} is attachment ${kept.id}`
     : `Image ${name} is not kept as an attachment: ${OMISSION_WORDS[kept.omitted]}`;
 }
 
-/** What a line eve was handed after the image of the name says was kept of it; nothing for any other text. */
+/** What a line the runtime was handed after the image of the name says was kept of it; nothing for any other text. */
 export function keptImageOfLine(name: string, text: string): KeptImage | undefined {
   const lead = keptImageLine(name, { id: "" });
   if (text.startsWith(lead)) {
@@ -142,7 +142,7 @@ const ATTACHED_FILE_HEADING = "Attached file: ";
 /** The shortest fence a text file is inlined in, as Markdown's is. */
 const SHORTEST_FENCE = 3;
 
-/** An attachment's bytes as a `data:` URL, which both eve and the journal carry. */
+/** An attachment's bytes as a `data:` URL, which both the runtime and the journal carry. */
 export function dataUrl(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
 }
@@ -153,7 +153,7 @@ function base64Of(url: string): string | undefined {
   return url.startsWith("data:") && comma >= 0 ? url.slice(comma + 1) : undefined;
 }
 
-/** An image or a PDF as a line is matched by it: its name and its type, which a receipt lists it by whether eve staged it or not. */
+/** An image or a PDF as a line is matched by it: its name and its type, which a receipt lists it by whether the retired runtime staged it or not. */
 export function fileMark(filename: string | undefined, mediaType: string): string {
   return `[file: ${filename ?? ""} (${mediaType})]`;
 }
@@ -173,7 +173,7 @@ export function textOf(base64: string): string {
 /**
  * The URL a line's file is kept under in the journal: its bytes as a
  * `data:` URL, or none for an image kept beside the conversation, which its
- * part names by id instead (`keptImageMetadata`), as eve's receipt names a
+ * part names by id instead (`keptImageMetadata`), as the retired runtime's receipt names a
  * staged one, so the row carries no image twice.
  */
 function keptUrl(file: HandedFile): string {
@@ -204,7 +204,7 @@ export function lineParts(
 }
 
 /**
- * A line's parts as eve's receipt lists them, in the order eve was handed
+ * A line's parts as the retired runtime's receipt lists them, in the order it was handed
  * them: the words where there are any, what it mentioned, each text file
  * inlined, then each image and PDF by its mark, an image followed by the
  * line naming what was kept of it where it names that; nothing for a row

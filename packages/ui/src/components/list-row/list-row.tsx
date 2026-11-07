@@ -15,6 +15,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useMemo,
   useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
@@ -36,7 +37,14 @@ import {
   selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
-import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
+import { SELECT_BOX_PLACE, SelectBox } from "../selection/select-box.js";
+import {
+  reachInRun,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "../virtual-rows/virtual-rows.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 export type { ListRowMenu } from "../row-menu/row-menu.js";
@@ -158,10 +166,12 @@ export type { ListSelection } from "../selection/list-selection.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
  * title's or its lead's where that stands over the title, the lines under
  * it running the row's whole width and its leading mark level with the
- * first; or, in a rail whose rows count what each holds
- * (`LIST_ROW_META.LAST`), at the end of its last line, the description's,
- * on that line's baseline, the title over both running the row's whole
- * width and its leading mark level with the title's first line. A row
+ * first, though a row with no line under its first keeps it at its
+ * middle, its marks and acts centered on the row as its title is; or, in a
+ * rail whose rows count what each holds (`LIST_ROW_META.LAST`), at the
+ * end of its last line, the description's, on that line's baseline, the
+ * title over both running the row's whole width and its leading mark level
+ * with the title's first line. A row
  * whose names run long may let its title run to a second line before it
  * is cut short (`LIST_ROW_TITLE_LINES.TWO`), ending then in an ellipsis
  * rather than a fade. A row's acts stand beside it, or, in a list
@@ -365,7 +375,7 @@ const LIST_CLASS =
 
 /** The row: a grid of five tracks, its parts centered on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
-  "ui-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
+  "ui-list-row group/list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
 /**
  * The fold's chevron, a control of its own standing over the leading mark's
@@ -460,6 +470,26 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
+/** The run a long `List` draws its rows in, only those near the view (`VirtualRows`). */
+export interface ListRun {
+  /** The element that scrolls, which the rows stand in. */
+  readonly scroller: RefObject<HTMLElement | null>;
+  /** A box whose resizing moves where the list stands in its scroller. */
+  readonly shiftedBy?: RefObject<HTMLElement | null> | undefined;
+  /** Each row's key, in order. */
+  readonly keys: readonly string[];
+  /** The height a row is taken to have before it is measured, in pixels. */
+  readonly estimate: number;
+  /** The room between two rows, in pixels: none unless said. */
+  readonly gap?: number | undefined;
+  /** How many rows past each edge of the view are drawn, every row while a find bar stands open. */
+  readonly overscan?: number | undefined;
+  /** What the caller asks of the run, such as bringing a row in. */
+  readonly handle?: RefObject<VirtualRowsHandle | null> | undefined;
+  /** Draws the row at an index, a `ListRow` wearing `place`. */
+  readonly row: (index: number, place: VirtualRowPlace) => ReactNode;
+}
+
 /**
  * A list of `ListRow`s, named by `label` for a reader moving between lists.
  * One whose rows a finger opens (`fingerTall`) stands each a finger's press
@@ -481,6 +511,14 @@ function said(words: ReactNode): boolean {
  * and Esc none, while a plain press still opens its row. Each row takes
  * part by its key (`selectKey`), and one chosen is filled and described as
  * selected. A list not asked chooses nothing.
+ *
+ * A long list draws only the rows near the view (`run`): its rows are a
+ * run of `VirtualRows` in the caller's scroller, each `ListRow` wearing its
+ * place, and the run's block is the list itself, so the list's sheet
+ * reaches its rows as its children. A key walking past the rows drawn goes
+ * on to the row it reaches in the whole list, brought in where it is not
+ * drawn, the row holding the keyboard stays drawn wherever the list is
+ * scrolled, and a choice reaches the rows left undrawn.
  */
 export function List({
   id,
@@ -492,6 +530,7 @@ export function List({
   joinsWalk = false,
   selection,
   onPointerDown,
+  run,
   children,
 }: {
   /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
@@ -508,17 +547,72 @@ export function List({
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
   /** A press on the list, as a drag that puts its rows in another order hears it (the panel's `useRowDrag`). */
-  onPointerDown?: PointerEventHandler<HTMLUListElement> | undefined;
-  children: ReactNode;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
+  run?: ListRun | undefined;
+  /** The rows, where the list draws every one. */
+  children?: ReactNode;
 }): React.JSX.Element {
-  const roving = useRovingKeys<HTMLUListElement>();
-  const chooser = useListSelection(selection);
+  const own = useRef<VirtualRowsHandle>(null);
+  const handle = run?.handle ?? own;
+  const keys = run?.keys;
+  const bringIn = useCallback(
+    (key: string, then: () => void) => handle.current?.bringIn(key, then) ?? false,
+    [handle],
+  );
+  // Note that a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLElement>({
+    reach: keys === undefined ? undefined : reachInRun(handle),
+  });
+  const order = useMemo(() => (keys === undefined ? undefined : [keys]), [keys]);
+  const chooser = useListSelection(selection, order, keys === undefined ? undefined : bringIn);
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
+  };
+  const contexts = (rows: ReactNode) => (
+    <ListVariantContext.Provider value={variant}>
+      <ListDensityContext.Provider value={density}>
+        <ListSelectionContext.Provider value={chooser.selecting}>
+          {rows}
+        </ListSelectionContext.Provider>
+      </ListDensityContext.Provider>
+    </ListVariantContext.Provider>
+  );
+  if (run !== undefined) {
+    return contexts(
+      <VirtualRows
+        scroller={run.scroller}
+        shiftedBy={run.shiftedBy}
+        keys={run.keys}
+        estimate={run.estimate}
+        gap={run.gap ?? 0}
+        overscan={run.overscan}
+        anchor={VIRTUAL_ROWS_ANCHOR.START}
+        listItems
+        moves={moves}
+        holdsFocus
+        className={LIST_CLASS}
+        aria-label={label}
+        onPointerDown={onPointerDown}
+        handle={handle}
+        block={{
+          ...(joinsWalk ? {} : roving),
+          id,
+          onKeyDown,
+          ...selectionRoot(),
+          "data-variant": variant,
+          "data-density": density,
+          "data-finger-tall": fingerTall ? "true" : undefined,
+        }}
+      >
+        {run.row}
+      </VirtualRows>,
+    );
+  }
   return (
     <ul
       {...(joinsWalk ? {} : roving)}
-      onKeyDown={(event) => {
-        if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
-      }}
+      onKeyDown={onKeyDown}
       id={id}
       className={LIST_CLASS}
       {...selectionRoot()}
@@ -529,13 +623,7 @@ export function List({
       onPointerDown={onPointerDown}
       {...(moves ? motionRows() : {})}
     >
-      <ListVariantContext.Provider value={variant}>
-        <ListDensityContext.Provider value={density}>
-          <ListSelectionContext.Provider value={chooser.selecting}>
-            {children}
-          </ListSelectionContext.Provider>
-        </ListDensityContext.Provider>
-      </ListVariantContext.Provider>
+      {contexts(children)}
     </ul>
   );
 }
@@ -575,6 +663,7 @@ export function ListRow({
   onTitleClipped,
   id,
   selectKey,
+  selectBox = false,
   motionKey: followedBy,
   ref,
   onKeyDown,
@@ -656,6 +745,8 @@ export function ListRow({
   id?: string | undefined;
   /** What the row is chosen by in a `List` that chooses rows (`selection`); a row with none is never chosen. */
   selectKey?: string | undefined;
+  /** Whether the row draws the box the pointer chooses it by over its unread gutter (`SELECT_BOX_PLACE.UNREAD_GUTTER`), where it can be chosen. */
+  selectBox?: boolean | undefined;
   /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
   motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
@@ -730,6 +821,8 @@ export function ListRow({
   const selecting = useContext(ListSelectionContext);
   const choosable = selecting !== undefined && selectKey !== undefined;
   const chosen = choosable && selecting.selected.has(selectKey);
+  // Note that the box is the pointer's way into a selection, so a row that refuses its press draws none.
+  const boxed = choosable && selectBox && !disabled ? selecting : undefined;
   const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
     <span
@@ -784,6 +877,15 @@ export function ListRow({
   // Note that a lead over the title takes the first line, the one the metadata ends.
   const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
   const firstLine = above ? leadMark : heading;
+  // Note that a row of one line keeps its metadata at its middle, its first line, because a dense row centers its title in its height.
+  const metaPlace =
+    metaAt === LIST_ROW_META.TITLE &&
+    titleLines === LIST_ROW_TITLE_LINES.ONE &&
+    !said(description) &&
+    lead === undefined &&
+    !said(attachments)
+      ? LIST_ROW_META.MIDDLE
+      : metaAt;
   // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
   const namedBy =
     describedAs === undefined
@@ -812,7 +914,7 @@ export function ListRow({
             {attachments}
           </span>
         ) : null}
-        {metaAt === LIST_ROW_META.TITLE ? (
+        {metaPlace === LIST_ROW_META.TITLE ? (
           <span className="ui-list-row-head">
             {firstLine}
             {end}
@@ -834,9 +936,9 @@ export function ListRow({
             <ReplayWords masked={descriptionReplayMasked}>{description}</ReplayWords>
           </span>
         ) : null}
-        {metaAt === LIST_ROW_META.LAST ? end : null}
+        {metaPlace === LIST_ROW_META.LAST ? end : null}
       </span>
-      {metaAt === LIST_ROW_META.MIDDLE ? end : null}
+      {metaPlace === LIST_ROW_META.MIDDLE ? end : null}
     </>
   );
   const press = onPress ? (
@@ -861,6 +963,7 @@ export function ListRow({
         // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
         if (rowMenu.open) rowMenu.close(false);
         if (choosable && selecting.press(selectKey, event)) return;
+        if (!choosable) selecting?.passOver(event);
         onPress(event);
       }}
       onKeyDown={(event) => {
@@ -947,12 +1050,15 @@ export function ListRow({
         {...nestedItem(depth, nest)}
         ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
-        data-meta={metaAt === LIST_ROW_META.MIDDLE ? undefined : metaAt}
+        data-meta={metaPlace === LIST_ROW_META.MIDDLE ? undefined : metaPlace}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
         data-current-look={currentLook}
         data-selected={chosen ? "true" : undefined}
+        data-select-box={
+          boxed === undefined ? undefined : boxed.selected.size > 0 ? "shown" : "rest"
+        }
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}
         data-latent={latent ? "true" : undefined}
@@ -962,9 +1068,13 @@ export function ListRow({
         data-depth={depth === 0 ? undefined : depth}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(rowMenu.doors, {})}
-        style={rowProperties(depth)}
+        // Note that the row stands where its run places it (`VirtualRows`), its depth's own property beside that.
+        style={{ ...place?.style, ...rowProperties(depth) }}
       >
         {row}
+        {boxed === undefined || selectKey === undefined ? null : (
+          <SelectBox selectKey={selectKey} place={SELECT_BOX_PLACE.UNREAD_GUTTER} />
+        )}
       </li>
       {/* Note that the menu stands beside the row rather than in it, because a
           press or a key in the menu's portal would otherwise reach the row's

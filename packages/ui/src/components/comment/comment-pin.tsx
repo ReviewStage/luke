@@ -6,8 +6,8 @@ import type { CommentAuthor } from "./comment.js";
 /**
  * comment-pin.tsx -- comments pinned to what they are on, as a design tool pins them: a speech bubble whose pointed corner touches it, wearing the face of who started its first thread, and a count where more than one thread stands there.
  *
- * It is the comments' own marker, as small as the plan's folded count, a
- * line's face over the menus' raised surface, so it reads as the plan's
+ * It is the comments' own marker, as small as the description's folded count, a
+ * line's face over the menus' raised surface, so it reads as the description's
  * comments do wherever it stands over something the owner drew; on a touch
  * screen its press takes a finger's target around it, as a text press's
  * does, while it stays drawn as small. Its owner stands it where the
@@ -20,7 +20,8 @@ import type { CommentAuthor } from "./comment.js";
  * comment by its writer and its first line, in a hint's card; a finger has
  * no pointer over it, so its press opens the comments at once, which say
  * the same and more. The count is a picture of the number its name says, so
- * it is hidden from a reader.
+ * it is hidden from a reader. A pin of comments held in the reader's review,
+ * which no one else sees until it is sent, is drawn dashed in the accent.
  */
 
 /**
@@ -34,6 +35,20 @@ export const COMMENT_PIN_STANDS = {
 } as const;
 
 export type CommentPinStands = (typeof COMMENT_PIN_STANDS)[keyof typeof COMMENT_PIN_STANDS];
+
+/** Whether a pin's comments are posted, or held in the reader's review, unsent. */
+export const COMMENT_PIN_LOOK = {
+  POSTED: "posted",
+  HELD: "held",
+} as const;
+
+export type CommentPinLook = (typeof COMMENT_PIN_LOOK)[keyof typeof COMMENT_PIN_LOOK];
+
+/** The edge each look draws. */
+const EDGE = {
+  [COMMENT_PIN_LOOK.POSTED]: "border-border",
+  [COMMENT_PIN_LOOK.HELD]: "border-dashed border-accent-fill",
+} as const satisfies Record<CommentPinLook, string>;
 
 /** The corner each stand makes its point. */
 const POINT = {
@@ -54,6 +69,7 @@ export function CommentPin({
   preview,
   open,
   stands = COMMENT_PIN_STANDS.BESIDE,
+  look = COMMENT_PIN_LOOK.POSTED,
   onPress,
   onHover,
 }: {
@@ -69,6 +85,8 @@ export function CommentPin({
   open: boolean;
   /** Where it stands by the corner it touches; beside what it is on unless told. */
   stands?: CommentPinStands | undefined;
+  /** Whether its comments are posted, or held in the reader's review; posted unless told. */
+  look?: CommentPinLook | undefined;
   onPress: () => void;
   /** Told the pointer or the focus came onto the pin, and went. */
   onHover: (over: boolean) => void;
@@ -79,7 +97,7 @@ export function CommentPin({
     <Tooltip label={label} card={preview}>
       <button
         type="button"
-        className={`ui-comment-pin inline-flex cursor-press items-center gap-ui-2 rounded-ui-full ${POINT[stands]} border border-border bg-popover p-ui-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--ui-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']`}
+        className={`ui-comment-pin inline-flex cursor-press items-center gap-ui-2 rounded-ui-full ${POINT[stands]} border ${EDGE[look]} bg-popover p-ui-4 text-caption text-foreground shadow-menu aria-expanded:shadow-menu-open-edge pointer-coarse:relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--ui-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']`}
         aria-label={label}
         aria-expanded={open}
         onClick={onPress}

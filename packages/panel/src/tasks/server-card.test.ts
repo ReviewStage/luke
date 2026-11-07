@@ -32,7 +32,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -43,11 +43,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * server-card.test.ts -- a mention of an MCP server or of one of its tools
- * hangs the server as the MCP popover reads it: its mark, its name, how
- * many tools it offers, and, in an agent's tab, whether the agent has it
- * on, a word with nothing to press; then what the mention does for the
- * agent, then the server's tools, each its title and its badge, or the one
- * tool a tool's mention names. A server switched off for the agent is handed to
+ * hangs the server as the MCP popover reads it: its mark, its name, and,
+ * in an agent's tab, whether the agent has it on, a word with nothing to
+ * press; then what the mention does for the agent. A server switched off for the agent is handed to
  * the turn a line opens alone, or to the next turn where the line reached
  * one under way, as its row says or, not yet read back, as the agent stood
  * when it went; the box says the same of a send now. Off an agent the card
@@ -62,20 +60,8 @@ const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 
-/** Linear's server's tools, out of order, more than a card has height for. */
-const TOOLS = [
-  { name: "update_issue", description: "Change an issue." },
-  {
-    name: "list_issues",
-    description: "List the team's issues. Filtered by state.",
-    annotations: { readOnlyHint: true },
-  },
-  { name: "get_issue", description: "Read one issue." },
-  { name: "create_comment", description: "Comment on an issue." },
-  { name: "list_teams", description: "List the teams." },
-  { name: "get_user", description: "Read one member." },
-  { name: "search_documentation", description: "Search Linear's documentation." },
-];
+/** Linear's server's tools. */
+const TOOLS = [{ name: "list_issues", description: "List the team's issues." }];
 
 const SERVER = mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: LINEAR }, "Linear", PLACE);
 
@@ -131,6 +117,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 function agentOf(status: AgentStatus, disabledServers: readonly string[]): AgentSummary {
@@ -247,13 +234,9 @@ async function cardOf(chip: Element | null | undefined) {
   assert.ok(card, "the chip hangs the server's card");
   const look = {
     name: card.querySelector(".ui-hover-card-name")?.textContent,
-    count: card.querySelector(".ui-hover-card-sub")?.textContent,
+    sub: card.querySelector(".ui-hover-card-sub")?.textContent,
     on: card.querySelector(".ui-hover-card-corner")?.textContent,
     note: card.querySelector(".ui-hover-card-head + .ui-hover-card-note")?.textContent,
-    tools: [...card.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
-      tool.querySelector(".ui-hover-card-row-label")?.textContent,
-      tool.querySelector(".ui-hover-card-row-end")?.textContent,
-    ]),
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
   act(() => {
@@ -272,26 +255,16 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
 
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
     name: "Linear",
-    count: "7 tools",
+    sub: undefined,
     on: "Off",
     note: SERVER_MENTION_NOTE.OFF_OPENS,
-    tools: [
-      ["create_comment, Comment on an issue.", undefined],
-      ["get_issue, Read one issue.", undefined],
-      ["get_user, Read one member.", undefined],
-      ["list_issues, List the team's issues.", "Read-only"],
-      ["list_teams, List the teams.", undefined],
-      ["search_documentation, Search Linear's documentation.", undefined],
-      ["update_issue, Change an issue.", undefined],
-    ],
     presses: 0,
   });
   assert.deepEqual(await cardOf(chipIn(container, "steered")), {
     name: "Linear",
-    count: "7 tools",
+    sub: undefined,
     on: "Off",
     note: SERVER_MENTION_NOTE.OFF_STEERS,
-    tools: [["list_issues, List the team's issues.", "Read-only"]],
     presses: 0,
   });
   const reply = await cardOf(chipIn(container, "first"));
@@ -342,19 +315,17 @@ test("in the box of an agent at rest, Linear off, a send hands it the turn the s
   assert.equal(drafted.note, SERVER_MENTION_NOTE.OFF_OPENS);
 });
 
-test("a server not connected says so, with no switch and no tools, a tool's mention listing none it was written with", async () => {
+test("a server not connected says so, with no switch", async () => {
   linear = INTEGRATION_STATUS.DISCONNECTED;
   const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, []));
 
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
     name: "Linear",
-    count: undefined,
+    sub: undefined,
     on: undefined,
     note: SERVER_MENTION_NOTE.NOT_CONNECTED,
-    tools: [],
     presses: 0,
   });
-  assert.deepEqual((await cardOf(chipIn(container, "steered"))).tools, []);
 });
 
 test("a server whose sign-in expired is handed all the same, its card saying a call to it asks for it to be reconnected", async () => {
@@ -367,7 +338,7 @@ test("a server whose sign-in expired is handed all the same, its card saying a c
   assert.equal(opened.note, SERVER_MENTION_NOTE.EXPIRED);
 });
 
-test("off an agent, as in a plan's or Vespin's words, the server's row has no switch and nothing is said of a turn", async () => {
+test("off an agent, as in a description's or Vespin's words, the server's row has no switch and nothing is said of a turn", async () => {
   const container = await drawn(
     createElement(TranscriptWords, { text: `Check ${SERVER} and ${TOOL}.` }),
   );
@@ -378,20 +349,5 @@ test("off an agent, as in a plan's or Vespin's words, the server's row has no sw
 
   assert.equal(serverCard.on, undefined);
   assert.equal(serverCard.note, undefined);
-  assert.equal(serverCard.count, "7 tools");
-  assert.equal(serverCard.tools.length, 7, "the card lists every tool, scrolling past a few");
-  assert.deepEqual(toolCard.tools, [["list_issues, List the team's issues.", "Read-only"]]);
-
-  restOn(tool ?? assert.fail("the tool's chip stands"));
-  await settle();
-  restOn(
-    [...document.querySelectorAll('[data-server-card] ul[aria-label$=" tools"] > li > *')].at(-1) ??
-      assert.fail("the tool's row stands"),
-  );
-  await settle();
-  assert.equal(
-    document.querySelector("[data-tool-card] .ui-hover-card-note")?.textContent,
-    "List the team's issues.",
-    "the tool's one-line row hangs what it does",
-  );
+  assert.equal(toolCard.name, "Linear", "a tool's mention hangs its server's card");
 });

@@ -17,7 +17,7 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@repo/database/models/recorded-session";
-import { readTaskPlan } from "@repo/database/models/task-store";
+import { readTaskDescription } from "@repo/database/models/task-store";
 import { readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
@@ -51,17 +51,18 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
-import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { keptHandedImages, senderLabel, turnContent } from "../attached-files.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
+import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import {
   type AgentSessions,
   describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveTypedTurn,
-  type EveUnreachable,
-} from "../eve-host/eve-sessions.js";
-import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
-import { readMentioned } from "../mentioned-reads.js";
+  SESSION_SEND_OUTCOME,
+  SESSION_TURN,
+  type SessionUnreachable,
+  type TypedTurn,
+} from "../sessions/agent-sessions.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
@@ -73,24 +74,24 @@ import { agentStatusOf } from "./status.js";
  *
  * The words are handed to the session the agent runs in, where they steer
  * the turn under way or open one, and written as a line awaiting its turn
- * once eve has taken them. The hand-over runs inside the conversation's
- * lock, so the turn eve opens on the line finds the row standing when its
- * own first write takes the lock, and an eve that did not take the message
- * leaves the row withdrawn, read nowhere unless a turn eve hands it to
+ * once the harness has taken them. The hand-over runs inside the conversation's
+ * lock, so the turn the harness opens on the line finds the row standing when its
+ * own first write takes the lock, and a harness that did not take the message
+ * leaves the row withdrawn, read nowhere unless a turn the harness hands it to
  * after all takes it with its kind and sender. Files the developer
- * attached go with the words, to eve and onto the row, each image kept beside the conversation first
- * and named to eve by its id (`attached-files.ts`), and so does what the words
- * mention of the plan, as it stands now (`mentioned-context.ts`), and a
+ * attached go with the words, to the harness and onto the row, each image kept beside the conversation first
+ * and named to the harness by its id (`attached-files.ts`), and so does what the words
+ * mention of the description, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
  * are another coding agent's or a reviewer's, which hand none, or an
  * automation's run, which hands only those its automation's own prompt
  * mentions; the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
- * it already wrote and hands eve nothing again: read once here, before
+ * it already wrote and hands the harness nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
  * sends racing under one key still send once. A hand-over that answered
- * nothing past its deadline, or whose store write failed after eve took
- * the message, withdrew a line eve may still hand a turn, which is why the
+ * nothing past its deadline, or whose store write failed after the harness took
+ * the message, withdrew a line the harness may still hand a turn, which is why the
  * row is kept rather than deleted. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
@@ -102,7 +103,7 @@ import { agentStatusOf } from "./status.js";
  * while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, the app from a call, or an automation's run.
- * A teammate's words, a member's other than the starter, are handed to eve
+ * A teammate's words, a member's other than the starter, are handed to the harness
  * behind a label naming them by their mention link (`attached-files.ts`'s
  * `senderLabel`), which the row leaves out, since its sender is its own
  * column, so the model never reads a teammate's words as the developer's.
@@ -114,8 +115,8 @@ import { agentStatusOf } from "./status.js";
  * conversation's dispatch claim just before the send, which is taken under
  * the row lock its archive takes, so a send claimed after the archive is
  * refused, and an archive after the claim finds the line awaiting. A
- * session eve answers it no longer runs has ended for good, and nothing
- * will end the turn it was running, so that turn, as read before eve was
+ * session its harness answers it no longer runs has ended for good, and nothing
+ * will end the turn it was running, so that turn, as read before the harness was
  * asked, is settled failed for its session's end
  * (`@repo/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
@@ -131,9 +132,9 @@ import { agentStatusOf } from "./status.js";
 /**
  * The developer's words, the files they attached where they did, the key the
  * send is made under, which a repeat carries again, and what sent them, which
- * the row keeps and eve is not told; and what the row says carried it, the
+ * the row keeps and the harness is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, a plan comment, GitHub, the app, or an automation's run, which eve is
+ * thread, a description comment, GitHub, the app, or an automation's run, which the harness is
  * not told either.
  */
 export interface SteerLine {
@@ -164,15 +165,15 @@ export const STEER_OUTCOME = {
 
 type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
 
-/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, and a failure is read by `failedCallRefusal`, an outage unless a native harness said why. A session eve no longer runs is no refusal: the message opens a fresh one. */
+/** The harness's answer to a message it did not take, in the route's words: a session still coming up is tried again, and a failure is read by `failedCallRefusal`, an outage unless the harness said why. A session the harness no longer runs is no refusal: the message opens a fresh one. */
 const REFUSAL_OF_SEND_OUTCOME = {
-  [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
+  [SESSION_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
 } as const;
 
 /**
  * Why a line was not written, in the route's words: a conversation gone is
  * the agent gone, a conversation whose lock another write held past the
- * send's wait for it is an outage the same key may retry, since eve was told
+ * send's wait for it is an outage the same key may retry, since the harness was told
  * nothing, and words the vocabulary refused are the request's own fault.
  */
 const REFUSAL_OF_UNWRITTEN_LINE = {
@@ -184,7 +185,7 @@ const REFUSAL_OF_UNWRITTEN_LINE = {
 /**
  * Whether a message to an agent whose session has not claimed its record
  * opens one: where its Start opened none, as an agent started blank, with
- * neither the plan nor a prompt, has none until its first words; or past the
+ * neither the description nor a prompt, has none until its first words; or past the
  * grace its first turn may land in, where the session its Start opened never
  * started. Inside the grace a Start's session is still coming up, and a
  * second opened beside it would only lose the record to it, so the developer
@@ -194,17 +195,17 @@ const opensUnclaimed = (agent: Agent) =>
   Effect.map(
     Clock.currentTimeMillis,
     (now) =>
-      (agent.planSnapshot === null && agent.prompt === null) ||
+      (agent.descriptionSnapshot === null && agent.prompt === null) ||
       agentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
-/** An eve the client never reached reads as an outage, said in the log by its kind alone. */
-const unreached = (failure: EveUnreachable) =>
+/** A runtime the client never reached reads as an outage, said in the log by its kind alone. */
+const unreached = (failure: SessionUnreachable) =>
   Effect.as(
     Effect.logWarning(
-      `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
+      `the agent's runtime could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
     ),
-    { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+    { outcome: SESSION_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
   );
 
 /** What a teammate's mention link names them by where their account is gone. */
@@ -248,7 +249,7 @@ const claimedFor = (target: ConversationTarget, sessionId: string) =>
     ),
   );
 
-/** The turn an ended session settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
+/** The turn an ended session settles: the newest, where it still stood queued or running before the harness was asked; none otherwise. */
 const runningTurnOf = (agent: Agent) =>
   Effect.map(
     hostedStoreOrUnavailable(latestTurnsOfReached([agent.conversationId])),
@@ -260,7 +261,7 @@ const runningTurnOf = (agent: Agent) =>
 
 /**
  * The turn read before the send settled failed for its session's end, now
- * that eve said it runs the session no more; a write that fails is logged
+ * that the harness said it runs the session no more; a write that fails is logged
  * and the refusal stands all the same, since the sweep's bound still ends
  * the turn in time.
  */
@@ -303,16 +304,20 @@ export interface SteerWritten {
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is. */
 export const steerAgent = (
-  eve: AgentSessions<EveTypedTurn>,
+  agentSessions: AgentSessions<TypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: Agent,
   line: SteerLine,
-) => Effect.map(steerAgentWritten(eve, writer, userId, agent, line), (written) => written.outcome);
+) =>
+  Effect.map(
+    steerAgentWritten(agentSessions, writer, userId, agent, line),
+    (written) => written.outcome,
+  );
 
 /** As `steerAgent`, with the transaction that wrote the line beside what it came to. */
 export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(function* (
-  eve: AgentSessions<EveTypedTurn>,
+  agentSessions: AgentSessions<TypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: Agent,
@@ -341,11 +346,11 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
-          : hostedStoreOrUnavailable(readTaskPlan(userId, agent.taskId)),
+          : hostedStoreOrUnavailable(readTaskDescription(userId, agent.taskId)),
       ),
       workspace: Effect.result(hostedStoreOrUnavailable(agentWorkspace(userId, agent))),
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
-      // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
+      // Read before the harness is asked, so an ended session settles the turn it was running and never one begun since.
       running: Effect.result(runningTurnOf(agent)),
       label: Effect.result(hostedStoreOrUnavailable(teammateLabel(agent, line.sender))),
     },
@@ -425,23 +430,31 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
   const reads = yield* Effect.fromResult(reached.reads);
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads, agent.id);
+  const mentioned = reviewers
+    ? undefined
+    : mentionedContext(
+        pointed,
+        task,
+        reads,
+        agent.id,
+        yield* descriptionsOnFor(agent.userId, agent.kind),
+      );
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
-  // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
+  // Each image is kept beside the agent's conversation before the harness is handed it, so the harness is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
   const attachments = yield* hostedStoreOrUnavailable(
     keptHandedImages(target, line.attachments ?? []),
   );
-  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed,
+  // The harness's refusal is kept beside the dispatch, since the write answers only whether a row landed,
   // and so is whether the session the record named had ended, whose running turn nothing else ends.
   let refused: HostedRefusal | undefined;
   let ended = false;
   const message = {
     conversationId: agent.conversationId,
-    turn: EVE_HOST_TURN.TYPED,
-    message: eveContent(line.text, attachments, mentioned, label),
-    // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
+    turn: SESSION_TURN.TYPED,
+    message: turnContent(line.text, attachments, mentioned, label),
+    // The line's own id, which a native harness's runner names back as it takes the message.
     lineId: sentLineId(line.clientKey),
   };
   // Note that a session that no longer runs, or none at all, is no refusal: the words open a fresh
@@ -449,22 +462,24 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   // no developer has to press Continue.
   const send = Effect.gen(function* () {
     if (sessionId !== undefined) {
-      const sent = yield* eve
+      const sent = yield* agentSessions
         .send(sessionId, message)
-        .pipe(Effect.catchTag("EveUnreachable", unreached));
-      if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+        .pipe(Effect.catchTag("SessionUnreachable", unreached));
+      if (sent.outcome === SESSION_SEND_OUTCOME.ACCEPTED) return true;
+      if (sent.outcome === SESSION_SEND_OUTCOME.FAILED) {
         refused = failedCallRefusal(sent);
         return false;
       }
-      if (sent.outcome !== EVE_SEND_OUTCOME.RETIRED) {
+      if (sent.outcome !== SESSION_SEND_OUTCOME.RETIRED) {
         refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
         return false;
       }
       ended = true;
     }
-    const opened = yield* eve.open(message).pipe(Effect.catchTag("EveUnreachable", unreached));
-    if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+    const opened = yield* agentSessions
+      .open(message)
+      .pipe(Effect.catchTag("SessionUnreachable", unreached));
+    if (opened.outcome !== SESSION_SEND_OUTCOME.ACCEPTED) {
       refused = failedCallRefusal(opened);
       return false;
     }
@@ -482,8 +497,8 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     refused = refusal;
     return Effect.succeed(false);
   });
-  // The servers the words mention stand for the agent's next turn from just before eve hears them, and
-  // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
+  // The servers the words mention stand for the agent's next turn from just before the harness hears them, and
+  // only where the harness took them; a store failure on the way is read as the harness hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.
   const services = yield* Effect.context<DatabaseServices>();
   // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, and an automation's
@@ -566,8 +581,8 @@ export const steerMemberWords = /* @__PURE__ */ Effect.fn("web/steerMemberWords"
   agent: Agent,
   line: Omit<SteerLine, "sender">,
 ) {
-  const eve = yield* routedSessions<EveTypedTurn>(userId);
-  const written = yield* steerAgentWritten(eve, writer, userId, agent, {
+  const agentSessions = yield* routedSessions<TypedTurn>(userId);
+  const written = yield* steerAgentWritten(agentSessions, writer, userId, agent, {
     ...line,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
   });

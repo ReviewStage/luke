@@ -1,35 +1,43 @@
 /**
- * sandbox-firewall.ts -- a sandbox session's whole firewall policy, composed from every credential standing for the session, and the one way the service writes it.
+ * sandbox-firewall.ts -- a sandbox session's whole firewall policy, rebuilt at every write from the credentials its writer gathered and the swaps of the launch standing in it, and the one way the service writes it.
  *
  * Vercel's network-policy write replaces a session's whole policy, and the
- * policy reads back with every header value redacted, so no writer can read
- * what another set there and keep it. Each part of a session sets its
- * credential in a slot of its own (`FIREWALL_SLOT`): the agent's repository
- * credential, a clone's read token, and the swaps its runner launches with.
- * What stands is the store's (`sandbox-firewall-store.ts`): one row per
- * sandbox session, under the account whose agent the session is, its
- * entries sealed under the deployment's key ring for that account and
- * session alone (`provider-key-seal.ts`). A write changes its own slot
- * there by a compare-and-set on the row's version, reading it again where
- * another writer moved it first, and then sends the policy every standing
- * slot composes, in the slots' declared order, so a write never drops what
- * another part of the session still needs; with nothing standing, the
- * policy is the open internet. An entry withdrawn leaves the row at once,
- * and the row goes with its last entry. A renewal (`renew`, the sweep's for
- * a ChatGPT plan's token) changes a slot only where it still stands, so it
- * never sets back an entry a withdraw or a clear took off, and writes
- * nothing where it finds nothing new.
+ * policy reads back with every header value redacted, so a write never
+ * reads what stands and keeps it: each composes the session's whole policy
+ * from its sources at the moment of writing and sends it whole. A writer
+ * gathers what it carries itself (`FirewallSources`): the agent's
+ * repository credential, minted afresh, and a clone's read token for that
+ * run alone. The one source no writer can gather again is a runner's
+ * launch: the placeholders it minted are in its runner's environment
+ * alone, and its bearer's bytes nowhere once its digest is kept, so the
+ * launch's swaps (`LAUNCH_SWAP`) are kept for its session
+ * (`sandbox-firewall-store.ts`), one row per sandbox session under the
+ * account whose agent the session is, sealed under the deployment's key
+ * ring for that account and session alone (`provider-key-seal.ts`), and
+ * every write sends them beside what it gathered. A launch keeps them before
+ * it writes, a stop's clear deletes them, and nothing
+ * else changes them but the sweep's renewal of a ChatGPT plan's token
+ * (`renew`), which writes over the row as it stands, the last write
+ * winning. With nothing to carry, the policy is the open internet.
  *
- * Two writes at once from two functions (a message's renewal, a Terminal's,
- * a runner's end) may land at Vercel in either order, and whichever lands
- * last would stand. So a writer reads the row's version again once its send
- * is done, and where the row moved on, sends what stands now itself, until
- * what it sent is what stands: whichever send lands last, its writer finds
- * the row as it left it, or sends the latest. A clear, made ahead of a
- * stop, deletes the session's rows and sends the open internet, reading
- * nothing. Note that a write racing a clear lands as a write after it, the
- * row and the policy both its own, as a renewal racing a stop landed before
- * this record; whether to write is the caller's to read, as it was.
+ * Two writers that compose from the same sources send the same policy, so
+ * whichever lands last is right; a GitHub credential minted twice is two
+ * tokens of the same reach. Note that this holds only while the sources
+ * stand still between a writer's read and its send: a writer that read the
+ * launch before a relaunch kept its own, or before a clear let it go, may
+ * land after them and send what
+ * it read until the session's next write; a renewal that read a launch before a relaunch replaced it writes
+ * the ended launch's swaps over the new runner's, which every later write
+ * sends until the next launch keeps its own; one that read the plan's swap
+ * before a renewal sends the token it read, which still has the renewal's
+ * margin left; and a clone's token
+ * stands only in its own writes, so another writer landing during a clone
+ * takes it off, though the clone goes on under the agent's own credential
+ * that writer carries, minted afresh, which reaches every repository the
+ * agent clones. A clear is made ahead of a stop, so whether to write is the
+ * caller's to read. Every send reaches the session through its sandbox's
+ * name (`VercelSandboxApi`'s `session`), so a write to a session its sandbox
+ * no longer runs is refused, as Vercel refuses one to a session gone.
  *
  * A placeholder swap is how a secret leaves the sandbox: the process that
  * needs it is handed a random placeholder minted for its launch
@@ -38,8 +46,8 @@
  * The firewall acts for every process in the sandbox, so the match on the
  * placeholder is what keeps the swap to the processes that can read it.
  *
- * A record that could not be kept, or a deployment with no key ring to seal
- * it under, fails the write as the policy write unavailable
+ * A launch that could not be kept or read, or a deployment with no key ring
+ * to seal it under, fails the write as the policy write unavailable
  * (`SandboxUnavailable`), as Vercel's own refusal does; what fails names no
  * value, and nothing here logs one.
  */
@@ -47,6 +55,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
+  type FirewallOwner,
   type KeyRing,
   openFirewallEntries,
   parseKeyRing,
@@ -54,8 +63,9 @@ import {
 } from "@repo/database/models/provider-key-seal";
 import {
   clearStandingFirewall,
-  readStandingFirewall,
-  replaceStandingFirewall,
+  keepFirewallLaunch,
+  readFirewallLaunch,
+  renewFirewallLaunch,
 } from "@repo/database/models/sandbox-firewall-store";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
@@ -67,49 +77,32 @@ import {
   OPEN_INTERNET_POLICY,
   SANDBOX_CALL,
   SandboxUnavailable,
+  type SessionRef,
   type VercelSandboxApi,
 } from "./vercel-sandbox-api.js";
 
 /**
- * The parts of a session that each set one credential at its firewall, in
- * the order the policy composes them: a write to one slot never drops
- * another's.
+ * The credentials a runner's launch holds at the firewall behind its
+ * placeholders, each its runner's alone, in the order the policy composes
+ * them after what its writer gathered.
  */
-export const FIREWALL_SLOT = {
-  /** The agent's repository credential: an installation token on GitHub's two hosts, or a member's own on its repository's paths alone. */
-  GITHUB: "github",
-  /** A clone's or a fetch's read token, on the repository's git endpoint alone, for that run alone. */
-  GITHUB_CLONE: "github-clone",
+export const LAUNCH_SWAP = {
   /** The Claude Code CLI's credential, swapped in on Anthropic's API for its launch's placeholder. */
   CLAUDE: "claude",
   /** The runner's bearer, swapped in on our deployment's host for the placeholder its launch holds (`./coder-host/runner-sessions.ts`). */
   RUNNER: "runner",
-  /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API, for that launch alone. */
+  /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API. */
   OPENAI_KEY: "openai-key",
-  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on OpenAI's API and renewed by the sweep while it stands. */
+  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on the plan's backend (OpenAI's API, or Codex's ChatGPT backend) and renewed by the sweep while it stands. */
   OPENAI_PLAN: "openai-plan",
 } as const;
 
-export type FirewallSlot = (typeof FIREWALL_SLOT)[keyof typeof FIREWALL_SLOT];
+export type LaunchSwapKind = (typeof LAUNCH_SWAP)[keyof typeof LAUNCH_SWAP];
 
-/** The slots a runner's launch sets and its end takes off a place left up: each a credential its runner alone sends. */
-export const RUNNER_SLOTS: readonly FirewallSlot[] = [
-  FIREWALL_SLOT.CLAUDE,
-  FIREWALL_SLOT.RUNNER,
-  FIREWALL_SLOT.OPENAI_KEY,
-  FIREWALL_SLOT.OPENAI_PLAN,
-];
+const SWAP_ORDER: readonly LaunchSwapKind[] = Object.values(LAUNCH_SWAP);
 
-const SLOT_ORDER: readonly FirewallSlot[] = Object.values(FIREWALL_SLOT);
-
-const FIREWALL_BOUNDS = {
-  /** How many times a write reads the row again where another writer moved it first. */
-  WRITE_ATTEMPTS: 8,
-  /** How many times a writer sends what stands again where the row moved on during its send. */
-  SETTLE_ROUNDS: 4,
-  /** The random bytes a placeholder is minted from. */
-  PLACEHOLDER_BYTES: 32,
-} as const;
+/** The random bytes a placeholder is minted from. */
+const PLACEHOLDER_BYTES = 32;
 
 /** The host every policy that carries a credential leaves open, ahead of the hosts its rules name. */
 const EVERY_HOST = "*";
@@ -132,68 +125,80 @@ export interface FirewallEntry {
   readonly rules: Redacted.Redacted<readonly HostRules[]>;
 }
 
-/** Whose sandbox session a write is to: the account whose agent it is, which every read of its record is scoped to, and the session. */
-export interface FirewallSession {
-  readonly userId: string;
-  readonly sandboxSessionId: string;
+/** Whose sandbox session a write is to: the account whose agent it is, which every read of its launch is scoped to, the sandbox by its name, and the session. */
+export interface FirewallSession extends FirewallOwner {
+  readonly name: string;
+}
+
+/**
+ * What a write carries of its writer's own, gathered as it writes: the
+ * agent's repository credential, minted afresh, and a clone's or a fetch's
+ * read token for that run alone; each left out where it is not to stand.
+ */
+export interface FirewallSources {
+  readonly github?: RepositoryCredential | undefined;
+  readonly clone?: RepositoryCredential | undefined;
+}
+
+/** A launch's swaps, by the credential each holds. */
+export type LaunchSwaps = ReadonlyMap<LaunchSwapKind, FirewallEntry>;
+
+/** What a launch keeps for its session: the agent it runs, whose repository credential a write made apart from it mints, and its swaps. */
+export interface FirewallLaunch {
+  readonly agentId: string;
+  readonly swaps: LaunchSwaps;
+}
+
+/** A launch as its session's row holds it: the agent and its swaps. */
+export interface KeptLaunch {
+  readonly agentId: string;
+  readonly swaps: LaunchSwaps;
 }
 
 /**
  * A secret swapped in at the firewall for a placeholder: on requests to
- * `domain` whose `header`, named in lower case, is the placeholder's whole
- * value (a scheme ahead of it included, as `Bearer <placeholder>`), the
- * header is set to `value`, whole as well.
+ * `domain`, under `path` alone where one is named, whose `header`, named in
+ * lower case, is the placeholder's whole value (a scheme ahead of it
+ * included, as `Bearer <placeholder>`), the header is set to `value`, whole
+ * as well.
  */
 export interface PlaceholderSwap {
   readonly domain: string;
+  readonly path?: { readonly startsWith: string };
   readonly header: string;
   readonly placeholder: Redacted.Redacted;
   readonly value: Redacted.Redacted;
 }
 
-/** The entries standing at a session's firewall, by slot. */
-type Standing = ReadonlyMap<FirewallSlot, FirewallEntry>;
-
-/** What a write leaves in its slot: an entry, or none to take it off; nothing at all to leave the slot, and the record, as they stand. */
-type SlotChange = Option.Option<FirewallEntry | undefined>;
-
-/** The record as a writer read it: the version it stood at, none where no row stood, and its entries. */
-interface ReadRecord {
-  readonly version: string | undefined;
-  readonly entries: Standing;
-}
-
 export interface SandboxFirewall {
-  /** The entry set in its slot at the session's firewall, in place of the one standing there, and the whole policy sent. */
-  readonly set: (
+  /** The session's whole policy composed from the sources given and the swaps of the launch kept for it, and sent. */
+  readonly write: (
     session: FirewallSession,
-    slot: FirewallSlot,
-    entry: FirewallEntry,
+    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** The slot's entry taken off the session's firewall, and what still stands sent. */
-  readonly withdraw: (
+  /** A launch's swaps kept for the session in place of an earlier launch's, so every write from here on sends them; nothing is sent. */
+  readonly keepLaunch: (
     session: FirewallSession,
-    slot: FirewallSlot,
+    launch: FirewallLaunch,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** Every entry taken off the session's firewall ahead of its stop, which is left the open internet, its record deleted. */
-  readonly clear: (
-    sandboxSessionId: string,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** The slots standing at the session's firewall, as its record holds them; none where no record stands. */
-  readonly standing: (
-    session: FirewallSession,
-  ) => Effect.Effect<ReadonlySet<FirewallSlot>, SandboxUnavailable, DatabaseServices>;
+  /** The launch kept for the account's session; none where none is. Note that the read is the store's alone, so it names no sandbox. */
+  readonly launchOf: (
+    owner: FirewallOwner,
+  ) => Effect.Effect<KeptLaunch | undefined, SandboxUnavailable, DatabaseServices>;
   /**
-   * The slot's entry renewed where it still stands: `renewal` is handed what
-   * stands and answers what stands in its place, or none to leave it; a slot
-   * that stands no longer is left alone, so a renewal never sets back what a
-   * withdraw or a clear took off. Answers whether it wrote.
+   * The swap given set in place of the launch's own of its kind, the swaps
+   * written over the session's row as it stands, the last write winning, and
+   * the policy sent with the sources given.
    */
-  readonly renew: <R>(
+  readonly renew: (
     session: FirewallSession,
-    slot: FirewallSlot,
-    renewal: (standing: FirewallEntry) => Effect.Effect<FirewallEntry | undefined, never, R>,
-  ) => Effect.Effect<boolean, SandboxUnavailable, DatabaseServices | R>;
+    launch: KeptLaunch,
+    kind: LaunchSwapKind,
+    entry: FirewallEntry,
+    sources: FirewallSources,
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  /** The launch kept for the session deleted ahead of its stop, so no renewal writes to it again; the policy stands as it was, until the sandbox stops. */
+  readonly clear: (session: SessionRef) => Effect.Effect<void, never, DatabaseServices>;
 }
 
 const PathMatchSchema = Schema.Union([
@@ -218,8 +223,8 @@ const RuleSchema = Schema.Struct({
   transform: Schema.Array(Schema.Struct({ headers: Schema.Record(Schema.String, Schema.String) })),
 });
 
-/** The standing entries as their seal holds them: each slot's rules, host by host. */
-const SealedStandingSchema = Schema.fromJsonString(
+/** A launch's swaps as their seal holds them: each kind's rules, host by host. */
+const SealedSwapsSchema = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
       slot: Schema.String,
@@ -228,8 +233,11 @@ const SealedStandingSchema = Schema.fromJsonString(
   ),
 );
 
-const encodeStanding = Schema.encodeSync(SealedStandingSchema);
-const decodeStanding = Schema.decodeUnknownResult(SealedStandingSchema);
+const encodeSwaps = Schema.encodeSync(SealedSwapsSchema);
+const decodeSwaps = Schema.decodeUnknownResult(SealedSwapsSchema);
+
+/** No launch's swaps. */
+const NO_SWAPS: LaunchSwaps = new Map();
 
 /** The policy write unavailable, in words naming no value. */
 function unkept(detail: string): SandboxUnavailable {
@@ -264,7 +272,7 @@ function gitBasic(token: Redacted.Redacted, access: GitHubTokenAccess): string {
 
 /**
  * The repository's credential at the firewall. An installation token is set
- * on GitHub's two hosts, as eve's own `authenticateGitHub` sets it. A
+ * on GitHub's two hosts. A
  * member's own classic token is set on the one repository's paths alone,
  * and nothing on any other path of GitHub's, GraphQL and every other
  * repository among them: git over HTTPS takes the member's login and the
@@ -276,7 +284,7 @@ function gitBasic(token: Redacted.Redacted, access: GitHubTokenAccess): string {
  * under it, never the name as a prefix, so `owner/name-other` carries
  * nothing.
  */
-export function githubEntry(credential: RepositoryCredential): FirewallEntry {
+function githubEntry(credential: RepositoryCredential): FirewallEntry {
   const { token, fullName, access } = credential;
   if (access.kind !== GITHUB_ACCESS.TOKEN) {
     const basic = gitBasic(token, access);
@@ -304,11 +312,7 @@ export function githubEntry(credential: RepositoryCredential): FirewallEntry {
  * a neighboring repository, or for the repository's pages outside git,
  * carries nothing.
  */
-export function cloneEntry(
-  fullName: string,
-  token: Redacted.Redacted,
-  access: GitHubTokenAccess,
-): FirewallEntry {
+function cloneEntry({ fullName, token, access }: RepositoryCredential): FirewallEntry {
   return entryOf([
     [GITHUB_HOST.GIT, [authorizing(gitBasic(token, access), { startsWith: `/${fullName}.git/` })]],
   ]);
@@ -325,7 +329,10 @@ export function placeholderSwap(swap: PlaceholderSwap): FirewallEntry {
       swap.domain,
       [
         {
-          match: { headers: [placeholder] },
+          match: {
+            ...(swap.path === undefined ? undefined : { path: swap.path }),
+            headers: [placeholder],
+          },
           transform: [{ headers: { [swap.header]: Redacted.value(swap.value) } }],
         },
       ],
@@ -370,19 +377,24 @@ export function renewedSwap(
 
 /** A placeholder minted for one launch: random, and named nowhere but where its process reads it. */
 export function newPlaceholder(): Redacted.Redacted {
-  return Redacted.make(randomBytes(FIREWALL_BOUNDS.PLACEHOLDER_BYTES).toString("base64url"));
+  return Redacted.make(randomBytes(PLACEHOLDER_BYTES).toString("base64url"));
 }
 
 /**
- * The whole policy the standing entries compose: the open internet with
- * none; otherwise every host left open, and on each host an entry names,
- * its rules in the slots' declared order.
+ * The whole policy the sources and the launch's swaps compose: the open
+ * internet with none; otherwise every host left open, and on each host a
+ * credential names, its rules in order, the repository's credential first,
+ * then the clone's, then the swaps in their declared order.
  */
-export function composePolicy(standing: Standing): NetworkPolicy {
-  const entries = SLOT_ORDER.flatMap((slot) => {
-    const entry = standing.get(slot);
-    return entry === undefined ? [] : [entry];
-  });
+export function composePolicy(sources: FirewallSources, swaps: LaunchSwaps): NetworkPolicy {
+  const entries = [
+    ...(sources.github === undefined ? [] : [githubEntry(sources.github)]),
+    ...(sources.clone === undefined ? [] : [cloneEntry(sources.clone)]),
+    ...SWAP_ORDER.flatMap((kind) => {
+      const entry = swaps.get(kind);
+      return entry === undefined ? [] : [entry];
+    }),
+  ];
   if (entries.length === 0) return OPEN_INTERNET_POLICY;
   const allow = new Map<string, readonly NetworkRule[]>([[EVERY_HOST, []]]);
   for (const entry of entries) {
@@ -393,30 +405,24 @@ export function composePolicy(standing: Standing): NetworkPolicy {
   return { allow: Object.fromEntries(allow) };
 }
 
-/** The entries with the slot's set to the entry given, or taken off for none. */
-function withSlot(standing: Standing, slot: FirewallSlot, entry: FirewallEntry | undefined) {
-  const next = new Map(standing);
-  if (entry === undefined) next.delete(slot);
-  else next.set(slot, entry);
-  return next;
+/** The swaps sealed for the session's row. */
+function sealed(ring: KeyRing, session: FirewallOwner, swaps: LaunchSwaps): string {
+  const kinds = [...swaps].map(([slot, entry]) => ({ slot, rules: Redacted.value(entry.rules) }));
+  return sealFirewallEntries(ring, session, Redacted.make(encodeSwaps(kinds)));
 }
 
-/** The entries sealed for the session's row. */
-function sealed(ring: KeyRing, session: FirewallSession, standing: Standing): string {
-  const slots = [...standing].map(([slot, entry]) => ({
-    slot,
-    rules: Redacted.value(entry.rules),
-  }));
-  return sealFirewallEntries(ring, session, Redacted.make(encodeStanding(slots)));
-}
-
-/** The entries a row seals, opened; none where it does not open for the session or holds no entries this service knows. */
-function opened(ring: KeyRing, session: FirewallSession, column: string): Standing | undefined {
+/**
+ * The swaps a row seals, opened; none where it does not open for the
+ * session. A kind this service does not know is passed over, so a row
+ * sealed when each writer kept its own credential there opens as its
+ * launch's swaps alone.
+ */
+function opened(ring: KeyRing, session: FirewallOwner, column: string): LaunchSwaps | undefined {
   const secret = openFirewallEntries(ring, session, column);
   if (Result.isFailure(secret)) return undefined;
-  const read = decodeStanding(Redacted.value(secret.success));
+  const read = decodeSwaps(Redacted.value(secret.success));
   if (Result.isFailure(read)) return undefined;
-  const known = (slot: string): slot is FirewallSlot => SLOT_ORDER.some((each) => each === slot);
+  const known = (kind: string): kind is LaunchSwapKind => SWAP_ORDER.some((each) => each === kind);
   return new Map(
     read.success.flatMap(({ slot, rules }) =>
       known(slot) ? [[slot, entryOf(rules)] as const] : [],
@@ -424,133 +430,85 @@ function opened(ring: KeyRing, session: FirewallSession, column: string): Standi
   );
 }
 
-/** The deployment's key ring the record is sealed under; the write unavailable where it has none. */
+/** The deployment's key ring a launch is sealed under; the write unavailable where it has none. */
 const keyRing = Effect.gen(function* () {
   const environment = yield* Effect.serviceOption(HostedEnvironment);
   const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
   const parsed = ring === undefined ? undefined : parseKeyRing(ring);
   if (parsed === undefined || Result.isFailure(parsed)) {
-    return yield* unkept("the deployment has no key ring to seal the firewall's record under");
+    return yield* unkept("the deployment has no key ring to seal the firewall's launch under");
   }
   return parsed.success;
 });
 
-/** The session's record as it stands, opened; a row that will not open reads as nothing standing, which the next write replaces. */
-const readRecord = (ring: KeyRing, session: FirewallSession) =>
+/** The launch kept for the account's session, opened; a row that will not open reads as none, which the next launch replaces. */
+const launchKept = (session: FirewallOwner) =>
   Effect.gen(function* () {
-    const row = yield* readStandingFirewall(session);
-    if (row === undefined) return { version: undefined, entries: new Map() } satisfies ReadRecord;
-    const entries = opened(ring, session, row.sealedEntries);
-    if (entries === undefined) {
-      yield* Effect.logWarning("a sandbox firewall's record would not open, and is written anew");
+    const row = yield* readFirewallLaunch(session);
+    if (row === undefined) return undefined;
+    const swaps = opened(yield* keyRing, session, row.sealedEntries);
+    if (swaps === undefined) {
+      yield* Effect.logWarning("a sandbox firewall's launch would not open, and is sent as none");
+      return undefined;
     }
-    return { version: row.version, entries: entries ?? new Map() } satisfies ReadRecord;
+    return { agentId: row.agentId, swaps } satisfies KeptLaunch;
   });
 
-/** The firewall over the API given: every write through the session's record, and its policy composed whole. */
+/** A store failure as the policy write unavailable, in words naming no value. */
+const storeUnavailable = (detail: string) =>
+  Effect.mapError((failure: SandboxUnavailable | { readonly _tag: string }) =>
+    failure instanceof SandboxUnavailable ? failure : unkept(detail),
+  );
+
+/** The firewall over the API given: every write composed whole from its sources and the launch kept for its session. */
 export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
-  /**
-   * The slot changed in the session's record as `next` decides on what
-   * stands there, read again for as long as another writer moves it first:
-   * what stands after, at the version this write minted; none where `next`
-   * leaves the slot as it stands, which writes and sends nothing.
-   */
-  const written = <R>(
-    ring: KeyRing,
-    session: FirewallSession,
-    slot: FirewallSlot,
-    next: (standing: FirewallEntry | undefined) => Effect.Effect<SlotChange, never, R>,
-  ) =>
-    Effect.gen(function* () {
-      for (let attempt = 0; attempt < FIREWALL_BOUNDS.WRITE_ATTEMPTS; attempt += 1) {
-        const standing = yield* readRecord(ring, session);
-        const decided = yield* next(standing.entries.get(slot));
-        if (Option.isNone(decided)) return undefined;
-        const entries = withSlot(standing.entries, slot, decided.value);
-        const row =
-          entries.size === 0
-            ? undefined
-            : { version: randomUUID(), sealedEntries: sealed(ring, session, entries) };
-        const now = yield* DateTime.nowAsDate;
-        if (yield* replaceStandingFirewall(session, standing.version, row, now)) {
-          return { version: row?.version, entries } satisfies ReadRecord;
-        }
-      }
-      return yield* unkept("the firewall's record kept moving under this write");
-    });
-
-  /** What the write left sent, and sent again for as long as the record moved on during the send, so the policy standing is the record's latest. */
-  const settled = (ring: KeyRing, session: FirewallSession, wrote: ReadRecord) =>
-    Effect.gen(function* () {
-      let sent = wrote;
-      yield* api.updateNetworkPolicy(session.sandboxSessionId, composePolicy(sent.entries));
-      for (let round = 0; round < FIREWALL_BOUNDS.SETTLE_ROUNDS; round += 1) {
-        const standing = yield* readRecord(ring, session);
-        if (standing.version === sent.version) return;
-        sent = standing;
-        yield* api.updateNetworkPolicy(session.sandboxSessionId, composePolicy(sent.entries));
-      }
-      yield* Effect.logWarning(
-        "a sandbox firewall's record moved on through every resend; its next write sends what stands",
-      );
-    });
-
-  /**
-   * The slot changed as `next` decides, and the whole policy sent; nothing
-   * written or sent where it left the slot as it stands. Answers whether it
-   * wrote; a record the store could not keep is the write unavailable.
-   */
-  const change = <R>(
-    session: FirewallSession,
-    slot: FirewallSlot,
-    next: (standing: FirewallEntry | undefined) => Effect.Effect<SlotChange, never, R>,
-  ) =>
-    Effect.gen(function* () {
-      const ring = yield* keyRing;
-      const wrote = yield* written(ring, session, slot, next);
-      if (wrote === undefined) return false;
-      yield* settled(ring, session, wrote);
-      return true;
-    }).pipe(
-      Effect.mapError((failure) =>
-        failure instanceof SandboxUnavailable
-          ? failure
-          : unkept("the firewall's record could not be kept"),
-      ),
+  /** The policy given sent to the session, looked up by its sandbox's name for this one write. */
+  const policySent = (session: SessionRef, policy: NetworkPolicy) =>
+    Effect.flatMap(api.session(session), (running) => running.updateNetworkPolicy(policy));
+  const sent = (session: FirewallSession, sources: FirewallSources, swaps: LaunchSwaps) =>
+    policySent(
+      { name: session.name, sessionId: session.sandboxSessionId },
+      composePolicy(sources, swaps),
     );
 
   return {
-    set: (session, slot, entry) =>
-      Effect.asVoid(change(session, slot, () => Effect.succeed(Option.some(entry)))),
-    // Note that a withdraw writes and sends even where its slot stands no longer, so one made again after a send
-    // that failed sends what stands.
-    withdraw: (session, slot) =>
-      Effect.asVoid(change(session, slot, () => Effect.succeed(Option.some(undefined)))),
-    standing: (session) =>
+    write: (session, sources) =>
       Effect.gen(function* () {
-        const record = yield* readRecord(yield* keyRing, session);
-        return new Set(record.entries.keys());
-      }).pipe(
-        Effect.mapError((failure) =>
-          failure instanceof SandboxUnavailable
-            ? failure
-            : unkept("the firewall's record could not be read"),
-        ),
-      ),
-    renew: (session, slot, renewal) =>
-      change(session, slot, (standing) =>
-        standing === undefined
-          ? Effect.succeed(Option.none())
-          : Effect.map(renewal(standing), Option.fromUndefinedOr),
-      ),
-    // Note that a record that would not go is logged and the open internet sent anyway, because the
-    // stop it goes ahead of must not wait on the store, and the sweep drops the row once its session is gone.
-    clear: (sandboxSessionId) =>
-      Effect.andThen(
-        clearStandingFirewall(sandboxSessionId).pipe(
-          Effect.catch(() => Effect.logWarning("a sandbox firewall's record was not deleted")),
-        ),
-        api.updateNetworkPolicy(sandboxSessionId, OPEN_INTERNET_POLICY),
+        const launch = yield* launchKept(session).pipe(
+          storeUnavailable("the firewall's launch could not be read"),
+        );
+        yield* sent(session, sources, launch?.swaps ?? NO_SWAPS);
+      }),
+    keepLaunch: (session, launch) =>
+      Effect.gen(function* () {
+        const ring = yield* keyRing;
+        yield* keepFirewallLaunch(
+          session,
+          {
+            version: randomUUID(),
+            agentId: launch.agentId,
+            sealedEntries: sealed(ring, session, launch.swaps),
+          },
+          yield* DateTime.nowAsDate,
+        );
+      }).pipe(storeUnavailable("the firewall's launch could not be kept")),
+    launchOf: (session) =>
+      launchKept(session).pipe(storeUnavailable("the firewall's launch could not be read")),
+    renew: (session, launch, kind, entry, sources) =>
+      Effect.gen(function* () {
+        const swaps = new Map(launch.swaps).set(kind, entry);
+        yield* renewFirewallLaunch(
+          session,
+          sealed(yield* keyRing, session, swaps),
+          yield* DateTime.nowAsDate,
+        ).pipe(storeUnavailable("the firewall's launch could not be renewed"));
+        yield* sent(session, sources, swaps);
+      }),
+    // Note that a launch that would not go is logged and passed over, because the stop it goes ahead of
+    // must not wait on the store, and the sweep drops the row once its session is gone.
+    clear: (session) =>
+      clearStandingFirewall(session.sessionId).pipe(
+        Effect.catch(() => Effect.logWarning("a sandbox firewall's launch was not deleted")),
       ),
   };
 }

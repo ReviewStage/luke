@@ -1,3 +1,5 @@
+import { CLI_RELEASE } from "@repo/features/cli-release";
+import { workingAgentCount } from "@repo/features/tasks-view";
 import { AgentNoticeDoors, type AgentNotices } from "@repo/host/agent-notices";
 import {
   AppStateStore,
@@ -30,8 +32,8 @@ import {
 } from "@repo/host/quit";
 import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
 import type { ColorCode } from "@repo/host/task-code-remote";
-import { NO_EXPERIMENTS } from "@repo/settings";
-import { Context, Effect, Layer } from "effect";
+import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
+import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { moveToApplications } from "../move-to-applications";
@@ -52,6 +54,21 @@ import {
 } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
+
+/**
+ * Every capability the desktop answers itself, but Install command-line tool
+ * in a live run before this build names a release of the command
+ * (`CLI_RELEASE`): until then the install script has none to install, so the
+ * row offers the npm command alone, as a browser tab does. Note that a
+ * fixture run keeps it, because its settings fixture answers the install
+ * with a staged one rather than running the script.
+ */
+function desktopClientCapabilities(fixtureMode: boolean) {
+  return ALL_CLIENT_CAPABILITIES.filter(
+    (capability) =>
+      capability !== HOST_CAPABILITY.CLI_INSTALL || fixtureMode || CLI_RELEASE !== undefined,
+  );
+}
 
 /**
  * The composition, as the bridge registration reads it. The keychain and the
@@ -98,6 +115,8 @@ export interface DesktopServices {
   readonly unsavedWork: UnsavedWorkHolders<WebContents>;
   /** Which commands each panel offers the menu bar, as each tells it. */
   readonly menuOffers: MenuOffers;
+  /** Whether the machine has a network, as any window tells it. */
+  readonly tellOnline: (online: boolean) => void;
   /**
    * Asks before a way out of the app while something would be lost, answering
    * whether to go on: the one sheet the quit, Restart to update, and Sign
@@ -213,7 +232,7 @@ export function composeDesktop(
           config,
           updateEngine !== undefined,
           // The desktop answers every capability a client can, beside the concerns its host runs.
-          hostCapabilities(host.concerns, ALL_CLIENT_CAPABILITIES),
+          hostCapabilities(host.concerns, desktopClientCapabilities(config.launch.fixtureMode)),
         ),
         services,
       );
@@ -223,6 +242,7 @@ export function composeDesktop(
       const operator = yield* createOperatorClient({
         report: config.report,
         gateway: host.gateway,
+        acts: host.acts,
         nodes: host.nodes,
         node: native.capabilities,
         state,
@@ -234,6 +254,7 @@ export function composeDesktop(
         recordEvent: (name, properties) => {
           void run(operator.host.recordEvent(name, properties));
         },
+        workingAgents: () => workingAgentCount(state.snapshot().tasks),
       });
       const windows = createWindowService({
         config,
@@ -299,11 +320,14 @@ export function composeDesktop(
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
+      // The network as main reads it once at launch, then as its windows tell it,
+      // since Electron announces no change of it to the main process.
+      const online = yield* SubscriptionRef.make(net.isOnline());
       // A run that sends nothing, a fixture's or a capture's, is never offline.
       if (config.runMode.sendsNetwork) {
         yield* linkNetworkWatch({
           state,
-          isOnline: () => net.isOnline(),
+          online: SubscriptionRef.changes(online),
           regained: operator.host.tasksRegained(),
           report: config.report,
         });
@@ -336,6 +360,7 @@ export function composeDesktop(
         services,
         unsavedWork,
         menuOffers: offers,
+        tellOnline: (found) => void run(SubscriptionRef.set(online, found)),
         askBeforeLeaving: askFirst,
       };
     }),

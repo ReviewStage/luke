@@ -55,22 +55,39 @@ export function undoneRename(statement: string): string {
 /** The migration that names the agent's tables `agent…`, which a test of an earlier migration walks back first. */
 export const RENAME_AGENT_TABLES = "20261029021951_agent_tables_rename";
 
-/**
- * The agent tables' rename walked back and its renames run forward again: a
- * test that stands the database before an earlier migration, spelled in the
- * old names, runs `back` first and `forward` before it reads with today's
- * schema.
- */
-export function agentTablesRename(): Effect.Effect<{
+/** The migration that names the task's document its description, which a test of an earlier migration walks back first, before the agent tables'. */
+const RENAME_DESCRIPTION = "20261106055235_description_rename";
+
+/** A migration's renames walked back and run forward again: `back` undoes them last first, and `forward` runs them as the migration did. */
+function renamesOf(migration: string): Effect.Effect<{
   readonly back: readonly string[];
   readonly forward: readonly string[];
 }> {
-  return Effect.map(migrationStatements(RENAME_AGENT_TABLES), (statements) => {
+  return Effect.map(migrationStatements(migration), (statements) => {
     const forward = replayable(statements).filter((statement) =>
       /^ALTER (TABLE|INDEX) "[^"]+" RENAME /u.test(statement),
     );
     return { back: [...forward].reverse().map(undoneRename), forward };
   });
+}
+
+/**
+ * The renames since: the agent tables' and the description's, the later,
+ * walked back and their renames run forward again: a test that stands the
+ * database before an earlier migration, spelled in the old names, runs
+ * `back` first and `forward` before it reads with today's schema.
+ */
+export function laterRenames(): Effect.Effect<{
+  readonly back: readonly string[];
+  readonly forward: readonly string[];
+}> {
+  return Effect.map(
+    Effect.all([renamesOf(RENAME_AGENT_TABLES), renamesOf(RENAME_DESCRIPTION)]),
+    ([agentTables, description]) => ({
+      back: [...description.back, ...agentTables.back],
+      forward: [...agentTables.forward, ...description.forward],
+    }),
+  );
 }
 
 /** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), the cut features' (`drop_retired_storage`), and the operator's (`operator_drop`). */

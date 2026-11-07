@@ -162,9 +162,7 @@ answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for an
-agent's turn, whose one turn is its whole run). It also starts due automation runs, and for agents on a member's GitHub
-token it reads their open pull requests' reviews, comments, and checks on that
-token and wakes the agent with them, as the webhook does for the App.
+agent's turn, whose one turn is its whole run). It also starts due automation runs.
 
 ## Testing
 

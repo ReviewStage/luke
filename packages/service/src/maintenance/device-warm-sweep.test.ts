@@ -20,8 +20,8 @@ import { noNetwork } from "@repo/wire/testing";
 import { DateTime, Deferred, Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { EVE_SEND_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { MAC_MACHINE } from "../agents/machine/device-machine.js";
+import { SESSION_SEND_OUTCOME } from "../agents/sessions/agent-sessions.js";
 import { clockWatch, Sync, type SyncShape } from "../sync/watch.js";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import {
@@ -151,7 +151,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           );
           yield* swept;
 
-          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           // The runner that may end itself at its idle cap is written nothing but its end.
           assert.deepEqual(yield* linesWaiting(late), [
             DEVICE_AGENT_LINE_KIND.STOP,
@@ -187,7 +187,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           yield* driven(sweep, MAC_MACHINE.POLL);
           const sent = yield* driven(send, MAC_MACHINE.POLL);
 
-          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           assert.deepEqual(yield* linesWaiting(raced), [
             RETIRE_LINE,
             DEVICE_AGENT_LINE_KIND.STOP,

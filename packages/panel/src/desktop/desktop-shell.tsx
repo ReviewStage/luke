@@ -8,7 +8,9 @@ import {
   BACK_BUTTON_LOOK,
   BackButton,
   COLLECTION_STATE,
+  CORNER_DOT_TONE,
   CollectionPage,
+  CornerDot,
   DrawerScrim,
   IconButton,
   NOT_FOUND_THING,
@@ -29,16 +31,26 @@ import {
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Outlet } from "@tanstack/react-router";
+import {
+  Activity,
+  createContext,
+  type RefObject,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
 import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
+import { NewWorkspaceSteps } from "../onboarding/new-workspace-steps.js";
 import { SETUP_GATE } from "../onboarding/setup-model.js";
 import { SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -49,12 +61,13 @@ import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-place.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  type TasksControl,
-} from "../tasks/use-tasks-tab.js";
-import { useAdminAccess, useAdminAccessPending, useCapability } from "../use-app-state.js";
+  appStateQuery,
+  selectAdminAccess,
+  selectAdminAccessPending,
+  selectCapability,
+} from "../use-app-state.js";
 import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
@@ -72,39 +85,19 @@ import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark } from "./offline-mark.js";
-import { ADMIN_PLACE, PERSON_PAGE, TASKS_ROUTE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
+import { useInboxWaiting } from "./places-waiting.js";
 import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
+import { TasksPagesHeld } from "./tasks-page-held.js";
 import { useWindowTitle } from "./window-title.js";
-
-/**
- * Settings, loaded as a chunk of its own the first time it opens rather than
- * with the window, because the renderer bundle is parsed at every window
- * open, and Settings is opened seldom. The chunk is a local file, so it stands a frame
- * later, over its frame of placeholders in the meantime (`SettingsLoading`).
- */
-const SETTINGS_ROUTE = lazyRoute(() =>
-  import("./desktop-settings.js").then((loaded) => loaded.DesktopSettings),
-);
-
-/**
- * The Automations pages, loaded as a chunk of their own the first time
- * they open, as Settings is and for the same reason: the renderer bundle is
- * parsed at every window open, and the pages, their editor and its triggers
- * among them, are opened seldom. What stands while
- * the chunk loads is the pages' own empty frame, for a frame.
- */
-const AUTOMATIONS_ROUTE = lazyRoute(() =>
-  import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
-);
 
 /** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
@@ -169,7 +162,7 @@ function PersonLoading({
 const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
-const HISTORY_EXIT_PLACE = "plan";
+const HISTORY_EXIT_PLACE = "description";
 
 /** What a phone's row is named for over a workspace's address that names none of the reader's. */
 const UNKNOWN_WORKSPACE_PHONE_PLACE = "unknown-workspace";
@@ -392,15 +385,34 @@ export interface DesktopGates {
  * takes their place at the window's edge (`window-full-screen.ts`). It
  * stands only where there is a sidebar to fold, so it offers the chord too.
  * A peek is not yet open, so over one it still offers to show the sidebar.
+ * While the sidebar is away, its Inbox row's count is too, so the toggle
+ * wears a dot in the attention tone while anything waits on the developer
+ * (`useInboxWaiting`), and says how many in its name, since the dot is
+ * hidden from a reader; over a peek the row is in view again, so neither.
  */
-function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Element {
+function SidebarToggle({
+  sidebar,
+  tasks,
+}: {
+  sidebar: SidebarCollapse;
+  tasks: TasksControl;
+}): React.JSX.Element {
   const shown = !sidebar.collapsed || sidebar.overlay === SIDEBAR_OVERLAY.OPEN;
   const label = shown ? "Hide sidebar" : "Show sidebar";
+  const away = sidebar.collapsed && sidebar.overlay === SIDEBAR_OVERLAY.CLOSED;
+  const waiting = useInboxWaiting(tasks);
+  const marked = away && waiting > 0;
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
-    <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
-      <IconButton icon={<SidebarIcon />} label={label} onClick={sidebar.onToggle} />
-    </Tooltip>
+    <CornerDot shown={marked} tone={CORNER_DOT_TONE.ATTENTION}>
+      <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
+        <IconButton
+          icon={<SidebarIcon />}
+          label={marked ? `${label}, ${waiting} need you` : label}
+          onClick={sidebar.onToggle}
+        />
+      </Tooltip>
+    </CornerDot>
   );
 }
 
@@ -457,30 +469,34 @@ function found({ element, tag, label, alone }: Holder): HTMLElement | undefined 
 }
 
 /**
- * Hands the keyboard back as Settings is left to the control that held it as
- * Settings opened, where that is still to be found.
- * Note that the control is named as Settings opens, in the render that turns
- * the window over, because by the commit its shell is gone and the keyboard
- * with it; and that it is handed back only from nowhere, since a press that
- * left Settings on a control of its own has put the keyboard where it was
- * meant to go.
+ * The control that held the keyboard as Settings opened, named in the render
+ * that turns the window over, because by the commit the places are gone
+ * and the keyboard with them; it is handed back by the places once they
+ * stand again (`useFocusHandedBack`).
  */
-function useSettingsFocusReturn(inSettings: boolean): void {
+function useSettingsFocusHolder(inSettings: boolean): RefObject<Holder | undefined> {
   const before = useRef<Holder | undefined>(undefined);
   const was = useRef(false);
   if (inSettings && !was.current) before.current = holder();
+  was.current = inSettings;
+  return before;
+}
+
+/**
+ * Hands the keyboard back, as the places stand again once Settings is left,
+ * to the control that held it as Settings opened, where that is still to be
+ * found. Note that it is handed back only from nowhere, since a press that
+ * left Settings on a control of its own has put the keyboard where it was
+ * meant to go, and that it waits on the places drawn, which the router
+ * draws a moment after the window turns from Settings.
+ */
+function useFocusHandedBack(held: RefObject<Holder | undefined>): void {
   useLayoutEffect(() => {
-    if (inSettings) {
-      was.current = true;
-      return;
-    }
-    if (!was.current) return;
-    was.current = false;
-    const back = before.current === undefined ? undefined : found(before.current);
-    before.current = undefined;
+    const back = held.current === undefined ? undefined : found(held.current);
+    held.current = undefined;
     const now = document.activeElement;
     if (now === null || now === document.body) back?.focus({ preventScroll: true });
-  }, [inSettings]);
+  }, [held]);
 }
 
 /**
@@ -506,7 +522,8 @@ function usePlaceCommands(
     APP_COMMAND.NEW_TASK,
     pastGate && tasks.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          // Note that the card stands over whatever place stands, so only Settings, which takes the window, is left for it.
+          if (tab === PANEL_TAB.SETTINGS) onTabChange(PANEL_TAB.TASKS);
           tasks.onNewTask();
         }
       : undefined,
@@ -516,7 +533,7 @@ function usePlaceCommands(
     APP_COMMAND.HOME,
     pastGate && tasks.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          onTabChange(PANEL_TAB.TASKS);
           tasks.onGoHome();
         }
       : undefined,
@@ -525,7 +542,7 @@ function usePlaceCommands(
     APP_COMMAND.INBOX,
     pastGate && tasks.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          onTabChange(PANEL_TAB.TASKS);
           tasks.inboxView.onOpen();
         }
       : undefined,
@@ -534,52 +551,41 @@ function usePlaceCommands(
     APP_COMMAND.TASKS,
     pastGate && tasks.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          onTabChange(PANEL_TAB.TASKS);
           tasks.boardView.onOpen();
         }
       : undefined,
   );
   // The Admin place is an admin's alone, so ⌘K offers it only on the terms its sidebar row stands on.
-  const adminOn = useAdminAccess();
+  const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   useAppCommand(
     APP_COMMAND.ADMIN,
-    pastGate && tasks.signedIn && adminOn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.adminView.onOpen();
-        }
-      : undefined,
+    pastGate && tasks.signedIn && adminOn ? () => tasks.adminView.onOpen() : undefined,
   );
+  // Note that the Automations pages are the router's place, which its navigation stands from wherever the window stands.
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
-    pastGate && tasks.signedIn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.automationsView.onOpen();
-        }
-      : undefined,
+    pastGate && tasks.signedIn ? () => tasks.automationsView.onOpen() : undefined,
   );
   const { onReopenClosedTab } = tasks;
   useAppCommand(
     APP_COMMAND.REOPEN_CLOSED_TAB,
     pastGate && tasks.signedIn && onReopenClosedTab !== undefined
       ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          onTabChange(PANEL_TAB.TASKS);
           onReopenClosedTab();
         }
       : undefined,
   );
   // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktopApp =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
     pastGate && desktopApp
-      ? () => {
-          // Arriving at Settings lands on Account, so the page is turned
-          // after.
-          onTabChange(PANEL_TAB.SETTINGS);
-          settings.onViewChange(SETTINGS_VIEW.SHORTCUTS);
-        }
+      ? // Choosing the page opens Settings on it, one step (`settings-link.ts`).
+        () => settings.onViewChange(SETTINGS_VIEW.SHORTCUTS)
       : undefined,
   );
 }
@@ -619,11 +625,6 @@ function titleSubject(
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
   return { signedIn, subject: shownTask.name, workspace };
-}
-
-/** Where on the Automations page a find stands: its list, a new automation, or one automation's editor, each a place of its own. */
-function automationsPlaceKey(place: AutomationsPlace): string {
-  return place.kind === AUTOMATIONS_PAGE.EDIT ? place.automationId : place.kind;
 }
 
 /**
@@ -676,13 +677,59 @@ function KeptPage({
 }
 
 /**
+ * What the window's places draw from, which the shell works out past its
+ * gates and hands the routes standing (`panel-router.tsx`), since a route's
+ * component takes no props: the window's controls, and what the shell holds
+ * across its places, so a place drawn anew finds it as it stood.
+ */
+interface ShellPlacesInput {
+  readonly tab: PanelTab;
+  readonly onTabChange: (tab: PanelTab) => void;
+  readonly tasks: TasksControl;
+  readonly history: WindowHistory;
+  readonly sidebar: SidebarCollapse;
+  readonly room: ShellRoom;
+  readonly settingsStep: SettingsStep;
+  readonly settings: SettingsPanelProps;
+  readonly shell: RefObject<HTMLDivElement | null>;
+  readonly keepOverlay: ReturnType<typeof useFloatDismiss>;
+  readonly summary: ReturnType<typeof useSummaryPin>;
+  readonly looks: ReturnType<typeof useTaskLooks>;
+  readonly mentionedAgents: React.ComponentProps<typeof MentionedAgents>["value"];
+  readonly chipCards: React.ComponentProps<typeof ChipCards>["value"];
+  readonly newTaskDialog: React.JSX.Element;
+  readonly phoneAccount: React.JSX.Element | null;
+  readonly away: { readonly label: string; readonly onPress: () => void };
+  readonly descriptionToggle: boolean;
+  readonly standingIn: boolean;
+  readonly inboxKept: boolean;
+  /** What each workspace's Tasks page holds across its visits (`tasks-page-held.ts`). */
+  readonly tasksPagesHeld: TasksPagesHeld;
+  readonly adminAccess: boolean;
+  readonly adminPending: boolean;
+  readonly setToggleRoom: ReturnType<typeof usePanelToggleRoom>;
+  /** The control that held the keyboard as Settings opened, which the places hand it back to. */
+  readonly focusHolder: RefObject<Holder | undefined>;
+}
+
+const ShellPlacesContext = createContext<ShellPlacesInput | undefined>(undefined);
+
+/** What the shell handed the places; a place is drawn under the shell alone. */
+export function useShellPlaces(): ShellPlacesInput {
+  const places = useContext(ShellPlacesContext);
+  if (places === undefined)
+    throw new Error("A place of the window is drawn under its shell alone.");
+  return places;
+}
+
+/**
  * The app's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
  * keeps its page list whatever the sidebar's collapse says, and hands the
  * tasks back folded or not as it found them. The side panel's toggle is the
  * mirror of the sidebar's, at the window's top right on a task's page, so
- * neither pane carries the button that moves it. A plan's version history
+ * neither pane carries the button that moves it. A description's version history
  * takes the whole window as Settings does, its versions listed where the
  * sidebar was, and leaves the same way; the Inbox stands in the task's
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
@@ -736,8 +783,8 @@ export function DesktopShell({
   const keptStanding =
     !gated && tasks.signedIn && tab !== PANEL_TAB.SETTINGS && !tasks.history.open;
   const inboxKept = usePageKept(tasks.inboxView.open, tasks.workspace?.id, keptStanding);
-  const boardKept = usePageKept(tasks.boardView.open, tasks.workspace?.id, keptStanding);
-  useSettingsFocusReturn(tab === PANEL_TAB.SETTINGS);
+  const [tasksPagesHeld] = useState(() => new TasksPagesHeld());
+  const focusHolder = useSettingsFocusHolder(tab === PANEL_TAB.SETTINGS);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
   const coarse = useCoarsePointer();
@@ -754,16 +801,21 @@ export function DesktopShell({
   const summary = useSummaryPin(sidebar.staged);
   // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
   const setToggleRoom = usePanelToggleRoom();
-  // Note that setup standing before the app holds the places' chords too, so none lands behind it.
-  usePlaceCommands(!gated && setup === SETUP_GATE.NONE, tab, onTabChange, tasks, settings, history);
-  // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
+  // Note that setup standing before the app holds the places' chords too, so none lands behind it, as New workspace's cards do.
+  const founding = !gated && tasks.newWorkspace.open;
+  usePlaceCommands(
+    !gated && setup === SETUP_GATE.NONE && !founding,
+    tab,
+    onTabChange,
+    tasks,
+    settings,
+    history,
+  );
+  // The Admin place is an admin's alone: its route gives way for an account known to be no admin (`route-gates.ts`),
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
-  const adminAccess = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  const { open: adminShown, onClose: closeAdmin } = tasks.adminView;
-  useEffect(() => {
-    if (adminShown && !adminAccess && !adminPending) closeAdmin();
-  }, [adminShown, adminAccess, adminPending, closeAdmin]);
+  const adminAccess = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
+  const adminPending =
+    useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
   const { region } = tasks;
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, the Automations page, or the Board standing in its place is not the plan.
@@ -836,7 +888,7 @@ export function DesktopShell({
   // Automations page stands in the plan's place, so it draws
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
-  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const descriptionToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -893,85 +945,88 @@ export function DesktopShell({
       </ScrollArea>
     );
   }
-  // Settings takes the whole window, its pages listed where the tasks were.
-  if (tab === PANEL_TAB.SETTINGS) {
-    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
-    // A phone keeps its places bar under Settings, each press leaving Settings for the place pressed (`mobile-bar.tsx`).
-    const settingsBar = room === SHELL_ROOM.NARROW && tasks.signedIn;
+  // New workspace takes the whole window on setup's own ground, its cards being setup's.
+  if (founding) {
     return (
-      <div className="desktop-shell" data-room={room} data-mobile-bar={String(settingsBar)}>
-        <Suspense
-          fallback={
-            <SettingsLoading
-              onExit={exitSettings}
-              place={backPlaceOf(history, TASKS_EXIT_PLACE)}
-              onList={settingsStep.onList}
-              hidden={hiddenColumns(room, settingsStep.listed)}
-            />
-          }
-        >
-          <SETTINGS_ROUTE.Route
-            sidebar={sidebar}
-            room={room}
-            step={settingsStep}
-            history={history}
-            settings={settings}
-            onExit={exitSettings}
-          />
-        </Suspense>
-        {settingsBar ? (
-          <MobileBar tasks={tasks} leave={() => onTabChange(PANEL_TAB.TASKS)} />
-        ) : null}
-      </div>
+      <ScrollArea>
+        <div className="desktop-onboarding relative">
+          <div className="desktop-drag-strip absolute inset-x-0 top-0" />
+          <NewWorkspaceSteps tasks={tasks} onClose={tasks.newWorkspace.onClose} />
+        </div>
+      </ScrollArea>
     );
   }
-  // A plan's version history takes the whole window too, its versions listed
-  // where the sidebar was, and hands the task back as it found it.
-  if (tasks.history.open) {
-    const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
-    return (
-      <div className="desktop-shell" data-room={room}>
-        {/* A chip in a version's words hangs the cards the plan's own words do. */}
-        <MentionedAgents value={mentionedAgents}>
-          <ChipCards value={chipCards}>
-            <Suspense
-              fallback={
-                <VersionHistoryLoading
-                  onExit={exitHistory}
-                  place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
-                  onList={tasks.history.onList}
-                  hidden={hiddenColumns(room, tasks.history.listed)}
-                />
-              }
-            >
-              <VERSION_HISTORY.Route
-                sidebar={sidebar}
-                room={room}
-                history={history}
-                tasks={tasks}
-                account={account}
-                onExit={exitHistory}
-                onRestored={history.onLeaveVersionHistory}
-              />
-            </Suspense>
-          </ChipCards>
-        </MentionedAgents>
-        {newTaskDialog}
-      </div>
-    );
-  }
+  // What stands past the gates is the route's: Settings over the whole window, or a place beside the sidebar (`ShellPlaces`).
+  const places: ShellPlacesInput = {
+    tab,
+    onTabChange,
+    tasks,
+    history,
+    sidebar,
+    room,
+    settingsStep,
+    settings,
+    shell,
+    keepOverlay,
+    summary,
+    looks,
+    mentionedAgents,
+    chipCards,
+    newTaskDialog,
+    phoneAccount,
+    away,
+    descriptionToggle,
+    standingIn,
+    inboxKept,
+    tasksPagesHeld,
+    adminAccess,
+    adminPending,
+    setToggleRoom,
+    focusHolder,
+  };
+  return (
+    <ShellPlacesContext value={places}>
+      <Outlet />
+    </ShellPlacesContext>
+  );
+}
+
+/**
+ * The window's places beside the sidebar, the layout every place but
+ * Settings and a version history shares (`panel-router.tsx`'s pathless
+ * `places` route): the sidebar, the work in its content slot, the route's
+ * `Outlet`, and the pages kept drawn between visits beside it.
+ */
+export function ShellPlaces(): React.JSX.Element {
+  const {
+    tab,
+    onTabChange,
+    tasks,
+    history,
+    sidebar,
+    room,
+    settings,
+    shell,
+    keepOverlay,
+    summary,
+    mentionedAgents,
+    chipCards,
+    newTaskDialog,
+    descriptionToggle,
+    setToggleRoom,
+    focusHolder,
+    inboxKept,
+    phoneAccount,
+  } = useShellPlaces();
+  const { account } = settings;
+  useFocusHandedBack(focusHolder);
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
-  const pagePerson = tasks.personView.userId;
-  const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
-  const unknownWorkspace = tasks.unknownWorkspace.open;
   const inboxItemShown = tasks.inboxView.chosen !== undefined;
-  // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
-  const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
-    (planToggle && room !== SHELL_ROOM.NARROW) ||
+    (descriptionToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
     (inboxOpen && inboxItemShown);
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
@@ -979,14 +1034,6 @@ export function DesktopShell({
   // keyboard reaches what the drawer covers, and a press there only puts it
   // away. Its toggle stays, the way to close it.
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const adminLoading = (
-    <AdminLoading
-      room={room}
-      view={tasks.adminView.view}
-      onOpen={tasks.adminView.onOpen}
-      onExit={tasks.adminView.onClose}
-    />
-  );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks);
   // A phone's Tasks page is the sidebar's tree, pinned in the work's place rather than floating in as a drawer (`mobile-bar.tsx`).
@@ -1025,108 +1072,24 @@ export function DesktopShell({
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            {inboxOpen ? null : pageAgent !== undefined ? (
-              // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-              <DesktopAgentPage
-                key={pageAgent}
-                tasks={tasks}
-                agentId={pageAgent}
-                away={room === SHELL_ROOM.NARROW ? away : undefined}
-              />
-            ) : pagePerson !== undefined ? (
-              // Keyed by the person, so another person's page holds nothing of the last, its find among it.
-              <PageFind
-                key={pagePerson}
-                page={FIND_PAGE.PERSON}
-                at={pagePerson}
-                active={tasks.shown}
-              >
-                <Suspense
-                  fallback={
-                    <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />
-                  }
-                >
-                  <PERSON_PAGE.Route
-                    tasks={tasks}
-                    userId={pagePerson}
-                    name={tasks.personView.name}
-                    staged={sidebar.staged}
-                    away={room === SHELL_ROOM.NARROW ? away : undefined}
-                  />
-                </Suspense>
-              </PageFind>
-            ) : boardOpen ? null : adminOpen ? (
-              <Suspense fallback={adminLoading}>
-                {adminAccess ? (
-                  <ADMIN_PLACE.Route
-                    room={room}
-                    view={tasks.adminView.view}
-                    shown={tasks.shown}
-                    onOpen={tasks.adminView.onOpen}
-                    onExit={tasks.adminView.onClose}
-                  />
-                ) : (
-                  adminLoading
-                )}
-              </Suspense>
-            ) : automationsOpen ? (
-              <PageFind
-                page={FIND_PAGE.AUTOMATIONS}
-                at={automationsPlaceKey(tasks.automationsView.place)}
-                active={tasks.shown}
-              >
-                <Suspense
-                  fallback={
-                    <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
-                  }
-                >
-                  <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
-                </Suspense>
-              </PageFind>
-            ) : unknownWorkspace ? (
-              // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
-              <ReplayUnmask>
-                <NotFound
-                  replayUnmasked
-                  thing={NOT_FOUND_THING.WORKSPACE}
-                  bar={
-                    room === SHELL_ROOM.NARROW
-                      ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
-                      : {}
-                  }
-                  action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
-                />
-              </ReplayUnmask>
-            ) : (
-              <DesktopTasks
-                tasks={tasks}
-                looks={looks}
-                summary={summary}
-                room={room}
-                away={away}
-                accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
-                staged={sidebar.staged}
-              />
-            )}
-            {/* Note that a page kept stands after the page shown in its place, so a lookup of the page's first box finds the page's,
-                and the Tasks page before the Inbox, so it is the first box while it is shown. */}
-            {(boardOpen || boardKept) && !phoneTasks ? (
-              <KeptPage shown={boardOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-                {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
-                <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-                  <TASKS_ROUTE.Route tasks={tasks} room={room} />
-                </Suspense>
-              </KeptPage>
-            ) : null}
-            {inboxOpen || inboxKept ? (
-              <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-                <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
-              </KeptPage>
-            ) : null}
+            <Outlet />
           </ChipCards>
         </MentionedAgents>
+        {/* Note that the Inbox kept stands after the place shown, so a lookup of the place's first box finds the place's,
+            and beside every place's route rather than in one, so another place standing, Admin, the Board, or a person's
+            page, lets go of nothing it held; its own route draws nothing in the `Outlet` (`InboxPlace`). */}
+        {inboxOpen || inboxKept ? (
+          <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+            <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
+          </KeptPage>
+        ) : null}
       </main>
       {barShown ? <MobileBar tasks={tasks} /> : null}
+      {/* Note that the floating sidebar's title-bar row is claimed back from the work's drag strips here, after the work,
+          because a later drag region wins and the sidebar comes before the work, so its Back and Forward keep their presses. */}
+      {sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED && room === SHELL_ROOM.WIDE ? (
+        <div className="sidebar-float-claim" />
+      ) : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&
@@ -1146,7 +1109,7 @@ export function DesktopShell({
         <SidebarChord sidebar={sidebar} />
       ) : (
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
-          <SidebarToggle sidebar={sidebar} />
+          <SidebarToggle sidebar={sidebar} tasks={tasks} />
           {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
           {sidebar.collapsed ? (
             <ReplayUnmask>
@@ -1159,19 +1122,20 @@ export function DesktopShell({
       {panelToggle && room === SHELL_ROOM.NARROW ? (
         <SidePanelChord
           panel={tasks.sidePanel}
-          disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+          disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
         />
       ) : panelToggle ? (
         <div ref={setToggleRoom} className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
-            disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+            disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}
       {newTaskDialog}
       <PaneGlide
         root={shell}
+        place={tasks.sidePanel.stop}
         layout={{
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: tasks.sidePanel.open,
@@ -1180,5 +1144,173 @@ export function DesktopShell({
         }}
       />
     </div>
+  );
+}
+
+/**
+ * What the Inbox's route draws in the places' content slot: nothing, since
+ * the Inbox is kept drawn beside every place's route (`ShellPlaces`), and it
+ * is what stands while its route does.
+ */
+export function InboxPlace(): null {
+  return null;
+}
+
+/**
+ * What a place the window's state says draws in the places' content slot:
+ * a task, an agent's page, or a workspace not there for the reader. Every
+ * route not yet moved onto the router draws this one component, so moving
+ * between them keeps it drawn.
+ */
+export function StatePlace(): React.JSX.Element {
+  const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
+  const { account } = settings;
+  const pageAgent = tasks.agentView.agentId;
+  const unknownWorkspace = tasks.unknownWorkspace.open;
+  return pageAgent !== undefined ? (
+    // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+    <DesktopAgentPage
+      key={pageAgent}
+      tasks={tasks}
+      agentId={pageAgent}
+      away={room === SHELL_ROOM.NARROW ? away : undefined}
+    />
+  ) : unknownWorkspace ? (
+    // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
+    <ReplayUnmask>
+      <NotFound
+        replayUnmasked
+        thing={NOT_FOUND_THING.WORKSPACE}
+        bar={
+          room === SHELL_ROOM.NARROW
+            ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
+            : {}
+        }
+        action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
+      />
+    </ReplayUnmask>
+  ) : (
+    <DesktopTasks
+      tasks={tasks}
+      looks={looks}
+      summary={summary}
+      room={room}
+      away={away}
+      accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
+      staged={sidebar.staged}
+    />
+  );
+}
+
+/** The Board's frame while its chunk loads; nothing on a phone, whose Tasks page is the sidebar's tree pinned in the work's place (`mobile-bar.tsx`). */
+export function BoardRouteLoading(): React.JSX.Element | null {
+  const { tasks, room } = useShellPlaces();
+  if (mobileBarShown(room, tasks)) return null;
+  return <TasksLoading onExit={tasks.boardView.onClose} />;
+}
+
+/** The Automations pages' frame while their chunk loads. */
+export function AutomationsRouteLoading(): React.JSX.Element {
+  const { tasks, room } = useShellPlaces();
+  return <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />;
+}
+
+/** A person's page's frame while its chunk loads. */
+export function PersonRouteLoading(): React.JSX.Element {
+  const { tasks } = useShellPlaces();
+  return <PersonLoading name={tasks.personView.name} onExit={tasks.personView.onClose} />;
+}
+
+/** Admin's frame, which stands while its chunk loads and while the account's access is still read. */
+export function AdminRouteLoading(): React.JSX.Element {
+  const { tasks, room } = useShellPlaces();
+  return (
+    <AdminLoading
+      room={room}
+      view={tasks.adminView.view}
+      onOpen={tasks.adminView.onOpen}
+      onExit={tasks.adminView.onClose}
+    />
+  );
+}
+
+/**
+ * Settings over the whole window, its pages listed where the tasks were, as
+ * the route draws it once its chunk lands (`settings-route.lazy.tsx`) or its
+ * frame while it loads: a phone keeps its places bar under it, each press
+ * leaving Settings for the place pressed (`mobile-bar.tsx`).
+ */
+export function SettingsFrame({
+  children,
+}: {
+  children: (exit: () => void) => React.ReactNode;
+}): React.JSX.Element {
+  const { tasks, history, room, onTabChange } = useShellPlaces();
+  const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
+  const settingsBar = room === SHELL_ROOM.NARROW && tasks.signedIn;
+  return (
+    <div className="desktop-shell" data-room={room} data-mobile-bar={String(settingsBar)}>
+      {children(exitSettings)}
+      {settingsBar ? <MobileBar tasks={tasks} leave={() => onTabChange(PANEL_TAB.TASKS)} /> : null}
+    </div>
+  );
+}
+
+/**
+ * A task's version history over the whole window, as its route draws it
+ * (`version-history-route.lazy.tsx`), its versions listed where the sidebar
+ * was: a chip in a version's words hangs the cards the description's own
+ * words do, and New task's dialog stands over it as it does over the tasks.
+ * Its way out goes back a step, or leaves it for its task where none stands
+ * behind it.
+ */
+export function VersionHistoryFrame({
+  children,
+}: {
+  children: (exit: () => void) => React.ReactNode;
+}): React.JSX.Element {
+  const { tasks, history, room, mentionedAgents, chipCards, newTaskDialog } = useShellPlaces();
+  const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
+  return (
+    <div className="desktop-shell" data-room={room}>
+      <MentionedAgents value={mentionedAgents}>
+        <ChipCards value={chipCards}>{children(exitHistory)}</ChipCards>
+      </MentionedAgents>
+      {newTaskDialog}
+    </div>
+  );
+}
+
+/** A version history's frame while its chunk loads, and while the task it is of opens under it. */
+export function VersionHistoryRouteLoading(): React.JSX.Element {
+  const { tasks, history, room } = useShellPlaces();
+  return (
+    <VersionHistoryFrame>
+      {(exit) => (
+        <VersionHistoryLoading
+          onExit={exit}
+          place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
+          onList={tasks.history.onList}
+          hidden={hiddenColumns(room, tasks.history.listed)}
+        />
+      )}
+    </VersionHistoryFrame>
+  );
+}
+
+/** Settings' frame while its chunk loads. */
+export function SettingsRouteLoading(): React.JSX.Element {
+  const { history, room, settingsStep } = useShellPlaces();
+  return (
+    <SettingsFrame>
+      {(exit) => (
+        <SettingsLoading
+          onExit={exit}
+          place={backPlaceOf(history, TASKS_EXIT_PLACE)}
+          onList={settingsStep.onList}
+          hidden={hiddenColumns(room, settingsStep.listed)}
+        />
+      )}
+    </SettingsFrame>
   );
 }

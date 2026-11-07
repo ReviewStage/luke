@@ -5,6 +5,7 @@ import {
   pinPositionsForMove,
 } from "@repo/features/pin-order";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pullRequestsOfTask } from "@repo/features/task-agents-model";
 import {
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
@@ -24,6 +25,7 @@ import {
   readingWords,
   TERM,
 } from "@repo/features/words";
+import { taskKey } from "@repo/features/workspace-key";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -62,6 +64,7 @@ import {
   TEXT_VARIANT,
   Text,
   taskRowColumns,
+  taskRowFit,
   useLeaving,
   useMinute,
   useRovingKeys,
@@ -96,6 +99,7 @@ import {
   useVirtualRuns,
   VIRTUAL_ROW_KEY_ATTRIBUTE,
   VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowMeasurements,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
@@ -120,6 +124,7 @@ import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
+import { pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -127,6 +132,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
+import { useListedTaskPullRequests } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -136,7 +142,7 @@ import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { type OpenedTask, openedTaskOf, type TaskRowTab, useTaskRowTab } from "./task-actions.js";
-import { TaskListRow } from "./task-list-row.js";
+import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { CreatorFace, useStandingDoor, WaitingCount } from "./task-row-parts.js";
 import {
   assigneeFor,
@@ -654,7 +660,7 @@ const TasksPageRow = memo(function TasksPageRow({
   workspaceName: string;
   /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  /** How many of its threads wait on the reader, questions and updates alike, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   properties: readonly TaskRowCell[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
@@ -796,6 +802,7 @@ function TasksListGroup({
   properties,
   place,
   row,
+  measured,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -812,7 +819,10 @@ function TasksListGroup({
   place: ListRunsPlace;
   /** Draws a task's row, wearing its place in the run. */
   row: (task: TaskSummary, at: VirtualRowPlace) => ReactNode;
+  /** What each group's run measured, by the group's key, held across the page's visits. */
+  measured: Map<string, VirtualRowMeasurements> | undefined;
 }): React.JSX.Element {
+  const runKey = groupKey(group.head);
   const drawn = useLeaving(group.tasks, taskIdOf);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
   const run = useRef<VirtualRowsHandle>(null);
@@ -873,6 +883,8 @@ function TasksListGroup({
             data-row-drop-rows={ordered(group.head) ? "" : undefined}
             onPointerDown={draggable ? drag : undefined}
             handle={run}
+            measurements={measured?.get(runKey)}
+            onMeasurements={(rows) => measured?.set(runKey, rows)}
           >
             {(index, at) => {
               const entry = drawn[index];
@@ -1005,17 +1017,53 @@ export function TasksList({
   const rowTab = useTaskRowTab(tasks);
   const { region, agents } = tasks;
   const opened = useMemo(() => openedTaskOf({ region, agents }), [region, agents]);
-  const repositories = groups.flatMap((group) =>
-    group.tasks.map((task) => ({ repository: task.repository })),
+  const repositories = useMemo(
+    () => groups.flatMap((group) => group.tasks.map((task) => ({ repository: task.repository }))),
+    [groups],
   );
   const workspaceName = tasks.workspace?.name ?? "";
+  const pullRequests = useListedTaskPullRequests();
+  // What every task listed says in the cells whose words differ row to row, which its columns stand as wide as (`taskRowFit`); read again only as those change, since it walks every task.
+  const fit = useMemo(
+    () =>
+      taskRowFit(
+        groups.flatMap((group) =>
+          group.tasks.map((task) => {
+            const subTasks = subTaskCounts.get(task.id);
+            const waiting = waitingOn.get(task.id) ?? 0;
+            return {
+              key: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
+              pullRequests: openPullRequests(pullRequestsOfTask(pullRequests, task.id)).map(
+                pullRequestNumberLabel,
+              ),
+              subTasks:
+                subTasks === undefined || subTasks.total === 0
+                  ? undefined
+                  : `${subTasks.finished}/${subTasks.total}`,
+              waiting: waiting === 0 ? undefined : String(waiting),
+              repository:
+                task.repository === null
+                  ? NO_REPOSITORY
+                  : repositoryLabel(task.repository, repositories),
+            };
+          }),
+        ),
+      ),
+    [groups, subTaskCounts, waitingOn, workspaceName, repositories, pullRequests],
+  );
+  const listStyle = useMemo(
+    () => ({
+      ...fit,
+      ...cssCustomProperties({ "--tasks-list-columns": taskRowColumns(properties, more) }),
+    }),
+    [fit, properties, more],
+  );
   // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
   const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  const scrollRef = useMemo(() => joinRefs(scroller, frame.scroll), [frame.scroll]);
   // Every open group's tasks, in the order drawn down the page, those its run leaves undrawn among them; a folded group's are not drawn.
   const order = groups.flatMap((group) =>
     folds.folded(group.head) ? [] : group.tasks.map(taskIdOf),
@@ -1052,7 +1100,7 @@ export function TasksList({
   });
   const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
   // Note that only rows an open group lists stay chosen, so a task the filter or a fold took away is never acted on.
-  const selection = useTasksSelection(tasks, new Set(order));
+  const selection = useTasksSelection(tasks, new Set(order), frame.chosen);
   const { regionId, selected } = selection;
   // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
   const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);
@@ -1062,7 +1110,7 @@ export function TasksList({
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
-      scrollRef={scrollRef}
+      scrollRef={scroller}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
@@ -1107,9 +1155,7 @@ export function TasksList({
             className="tasks-list grid grid-cols-tasks-list gap-x-block-gap gap-y-section-gap pb-ui-24"
             data-row-drop-scope=""
             {...motionRows()}
-            style={cssCustomProperties({
-              "--tasks-list-columns": taskRowColumns(properties, more),
-            })}
+            style={listStyle}
           >
             {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
             {groups.every((group) => group.tasks.length === 0) ? (
@@ -1141,6 +1187,7 @@ export function TasksList({
                     tasks={tasks}
                     properties={properties}
                     place={runsPlace}
+                    measured={frame.measured}
                     row={(task, at) => (
                       <TasksPageRow
                         key={task.id}

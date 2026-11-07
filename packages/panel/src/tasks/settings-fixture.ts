@@ -38,6 +38,7 @@ import {
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
@@ -51,6 +52,8 @@ import {
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
@@ -78,7 +81,12 @@ import {
   EVERY_WORKSPACE,
   RUN_PROFILE,
 } from "@repo/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import {
+  CLI_INSTALL_OUTCOME,
+  type PortActKind,
+  type PortActPayload,
+  type PortActResult,
+} from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 
@@ -280,18 +288,9 @@ function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
 
 /** The tools a connected server lists, a few of each, as its server describes them. */
 const TOOLS = [
-  {
-    name: "search",
-    title: "Search",
-    description: "Find pages, issues, and messages by their words.",
-  },
-  { name: "read", title: "Read", description: "Read one item whole, by its id or address." },
-  {
-    name: "create",
-    title: "Create",
-    description: "Create an item where the account may write.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
-  },
+  { name: "search", description: "Find pages, issues, and messages by their words." },
+  { name: "read", description: "Read one item whole, by its id or address." },
+  { name: "create", description: "Create an item where the account may write." },
 ] as const;
 
 /* ----- Settings › Agents ----- */
@@ -333,7 +332,7 @@ function skillId(n: number): string {
 }
 
 /** A workspace's skills as its members see them: its own, then the account's. */
-function skills(workspaceId: string) {
+function skills(workspaceId: string): InstalledSkillSummary[] {
   return [
     {
       id: skillId(1),
@@ -364,7 +363,7 @@ function skills(workspaceId: string) {
       description: "Check a schema change commutes with the migrations on every open branch.",
       userInvocable: false,
       source: { type: INSTALLED_SKILL_SOURCE.TEXT },
-      enabled: false,
+      enabled: true,
       workspaceId,
       installedBy: "Theo Lindqvist",
       manageable: true,
@@ -569,7 +568,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         daily: days.map((day, index) => ({
           day,
           [ACTIVITY_FEATURE.AGENTS_STARTED]: wave(index, 20, 0.6),
-          [ACTIVITY_FEATURE.PLAN_REVISIONS]: wave(index, 34, 0.5),
+          [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: wave(index, 34, 0.5),
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: wave(index, 15, 0.4),
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: wave(index, 4, 0.2),
         })),
@@ -663,6 +662,12 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
+  // The command-line tool installed on this Mac, as Settings' MCP page's Install asks, without running the install script: a fixture run reaches no network and installs nothing.
+  [ACT_KIND.CLI_INSTALL]: () => ({
+    outcome: CLI_INSTALL_OUTCOME.INSTALLED,
+    version: "0.1.0",
+    onPath: true,
+  }),
   [ACT_KIND.ADMIN_READ]: ({ procedure, query }) =>
     procedure === ADMIN_READ.METRICS
       ? { answer: adminMetrics(query) }
@@ -677,7 +682,7 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
-/** The outside agents the account allowed: one on this computer that refreshed lately, one on the web that never has. */
+/** The clients the account allowed: an outside agent on this computer that refreshed lately, one on the web that never has, and the vespin command, signed in. */
 const STAGED_MCP_CLIENTS: AppMcpClients = {
   [ACCOUNT_ID]: {
     rows: {
@@ -696,6 +701,14 @@ const STAGED_MCP_CLIENTS: AppMcpClients = {
           redirectUris: ["https://chatgpt.example/connector/oauth/callback"],
           allowedAt: NOW - 9 * DAY,
           lastRefreshedAt: null,
+        },
+        // The vespin command, signed in, which Settings › CLI shows and Connected leaves out.
+        {
+          clientId: FIRST_PARTY_OAUTH_CLIENT_ID.CLI,
+          name: `${PRODUCT_NAME} CLI`,
+          redirectUris: ["http://127.0.0.1/callback"],
+          allowedAt: NOW - 4 * DAY,
+          lastRefreshedAt: NOW - 20 * MINUTE,
         },
       ],
     },

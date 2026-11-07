@@ -1,26 +1,23 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { failureKind } from "@repo/runtime/effect";
 import { Effect } from "effect";
-import { HostedEnvironment } from "../../environment.js";
-import { providerModelOf } from "../../providers/model-catalog.js";
-import { ownKeyOf } from "../coder-host/account-keys.js";
-import { titleModel } from "../coder-host/model.js";
+import type { HostedEnvironment } from "../../environment.js";
+import { deploymentTitleModel } from "../coder-host/model.js";
 import { titleAgent } from "../coder-host/title.js";
 
 /**
- * native-title.ts -- a native agent's title, asked for as its runner's turns start and end, as eve's relay asks for an eve agent's.
+ * native-title.ts -- a native agent's title, asked for as its runner's turns start and end.
  *
- * The title is generated on the account's own API key
- * (`../coder-host/model.ts`'s `titleModel`), preferring the provider of
- * the agent's own model, and named where none stands
- * (`../coder-host/title.ts`), its untitled task with it. An account that
- * saved no API key, as one on a subscription alone, is titled from its
- * opening's first words with no model call. Our own key never pays for
- * one. Nothing here fails the batch: a title not written is said in the log
- * and asked for again at the next turn's start or end.
+ * The title is generated on our own key
+ * (`../coder-host/model.ts`'s `deploymentTitleModel`), whatever key the
+ * account saved or none, and named where none stands
+ * (`../coder-host/title.ts`), its untitled task with it. A deployment
+ * holding no such key titles it from its opening's first words with no
+ * model call; the account's own key never pays for one. Nothing here fails
+ * the batch: a title not written is said in the log and asked for again at
+ * the next turn's start or end.
  */
 
 /** The agent's title asked for, where none stands. */
@@ -30,12 +27,8 @@ export function titleNativeAgent(
 ): Effect.Effect<void, never, DatabaseServices | HostedEnvironment> {
   return Effect.gen(function* () {
     if (agent.title !== null) return;
-    const environment = yield* HostedEnvironment;
-    const preferred = providerModelOf(agent.model)?.provider ?? MODEL_PROVIDER.ANTHROPIC;
-    yield* ownKeyOf(target.userId, preferred, environment.providerKeyEncryptionKeys).pipe(
-      Effect.flatMap((own) =>
-        titleAgent(own === undefined ? undefined : titleModel(own), target, agent),
-      ),
+    const model = yield* deploymentTitleModel();
+    yield* titleAgent(model, target, agent).pipe(
       Effect.catch((failure) =>
         Effect.logWarning(`The agent's title was not written: ${failureKind(failure)}`),
       ),

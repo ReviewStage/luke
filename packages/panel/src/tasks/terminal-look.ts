@@ -14,5 +14,5 @@ export const TERMINAL_BODY_CLASS = "terminal-tab-body relative bg-terminal-groun
 /** The column the screen fills beside the shells. */
 export const TERMINAL_HOST_CLASS = "terminal-tab-host flex min-w-0 flex-1 flex-col";
 
-/** The terminal's screen, dimmed rather than blanked under any state with no shell connected. */
-export const TERMINAL_SCREEN_CLASS = "terminal-tab-screen min-h-0 flex-1";
+/** The box the terminal's screen is shown in, which the screen fills. */
+export const TERMINAL_SCREEN_CLASS = "terminal-tab-screen relative min-h-0 flex-1";

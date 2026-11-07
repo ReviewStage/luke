@@ -18,7 +18,7 @@ import { ADMINS_HIDDEN } from "./prefs.js";
 import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "./routing.js";
 import { AccountScreen } from "./screens/account.js";
 import { CostScreen } from "./screens/cost.js";
-import { DashboardScreen, useMetricsRead } from "./screens/dashboard.js";
+import { DashboardScreen } from "./screens/dashboard.js";
 import { DayScreen } from "./screens/day.js";
 import { ReliabilityScreen } from "./screens/reliability.js";
 import { UsersScreen } from "./screens/users.js";
@@ -64,8 +64,6 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
   const openAccount = (id: string) => onOpen({ kind: ADMIN_PAGE.ACCOUNT, id });
   const openWorkspace = (id: string) => onOpen({ kind: ADMIN_PAGE.WORKSPACE, id });
   const openDay = (day: string) => onOpen({ kind: ADMIN_PAGE.DAY, day });
-  // The overview's read waits while another view stands, as the web page's does.
-  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === ADMIN_TAB.DASHBOARD);
   const shared = { account: undefined, onSignOut: noSignOut, frame: unframed };
 
   switch (view.kind) {
@@ -147,7 +145,6 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
       return (
         <DashboardScreen
           {...shared}
-          read={metrics}
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
           windowDays={windowDays}

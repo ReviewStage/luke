@@ -50,9 +50,9 @@
      row's own stronger fill or a chosen row's. */
   @media (hover: hover) {
     .ui-list-row:has(> button.ui-list-row-main):hover:not(
-      [data-current="true"],
-      [data-selected="true"]
-    ) {
+        [data-current="true"],
+        [data-selected="true"]
+      ) {
       background: var(--ui-color-fill-hover);
     }
   }
@@ -488,6 +488,24 @@
     align-self: baseline;
   }
 
+  /* A row that draws its select box over its unread gutter stands the box
+     in its own box, and hides its dot while the box shows, under the
+     pointer or while its list is being chosen from, so the two never
+     stand one over the other; its words' weight still says it is unread. */
+  .ui-list-row[data-select-box] {
+    position: relative;
+  }
+
+  .ui-list-row[data-select-box="shown"] .ui-unread-gutter {
+    visibility: hidden;
+  }
+
+  @media (hover: hover) {
+    .ui-list-row[data-select-box]:hover .ui-unread-gutter {
+      visibility: hidden;
+    }
+  }
+
   /* Note that in a lead line's metadata the time is the one word, so
      whatever else stands there is a mark. */
   .ui-list-row[data-meta="title"][data-lead="above"]
@@ -731,7 +749,9 @@
       transform var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  .ui-list-row[data-actions="hover"][data-meta="title"] .ui-list-row-actions {
+  /* A mail-style row's acts, whether they always stand or come in on
+     hover, stand level with its title's line, as its ⋯ does. */
+  .ui-list-row[data-meta="title"] .ui-list-row-actions {
     align-self: start;
     height: var(--ui-list-row-head-leading);
     margin-block-start: var(--ui-list-row-inset-block);

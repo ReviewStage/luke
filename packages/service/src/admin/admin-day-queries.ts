@@ -53,7 +53,7 @@ const DayBoundSchema = Schema.Struct({
  * them together, the account id breaking ties so equally busy accounts keep
  * one order across refreshes. An account is listed only when it took a
  * meaningful action that day, and every such action is itself one of the
- * rows counted here (a task, the developer's own plan revision, an agent),
+ * rows counted here (a task, the developer's own description revision, an agent),
  * so the window count over the groups, taken before the bound cuts them, is
  * the day's active developers.
  */
@@ -62,7 +62,7 @@ const findDayActiveAccounts = SqlSchema.findAll({
   Result: Schema.Struct({
     ...ACCOUNT_FACE_FIELDS,
     [DAY_ACCOUNT_COUNT.TASKS_CREATED]: AggregateColumnSchema,
-    [DAY_ACCOUNT_COUNT.PLAN_REVISIONS]: AggregateColumnSchema,
+    [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: AggregateColumnSchema,
     [DAY_ACCOUNT_COUNT.AGENTS_STARTED]: AggregateColumnSchema,
     [DAY_ACCOUNT_COUNT.INBOX_ANSWERED]: AggregateColumnSchema,
     [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: AggregateColumnSchema,
@@ -78,7 +78,9 @@ const findDayActiveAccounts = SqlSchema.findAll({
         .select({
           ...ACCOUNT_FACE_COLUMNS,
           [DAY_ACCOUNT_COUNT.TASKS_CREATED]: counted(DAY_ACCOUNT_COUNT.TASKS_CREATED),
-          [DAY_ACCOUNT_COUNT.PLAN_REVISIONS]: counted(DAY_ACCOUNT_COUNT.PLAN_REVISIONS),
+          [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: counted(
+            DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS,
+          ),
           [DAY_ACCOUNT_COUNT.AGENTS_STARTED]: counted(DAY_ACCOUNT_COUNT.AGENTS_STARTED),
           [DAY_ACCOUNT_COUNT.INBOX_ANSWERED]: counted(DAY_ACCOUNT_COUNT.INBOX_ANSWERED),
           [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: counted(DAY_ACCOUNT_COUNT.AUTOMATION_RUNS),
@@ -120,7 +122,7 @@ const readDayActivity = /* @__PURE__ */ Effect.fn("web/readAdminDayActivity")(fu
   return {
     features: {
       [ACTIVITY_FEATURE.AGENTS_STARTED]: on(ACTIVITY_FEATURE.AGENTS_STARTED),
-      [ACTIVITY_FEATURE.PLAN_REVISIONS]: on(ACTIVITY_FEATURE.PLAN_REVISIONS),
+      [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: on(ACTIVITY_FEATURE.DESCRIPTION_REVISIONS),
       [ACTIVITY_FEATURE.INBOX_ANSWERED]: on(ACTIVITY_FEATURE.INBOX_ANSWERED),
       [ACTIVITY_FEATURE.AUTOMATION_RUNS]: on(ACTIVITY_FEATURE.AUTOMATION_RUNS),
     },
@@ -133,7 +135,7 @@ const readDayActivity = /* @__PURE__ */ Effect.fn("web/readAdminDayActivity")(fu
       admin: isAdminRole(row.role),
       counts: {
         [DAY_ACCOUNT_COUNT.TASKS_CREATED]: row[DAY_ACCOUNT_COUNT.TASKS_CREATED],
-        [DAY_ACCOUNT_COUNT.PLAN_REVISIONS]: row[DAY_ACCOUNT_COUNT.PLAN_REVISIONS],
+        [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: row[DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS],
         [DAY_ACCOUNT_COUNT.AGENTS_STARTED]: row[DAY_ACCOUNT_COUNT.AGENTS_STARTED],
         [DAY_ACCOUNT_COUNT.INBOX_ANSWERED]: row[DAY_ACCOUNT_COUNT.INBOX_ANSWERED],
         [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: row[DAY_ACCOUNT_COUNT.AUTOMATION_RUNS],

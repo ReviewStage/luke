@@ -8,13 +8,10 @@ import {
   ProductMark,
   ProviderMark,
   SiteBarPages,
-  TEXT_ELEMENT,
-  TEXT_FONT,
+  SiteFootLinks,
   TEXT_LINK_CURRENT,
   TEXT_LINK_HEIGHT,
-  TEXT_TONE,
   TEXT_VARIANT,
-  Text,
   TextLink,
   type TextLinkCurrent,
 } from "@repo/ui";
@@ -24,6 +21,13 @@ import { PANEL_PATH } from "./app/web-address";
 export const REPOSITORY_URL = "https://github.com/ReviewStage/vespin";
 /** The newest release's version-free DMG, named for the product as the Release workflow names it. */
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/${PRODUCT_NAME}.dmg`;
+
+/**
+ * The user docs, which Mintlify builds from `apps/docs`; the root
+ * `vercel.json` passes `/docs` and Mintlify's asset paths on to it, so they
+ * stand beside the changelog on this origin.
+ */
+export const DOCS_URL = "/docs";
 
 /** Where the web app opens, the one address the site and the invitation page send a reader to. */
 export const WEB_APP_URL = PANEL_PATH;
@@ -99,6 +103,9 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
           >
             About
           </TextLink>
+          <TextLink href={DOCS_URL} variant={TEXT_VARIANT.LABEL} height={TEXT_LINK_HEIGHT.CONTROL}>
+            Docs
+          </TextLink>
           <TextLink
             href={SITE_PAGE.CHANGELOG}
             variant={TEXT_VARIANT.LABEL}
@@ -164,39 +171,31 @@ export function SiteBarDownload(): React.JSX.Element {
 
 /**
  * Shared between every page so the legal and license links never drift
- * apart: what PublicPage's `footer` holds under its rule.
+ * apart: what PublicPage's `footer` holds under its rule. The changelog's
+ * feed is as quiet as the rest of the foot: a reader subscribes once, so it
+ * needs a way in, not a call to action.
  */
 export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
-    <Text
-      as={TEXT_ELEMENT.DIV}
-      variant={TEXT_VARIANT.CAPTION}
-      tone={TEXT_TONE.MUTED}
-      font={TEXT_FONT.MONO}
-    >
-      {/* The separator belongs to the gap between items rather than to any
-            item, so adding or reordering a link never leaves a stray dot. */}
-      <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
-        <span>Apache-2.0</span>
-        <span>macOS 14+</span>
-        <TextLink href={SITE_PAGE.ABOUT} current={currentOf(SITE_PAGE.ABOUT, current)}>
-          About
-        </TextLink>
-        <TextLink href={SITE_PAGE.CHANGELOG} current={currentOf(SITE_PAGE.CHANGELOG, current)}>
-          Changelog
-        </TextLink>
-        {/* The changelog's feed, as quiet as the rest of the footer: a reader
-              subscribes once, so it needs a way in, not a call to action. */}
-        <TextLink href="/changelog/rss.xml">RSS</TextLink>
-        <TextLink href={SITE_PAGE.PRIVACY} current={currentOf(SITE_PAGE.PRIVACY, current)}>
-          Privacy
-        </TextLink>
-        <TextLink href="mailto:founders@stagereview.app">Contact</TextLink>
-      </div>
-      {/* The notice sits under its own rule at the foot of the column, the
-            way stagereview.app closes its footer, so the link row above stays
-            a row of links. */}
-      <p className="mt-8 border-t border-(--ui-color-border) pt-6">© 2026 Stage Inc.</p>
-    </Text>
+    <SiteFootLinks
+      facts={["Apache-2.0", "macOS 14+"]}
+      links={[
+        { label: "About", href: SITE_PAGE.ABOUT, current: currentOf(SITE_PAGE.ABOUT, current) },
+        { label: "Docs", href: DOCS_URL },
+        {
+          label: "Changelog",
+          href: SITE_PAGE.CHANGELOG,
+          current: currentOf(SITE_PAGE.CHANGELOG, current),
+        },
+        { label: "RSS", href: "/changelog/rss.xml" },
+        {
+          label: "Privacy",
+          href: SITE_PAGE.PRIVACY,
+          current: currentOf(SITE_PAGE.PRIVACY, current),
+        },
+        { label: "Contact", href: "mailto:founders@vespin.dev" },
+      ]}
+      notice="© 2026 Stage Inc."
+    />
   );
 }

@@ -47,7 +47,7 @@ const openAgent = (userId: string) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: "acme/relay",
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

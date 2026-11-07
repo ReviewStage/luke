@@ -16,7 +16,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { useAct } from "../act.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
@@ -104,11 +103,7 @@ function marks() {
   });
   let control: InboxReadMarks | undefined;
   function Harness() {
-    const { act: send } = useAct();
-    control = useInboxReadMarks({
-      act: send,
-      workspaceId: TASK.workspaceId,
-    });
+    control = useInboxReadMarks({ workspaceId: TASK.workspaceId });
     return createElement(Fragment, null, createElement(ToastHost));
   }
   root = createRoot(document.createElement("div"));

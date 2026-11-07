@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
@@ -10,7 +9,7 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -116,15 +115,15 @@ async function settle(): Promise<void> {
 
 test("two readers of the same document are handed the same names", async () => {
   const { seen } = await twoReaders(holding([INVITES], 1));
-  const one = seen.get("one");
-  assert.equal(one?.tasks.get(INVITES.id), "Teammate invitations");
+  await vi.waitFor(() =>
+    expect(seen.get("one")?.tasks.get(INVITES.id)).toBe("Teammate invitations"),
+  );
 });
 
 test("a task added hands every reader new names that name it", async () => {
   const { seen, deliver } = await twoReaders(holding([INVITES], 1));
   await deliver(holding([INVITES, BILLING], 2));
-  const one = seen.get("one");
-  assert.equal(one?.tasks.get(BILLING.id), "Usage billing");
+  await vi.waitFor(() => expect(seen.get("one")?.tasks.get(BILLING.id)).toBe("Usage billing"));
 });
 
 test("the tasks' keys are handed again for a delivery that moves no key, and anew for one that adds a numbered task", async () => {
@@ -163,13 +162,12 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
     });
     await settle();
   };
-  const first = seen.at(-1);
-  assert.deepEqual([...(first?.keys() ?? [])], ["ACME-41"]);
+  await vi.waitFor(() => expect([...(seen.at(-1)?.keys() ?? [])]).toEqual(["ACME-41"]));
 
   await deliver(listing([{ ...numbered(INVITES, 41), name: "Invites", updatedAt: AT + 1 }], 2));
 
   await deliver(listing([numbered(INVITES, 41), numbered(BILLING, 42)], 3));
-  assert.deepEqual([...(seen.at(-1)?.keys() ?? [])], ["ACME-41", "ACME-42"]);
+  await vi.waitFor(() => expect([...(seen.at(-1)?.keys() ?? [])]).toEqual(["ACME-41", "ACME-42"]));
 });
 
 test("an untitled agent is named by the catalog around the reader, as its tab and its row in the @ list name it", async () => {
@@ -177,17 +175,26 @@ test("an untitled agent is named by the catalog around the reader, as its tab an
   const model = "openai/gpt-6.1-sol";
   const task: TaskSummary = {
     ...INVITES,
-    agents: {
-      total: 1,
-      working: 1,
-      agents: [{ id: agentId, title: null, model, effort: "high", status: AGENT_STATUS.RUNNING }],
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
+    agents: { total: 1, working: 1, pullRequestTotal: 0 },
+  };
+  const held = holding([task], 1);
+  // The task's agent, as the list followed live holds it.
+  const followed = {
+    id: agentId,
+    planId: task.id,
+    title: null,
+    model,
+    effort: "high",
+    status: AGENT_STATUS.RUNNING,
+    createdAt: AT,
+    turnId: null,
+    workspaceId: task.workspaceId,
+    repository: task.repository,
   };
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(holding([task], 1)),
+    requestAppState: () =>
+      Promise.resolve({ ...held, tasks: { ...held.tasks, taskAgents: [followed] } }),
   });
   let seen: KnownNames | undefined;
   function Reader(): null {
@@ -209,6 +216,5 @@ test("an untitled agent is named by the catalog around the reader, as its tab an
       ),
     ),
   );
-  await settle();
-  assert.equal(seen?.agents.get(agentId), "GPT-6.1 Sol");
+  await vi.waitFor(() => expect(seen?.agents.get(agentId)).toBe("GPT-6.1 Sol"));
 });

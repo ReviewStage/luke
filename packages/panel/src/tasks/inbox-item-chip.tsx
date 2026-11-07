@@ -1,7 +1,6 @@
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type {
   AppInboxItems,
   AppInboxSlice,
@@ -10,9 +9,10 @@ import type {
 } from "@repo/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useMemo } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
+import { inboxItemsQuery } from "../live-reads.js";
+import { appStateQuery, selectInbox, selectTasks } from "../use-app-state.js";
 import { InboxItemCard, inboxItemGlyph } from "./inbox-item-parts.js";
 import {
   agentHolder,
@@ -30,7 +30,7 @@ import { useMentionedPlace } from "./mentioned-place.js";
  *
  * A link to an item names the task, or the agent with no task, that holds it
  * and the item. Main's document holds only what waits, in brief, so the
- * item is drawn from the account's feed of every item (`use-host-read.ts`),
+ * item is drawn from the account's feed of every item (`live-reads.ts`),
  * which the host holds for the session, as the Inbox draws it: the glyph
  * its row's second line leads with for what it asks (`inboxLineGlyph`),
  * never its agent's tile, which would draw it as a chip of the agent, and
@@ -115,9 +115,9 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
   const namedAgent = "agentId" in place ? place.agentId : undefined;
   const { itemId } = place;
-  const fed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
-  const tasks = useAppSlice(APP_SLICE.TASKS);
-  const inbox = useAppSlice(APP_SLICE.INBOX);
+  const fed = useQuery(inboxItemsQuery()).data;
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
   const found = useMemo(() => {
     if (planId !== undefined) return fedItemOf(fed, { planId, itemId });
     return fedItemOf(fed, namedAgent === undefined ? { itemId } : { agentId: namedAgent, itemId });
@@ -147,7 +147,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
 
 /** The brief main holds of an item that waits, by its id; none for one settled or unknown. */
 function useWaitingBrief(itemId: string): WaitingBrief | undefined {
-  const inbox = useAppSlice(APP_SLICE.INBOX);
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
   return [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].find(
     (each) => each.id === itemId,
   );
@@ -162,7 +162,7 @@ function waitingWords(item: WaitingBrief, readerId: string | undefined): string 
   return waitsOnReader(item, readerId) ? NEEDS_YOU.LABEL : "Waiting";
 }
 
-/** An item's card from main's brief alone, wearing the thread glyph its chip wears until the item is read: its question, that it waits for an answer, and when it was asked. */
+/** An item's card from main's brief alone, wearing no glyph, as its read card wears none: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
@@ -175,7 +175,6 @@ function WaitingItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={<GLYPH.THREAD />}
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />

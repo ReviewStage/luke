@@ -1,9 +1,13 @@
 /**
- * snapshot.ts -- the source agent's work, pushed or not, copied to a new branch for an agent continued or forked from it.
+ * snapshot.ts -- the work of a source agent from before drives, pushed or not, copied to a new branch for an agent continued or forked from it.
+ *
+ * A source with a drive of its own hands its drive instead, which the new
+ * agent's is forked from (`../agent-drive.ts`), so this copy serves only an
+ * agent opened before drives, until its snapshots lapse.
  *
  * Each agent runs in a sandbox of its own, so what the source never
  * committed and pushed would be lost to the agent started from it. As that
- * Start is made, the service reaches the source's sandbox by its eve
+ * Start is made, the service reaches the source's sandbox by its
  * session's tag (`../vercel-sandbox-api.ts`), wakes it where it stopped, as
  * the Terminal tab's resume does, and records its checkout whole: what it
  * committed, what it changed, and every file it made that git does not
@@ -12,13 +16,13 @@
  * temporary directory, so the source's own index and working tree are never
  * touched, and the source may be idle or mid-turn: nothing here writes to it
  * but git's objects, and a push. The push goes through the repository's
- * write credential, set in the GitHub slot of the sandbox's firewall, in the
- * shape the agent's own session and the Terminal tab set it (`githubEntry`),
- * beside whatever else stands there (`../sandbox-firewall.ts`), so no token
- * enters the sandbox's files or a command's words; a member's own token is
- * taken off again once the push is done, unless a terminal or a turn of the
- * source still uses the sandbox. A sandbox this step woke is stopped
- * again once it is done, however it ended, unless a developer's terminal
+ * write credential, set at the sandbox's firewall in the shape the agent's
+ * own session and the Terminal tab set it, beside the swaps of the launch
+ * running there (`../sandbox-firewall.ts`), so no token
+ * enters the sandbox's files or a command's words; the credential stays
+ * there until the sandbox stops or the next write replaces it. A sandbox this step woke is stopped
+ * again, its kept launch deleted first as ahead of every stop, once it is
+ * done, however it ended, unless a developer's terminal
  * holds it, a turn of the source began meanwhile, or another Start's copy
  * still holds it past this one's own hold; one already up stays as it was.
  * That stop's calls to Vercel run on a fiber of its own, so the Start never
@@ -39,20 +43,12 @@ import { latestTurnsOfReached } from "@repo/database/models/message-reads";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { redactCredentials } from "@repo/features/credential-redaction";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_STATUS } from "@repo/wire";
 import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
-import {
-  FIREWALL_SLOT,
-  type FirewallSession,
-  githubEntry,
-  type RepositoryCredential,
-  sandboxFirewall,
-} from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
+import { type RepositoryCredential, sandboxFirewall } from "../sandbox-firewall.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -98,9 +94,9 @@ export type SnapshotOutcome =
 
 /** What a copy is asked: whose sandbox, the branch and the commit's message, the credential the push goes through, and whether the sandbox is in use and must be left up. */
 export interface SnapshotAsk<R> {
-  /** The account whose agent the source is, under which its sandbox's firewall record is kept. */
+  /** The account whose agent the source is, under which its sandbox's firewall launch is kept. */
   readonly userId: string;
-  /** The eve session the source's sandbox is tagged with. */
+  /** The session the source's sandbox is tagged with. */
   readonly sessionId: string;
   readonly branch: string;
   readonly message: string;
@@ -204,7 +200,9 @@ const stopMissed = (why: string) =>
  * It lists the sandbox again rather than trusting a session it was handed,
  * so a wake interrupted before it answered is stopped too, and asks again
  * whether it must stay up once listed, so a terminal, a turn, or another
- * Start's copy that took it up since the first ask keeps it.
+ * Start's copy that took it up since the first ask keeps it. Its kept
+ * launch is deleted ahead of each stop, as ahead of every other stop, so no
+ * renewal writes to it again.
  */
 const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -214,7 +212,9 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
       if (sandbox.currentSessionId === undefined || !UP_STATUSES.has(sandbox.status ?? "")) {
         continue;
       }
-      yield* api.stopSession(sandbox.currentSessionId);
+      const running = { name: sandbox.name, sessionId: sandbox.currentSessionId };
+      yield* sandboxFirewall(api).clear(running);
+      yield* (yield* api.session(running)).stop();
     }
   }).pipe(
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
@@ -238,31 +238,6 @@ const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     Effect.catch((failure) => stopMissed(String(failure))),
   );
 
-/**
- * A member's own token taken off the sandbox session's firewall once the
- * copy is done, however it ended, unless a terminal or a turn uses the
- * sandbox, which keeps it standing for them; within the stop's bound, and
- * a withdrawal that fails is logged, since the copy's outcome stands.
- */
-const withdrawUnlessInUse = <R>(
-  api: VercelSandboxApi,
-  session: FirewallSession,
-  ask: SnapshotAsk<R>,
-) =>
-  Effect.gen(function* () {
-    if (yield* ask.keepUp) return;
-    yield* sandboxFirewall(api).withdraw(session, FIREWALL_SLOT.GITHUB);
-  }).pipe(
-    // Note that a finalizer runs uninterruptibly, so the bound can cut the withdrawal off only once it is made interruptible.
-    Effect.interruptible,
-    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `a member's token was not taken off the source's sandbox: ${String(failure)}`,
-      ),
-    ),
-  );
-
 /** The copy inside the scope a woken sandbox's stop is registered on. */
 const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -273,17 +248,11 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     const up = UP_STATUSES.has(sandbox.status ?? "");
     // Note that the stop is registered ahead of the wake, so a wake cut short by the bound is stopped too.
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
-    // Lowered ahead of a wake, so a woken session a terminal or a turn keeps up lives the timeout, not an old sandbox's day.
-    if (!up) yield* capSandboxTimeout(api, sandbox);
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
-    const owner = { userId: ask.userId, sandboxSessionId: session };
+    const owner = { userId: ask.userId, name: sandbox.name, sandboxSessionId: session };
     const credential = yield* ask.credential;
-    // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
-    if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
-      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, owner, ask));
-    }
-    yield* sandboxFirewall(api).set(owner, FIREWALL_SLOT.GITHUB, githubEntry(credential));
-    const ran = yield* api.run(session, {
+    yield* sandboxFirewall(api).write(owner, { github: credential });
+    const ran = yield* (yield* api.session({ name: sandbox.name, sessionId: session })).run({
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
       cwd: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
@@ -333,7 +302,7 @@ const TAKEN_UP = { CONTINUED: "continued", FORKED: "forked" } as const;
 const TURN_UNDER_WAY: ReadonlySet<string> = new Set([TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]);
 
 /** Whether a turn of the agent whose conversation is named is under way: queued, or running. */
-export const agentTurnUnderWay = (conversationId: string) =>
+const agentTurnUnderWay = (conversationId: string) =>
   Effect.map(latestTurnsOfReached([conversationId]), (turns) =>
     TURN_UNDER_WAY.has(turns.get(conversationId)?.status ?? ""),
   );

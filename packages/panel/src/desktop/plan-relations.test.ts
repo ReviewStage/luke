@@ -101,6 +101,7 @@ function draw(
           task,
           tasks,
           door: { workspaceName: ACME.name, tasks: listed },
+          room: { scroller: { current: container }, column: { current: container } },
           onOpenTask: tasks.onSelect,
         }),
       ),

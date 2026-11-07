@@ -1,6 +1,6 @@
 import { accountPictureAt } from "@repo/features/account-picture";
 import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
-import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDate, formatDayTick, formatInstant } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
@@ -25,10 +25,12 @@ import {
 } from "@repo/ui";
 import { accountLabel } from "@repo/ui/account-initials";
 import { signInMethodLabel } from "@repo/ui/admin-format";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { AttachmentViewer } from "../../tasks/attachment-viewer.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminUserQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { ActionsChart, ActionsChartSkeleton } from "../charts/actions-chart.js";
 import {
@@ -49,7 +51,6 @@ import {
 } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { ADMIN_TAB, accountReadQuery } from "../routing.js";
-import { useAdminRead } from "../use-admin-read.js";
 import { AccountSupportSections } from "./account-support.js";
 
 const ACCOUNT_ERROR = readFailedWords("this account");
@@ -265,6 +266,9 @@ function supportAccessWords(detail: AdminUserDetail): string {
     : "no support access";
 }
 
+/** What the page says where Impersonate failed with no words of the service's. */
+const IMPERSONATE_FAILED = "Couldn't sign in as this account. Try again.";
+
 /**
  * Impersonate: signs the maintainer in as the member through the mount's
  * door, which leaves the page where it lands, so only a refusal comes back,
@@ -282,10 +286,12 @@ function ImpersonateControl({
   const press = () => {
     setBusy(true);
     setRefusal(undefined);
-    void impersonate(userId).then((refused) => {
-      setBusy(false);
-      setRefusal(refused);
-    });
+    void impersonate(userId)
+      .catch(() => IMPERSONATE_FAILED)
+      .then((refused) => {
+        setBusy(false);
+        setRefusal(refused);
+      });
   };
   return (
     <Inline>
@@ -483,13 +489,9 @@ export function AccountScreen({
 }): React.JSX.Element {
   const { reads, gate, impersonate } = useAdminDoors();
   const query = accountReadQuery(id, windowDays);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.USER, query: query },
-    (signal) => reads.user(query, signal),
-    ACCOUNT_ERROR,
-    { keeps: (shown) => shown.account.id === id },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminUserQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const back: AdminWayBack = { tab: ADMIN_TAB.USERS, onBack };
   const controls = (
     <AdminViewOptions windowDays={windowDays} onWindowDaysChange={onWindowDaysChange} />
@@ -497,7 +499,7 @@ export function AccountScreen({
   const note = windowWords(windowDays);
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

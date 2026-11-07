@@ -2,13 +2,8 @@ export { AccountClient, accountGateOpen, type StoredAccount } from "./account/cl
 export { AccountSessionManager, SignInFailed } from "./account/session-manager.js";
 export { ACCOUNT_STATUS } from "./account/snapshot.js";
 export {
-  CHATGPT_SIGN_IN,
-  CHATGPT_SIGN_IN_REASON,
-  type ChatGptSignIn,
-  chatGptSignIn,
-} from "./chatgpt-sign-in.js";
-export {
   LOOPBACK_CONSENT_CANCELED,
   type LoopbackConsentOptions,
   type OpenConsent,
 } from "./consent.js";
+export { PASTE_BACK_REASON, pasteBackConsent } from "./paste-back-consent.js";

@@ -6,7 +6,7 @@
  * answers exactly as one that names nothing, and so does an id that is no
  * UUID, so nothing is learned about plans the caller does not hold. The
  * developer writes a document in two ways here, each through the plan's one
- * write (`packages/service/src/tasks/plan-notes.ts`) that the notetaker and
+ * write (`packages/service/src/tasks/description-notes.ts`) that the notetaker and
  * the coding agents save their notes through: `POST /api/plans/{id}/edit` is
  * their edit of the document, saved, or answered as a conflict with the text
  * as it stands now where we wrote it meanwhile and the edit no longer
@@ -36,11 +36,11 @@
  * block that would close a cycle is refused
  * (`@repo/database/models/task-block-store`).
  *
- * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
+ * `/api/plans/{id}/revisions` is the description's history for the History tab, a
  * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
  * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's
- * (`@repo/database/models/plan-revisions`).
+ * (`@repo/database/models/description-revisions`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -55,8 +55,8 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
+import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
 import { devicesNamed } from "@repo/database/models/device-store";
-import { listRevisions, readRevision } from "@repo/database/models/plan-revisions";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   addTaskBlock,
@@ -70,30 +70,26 @@ import {
 } from "@repo/database/models/task-block-store";
 import { taskIdOfNumber } from "@repo/database/models/task-number-store";
 import {
-  checkTreeRepository,
   deleteTaskCommitted,
   listTasks,
-  readTaskHeader,
-  readTaskPlan,
+  readTask,
+  readTaskDescription,
   type StoredTask,
   setTaskParent,
-  type TaskHeader,
-  updateTaskCommitted,
+  type TaskAssigneeNotMember,
+  type TaskIdTaken,
 } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@repo/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { AGENT_ARCHIVER, AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@repo/features/agent-wire";
 import { TASK_START_STATUS } from "@repo/features/contract";
-import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
-import { PLAN_EDIT_REFUSAL } from "@repo/features/plan-edit";
+import { DESCRIPTION_EDIT_REFUSAL } from "@repo/features/description-edit";
 import {
   startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
-  TASK_CREATE_RELATION_KIND,
   TASK_MODE,
-  TASK_STATUS,
   type Task,
   type TaskAgentStart,
   type TaskBlockRequest,
@@ -102,31 +98,18 @@ import {
   type TaskStartAnswer,
 } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
-import { Data, Effect, Option } from "effect";
-import type { HttpClient } from "effect/http";
+import { Effect, Option } from "effect";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
-import {
-  everyStoppedForGood,
-  everyStopsForGood,
-  idleStandingAgents,
-  summaryOf,
-} from "../agents/coder-host/stop.js";
+import { everyStoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
-import { type SandboxStopReach, stoppedInBackground } from "../agents/session-sandboxes.js";
+import type { SandboxStopReach } from "../agents/session-sandboxes.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED } from "../core.js";
-import {
-  recordServerEvent,
-  SERVER_EVENT,
-  SERVER_TASK_FINISHER,
-  SERVER_TASK_SOURCE,
-} from "../events/server-events.js";
-import type { GitHubApp } from "../github/github-app.js";
+import { SERVER_TASK_SOURCE } from "../events/server-events.js";
 import { refreshRepositoryReads } from "../github/repository-reads.js";
-import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -136,19 +119,14 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
-import { archiveAskedStatus } from "./archive-settle.js";
 import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
+  DESCRIPTION_SAVE_REFUSAL,
+  DESCRIPTION_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
-} from "./plan-notes.js";
-import {
-  createTaskRelated,
-  relationsAsked,
-  type TaskCreateRelationRefused,
-} from "./task-create-relation.js";
-import { type TaskParent, taskParentOf } from "./task-parent.js";
+} from "./description-notes.js";
+import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "./task-change.js";
+import { createTaskAsked, type TaskCreateRelationRefused } from "./task-create-relation.js";
 import { moveTaskRelation, type TaskRelationRefused } from "./task-relation.js";
 
 export interface TasksProcedureSeams extends SandboxStopReach {
@@ -156,75 +134,6 @@ export interface TasksProcedureSeams extends SandboxStopReach {
   /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
 }
-
-/**
- * The repository as the row keeps it, with how it was reached: null where
- * none was named, or the full name as GitHub spells it once the workspace's
- * installation, or else the member's own token, reaches it
- * (`packages/service/src/github/workspace-repository.ts`). The workspace
- * is read only where a repository is named.
- */
-const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
-  workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
-  repository: string | null | undefined,
-  member: string | undefined,
-): Effect.fn.Return<
-  { readonly repository: string | null; readonly githubAccess: GitHubAccess },
-  HostedRefusal,
-  GitHubApp | HttpClient.HttpClient | DatabaseServices
-> {
-  if (repository === undefined || repository === null) {
-    return { repository: null, githubAccess: GITHUB_ACCESS.APP };
-  }
-  const organizationId = yield* workspace;
-  const reached = yield* workspaceRepository(organizationId, repository, member);
-  return { repository: reached.repository.fullName, githubAccess: reached.access };
-});
-
-/** The account's plan without its document, or not found for a plan it does not reach. */
-const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  taskId: string,
-): Effect.fn.Return<TaskHeader, HostedRefusal, DatabaseServices> {
-  const reached = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
-  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return reached.value;
-});
-
-/** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the procedure's refusal. */
-class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: HostedRefusal }> {}
-
-/**
- * The workspace a plan moves to, confirmed: the plan is the account's own,
- * since a teammate's plan moved out of a shared workspace would leave the
- * teammates who wrote it behind, and the account is a member of the
- * workspace, which answers as none where it is not. That the workspace's
- * GitHub reaches the plan's repository is confirmed under the plan's lock
- * (`movedRepositoryReached`), so a move never strands one.
- */
-const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  stored: TaskHeader,
-  workspaceId: string,
-): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
-  if (stored.ownerId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
-  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return workspaceId;
-});
-
-/** The move's guard: the workspace's GitHub reaches the repository the plan names under its lock, where it names one. */
-const movedRepositoryReached =
-  (workspaceId: string, member: string) =>
-  (
-    repository: string | null,
-  ): Effect.Effect<void, MoveRefused, GitHubApp | HttpClient.HttpClient | DatabaseServices> =>
-    repository === null
-      ? Effect.void
-      : workspaceRepository(workspaceId, repository, member).pipe(
-          Effect.asVoid,
-          Effect.mapError((refusal) => new MoveRefused({ refusal })),
-        );
 
 /**
  * The workspace a start lands in: the one the request named, where the
@@ -276,7 +185,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   const task =
     made.value.taskId === null
       ? Option.none()
-      : yield* hostedStoreOrUnavailable(readTaskPlan(userId, made.value.taskId));
+      : yield* hostedStoreOrUnavailable(readTaskDescription(userId, made.value.taskId));
   if (Option.isNone(task) || task.value.workspaceId !== organizationId) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -285,7 +194,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The agent the key names on the plan, where the Start made one before it
- * failed: a store write or read after eve took the session failed the
+ * failed: a store write or read after the session was opened failed the
  * Start, though the agent works on. Nothing where it made none, or where it
  * could not be read either.
  */
@@ -302,14 +211,14 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
  * the task as it was made where it cannot be read again just now.
  */
 const taskAfterStart = (userId: string, task: Task) =>
-  readTaskPlan(userId, task.id).pipe(
+  readTaskDescription(userId, task.id).pipe(
     Effect.map(Option.getOrElse(() => task)),
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
   );
 
 /**
  * The agent a start asks for, started on the plan it just made through the
- * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * agent's own Start (`startRequestedAgent`), reaching the agent's sessions as the developer;
  * a refusal is answered beside the plan rather than in its place, since the
  * plan stands either way and the developer's words are theirs to try again.
  * A Start that failed after its agent was made answers that agent, since it
@@ -323,7 +232,7 @@ const startedAgentOn = (
 ) => {
   const { task } = stored;
   return startRequestedAgent(
-    routedSessions<EveTypedTurn>(userId),
+    routedSessions<TypedTurn>(userId),
     userId,
     { taskId: task.id },
     agent,
@@ -381,14 +290,14 @@ const startedAgentOn = (
 
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
-  [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
-  [PLAN_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
-  [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
+  [DESCRIPTION_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
 ]);
 
 /** What an edit that saved nothing answers, by why, where it is not answered in band; the store out of reach is any other. */
 const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
-  [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
+  [DESCRIPTION_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
 ]);
 
 /**
@@ -412,37 +321,6 @@ const pickKept = (userId: string, asked: TaskRunsOnRequest) =>
       Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
     ),
   );
-
-/**
- * The parent a start names, confirmed in the workspace it starts in
- * (`task-parent.ts`): one the account does not reach is not found, as any
- * task it does not reach is, and a start naming another repository than the
- * parent's is refused by name; nothing is written either way.
- */
-const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  organizationId: string,
-  input: {
-    readonly parentTaskId: string;
-    readonly repository?: string | null;
-  },
-): Effect.fn.Return<TaskParent, HostedRefusal, DatabaseServices> {
-  const parent = yield* taskParentOf(
-    userId,
-    organizationId,
-    input.parentTaskId,
-    input.repository,
-  ).pipe(
-    Effect.catch((failure) => {
-      if (failure._tag === "TaskParentUnreached") return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (failure._tag === "TaskParentRepositoryDiffers") {
-        return Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED);
-      }
-      return hostedStoreOrUnavailable(Effect.fail(failure));
-    }),
-  );
-  return parent;
-});
 
 /**
  * How a start asks its task to be worked, checked before anything is
@@ -486,6 +364,21 @@ function relationRefused(
     default:
       return hostedStoreOrUnavailable(Effect.fail(failure));
   }
+}
+
+/** A make's refusal answered by name: a repository refused as its reach answered it, an assignee who is no member as invalid, an id another plan holds as not found, and a parent or a relation as `relationRefused` answers it. */
+function createRefused(
+  failure:
+    | HostedRefusal
+    | TaskAssigneeNotMember
+    | TaskIdTaken
+    | TaskCreateRelationRefused
+    | StoreFailure,
+): Effect.Effect<never, HostedRefusal> {
+  if (!("_tag" in failure)) return Effect.fail(failure);
+  if (failure._tag === "TaskAssigneeNotMember") return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  if (failure._tag === "TaskIdTaken") return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return relationRefused(failure);
 }
 
 /**
@@ -541,29 +434,17 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * A plan started with an empty document, its repository confirmed where
-     * it names one, and, where it names an agent, that agent started on it,
-     * in no repository where the plan names none. The agent's session is
-     * opened for the account the request resolved to (`coder-host/runtime-sessions.ts`); one whose
-     * agent's key already started an agent in the workspace answers that
-     * agent's plan and the agent (`startedBefore`). A pilot task is refused,
-     * also before anything is written, to an account without the Pilot
-     * experiment (`modeAsked`). A plan started as a child of another, by
-     * `parentTaskId` or a relation as its sub-task, takes its parent's
-     * repository and, where it names none, its assignee
-     * (`parentAsked`), confirmed again as any start's repository is; one
-     * started as others' parent takes their repository, which the tree
-     * shares, and one started blocking or blocked by others takes nothing of
-     * them (`relationsAsked`), and every relation is written in the plan's
-     * own transaction (`createTaskRelated`), so one refused makes nothing.
-     * A start naming an `id` makes the plan under it; sent again, it answers
-     * the plan it made, with no transaction, and starts the agent it names
-     * under that agent's own key, so never a second. An id a plan the
-     * account does not reach stands under is refused as a workspace it is
-     * not in is, so the answer names nothing of that plan. A start sent
-     * again under the idempotency key it was taken under is refused as
-     * already written without running (`writeReceiptMiddleware`), as a start
-     * made offline is, so none of its checks can refuse a plan it made.
+     * A plan started with an empty document as every door makes a task
+     * (`createTaskAsked`), and, where it names an agent, that agent started
+     * on it. The agent's session is opened for the account the request
+     * resolved to (`coder-host/runtime-sessions.ts`); one whose agent's key
+     * already started an agent in the workspace answers that agent's plan and
+     * the agent (`startedBefore`). A pilot task is refused, before anything is
+     * written, to an account without the Pilot experiment (`modeAsked`). An
+     * id a plan the account does not reach stands under is refused as a
+     * workspace it is not in is. A start sent again under the idempotency key
+     * it was taken under is refused as already written without running
+     * (`writeReceiptMiddleware`), so none of its checks can refuse a plan it made.
      */
     create: plans.create.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId } = context;
@@ -576,89 +457,35 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
       // A retry is answered above first, since its parent may be gone by now, or its device away, while its task stands.
-      const relations = startRelationsOf(input);
-      // A start as a sub-task of a plan is a start under that parent, which `parentTaskId` names as well.
-      const parentTaskId =
-        input.parentTaskId ??
-        relations.find((relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF)
-          ?.taskId;
-      const parent =
-        parentTaskId === undefined
-          ? undefined
-          : yield* parentAsked(userId, organizationId, { ...input, parentTaskId });
-      // A plan's children share its parent's repository, so a start under a parent holds them to that one.
-      const beside = yield* Effect.catch(
-        relationsAsked(
-          userId,
-          organizationId,
-          relations,
-          parent === undefined ? input.repository : parent.repository,
-        ),
-        relationRefused,
-      );
-      const childOf = beside.find((asked) => asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF);
-      // A plan in a tree works in the tree's repository: its parent's as a child, and its children's as a parent.
-      const repository =
-        parent !== undefined
-          ? parent.repository
-          : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
-            ? childOf.repository
-            : input.repository;
-      const reached = yield* reachableRepository(
-        Effect.succeed(organizationId),
-        repository,
-        userId,
-      );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
       const {
         task: stored,
         txid,
-        made,
-      } = yield* createTaskRelated(
+        made: _made,
+        ...reached
+      } = yield* createTaskAsked(
         userId,
         {
           ...(input.id === undefined ? undefined : { id: input.id }),
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
-          repository: reached.repository,
-          githubAccess: reached.githubAccess,
+          ...(input.repository === undefined ? undefined : { repository: input.repository }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
           ...(input.status === undefined ? undefined : { status: input.status }),
           ...(input.priority === undefined ? undefined : { priority: input.priority }),
-          ...(assigneeId === undefined ? undefined : { assigneeId }),
-          ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+          ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
+          ...(input.parentTaskId === undefined ? undefined : { parentTaskId: input.parentTaskId }),
           ...(input.mode === undefined ? undefined : { mode: input.mode }),
+          relations: startRelationsOf(input),
         },
-        beside,
-      ).pipe(
-        Effect.catch((failure) => {
-          switch (failure._tag) {
-            case "TaskAssigneeNotMember":
-              return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-            case "TaskIdTaken":
-              return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-            default:
-              return relationRefused(failure);
-          }
-        }),
-      );
+        SERVER_TASK_SOURCE.SIDEBAR,
+      ).pipe(Effect.catch(createRefused));
       // A task holds no place: the place a released desktop names on the task alone runs the agent the
       // create starts, which keeps it as the member's pick once it stands, or is kept as that pick where
       // the create starts none.
       if (input.runsOn !== undefined && agent === undefined) yield* pickKept(userId, input.runsOn);
-      // A start sent again under its id made no plan, so it counts none.
-      if (made) {
-        yield* recordServerEvent(
-          SERVER_EVENT.TASK_CREATE,
-          { userId, workspaceId: organizationId },
-          {
-            source: SERVER_TASK_SOURCE.SIDEBAR,
-          },
-        );
-      }
       // The agent runs where it names, else where a released desktop named on the task alone.
       const runsOnOfAgent = agent?.runsOn ?? input.runsOn;
       const answer: TaskStartAnswer =
@@ -692,150 +519,29 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(context.userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { plan: opened.value };
+      const { task, brief } = opened.value;
+      return { plan: task, ...(brief === undefined ? undefined : { brief }) };
     }),
 
     /**
-     * The plan's name, its repository, its pin, its workspace,
-     * where it stands, its assignee, or any of them changed, answered with
-     * its document; an assignee who is no member of the plan's workspace, or
-     * of the one it moves to, is refused as an invalid request. A repository and a
-     * move are confirmed before the row is touched, so a refused one leaves
-     * the rest unchanged too; a repository named beside a move is confirmed
-     * in the workspace the plan moves to, and a move confirms the repository
-     * the row names under its lock, so one changed meanwhile is the one
-     * confirmed.
-     *
-     * A plan is archived no longer; an archive an older build asks for
-     * stops every coding agent of the plan first, as a Stop stops one, then
-     * settles the plan instead, and an unarchive puts it back to work
-     * (`archive-settle.ts`); a status named beside either is the one
-     * written. An eve that refuses a Stop, or an agent still coming up or
-     * with a message awaiting its turn, which no Stop can name yet, leaves
-     * the plan and every agent standing and the archive refused as not
-     * ready, so it is asked again a moment later.
-     *
-     * A move to Done archives with the plan every agent of it standing idle,
-     * as the member, and lets each go as an archive by hand does, its sandbox
-     * stopped and its device's folder removed; one still at work is archived
-     * as its turn ends. A move off Done brings back the agents that Done
-     * archived (`task-store.ts`'s `updateTaskCommitted`).
+     * The plan changed as every door changes a task (`task-change.ts`):
+     * confirmed, written, and followed through, any archive by the member.
      */
     update: plans.update.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId } = context;
       const taskId = yield* pathUuid(input.params.id);
-      const changes = input.body;
-      const organizationId =
-        changes.workspaceId === undefined
-          ? undefined
-          : yield* movedToWorkspace(
-              userId,
-              yield* reachedTask(userId, taskId),
-              changes.workspaceId,
-            );
-      const workspace =
-        organizationId === undefined
-          ? Effect.map(reachedTask(userId, taskId), (stored) => stored.workspaceId)
-          : Effect.succeed(organizationId);
-      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
-      const reached =
-        "repository" in changes
-          ? yield* reachableRepository(
-              workspace,
-              changes.repository,
-              (yield* reachedTask(userId, taskId)).ownerId === userId ? userId : undefined,
-            )
-          : undefined;
-      // An assignee is confirmed a member before anything is stopped, since a Stop is not taken
-      // back by a write refused after it; the store confirms it again under the row's lock.
-      const { assigneeId } = changes;
-      if (assigneeId !== undefined && assigneeId !== null) {
-        const member = yield* hostedStoreOrUnavailable(
-          isWorkspaceMember(assigneeId, yield* workspace),
-        );
-        if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
       // Note that a place a released desktop names (`runsOn`) is read and goes nowhere, because a task holds none.
-      // A repository another than its tree's is refused before anything is stopped too; the store holds it again under the lock.
-      // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
-      if (reached !== undefined) {
-        yield* checkTreeRepository(userId, taskId, reached.repository).pipe(
-          Effect.catch((failure) =>
-            failure._tag === "TaskTreeRepositoryLocked"
-              ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
-              : hostedStoreOrUnavailable(Effect.fail(failure)),
-          ),
-        );
-      }
-      const archiving = changes.archived === true;
-      if (archiving) {
-        const agents = yield* hostedStoreOrUnavailable(listAgents(userId, taskId));
-        // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
-        if (!(yield* everyStopsForGood(agents))) {
-          return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-        }
-        yield* everyStoppedForGood(writer, userId, agents);
-      }
-      // Note that the archive stamp is never written, because a task is archived no longer: the request settles the task, or puts it back to work.
-      const status =
-        changes.status !== undefined || changes.archived === undefined
-          ? changes.status
-          : yield* hostedStoreOrUnavailable(
-              archiveAskedStatus(
-                userId,
-                taskId,
-                (yield* reachedTask(userId, taskId)).status,
-                changes.archived,
-              ),
-            );
-      const task = yield* updateTaskCommitted(
+      const { runsOn: _runsOn, ...asked } = input.body;
+      const confirmed = yield* taskChangeAsked(userId, taskId, asked);
+      const task = yield* taskChangeWritten(userId, taskId, confirmed, {
+        by: AGENT_ARCHIVER.MEMBER,
         userId,
-        taskId,
-        {
-          ...("name" in changes ? { name: changes.name } : undefined),
-          ...(organizationId === undefined ? undefined : { organizationId }),
-          ...(reached === undefined
-            ? undefined
-            : { repository: reached.repository, githubAccess: reached.githubAccess }),
-          ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
-          ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
-          ...(changes.readMark === undefined ? undefined : { readMark: changes.readMark }),
-          ...(status === undefined ? undefined : { status }),
-          ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
-          ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-        },
-        organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
-        { archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId }, idle: idleStandingAgents },
-      ).pipe(
-        Effect.catch((failure) =>
-          failure._tag === "MoveRefused"
-            ? Effect.fail(failure.refusal)
-            : failure._tag === "TaskAssigneeNotMember"
-              ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-              : failure._tag === "TaskTreeRepositoryLocked"
-                ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
-                : hostedStoreOrUnavailable(Effect.fail(failure)),
-        ),
-      );
+      });
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid, archived, statusMoved } = task.value;
-      if (archived.length > 0) yield* stoppedInBackground(seams, archived);
-      // Counted where this write moved the task to Done or Canceled, as the store read it under the task's lock.
-      if (
-        statusMoved &&
-        (plan.status === TASK_STATUS.DONE || plan.status === TASK_STATUS.CANCELED)
-      ) {
-        yield* recordServerEvent(
-          SERVER_EVENT.TASK_FINISH,
-          { userId, workspaceId: plan.workspaceId },
-          {
-            status: plan.status,
-            by: SERVER_TASK_FINISHER.MEMBER,
-          },
-        );
-      }
+      yield* taskChangeSettled(seams, userId, task.value);
+      const { task: plan, txid } = task.value;
       return txid === undefined ? { plan } : { plan, txid };
     }),
 
@@ -850,7 +556,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const taskId = yield* pathUuid(input.params.id);
       const written = yield* blockWritten(userId, taskId, input.body);
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTaskDescription(userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const { txid } = written.value;
       return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
@@ -888,7 +594,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         relationRefused,
       );
       if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTaskDescription(userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const { txid } = written.value;
       return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
@@ -897,9 +603,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /**
      * Every coding agent of the plan stopped for good first, as a Stop stops
      * one, so none works on for a plan that is gone; then the
-     * plan's eve sessions and its agents' retired (`retire-sessions.ts`),
+     * plan's sessions and its agents' retired (`retire-sessions.ts`),
      * with no transaction open; then the plan, under its lock, which reads
-     * again which agents stand. An eve that refuses a Stop, an agent with a turn still
+     * again which agents stand. A harness that refuses a Stop, an agent with a turn still
      * coming that no Stop can name yet, or an agent started while the others
      * were stopped, leaves the plan standing and refused.
      *
@@ -915,7 +621,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         listAgents(userId, taskId, { includeArchived: true }),
       );
       yield* everyStoppedForGood(writer, userId, agents);
-      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;
+      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on a harness;
       // an agent started meanwhile is none of these, keeps its session, and refuses the delete below.
       yield* hostedStoreOrUnavailable(
         retiredBeforeDelete(retiring)(agents.map(({ conversationId }) => conversationId)),
@@ -933,53 +639,48 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * The developer's edit of the plan's document: answered with the plan as
+     * The developer's edit of the description: answered with the plan as
      * saved and the transaction it was saved in, which a host waits for on
      * the plan's record before it lets a delivery of the plan land, with the
      * text as it now stands and who last wrote it where the edit conflicts
-     * with it, or as refused where the plan would be longer than a plan may be.
+     * with it, or as refused where the description would be longer than a description may be.
      */
-    edit: plans.edit.effect(function* ({ input, context }) {
+    editDescription: plans.editDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
-        case PLAN_SAVE_STATUS.SAVED:
-          yield* recordServerEvent(
-            SERVER_EVENT.PLAN_EDIT,
-            { userId: context.userId, workspaceId: saved.task.workspaceId },
-            {},
-          );
+        case DESCRIPTION_SAVE_STATUS.SAVED:
           return {
             plan: saved.task,
             ...(saved.txid === undefined ? undefined : { txid: saved.txid }),
           };
-        case PLAN_SAVE_STATUS.CONFLICT:
+        case DESCRIPTION_SAVE_STATUS.CONFLICT:
           return {
             conflict:
               saved.by === undefined
                 ? { current: saved.current }
                 : { current: saved.current, by: saved.by },
           };
-        case PLAN_SAVE_STATUS.NOT_SAVED:
-          if (saved.reason === PLAN_SAVE_REFUSAL.TOO_LONG) {
-            return { refused: PLAN_EDIT_REFUSAL.TOO_LONG };
+        case DESCRIPTION_SAVE_STATUS.NOT_SAVED:
+          if (saved.reason === DESCRIPTION_SAVE_REFUSAL.TOO_LONG) {
+            return { refused: DESCRIPTION_EDIT_REFUSAL.TOO_LONG };
           }
           return yield* Effect.fail(EDIT_REFUSAL.get(saved.reason) ?? HOSTED_REFUSAL.UNAVAILABLE);
       }
     }),
 
     /**
-     * A page of the plan's history, the newest first. A plan with no history
+     * A page of the description's history, the newest first. A description with no history
      * yet answers an empty page, and so does a plan id the account does not
      * own, which it answers no differently.
      */
-    revisions: plans.revisions.effect(function* ({ input, context }) {
+    descriptionRevisions: plans.descriptionRevisions.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       return yield* hostedStoreOrUnavailable(listRevisions(context.userId, taskId, input.before));
     }),
 
     /** One revision's content and the content before it. */
-    revision: plans.revision.effect(function* ({ input, context }) {
+    descriptionRevision: plans.descriptionRevision.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const revision = yield* hostedStoreOrUnavailable(
         readRevision(context.userId, taskId, input.seq),
@@ -989,16 +690,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * One revision's content put back as the plan's, a revision of the
+     * One revision's content put back as the description, a revision of the
      * developer's naming it, answered with the plan as it now stands and the
      * transaction its revision was written in, none where it changed
      * nothing. It names nothing in a body: the plan and the revision are the
      * path's.
      */
-    restore: plans.restore.effect(function* ({ input, context }) {
+    restoreDescription: plans.restoreDescription.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const restored = yield* restoreRevision({ userId: context.userId, taskId }, input.seq);
-      if (restored.status !== PLAN_SAVE_STATUS.SAVED) {
+      if (restored.status !== DESCRIPTION_SAVE_STATUS.SAVED) {
         return yield* Effect.fail(
           RESTORE_REFUSAL.get(restored.reason) ?? HOSTED_REFUSAL.UNAVAILABLE,
         );

@@ -43,7 +43,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { changesTab, STRIP_TAB_KIND, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -88,7 +88,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -374,6 +374,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // The window's terminals are kept in its session storage, which each test starts without.
+  window.sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -448,11 +450,14 @@ function mount(
   return Object.assign(container, { relist: () => act(draw) });
 }
 
-/** Lets every promise settled so far run its continuations. */
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
 }
 
 test("an agent the task list carries draws in the page's first frame, titled as its tab would be, reading nothing of it", async () => {
@@ -640,7 +645,7 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Plan or Comments", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Description or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -687,7 +692,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Plan|Comments|Inbox)/u.test(label ?? "")),
+    offered.filter((label) => /^(Description|Comments|Inbox)/u.test(label ?? "")),
     [],
     "no task's kind nor an Inbox is offered",
   );
@@ -753,7 +758,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
     [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["Pages", "Terminal", "Browser"],
+    ["Pages", "Cloud Terminal", "Local Terminal", "Browser"],
   );
   const row =
     [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
@@ -820,7 +825,7 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   );
 });
 
-test("an agent on a task, an archived one's page among them, opens on its plan sent by the task, whose name opens the task's plan", async () => {
+test("an agent on a task, an archived one's page among them, opens on its description sent by the task, whose name opens the task's plan", async () => {
   const task: Task = {
     id: PAGE_TASK,
     workspaceId: PAGE.workspaceId,
@@ -830,7 +835,7 @@ test("an agent on a task, an archived one's page among them, opens on its plan s
     repository: "acme/relay",
     document: { body: "", assumptions: [] },
   };
-  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.PLAN };
+  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.DESCRIPTION };
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Invitations" }] },
@@ -941,7 +946,7 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
     ),
     headings,
   );
-  assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
+  assert.deepEqual(headings, ["Pull requests", "Cloud Terminal", "Local Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
@@ -1066,10 +1071,12 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLAnchorElement>(
-    "aside.side-panel .pull-request-earlier a",
+  // Note that the link stands once the conversation's read reaches its query.
+  const more = await vi.waitFor(
+    () =>
+      container.querySelector<HTMLAnchorElement>("aside.side-panel .pull-request-earlier a") ??
+      assert.fail("the tab counts the earlier comments"),
   );
-  assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
   assert.deepEqual(openedOnGitHub, [other, url]);
 });
@@ -1414,7 +1421,7 @@ interface OpenedOrigin {
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
-  const head = card.querySelector<HTMLElement>("[data-origin-plan] > summary");
+  const head = card.querySelector<HTMLElement>("[data-origin-description] > summary");
   act(() => head?.click());
   return { card, sender: card.querySelector<HTMLElement>(".ui-message-line-sender") };
 }
@@ -1478,7 +1485,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
-  assert.deepEqual(chosen, [{ changes: AGENT_ID, number: 2905 }]);
+  assert.deepEqual(chosen, [changesTab(AGENT_ID, 2905)]);
 });
 
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
@@ -1556,9 +1563,7 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
     }),
   );
   await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more, "the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
     (each) => each.textContent === "Copy link",
   );
@@ -1569,12 +1574,18 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.equal(newestToastSays(), "Link copied");
 });
 
-/** Opens the page's ⋯ and answers the item under `label`, or fails saying it is not offered. */
+/** Opens the page's menu as a reader does: a right-click on the agent's name in its toolbar. */
+function openPageMenu(page: HTMLElement): void {
+  const name =
+    page.querySelector(".ui-toolbar-title-menu") ?? assert.fail("the toolbar names the agent");
+  act(() => {
+    name.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+}
+
+/** Opens the page's menu and answers the item under `label`, or fails saying it is not offered. */
 function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
-  const more =
-    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
-    assert.fail("the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   return (
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === label,
@@ -1582,12 +1593,10 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Add repository…, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
+  openPageMenu(page);
 
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (each) => each.textContent,
@@ -1597,6 +1606,8 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
     "Copy transcript",
     "Rename",
     "Show terminal⌘J",
+    "Show local",
+    "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",
   ]);
@@ -1625,7 +1636,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
 
   assert.deepEqual(offered(), [], "the menu closed on the pin");
-  act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  openPageMenu(page);
   assert.deepEqual(offered(), [
     "Copy link",
     "Copy transcript",
@@ -1634,6 +1645,8 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "PinP",
     "Move to section",
     "Show terminal⌘J",
+    "Show local",
+    "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",
   ]);
@@ -1674,17 +1687,24 @@ test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal t
   await settle();
 
   assert.equal(offered, true, "⌘J is offered on the page");
-  assert.deepEqual(chosen, [{ terminal: AGENT_ID }, { terminal: AGENT_ID }]);
+  assert.deepEqual(
+    chosen.map((tab) =>
+      typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TERMINAL
+        ? [tab.terminal, tab.title]
+        : tab,
+    ),
+    [
+      [AGENT_ID, "Cloud 1"],
+      [AGENT_ID, "Cloud 1"],
+    ],
+  );
 });
 
 test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its sandbox taking no shell", async () => {
   listed = { ...PAGE, archivedAt: 2 };
   const { page, chosen } = mountHearingPanel();
   await settle();
-  const more =
-    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
-    assert.fail("the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (each) => each.textContent,
   );
@@ -1897,18 +1917,22 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
+  const chipsNow = () => [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
 
-  assert.deepEqual(
-    chips.map((chip) => [
-      chip.dataset.kind,
-      chip.querySelector(".ui-inline-ref-label")?.textContent,
-    ]),
-    [
-      ["file", "store.ts"],
-      ["folder", "src"],
-    ],
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsNow().map((chip) => [
+        chip.dataset.kind,
+        chip.querySelector(".ui-inline-ref-label")?.textContent,
+      ]),
+      [
+        ["file", "store.ts"],
+        ["folder", "src"],
+      ],
+    ),
   );
+  const chips = chipsNow();
   const [fileChip, folderChip] = chips;
   assert.ok(fileChip && folderChip);
   restOn(fileChip);
@@ -1959,8 +1983,12 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
-  assert.equal(chips.length, 2, "the pull request and its files are chips");
+  const chipsNow = () => [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  // Note that the agent's words stand once its transcript reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(chipsNow().length, 2, "the pull request and its files are chips"),
+  );
+  const chips = chipsNow();
 
   for (const chip of chips) {
     restOn(chip);
@@ -2053,7 +2081,11 @@ test("on a phone the page is headed by its way back's glyph, the agent's name ce
     "one control a corner",
   );
   assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
-  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(offered.includes("Show panel"), "the ⋯ offers the panel");
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });

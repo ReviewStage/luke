@@ -25,14 +25,14 @@ or linking GitHub later, authorizes the Vespin GitHub App; we store its
 OAuth tokens encrypted on the Service and never send them to your Mac or
 browser.
 
-### Workspaces, tasks, and plans
+### Workspaces, tasks, and descriptions
 
 Every account gets a first workspace, and you can create or join others.
 Members of a workspace see each other's names, email addresses, and roles.
 Owners and admins can invite people by email, upload a workspace photo, and
 connect a GitHub App installation. Within a workspace we store each task's
-name, its plan (a Markdown document written by members and agents) with its
-full revision history, comments on the plan, inbox items and their answers,
+name, its description (a Markdown document written by members and agents) with its
+full revision history, comments on the description, inbox items and their answers,
 pages that agents make, pictures and short videos added to any of these, and,
 if the Memory experiment is on, short facts agents save about how your team
 works. Every member of the workspace can see all of this.
@@ -43,7 +43,7 @@ For each turn an agent runs, we store your message, any files you attach, the
 agent's reply and reasoning summaries, each tool call with its input and
 output, and the model, token counts, and timing. Tool output can include files
 from your repository, command output, web pages, screenshots of the agent's
-browser, and answers from your integrations. Transcripts and plans are stored
+browser, and answers from your integrations. Transcripts and descriptions are stored
 as written, not end-to-end encrypted, and our operators can read them.
 
 ### Repository and GitHub data
@@ -131,14 +131,15 @@ way, under your account.
 ### Error and performance data
 
 The Mac app, the web app, and the Service send Sentry error reports, crash
-reports, reports of the errors Vespin shows you, and performance traces for a
-sample of launches and page loads. They use Sentry's default data collection,
+reports, reports of the errors Vespin shows you, and performance traces and
+profiles for a sample of launches and page loads. They use Sentry's default data collection,
 so reports may include error messages, stack traces, request addresses and
 headers, device details, and your IP address. Sentry replaces values whose
 names look like credentials, and Vespin removes query parameter values and
 token-shaped parts of addresses. Reports name your account by its id only. The
 Service does not send Sentry what was sent to or returned by a model, though an
-error's own words can quote what an agent was working on.
+error's own words can quote what an agent was working on. The Mac app also sends
+Sentry diagnostic data about its resource use, such as processor usage.
 
 ### Feedback
 
@@ -197,18 +198,25 @@ We do not use your code or conversations to train AI models.
 We do not sell your personal information or use it for advertising. We share
 data with:
 
-- **AI providers:** your agents, web search, dictation, titles, and pull
-  request chapters run on Anthropic or OpenAI, always on the API key or
-  subscription you saved, never ours. Each call carries what the model needs,
-  such as the plan, the conversation, attached files, and what the agent read.
-  These providers process it under their own policies.
+- **AI providers:** your agents, web search, dictation, and pull request
+  chapters run on Anthropic or OpenAI, always on the API key or subscription
+  you saved, never ours. Titles, of your agents, tasks, and the threads you
+  start, are generated on Anthropic under Vespin's own API key, from excerpts
+  of an agent's opening message, your latest message, and its latest answer,
+  or of a thread's first message.
+  Each call carries what the model needs, such as the description, the conversation,
+  attached files, and what the agent read. These providers process it under
+  their own policies.
 - **GitHub:** to check out repositories, push branches, and open pull requests
   through the Vespin GitHub App. Your devices also contact GitHub directly to
   check for updates and load avatars.
 - **Infrastructure providers:** Vercel (hosting, agent sandboxes, and Vercel
   Connect, which holds integration tokens), Neon (database), PostHog (usage
   data, screen recordings, and feedback), Sentry (error and performance
-  monitoring), Resend (email), and Slack (feedback and Vespin's Slack bot).
+  monitoring), Resend (email: for the onboarding emails a new account is sent,
+  Resend is told your email address, your first name, when you signed up, whether
+  you accepted a workspace invitation, and on which days you started a task),
+  and Slack (feedback and Vespin's Slack bot).
 - **Integrations and connected apps:** the services and MCP clients you connect
   receive what your agents send them, or what our tools answer, and keep it
   under their own policies.
@@ -224,7 +232,7 @@ database is hosted by Neon, and agents' checkouts and session files live in
 Vercel Sandboxes and in snapshots kept for up to thirty days after last use.
 We use encryption in transit (TLS), encrypt saved credentials as described
 above, and keep the tokens agents use outside their sandboxes, adding them at
-the sandbox's network firewall. Transcripts, plans, and other content are not
+the sandbox's network firewall. Transcripts, descriptions, and other content are not
 end-to-end encrypted.
 
 While we strive to protect your information, no method of electronic storage
@@ -241,14 +249,14 @@ removed seven days later. When you delete your account:
 
 - **Account data** (profile, sessions, OAuth tokens, saved credentials,
   preferences, and integration records) is deleted at once.
-- **Your tasks, plans, transcripts, and inbox items** are deleted at once, and
+- **Your tasks, descriptions, transcripts, and inbox items** are deleted at once, and
   your agents' sandboxes shortly after.
 - **Workspaces you own and are the only member of** are deleted at once with
   everything in them, as a deleted task is. Their GitHub, Slack, and Sentry
   connections are removed on our side; our apps stay installed at those
   services until you uninstall them there.
-- **Workspaces with other members**, and the memories, comments, and plan text
-  you left in them, stay with the workspace without your name.
+- **Workspaces with other members**, and the memories, comments, and
+  description text you left in them, stay with the workspace without your name.
 - **Usage data and screen recordings:** we ask PostHog to erase them; if it
   cannot be reached, your account is deleted anyway and PostHog keeps them.
 - **Error reports** already sent to Sentry are kept until Sentry's retention
@@ -267,7 +275,7 @@ Depending on your jurisdiction, you may have the right to:
 - Request a copy of your data in a portable format
 - Withdraw consent at any time
 
-To exercise any of these rights, contact us at founders@stagereview.app. You
+To exercise any of these rights, contact us at founders@vespin.dev. You
 can also act directly in the app:
 
 - **Usage data:** turn off Settings › Account › "Share usage data". It is set
@@ -330,7 +338,7 @@ California Consumer Privacy Act (CCPA) and the California Privacy Rights Act
 - **Right to non-discrimination:** we will not discriminate against you for
   exercising any of these rights.
 
-To exercise these rights, contact us at founders@stagereview.app. We will
+To exercise these rights, contact us at founders@vespin.dev. We will
 verify your identity before processing your request.
 
 ## 13\. International data transfers
@@ -373,4 +381,4 @@ provisions.
 ## 17\. Contact us
 
 If you have questions about this Privacy Policy, please contact us at
-founders@stagereview.app.
+founders@vespin.dev.

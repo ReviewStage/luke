@@ -7,6 +7,7 @@ import {
   type PullRequestState,
 } from "@repo/features/agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import type { Workspace } from "@repo/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -14,8 +15,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handMembers, stateWith } from "../testing/app-state.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { RelatedTasks } from "./related-tasks.js";
@@ -52,6 +53,27 @@ beforeEach(() => {
   fakeAppBridge({});
   fakeActPort({});
   handMembers(() => ({ rows: { members: [] } }));
+  // The task's pull requests, as the list followed live holds them.
+  writeAppState(
+    stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          taskPullRequests: [
+            {
+              taskId: TASK.id,
+              pullRequests: [
+                pullRequest(612, PULL_REQUEST_STATE.OPEN),
+                pullRequest(611, PULL_REQUEST_STATE.DRAFT),
+                pullRequest(600, PULL_REQUEST_STATE.MERGED),
+              ],
+            },
+          ],
+        },
+      },
+    ),
+  );
 });
 
 afterEach(() => {
@@ -86,17 +108,7 @@ const TASK: TaskSummary = {
   status: TASK_STATUS.IN_PROGRESS,
   priority: TASK_PRIORITY.HIGH,
   number: 42,
-  agents: {
-    total: 1,
-    working: 0,
-    agents: [],
-    pullRequestTotal: 3,
-    pullRequests: [
-      pullRequest(612, PULL_REQUEST_STATE.OPEN),
-      pullRequest(611, PULL_REQUEST_STATE.DRAFT),
-      pullRequest(600, PULL_REQUEST_STATE.MERGED),
-    ],
-  },
+  agents: { total: 1, working: 0, pullRequestTotal: 3 },
 };
 
 test("a related task's row is led by its owner's relation and ends with its open pull requests, and a press opens it", () => {
@@ -117,6 +129,7 @@ test("a related task's row is led by its owner's relation and ends with its open
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Related tasks",
           rows: [{ task: TASK, relation: "Blocks" }],
           onOpenTask: (taskId: string) => opened.push(taskId),
@@ -165,6 +178,7 @@ test("a related task's row says it is blocked beside its name and how many of it
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Sub-tasks",
           rows: [{ task: blocked }],
           onOpenTask: tasks.onSelect,
@@ -201,6 +215,7 @@ test("under a finger, a related task's row draws no ⋯, and a long press on it 
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Sub-tasks",
           rows: [{ task: TASK }],
           onOpenTask: () => undefined,

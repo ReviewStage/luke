@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { Database } from "@repo/database/core/query";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
 import { openHostedStoreTestDatabase } from "@repo/database/testing";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
@@ -10,11 +12,12 @@ import {
 } from "@repo/features/provider-key-wire";
 import { jsonResponse } from "@repo/wire/testing";
 import { generateText, type LanguageModel } from "ai";
+import { eq } from "drizzle-orm";
 import { Effect, Redacted, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
+import { USER_ROLE } from "../../admin/admin-access.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { ownKeyOf } from "./account-keys.js";
-import { titleModel } from "./model.js";
 import { productionSummaryModel } from "./replay-summary.js";
 
 /**
@@ -22,8 +25,8 @@ import { productionSummaryModel } from "./replay-summary.js";
  * rows over a real dialect and spent against a provider faked at its fetch:
  * the account's own API key for the provider it prefers or the other's, and
  * none, never ours, where it saved none, holds only a Claude setup-token, or
- * its key cannot be read; and an agent's title and a replay's summary told
- * on it.
+ * its key cannot be read; and a replay's summary told on it, never on the
+ * key the deployment holds for titles.
  *
  * Synthetic keys and accounts; the key-encryption keys are fixed bytes
  * written for this file.
@@ -83,8 +86,14 @@ function provider(answers: readonly Response[]) {
   return { fetch, keys, asked };
 }
 
-async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string>>) {
+async function accountWithKeys(
+  saved: Partial<Record<ProviderKeyProvider, string>>,
+  role: string = USER_ROLE.USER,
+) {
   const userId = await database.createUser();
+  await database.run(
+    Database.use((db) => db.update(user).set({ role }).where(eq(user.id, userId))),
+  );
   const ring = parseKeyRing(Redacted.make(RING.HELD));
   if (Result.isFailure(ring)) return assert.fail("not a ring");
   for (const [named, key] of Object.entries(saved)) {
@@ -110,14 +119,21 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   return userId;
 }
 
-/** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null. */
+/** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null, and the Preview stand-ins given. */
 async function ownKey(
   userId: string,
   preferred: ProviderKeyProvider,
   ring: string | null = RING.HELD,
+  standIns: Partial<Record<ProviderKeyProvider, string>> = {},
 ) {
+  const previewApiKeys = Object.fromEntries(
+    Object.entries(standIns).map(([provider, key]) => [provider, Redacted.make(key)]),
+  );
   const own = await database.run(
-    ownKeyOf(userId, preferred, ring === null ? undefined : Redacted.make(ring)),
+    ownKeyOf(userId, preferred, {
+      providerKeyEncryptionKeys: ring === null ? undefined : Redacted.make(ring),
+      previewApiKeys,
+    }),
   );
   return own === undefined ? undefined : { provider: own.provider, key: Redacted.value(own.key) };
 }
@@ -147,7 +163,7 @@ async function accountWithSetupToken() {
   return userId;
 }
 
-test("a call beside an account's agents, such as a title, chapters, or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none, holds only a Claude setup-token, or none opens, never Vespin's", async () => {
+test("a call beside an account's agents, such as chapters or a replay's summary, spends the account's own key for the provider it prefers, the other provider's where it saved only that, and nothing where it saved none, holds only a Claude setup-token, or none opens, never Vespin's", async () => {
   const both = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
     [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
@@ -176,7 +192,50 @@ test("a call beside an account's agents, such as a title, chapters, or a replay'
   assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
-/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of ours, which it holds none of. */
+test("on a Preview, a call beside an admin's agents spends the Preview's stand-in key where no key of the account's opens, and the account's own wherever one does, and a member's never spends it", async () => {
+  const both = await accountWithKeys(
+    {
+      [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+      [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
+    },
+    USER_ROLE.ADMIN,
+  );
+  const openAiOnly = await accountWithKeys(
+    { [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI },
+    USER_ROLE.ADMIN,
+  );
+  const none = await accountWithKeys({}, USER_ROLE.ADMIN);
+  const member = await accountWithKeys({});
+  const standIns = {
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "sk-ant-preview-stand-in-1111",
+    [PROVIDER_KEY_PROVIDER.OPENAI]: "sk-proj-preview-stand-in-1111",
+  };
+
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    key: ACCOUNT_KEY.ANTHROPIC,
+  });
+  assert.deepEqual(await ownKey(openAiOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    key: ACCOUNT_KEY.OPENAI,
+  });
+  assert.deepEqual(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.OTHER, standIns), {
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    key: standIns[PROVIDER_KEY_PROVIDER.ANTHROPIC],
+  });
+  assert.deepEqual(
+    await ownKey(none, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, {
+      [PROVIDER_KEY_PROVIDER.OPENAI]: standIns[PROVIDER_KEY_PROVIDER.OPENAI],
+    }),
+    { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: standIns[PROVIDER_KEY_PROVIDER.OPENAI] },
+  );
+  assert.equal(
+    await ownKey(member, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns),
+    undefined,
+  );
+});
+
+/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and our own key for titles, which no such call spends. */
 const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -186,6 +245,8 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING.HELD),
+  titleAnthropicApiKey: Redacted.make("sk-ant-vespin-title-key-1111"),
+  previewApiKeys: {},
 };
 
 /** Asks the model once, answering its text or nothing where the provider refused. */
@@ -205,47 +266,6 @@ async function askOnce(
     return undefined;
   }
 }
-
-/** An agent's title model for the account, preferring the provider given, as production reads it, over the provider's door given. */
-async function titleModelFor(
-  userId: string,
-  preferred: ProviderKeyProvider,
-  fetch: typeof globalThis.fetch,
-) {
-  const own = await database.run(
-    ownKeyOf(userId, preferred, ENVIRONMENT.providerKeyEncryptionKeys),
-  );
-  return own === undefined ? undefined : titleModel(own, fetch);
-}
-
-test("an agent's title is told on the account's own key, Anthropic's small model on its Anthropic key and OpenAI's on an OpenAI key it saved alone, and no model at all where it saved none, never on Vespin's key", async () => {
-  const anthropicKeyed = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const openAiOnly = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
-  const none = await accountWithKeys({});
-  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-  const openAi = provider([jsonResponse({ error: { message: "fixture: stop here" } }, 500)]);
-
-  const onAnthropic = await titleModelFor(
-    anthropicKeyed,
-    PROVIDER_KEY_PROVIDER.OPENAI,
-    anthropic.fetch,
-  );
-  const onOpenAi = await titleModelFor(openAiOnly, PROVIDER_KEY_PROVIDER.ANTHROPIC, openAi.fetch);
-  assert.ok(onAnthropic !== undefined && onOpenAi !== undefined);
-  await askOnce(onAnthropic);
-  await askOnce(onOpenAi);
-
-  assert.deepEqual(anthropic.keys, [ACCOUNT_KEY.ANTHROPIC]);
-  assert.deepEqual(anthropic.asked, [{ host: "api.anthropic.com", model: "claude-haiku-5-5" }]);
-  assert.deepEqual(openAi.keys, [ACCOUNT_KEY.OPENAI]);
-  assert.deepEqual(openAi.asked, [{ host: "api.openai.com", model: "gpt-6-luna" }]);
-  assert.equal(
-    await titleModelFor(none, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch),
-    undefined,
-  );
-});
 
 /** A replay's summary model for the account and the new agent's choice, as a Start reads it, over the provider's door given. */
 function summaryModelFor(userId: string, choice: ModelChoice, fetch: typeof globalThis.fetch) {

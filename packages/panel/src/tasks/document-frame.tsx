@@ -5,22 +5,22 @@ import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 
 /**
- * document-frame.tsx -- what every document of the window is drawn in, a plan's, a version's, and an issue's alike: the column it scrolls in, and the line under its title.
+ * document-frame.tsx -- what every document of the window is drawn in, a description's, a version's, and an issue's alike: the column it scrolls in, and the line under its title.
  *
  * A document scrolls in its own column, a `ScrollArea` with its edges
- * faded, its bar's room kept, and one block inside it (`.plan-document-body`):
+ * faded, its bar's room kept, and one block inside it (`.description-document-body`):
  * its page's inset around it and the room for its last line under it, its
  * words selectable, and the app's accent for its caret; its
- * body stands at the page's measure in the plan's type (`.plan-body` under
+ * body stands at the page's measure in the description's type (`.description-body` under
  * `.desktop-document`). Under its title one muted line says who created
  * it and when, then what its page says of its last edit, each phrase
- * wrapping whole (`.plan-byline`). Drawing every document through these,
- * rather than each page through a frame of its own, is what keeps a plan,
+ * wrapping whole (`.description-byline`). Drawing every document through these,
+ * rather than each page through a frame of its own, is what keeps a description,
  * its versions, and an issue the same width, inset, and look.
  */
 
 /** The class of the block a document stands in, inside its scrolling column. */
-const DOCUMENT_BODY_CLASS = "plan-document-body";
+const DOCUMENT_BODY_CLASS = "description-document-body";
 
 /** The scrolling column a part of a document stands in; none outside one. */
 export function documentScrollerOf(element: Element): HTMLElement | undefined {
@@ -38,7 +38,7 @@ export function DocumentScroll({
 }): React.JSX.Element {
   return (
     // Note that the block sets its own accent, because `--accent` is only ever
-    // set by a `data-state` ancestor and nothing above the plan carries one:
+    // set by a `data-state` ancestor and nothing above the description carries one:
     // unset, the caret, the writing ring, and the fresh tint all drew nothing.
     <ScrollArea ref={ref} fade={SCROLL_FADE.BOTH} gutter={SCROLL_GUTTER.STABLE}>
       <div
@@ -65,6 +65,7 @@ export function DocumentByline({
   now,
   edited,
   saved,
+  end,
 }: {
   creator: Actor | undefined;
   /** The app or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
@@ -75,9 +76,11 @@ export function DocumentByline({
   edited?: ReactNode;
   /** What confirms the reader's own edit landed, a Saved tick, after the rest. */
   saved?: ReactNode;
+  /** What the line ends with past its words, as the description's Comments toggle. */
+  end?: ReactNode;
 }): React.JSX.Element {
   return (
-    <p className="plan-byline mx-0 mt-0 mb-block-gap flex flex-wrap gap-x-field-gap gap-y-tight-gap text-caption text-muted-foreground pointer-coarse:gap-y-block-gap">
+    <p className="description-byline mx-0 mt-0 mb-block-gap flex flex-wrap gap-x-field-gap gap-y-tight-gap text-caption text-muted-foreground pointer-coarse:gap-y-block-gap">
       <ReplayUnmask>
         <span className="actor-line">
           {creator === undefined && maker === undefined ? "Created" : "Created by "}
@@ -101,7 +104,7 @@ export function DocumentByline({
         {maker?.fromTask === undefined ? null : (
           <>
             {" "}
-            <span className="actor-line plan-byline-from">
+            <span className="actor-line description-byline-from">
               From <ReplayMask>{maker.fromTask}</ReplayMask>
             </span>
           </>
@@ -110,11 +113,12 @@ export function DocumentByline({
         {edited === undefined ? null : (
           <>
             {" "}
-            <span className="actor-line plan-byline-edited">{edited}</span>
+            <span className="actor-line description-byline-edited">{edited}</span>
           </>
         )}
         {saved}
       </ReplayUnmask>
+      {end}
     </p>
   );
 }

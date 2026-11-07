@@ -56,25 +56,26 @@ function wakeupKey(wakeup: ClaimedAgentWakeup): string {
   return `native-wakeup:${wakeup.id}`;
 }
 
-/**
- * One wakeup handed to its agent as a message of its own; whether it landed.
- * It is sent only while it still stands, so one a Stop or a launch deleted
- * since the claim is not sent, and deleted once the send landed; one whose
- * send failed stands for its next delivery.
- */
+/** One wakeup handed to its agent as a message of its own, as the header says; whether it landed. */
 const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
   Effect.gen(function* () {
     const agent = yield* readAgent(wakeup.userId, wakeup.agentId);
     // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
-    const eve = yield* sessionsFor(wakeup.userId);
-    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), wakeup.userId, agent.value, {
-      text: wakeup.prompt,
-      clientKey: wakeupKey(wakeup),
-      sender: agentLineSender(agent.value),
-      metadata: APP_LINE_METADATA,
-    });
+    const agentSessions = yield* sessionsFor(wakeup.userId);
+    yield* steerAgent(
+      agentSessions,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      wakeup.userId,
+      agent.value,
+      {
+        text: wakeup.prompt,
+        clientKey: wakeupKey(wakeup),
+        sender: agentLineSender(agent.value),
+        metadata: APP_LINE_METADATA,
+      },
+    );
     yield* deleteAgentWakeup(wakeup.id);
     return true;
   }).pipe(

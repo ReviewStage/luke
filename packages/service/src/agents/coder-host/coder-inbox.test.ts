@@ -76,7 +76,7 @@ const agentOn = (userId: string, task: { readonly id: string; readonly workspace
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     });
@@ -118,7 +118,7 @@ const SETTINGS = {
   },
 };
 
-/** A tool's input as eve hands it over. */
+/** A tool's input as a harness hands it over. */
 const input = (value: WireBoundaryInput) => unparsedWire(value);
 
 /** A sandbox door no post with words alone opens: one that fails if it is. */

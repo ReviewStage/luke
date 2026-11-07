@@ -38,7 +38,7 @@
  * makes a task and starts an agent as the writer on it, on the one path a
  * Start takes (`coder-host/start.ts`), both keyed by Slack's event id. The
  * task starts untitled, for its agent's title to name it, with a blank
- * plan, since the message is the agent's prompt, assigned to the writer and
+ * description, since the message is the agent's prompt, assigned to the writer and
  * in progress, and works in the repository the
  * message names as `owner/name` where the workspace reaches it, else in the
  * channel's default repository, else in the workspace's, both as an owner
@@ -163,7 +163,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
 import { runResultContent } from "../automations/automation-slack-delivery.js";
-import { archiveFinishedAgents } from "../automations/automation-sweep.js";
+import { archiveFinishedAgents } from "../automations/run-archive.js";
 import { HostedEnvironment } from "../environment.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";
@@ -766,7 +766,7 @@ const sendToAgent = Effect.fnUntraced(function* (
  * The task the message's agent starts on, made for it: untitled, so the
  * agent's title names it as it names any untitled task (`title.ts`),
  * assigned to the writer, in the repository the start resolved or in none,
- * in progress, and with a blank plan, since the message is handed to the
+ * in progress, and with a blank description, since the message is handed to the
  * agent as its prompt. Note that it is made under an id drawn from Slack's
  * event id, as the agent is keyed by it, because a start run again must find
  * the task it made rather than make a second.

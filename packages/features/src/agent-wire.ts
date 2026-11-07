@@ -26,9 +26,9 @@ import { trimmedText } from "./text-schema.js";
  * agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
  *
  * A coding agent is one cloud session the service runs over a task: it
- * checks the task's repository out, implements the plan, and decides on a
+ * checks the task's repository out, implements the description, and decides on a
  * pull request. Or, where the developer started it with words of their own,
- * it is handed those as its prompt in the plan's place, and never the plan.
+ * it is handed those as its prompt in the description's place, and never the description.
  * The desktop starts one with a key of its own, so a retry of the same
  * Start is the same agent, and names the model and effort it runs on or
  * leaves both to the account's default. What comes back is the
@@ -80,12 +80,12 @@ export const AGENT_BOUNDS = {
   MAX_MESSAGE_CHARS: 16_000,
   /**
    * The most characters a `start_agent` call's prompt may spell, trimmed, and its note apart:
-   * room for an orchestrator's brief to a worker on a long plan, quoted whole. Both together,
+   * room for an orchestrator's brief to a worker on a long description, quoted whole. Both together,
    * with the headings around them, stay under a task's own bound (`TASK_BOUNDS.MAX_BODY_CHARS`),
-   * which a start on the plan already hands an agent whole as its first message.
+   * which a start on the description already hands an agent whole as its first message.
    */
   MAX_START_WORDS_CHARS: 64_000,
-  /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
+  /** The most characters a runtime's own id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
   /** The most characters of a spoken line's id, which the voice's ledger mints. */
   MAX_LINE_ID_CHARS: 128,
@@ -95,7 +95,7 @@ export const AGENT_BOUNDS = {
   MAX_ARCHIVE_REASON_CHARS: 500,
   /** The most characters the words a workspace's agents are found by may spell. */
   MAX_SEARCH_CHARS: 200,
-  /** The most agents a workspace's list offers, newest first: enough to choose one an automation's runs go to. */
+  /** The most agents one page of a workspace's list offers, newest first: enough to choose one an automation's runs go to; `nextOffset` names the next page. */
   MAX_WORKSPACE_AGENTS: 50,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
@@ -198,20 +198,21 @@ export const agentPayerSchema = literalsReadingLegacy(
 
 /**
  * What answers a coding agent's conversation, as its conversation's row
- * records it: eve, as every agent ran before the native harnesses, or the
- * provider's own harness, Claude Code or Codex, which we launch in the
- * agent's sandbox. The store's own vocabulary spells the same words
+ * records it: the provider's own harness, Claude Code or Codex, which we
+ * launch in the agent's sandbox, or the retired runtime every agent ran on
+ * before them. The store's own vocabulary spells the same words
  * (`@repo/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
 export const AGENT_RUNTIME = {
-  EVE: "eve",
+  /** The runtime agents ran on before the native harnesses, which runs nothing any more; its agents stand archived, their sessions ended for good. */
+  RETIRED: "eve",
   CLAUDE_CODE: "claude_code",
   CODEX: "codex",
 } as const;
 
 export type AgentRuntime = (typeof AGENT_RUNTIME)[keyof typeof AGENT_RUNTIME];
 
-/** The runtimes that are a provider's own harness rather than eve, which an agent's summary names. */
+/** The runtimes that are a provider's own harness, which an agent's summary names. */
 export const NATIVE_AGENT_RUNTIMES = [AGENT_RUNTIME.CLAUDE_CODE, AGENT_RUNTIME.CODEX] as const;
 
 export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
@@ -292,8 +293,6 @@ export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL
 
 /** Why a Start naming repositories beside its agent's own, or a repository added to a running agent, was refused, which the refusal names (`extra-repository-refused`). */
 export const EXTRA_REPOSITORY_REFUSAL = {
-  /** The starter has the Several repositories experiment off. */
-  EXPERIMENT_OFF: "experiment-off",
   /** The agent works in no repository of its own, which extras stand beside. */
   NO_REPOSITORY: "no-repository",
   /** The agent would run on a device, and only an agent in the cloud works in several repositories. */
@@ -345,11 +344,12 @@ export const MAC_PRESENCE = {
   /** How often the host reads the beats of the account's devices while a window draws them: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
   /**
-   * How long one read of the beats may take before it counts as failed: past
-   * the hosted call's own ten-second deadline, so an answer that is merely
-   * slow still lands, and short enough that a wedged read (a body that never
-   * ends, a credential renewed and asked again) says unknown well inside a
-   * poll rather than letting every device age past `FRESH_MS` meanwhile.
+   * How long one read of the beats may take before it counts as failed, the
+   * read's whole deadline (`hosted-link.ts`'s `HOSTED_DEADLINE.PRESENCE`),
+   * its body and a credential renewed and asked again among it: past the
+   * usual ten seconds, so an answer that is merely slow still lands, and
+   * short enough that a wedged read says unknown well inside a poll rather
+   * than letting every device age past `FRESH_MS` meanwhile.
    */
   READ_TIMEOUT_MS: 12_000,
 } as const;
@@ -415,7 +415,8 @@ export function deviceStanding(beat: BeatReading, readFailed: boolean): DeviceSt
 
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const AGENT_BRIEF = {
-  PLAN: "plan",
+  // Note that the value says "plan", the description's name before it, because a released desktop decodes it.
+  DESCRIPTION: "plan",
   // Note that the value says "task", because a released desktop decodes it.
   PROMPT: "task",
   BLANK: "blank",
@@ -461,7 +462,7 @@ export const AGENT_FAILURE = {
   FAST_NOT_ENABLED: "fast_not_enabled",
   /** The provider refused the step's prompt as longer than the model's context window. */
   CONTEXT_OVERFLOW: "context_overflow",
-  /** The agent's session ended for good while its turn ran, and eve no longer runs it: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
+  /** The agent's session ended for good while its turn ran, and no runtime runs it any more: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
   SESSION_ENDED: "session_ended",
   OTHER: "other",
 } as const;
@@ -685,9 +686,9 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
  * window beside them where it is the standard one. A prompt, where the
- * developer wrote one, is the agent's first message in the plan's place,
+ * developer wrote one, is the agent's first message in the description's place,
  * bounded as a message is: its words, the files the developer attached to
- * it, or both. With none, the agent is handed the plan, and files go only
+ * it, or both. With none, the agent is handed the description, and files go only
  * with a prompt. The MCP servers its draft switched off go with it, and none
  * is off where the Start names none. A Start `from` another agent of the
  * plan is handed that agent's brief and its transcript replayed after it,
@@ -695,12 +696,12 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * servers where it names none. A note, bounded as a message is, goes only
  * beside such a source, written after the replay as the developer's, and
  * files go with it there as they go with a prompt. A Start `blank` hands the
- * agent nothing at all, neither the plan nor a prompt, so it names no
+ * agent nothing at all, neither the description nor a prompt, so it names no
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
  * draft's composer: it runs where the account's routing chooses, as any
- * Start does, eve or the provider's own harness alike. A Start's `runsOn`
+ * Start does, on Claude Code or Codex alike. A Start's `runsOn`
  * names where its agent runs, from another agent too, which is how an agent
  * moves; one that names none runs where its source runs, for a continue or
  * a fork, else where the starting member's newest agent on the task runs,
@@ -712,6 +713,13 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * only beside a repository of its own, in the cloud, through the same
  * installation of the GitHub App, and only for a member with the Several
  * repositories experiment on; none for an agent in one repository or none.
+ * A Start's `branch` names the branch its agent's checkout is cloned at,
+ * which must already be on GitHub, as the member MCP server's `start_agent`
+ * takes it: refused as not found where the repository has no such branch,
+ * and refused beside `from`, since an agent started from another is cloned
+ * at that agent's branch. Its `title` is the agent's from the start, which no
+ * generated title covers; one from another agent takes it in place of
+ * `<title> (continued)`.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -727,6 +735,8 @@ export const agentStartRequestFields = {
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(agentRunsOnRequestSchema),
   alsoRepositories: EffectSchema.optionalKey(agentAlsoRepositoriesSchema),
+  branch: EffectSchema.optionalKey(startBranchSchema),
+  title: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_TITLE_CHARS)),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -761,13 +771,22 @@ export const startBrief = EffectSchema.makeFilter(
   },
 );
 
+/** A Start's branch only afresh: one from another agent is cloned at that agent's branch. */
+const startBranchAfresh = EffectSchema.makeFilter(
+  ({ from, branch }: { readonly from?: AgentStartFrom; readonly branch?: string }) =>
+    from === undefined || branch === undefined,
+);
+
 /** The Start request as a caller holds it, before it is put on the wire. */
-const agentStartRequestValueSchema = EffectSchema.Struct(agentStartRequestFields).check(startBrief);
+const agentStartRequestValueSchema = EffectSchema.Struct(agentStartRequestFields).check(
+  startBrief,
+  startBranchAfresh,
+);
 
 /** The Start request on the wire, where the prompt travels as `task`, because a released desktop sends that key. */
 export const agentStartRequestSchema = EffectSchema.Struct(agentStartRequestFields)
   .pipe(wireKeys({ prompt: "task" }))
-  .check(startBrief);
+  .check(startBrief, startBranchAfresh);
 
 export type AgentStartRequest = typeof agentStartRequestSchema.Type;
 
@@ -896,11 +915,14 @@ export type AgentRenameRequest = typeof agentRenameRequestSchema.Type;
  * turn running stops that turn first, as a Stop would, and the answer is
  * the agent as it then stands. One still starting, or with a message
  * awaiting its turn, has no turn to stop yet and is refused as not ready,
- * to be tried again. An archived agent takes no message.
+ * to be tried again. An archived agent takes no message. An archive may say
+ * why, in a short sentence its archived banner shows, as the member MCP
+ * server's `update_agent` does; bringing one back says nothing.
  */
 export const agentArchiveRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.Boolean,
-});
+  reason: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS)),
+}).check(EffectSchema.makeFilter(({ archived, reason }) => archived || reason === undefined));
 
 export type AgentArchiveRequest = typeof agentArchiveRequestSchema.Type;
 
@@ -961,8 +983,7 @@ export const addedRepositoryCheckoutSchema = EffectSchema.Literals(
  * branch its checkout is cloned at, none for its default branch, appended
  * after the repositories it works in beside its own, checked out, and told
  * to it, as `update_agent`'s `addRepository` adds one. Only for the agent's
- * starter with the Several repositories experiment on, an agent in the
- * cloud in a repository of its own, its repositories all reached through
+ * starter, an agent in the cloud in a repository of its own, its repositories all reached through
  * one installation of the GitHub App; refused by why
  * (`extra-repository-refused`) otherwise. Nothing removes one.
  */
@@ -987,6 +1008,7 @@ export const AGENT_WORKSPACE_QUERY = {
   REPOSITORY: "repository",
   WORDS: "words",
   ARCHIVED: AGENT_LIST_QUERY.ARCHIVED,
+  OFFSET: "offset",
 } as const;
 
 /** What the list's `archived` query may say. */
@@ -1097,7 +1119,7 @@ export const agentSummarySchema = EffectSchema.Struct({
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   /**
    * The provider's own harness the agent runs on, which narrows the models
-   * its chip offers (`agent-runtime-models.ts`); absent for an agent on eve,
+   * its chip offers (`agent-runtime-models.ts`); absent for an agent on the retired runtime,
    * and from a service older than it.
    */
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_AGENT_RUNTIMES)),
@@ -1133,7 +1155,7 @@ export const agentSummarySchema = EffectSchema.Struct({
   /**
    * The newest turn the status is read from, by the service's own id for
    * it; nothing before the first turn. A message that opens a new turn moves
-   * it once eve starts that turn, so a reader keying an agent's run by
+   * it once the agent's harness starts that turn, so a reader keying an agent's run by
    * (agent, turn) sees the run after a message as its own; while the
    * message still awaits its turn the id is the ended turn's and the status
    * is running on the message's account.
@@ -1142,7 +1164,7 @@ export const agentSummarySchema = EffectSchema.Struct({
   /**
    * Epoch milliseconds the run the status is read from began, which is what
    * a tab counts how long the agent has been working from: the newest
-   * turn's start, or its queueing where eve has not started it, and the
+   * turn's start, or its queueing where its harness has not started it, and the
    * agent's own start before its first turn. Absent while a message awaits
    * its turn, whose run has not begun, and from a service older than it.
    */
@@ -1158,9 +1180,9 @@ export const agentSummarySchema = EffectSchema.Struct({
   stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
   /**
    * What the agent was handed as its first message, so its tab draws a
-   * plan as the plan's card, a task as the developer's own message, and,
+   * description as the description's card, a task as the developer's own message, and,
    * for an agent started blank, its first line as any other line. Absent
-   * from a service older than the task, which handed every agent the plan.
+   * from a service older than the task, which handed every agent the description.
    */
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
@@ -1317,8 +1339,9 @@ export type AgentOrigin = typeof agentOriginSchema.Type;
  * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
- * repository it works in, null for one with none. An agent on a plan reads
- * so too, by the same id.
+ * repository it works in, null for one with none, and the branch its
+ * checkout stood on as its last turn ended, as the member MCP server's
+ * `read_agent` answers it. An agent on a plan reads so too, by the same id.
  */
 const agentPageSchema = EffectSchema.Struct({
   ...agentSummarySchema.fields,
@@ -1327,6 +1350,8 @@ const agentPageSchema = EffectSchema.Struct({
   origin: EffectSchema.optionalKey(agentOriginSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.NullOr(EffectSchema.String),
+  /** The branch checked out in its sandbox as its last turn ended, pushed or not; absent before a turn ends, where the checkout stood detached, and from a service before it. */
+  branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AgentPage = typeof agentPageSchema.Type;
@@ -1337,6 +1362,12 @@ export const agentPageAnswerSchema = EffectSchema.Struct({ agent: agentPageSchem
 /** The task's agents (GET), in the order they were started. */
 export const agentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(agentSummarySchema),
+});
+
+/** A page of a workspace's agents (GET), newest started first, and the `offset` of the next page where more stand; absent where the list ended, and from a service before paging. */
+export const agentWorkspaceListAnswerSchema = EffectSchema.Struct({
+  ...agentListAnswerSchema.fields,
+  nextOffset: EffectSchema.optionalKey(EffectSchema.Int),
 });
 
 /** Where a pull request stands on GitHub, as its pill is colored. */
@@ -1421,6 +1452,8 @@ export const listedAgentSchema = EffectSchema.Struct({
   ...agentSummarySchema.fields,
   workspaceId: agentPageSchema.fields.workspaceId,
   repository: agentPageSchema.fields.repository,
+  /** Epoch milliseconds its newest turn ended, which a settled agent's row says it last moved at; absent while that turn runs and before it has one. */
+  settledAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ListedAgent = typeof listedAgentSchema.Type;
@@ -2116,8 +2149,8 @@ export type PullRequestReviewer = typeof pullRequestReviewerSchema.Type;
  * The tool an agent hands a slice of its work to a subagent with, by the
  * name its tool part carries in the transcript (`tool-delegate`). The call
  * blocks the agent's turn until the worker answers; the worker reads the
- * agent's checkout and writes nothing. The part's `toolCallId` is eve's
- * id for the call, and the worker's own transcript is read under it
+ * agent's checkout and writes nothing. The part's `toolCallId` is the
+ * runtime's own id for the call, and the worker's own transcript is read under it
  * (`GET /api/agents/{id}/subagents/{callId}/messages`), so a tab can open the
  * worker's session from the moment the call is requested.
  */
@@ -2162,7 +2195,7 @@ export function agentMessageWords(text: string): string | undefined {
   return words.join("\n\n").trim();
 }
 
-/** eve's id for a tool call, as the path names a subagent's transcript by it. */
+/** A runtime's own id for a tool call, as the path names a subagent's transcript by it. */
 export const agentCallIdSchema = trimmedText(AGENT_BOUNDS.MAX_CALL_ID_CHARS);
 
 /**
@@ -2170,7 +2203,7 @@ export const agentCallIdSchema = trimmedText(AGENT_BOUNDS.MAX_CALL_ID_CHARS);
  * carries in the transcript (`tool-write_todos`). Each call carries the
  * whole list, so the newest call's input is the list as it stands, and a
  * tab draws each call where it landed with the older ones folded. Named
- * to-dos rather than a plan, because the plan is the app's own document.
+ * to-dos rather than a plan, so it is never taken for the task's description.
  */
 export const AGENT_TODOS_TOOL = "write_todos";
 
@@ -2185,8 +2218,8 @@ export type AgentTodoStatus = (typeof AGENT_TODO_STATUS)[keyof typeof AGENT_TODO
 
 /**
  * What a to-do write's tool part carries as its input: the whole list, in
- * order, each item its words and where it stands. The model is shown this
- * schema and eve holds the call to it, and a tab reads the stored part
+ * order, each item its words and where it stands. The model was shown this
+ * schema and the retired runtime held the call to it, and a tab reads the stored part
  * back through it, so the two read one list.
  */
 export const agentTodosInputSchema = EffectSchema.Struct({
@@ -2332,6 +2365,13 @@ const agentSenderSchema = EffectSchema.Struct({
    * kept, once that agent is gone, and from a service older than it.
    */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /**
+   * The id of the automation whose run sent the line, which the window opens
+   * its page and reads its card by; absent for any other sender, for an
+   * automation's line sent before it was kept, and from a service older
+   * than it.
+   */
+  automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type AgentSender = typeof agentSenderSchema.Type;
@@ -2431,7 +2471,7 @@ const agentTranscriptMessageSchema = EffectSchema.Struct({
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
   ),
-  /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
+  /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where its harness has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */
   finishedAt: EffectSchema.optionalKey(countedNumber),
@@ -2481,14 +2521,14 @@ export type AgentUsage = typeof agentUsageSchema.Type;
  * newest model step left it: the tokens that step's provider counted as
  * read, how many of those its prefix cache answered and how many it wrote
  * to the cache, and what the step wrote; the window of the model the agent
- * runs on now, and the count past which eve compacts the conversation
+ * runs on now, and the count past which its harness compacts the conversation
  * against it. Beside the counts, the estimates of what the step read that
  * no provider counts apart, each made from the text the service composed
- * at about four bytes a token, which is eve's own estimate: the
- * instructions, the tool definitions, and the plan or task the agent was
- * handed, which is absent once eve has compacted the conversation, since
+ * at about four bytes a token: the
+ * instructions, the tool definitions, and the description or task the agent was
+ * handed, which is absent once the harness has compacted the conversation, since
  * a compaction's summary may have folded it in. When that step ended, and
- * when eve last compacted the conversation, where it has.
+ * when the harness last compacted the conversation, where it has.
  */
 const agentContextSchema = EffectSchema.Struct({
   windowTokens: countedNumber,
@@ -2504,7 +2544,7 @@ const agentContextSchema = EffectSchema.Struct({
   }),
   /** Epoch milliseconds the step ended. */
   measuredAt: countedNumber,
-  /** Epoch milliseconds eve last compacted the conversation. */
+  /** Epoch milliseconds the harness last compacted the conversation. */
   compactedAt: EffectSchema.optionalKey(countedNumber),
 });
 

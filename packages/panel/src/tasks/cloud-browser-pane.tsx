@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTab, BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
 import { browserAddressOf, chordIsWindows } from "@repo/features/browser-acts";
 import {
@@ -24,6 +23,7 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
+  forkEffect,
   IconButton,
   PaneBar,
   REMOTE_KEY_ACTION,
@@ -42,9 +42,9 @@ import {
   useAnnounce,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { useMutation } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Clock, Duration, Effect, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -61,18 +61,18 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { failureShown } from "../failure-report.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
   type CloudBrowserFrame,
+  type CloudBrowserLive,
   type CloudBrowserView,
   type CloudBrowserViewport,
   cloudBrowserLive,
@@ -137,9 +137,6 @@ const TEXT_PIECE_CHARS = 4_096;
 
 /** The keys a Command chord edits text with on the page, sent there as Control. */
 const PAGE_EDIT_KEYS: ReadonlySet<string> = new Set(["a", "c", "x", "z"]);
-
-/** A view that never opens, for a pane not on screen. */
-const RESTING = Atom.make<AsyncResult.AsyncResult<CloudBrowserView>>(AsyncResult.initial());
 
 /** The mouse buttons, by a DOM event's `button`. */
 const BUTTON_OF = [
@@ -389,13 +386,33 @@ function agentLately(lastActedAt: number): Stream.Stream<boolean> {
   );
 }
 
-/** `agentLately` for a component: the words it draws go on the clock's own edge, so nothing else need redraw the bar. */
+/** What `agentLately` last said, and for which act. */
+interface Lately {
+  readonly lastActedAt: number;
+  readonly lately: boolean;
+}
+
+/**
+ * `agentLately` for a component: the words it draws go on `@repo/ui`'s
+ * edge, so nothing else need redraw the bar. Note that a reading for an
+ * older act is set aside, so a newer act is said from the render's time
+ * until its own reading lands.
+ */
 function useAgentLately(lastActedAt: number): boolean {
-  const atom = useMemo(() => rendererRuntime.atom(agentLately(lastActedAt)), [lastActedAt]);
-  return AsyncResult.getOrElse(
-    useAtomValue(atom),
-    () => Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT),
+  const said = useCreateStore<Lately | undefined>(undefined);
+  useEffect(
+    () =>
+      forkEffect(
+        Stream.runForEach(agentLately(lastActedAt), (lately) =>
+          Effect.sync(() => said.setState(() => ({ lastActedAt, lately }))),
+        ),
+      ),
+    [lastActedAt, said],
   );
+  const reading = useSelector(said);
+  return reading?.lastActedAt === lastActedAt
+    ? reading.lately
+    : Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
 }
 
 /** What the bar says of who has the tab: the member, another member, its agent lately, or nothing. */
@@ -578,11 +595,20 @@ export function CloudBrowserPane({
       }),
     [tab.agentId, tab.id, onFrame, generation, watched],
   );
-  const views = useMemo(
-    () => (watched ? rendererRuntime.atom(live.views) : RESTING),
-    [live, watched],
-  );
-  const view = AsyncResult.getOrElse(useAtomValue(views), () => OPENING_VIEW);
+  // Note that a view is kept with the connection it came from, so a pane shown again opens anew.
+  const views = useCreateStore<
+    { readonly live: CloudBrowserLive; readonly view: CloudBrowserView } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!watched) return;
+    return forkEffect(
+      Stream.runForEach(live.views, (view) =>
+        Effect.sync(() => views.setState(() => ({ live, view }))),
+      ),
+    );
+  }, [live, watched, views]);
+  const reading = useSelector(views);
+  const view = watched && reading?.live === live ? reading.view : OPENING_VIEW;
   useLayoutEffect(() => {
     const element = body.current;
     if (element === null) return;
@@ -784,28 +810,25 @@ export function CloudBrowserDraftPane({
   onOpened: (tab: AgentBrowserTab) => void;
   onDiscard: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const [opening, setOpening] = useState(false);
-  const [refused, setRefused] = useState<string | undefined>(undefined);
+  // Note that the draft stays opening once a tab answers, because `onOpened` replaces it with that tab.
+  const opened = useMutation({
+    ...actMutation(ACT_KIND.TASKS_BROWSER_TAB_OPEN),
+    onSuccess: (answer) => {
+      if (!("tab" in answer)) return;
+      noteOpenedCloudTab(place, answer.tab);
+      onOpened(answer.tab);
+    },
+  });
+  const answer = opened.data;
+  const opening = opened.isPending || (answer !== undefined && "tab" in answer);
+  const refused = opened.isError
+    ? openFailureWords(BROWSER_TAB_OPEN_FAILURE.UNANSWERED, owner.name)
+    : answer !== undefined && "failure" in answer
+      ? openFailureWords(answer.failure, owner.name)
+      : undefined;
   const open = (address: string) => {
     if (opening) return;
-    setOpening(true);
-    setRefused(undefined);
-    act(ACT_KIND.TASKS_BROWSER_TAB_OPEN, { agentId: draft.agentId, address }).then(
-      (answer) => {
-        if ("tab" in answer) {
-          noteOpenedCloudTab(place, answer.tab);
-          onOpened(answer.tab);
-          return;
-        }
-        setOpening(false);
-        setRefused(openFailureWords(answer.failure, owner.name));
-      },
-      () => {
-        setOpening(false);
-        setRefused(openFailureWords(BROWSER_TAB_OPEN_FAILURE.UNANSWERED, owner.name));
-      },
-    );
+    opened.mutate({ agentId: draft.agentId, address });
   };
   return (
     <Fill

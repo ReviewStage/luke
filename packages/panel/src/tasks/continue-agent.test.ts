@@ -34,18 +34,19 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import {
   continuedByIds,
   endLineOffersContinue,
+  endLineOffersTryAgain,
   endLineParts,
   endLineReason,
   messageFailureWords,
@@ -97,7 +98,7 @@ function agentOf(id: string, overrides: Partial<AgentSummary> = {}): AgentSummar
     createdAt: 1_000,
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     ...overrides,
   };
 }
@@ -134,6 +135,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** Lays words and files in the agent's box before its tab draws, as a draft kept from before. */
@@ -334,9 +336,9 @@ async function drawnTab(input: {
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
       const words = container.querySelector<HTMLElement>(
-        "[data-ended] :is(.agent-end-words, .ui-failure-note-words)",
+        "[data-ended] :is(.ui-turn-end-words, .ui-failure-note-words)",
       );
-      const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
+      const row = words?.closest<HTMLElement>(".ui-turn-end") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },
   };
@@ -426,9 +428,12 @@ test("a launch its Mac's GitHub sign-in could not start ends on a card naming th
     },
   });
   const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
-  assert.match(
-    card.textContent ?? "",
-    /^Studio can't reach acme\/web on GitHub\.Sign in on that Mac, then retry:/,
+  // Note that the card names the repository once what the agent published reaches its query.
+  await vi.waitFor(() =>
+    assert.match(
+      card.textContent ?? "",
+      /^Studio can't reach acme\/web on GitHub\.Sign in on that Mac, then retry:/,
+    ),
   );
   assert.equal(tab.endRow(), null);
   assert.equal(tab.buttons(tab.container).length, 0);
@@ -527,6 +532,54 @@ test("a failed end line's row ends on Continue where only a new agent goes on, a
   }
 });
 
+test("a failed end line's row ends on Try again where a message carries the agent on, and not where Continue, a key, or a choice is the way on", () => {
+  const ending = (failure: AgentFailure | undefined, starter?: string) => ({
+    status: AGENT_STATUS.FAILED,
+    endReason: endLineReason(failure, starter),
+    failure,
+    continued: false,
+    boxClosed: false,
+  });
+
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.SANDBOX)), true);
+  assert.equal(endLineOffersTryAgain(ending(undefined)), true);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.SESSION_ENDED)), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.PROVIDER_KEY)), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.PROVIDER_KEY, "Ada")), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.FAST_ON_OWN_KEY)), false);
+  assert.equal(endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), continued: true }), false);
+  assert.equal(endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), boxClosed: true }), false);
+  assert.equal(
+    endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), status: AGENT_STATUS.CANCELED }),
+    false,
+  );
+});
+
+test("a turn failed on its sandbox ends on Try again, which sends the agent one line in place of Continue however often pressed", async () => {
+  const sent: string[] = [];
+  const tab = await drawnTab({
+    status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.SANDBOX,
+    onMessage: (text) => {
+      sent.push(text);
+      return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+    },
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  assert.equal(tab.buttons(tab.container).length, 0, "no Continue beside it");
+  const press =
+    [...line.querySelectorAll("button")].find((each) => each.textContent === "Try again") ??
+    assert.fail("the line offers Try again");
+
+  act(() => {
+    press.click();
+    press.click();
+  });
+  await settle();
+
+  assert.deepEqual(sent, ["Try again"]);
+});
+
 test("a message to an ended agent says to continue it in a new one, while a Start refused alike still says to start one", () => {
   assert.equal(
     messageFailureWords(AGENT_CALL_FAILURE.AGENT_RETIRED),
@@ -569,7 +622,7 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
   assert.match(line.textContent ?? "", /The agent could not be started\./);
 });
 
-test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail", async () => {
+test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail, nor Try again on an archived one", async () => {
   const key = await drawnTab({
     status: AGENT_STATUS.FAILED,
     failure: AGENT_FAILURE.PROVIDER_KEY,
@@ -585,6 +638,12 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
   });
   assert.ok(archived.endLine(), "the turn still ends on its line");
   assert.equal(archived.buttons(archived.container).length, 0);
+  const archivedRetry = await drawnTab({
+    status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.SANDBOX,
+    onUnarchive: () => undefined,
+  });
+  assert.equal(archivedRetry.named(archivedRetry.container, "Try again"), undefined);
 
   for (const status of [AGENT_STATUS.CANCELED, AGENT_STATUS.COMPLETED]) {
     const settled = await drawnTab({ status });
@@ -1086,7 +1145,7 @@ test("where the tab's place opens drafts, Continue on a closed box opens the con
   assert.equal(button.disabled, false, "nothing is out to hold the press for");
 });
 
-test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's plan", async () => {
+test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's description", async () => {
   const tab = await drawnTab({
     status: AGENT_STATUS.COMPLETED,
     message: { failure: AGENT_CALL_FAILURE.AGENT_RETIRED },

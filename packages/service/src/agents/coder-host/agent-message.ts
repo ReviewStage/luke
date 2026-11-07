@@ -44,7 +44,7 @@ import { agentLineSender, steerAgent } from "./steer.js";
  * starter, whose principal its turn runs under, under the sending agent's
  * name (`MESSAGE_SENDER.AGENT`), marked as an agent message
  * (`MESSAGE_CHANNEL.AGENT_MESSAGE`), so its window draws it as the sender's
- * bubble rather than the developer's, and keyed by eve's id for the call,
+ * bubble rather than the developer's, and keyed by the call's own id,
  * so a call run again sends once. Its words open with who sent it, by the
  * sender's mention link, and close with how to answer, by the sender's id,
  * both written here rather than by the model, so the receiving agent reads
@@ -99,8 +99,6 @@ export const MESSAGE_AGENT_REFUSAL = {
   RETIRED:
     "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from its work, " +
     `which ${AGENT_TOOL.START_AGENT} starts with that agent's id as its from.`,
-  IMAGE_PREPARING:
-    "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
   PLAN_SIGNED_OUT:
     "Not sent: the plan that pays for that agent is signed out, so it cannot run until its starter signs in again in Settings.",
   PLAN_UNREACHABLE:
@@ -119,7 +117,6 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, MESSAGE_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.AGENT_NOT_READY, MESSAGE_AGENT_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, MESSAGE_AGENT_REFUSAL.RETIRED],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, MESSAGE_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, MESSAGE_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, MESSAGE_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, MESSAGE_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
@@ -236,14 +233,14 @@ export function runMessageAgent(
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);
       }
       // The line is minted for the receiving agent's starter, whose principal its turn runs under.
-      const eve = call.eveAs(target.userId);
+      const agentSessions = call.agentSessionsAs(target.userId);
       const step = yield* workspaceStepOf(userId, workspace.value);
       const mention = writtenMention(
         { kind: MENTION_KIND.AGENT, agentId: sender.id },
         agentName(sender),
         step,
       );
-      const sent = yield* steerAgent(eve, call.writer, userId, target, {
+      const sent = yield* steerAgent(agentSessions, call.writer, userId, target, {
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
         sender: agentLineSender(sender),

@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { type PullRequestComment, PullRequestCommentBox } from "./pull-request-comment-box.js";
 
 /**
@@ -43,6 +45,7 @@ function Tab({ start }: { start: string }): React.JSX.Element {
       note: undefined,
       write: () => Promise.reject(new Error("Not in this test.")),
       dismiss: () => undefined,
+      confirmAct: () => neverBusyAct(() => undefined),
     },
     body,
     setBody,
@@ -58,7 +61,7 @@ test("Esc in the comment box lets go of it, keeps its words, and never reaches t
   const holder = document.body.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Tab, { start: "Looks right to me." })));
+  act(() => root.render(withQueryClient(createElement(Tab, { start: "Looks right to me." }))));
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
@@ -82,7 +85,7 @@ test("Esc that closes the / menu keeps the caret in the box, and the next Esc le
   const holder = document.body.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Tab, { start: "Looks right" })));
+  act(() => root.render(withQueryClient(createElement(Tab, { start: "Looks right" }))));
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");

@@ -53,7 +53,7 @@ export interface ThingCardAt {
   readonly wordsWorkspaceId: string | undefined;
   /** The repository the place names, `owner/name`, which a file is read in. */
   readonly repository: string | undefined;
-  /** What a section's card says of it where the plan no longer holds it; none while it does. */
+  /** What a section's card says of it where the description no longer holds it; none while it does. */
   readonly gone: string | undefined;
 }
 
@@ -87,13 +87,7 @@ function reading(at: ThingCardAt): ReactNode {
 /** An MCP server's card, or one of its tools': its server's row as the MCP popover draws it. */
 const SERVER_CARD: ThingCard<ThingOf<typeof THING_KIND.SERVER | typeof THING_KIND.TOOL>> = (
   server,
-) => (
-  <ServerCard
-    provider={server.provider}
-    connection={server.connection}
-    tool={server.kind === THING_KIND.TOOL ? server.tool : undefined}
-  />
-);
+) => <ServerCard provider={server.provider} connection={server.connection} />;
 
 /** An automation's card, or one of its runs': the automation's, read in the workspace its link names. */
 const AUTOMATION_CARD: ThingCard<

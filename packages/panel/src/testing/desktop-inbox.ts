@@ -56,10 +56,11 @@ import type {
 } from "@repo/host/app-state";
 import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
-import { isTranscriptTab } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, useMemo, useState } from "react";
+import { act, createElement, Fragment, useEffect, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
@@ -73,6 +74,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import { ToastHost } from "../toast.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -92,9 +94,10 @@ import {
   pressInComposer,
   typeInComposer,
 } from "./composer.js";
-import { onRegistry } from "./copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
 import { holdFrames, settleFrames } from "./frames.js";
+import { heardWords } from "./heard-words.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
@@ -127,22 +130,8 @@ export const BILLING: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  // The sidebar's list names the task's agent, as the service sums a task's agents up.
-  agents: {
-    total: 1,
-    working: 1,
-    agents: [
-      {
-        id: AGENT.id,
-        title: AGENT.title,
-        model: AGENT.model,
-        effort: AGENT.effort,
-        status: AGENT.status,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  // The sidebar's list counts the task's agent, as the service sums a task's agents up.
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 export const INVITES: TaskSummary = {
   id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
@@ -308,6 +297,8 @@ class InboxWorld {
   setInboxOpen: (open: boolean) => void = () => undefined;
   /** Chooses an item from outside the list, as a notification's click does. */
   chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
+  /** Narrows the Inbox to one task's items, as its address does (`inbox-route.ts`), or lists every task's again. */
+  narrowTo: (taskId: string | undefined) => void = () => undefined;
   /** Moves main's read of what waits on the agents with no task, and of the agents holding items, those it names unless given, as main does when an item opens or is answered. */
   setTaskless: (
     taskless: readonly AppInboxTasklessItem[],
@@ -790,6 +781,14 @@ export function mount(
     const [inboxOpen, setOpen] = useState(true);
     world.setInboxOpen = setOpen;
     world.chooseFromOutside = setChosen;
+    const [narrowed, setNarrowed] = useState<string | undefined>(undefined);
+    world.narrowTo = setNarrowed;
+    // Note that an item of another task than the one the list is narrowed to widens it, as the Inbox's door does.
+    const choose = (next: InboxChoice) => {
+      setChosen(next);
+      const holder = "taskId" in next ? next.taskId : undefined;
+      setNarrowed((held) => (held === undefined || held === holder ? held : undefined));
+    };
     const [holding, setHeld] = useState(firstHolding);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
     const [listRead, setRead] = useState(!listUnread);
@@ -819,6 +818,17 @@ export function mount(
         ].map((agent) => listedAgent(agent, { workspaceId: ACME.id, repository: "acme/relay" })),
       [listedAgents, tasklessAgents],
     );
+    // Note that the agents on a task are laid on the document too, over whatever else it holds of the list, as the host lays the list it follows, which an item's agent is read from (`useTaskAgent`).
+    const followed = world.agentListHeld ? undefined : liveAgents;
+    const onTasks = useMemo(() => followed?.filter((agent) => agent.planId !== null), [followed]);
+    // Note that the list is laid only once the window read its own document, since the test's Query client may still hold an earlier test's.
+    const held = useQuery({ ...appStateQuery, select: selectTasks });
+    const heldList = held.isFetchedAfterMount ? held.data : undefined;
+    useEffect(() => {
+      if (heldList === undefined || heldList.taskAgents === onTasks) return;
+      const { taskAgents: _held, ...rest } = heldList;
+      reads.deliverTasks(onTasks === undefined ? rest : { ...rest, taskAgents: onTasks });
+    }, [heldList, onTasks]);
     const control = tasksControl({
       ...(readerKnown ? { me: READER.userId } : {}),
       workspace: world.listedWorkspace,
@@ -829,7 +839,9 @@ export function mount(
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,
         onPreview: (tab) => {
-          if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
+          if (typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TRANSCRIPT) {
+            asked.previewedAgents.push(tab.transcript);
+          }
         },
       },
       inbox: waiting,
@@ -843,9 +855,11 @@ export function mount(
         onClose: () => {
           asked.closed += 1;
         },
-        onChoose: setChosen,
-        onOpenItem: setChosen,
+        onChoose: choose,
+        onOpenItem: choose,
         onClear: () => setChosen(undefined),
+        narrowed,
+        onWiden: () => setNarrowed(undefined),
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -898,9 +912,31 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
+/**
+ * Lets every promise settled so far run its continuations, the frames a
+ * paint takes pass (`settleFrames`), and every notification TanStack Query
+ * has queued reach the surfaces observing it (`settleQueries`). The Inbox's
+ * tests act step after step on what each push left, an item chosen, marked,
+ * or answered, so a `vi.waitFor` on one step's outcome alone left the next
+ * step racing the notification after it; waiting out the queue here holds
+ * every step.
+ */
 export async function settle(): Promise<void> {
   await settleFrames();
+  await settleQueries(settleFrames);
+}
+
+/**
+ * Answers every image read the page asks for, as each is asked, until no
+ * picture on it is still being read, as the window's queries ask for an
+ * image a tick after its place is drawn and draw its answer a tick after it lands.
+ */
+export async function landImageReads(page: HTMLElement): Promise<void> {
+  await vi.waitFor(() => {
+    for (const land of world.imageReads.splice(0)) act(() => land());
+    assert.equal(page.querySelector('.picture-block[data-state="reading"]') === null, true);
+  });
+  await settle();
 }
 
 /** A row's title, as its ListRow draws it. */
@@ -925,30 +961,18 @@ export function heardOf(ids: string | null): string {
     .split(" ")
     .filter((id) => id !== "")
     .map((id) => {
-      const copy = document.getElementById(id)?.cloneNode(true);
-      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
-      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
-      for (const apart of copy.querySelectorAll(".ui-visually-hidden")) {
-        apart.before(" ");
-        apart.after(" ");
-      }
-      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+      const named = document.getElementById(id);
+      assert.ok(named !== null, `nothing is drawn as ${id}`);
+      return heardWords(named);
     })
     .join(" ");
 }
 
-/**
- * What marks a row as needing the developer: `*` where it says "Needs you"
- * to a reader and draws no attention mark, which its card says instead,
- * nothing where it does neither, and `?` where it draws the mark, so a mark
- * drawn on every open row again fails every listing.
- */
+/** What marks a row as needing the developer: `*` where it says "Needs you" to a reader, nothing where it does not. */
 export function needsYouMark(row: HTMLElement): string {
-  const mark = row.querySelector(".ui-list-row-meta .attention-mark") !== null;
   const said = [...row.querySelectorAll(".ui-list-row-meta .ui-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
-  if (mark) return "?";
   return said ? "*" : "";
 }
 
@@ -987,7 +1011,7 @@ export function openViewOptions(page: HTMLElement): void {
 }
 
 /** The scopes the view's menu may offer, in their order, and Archived, which it offered while tasks were archived, so a menu offering it again is heard. */
-export const SCOPE_NAMES = ["Open", "Needs you", "All", "Archived"] as const;
+export const SCOPE_NAMES = ["Open", "Questions", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 export function headTitle(page: HTMLElement): string | null | undefined {
@@ -1026,43 +1050,70 @@ export function subjectOf(page: HTMLElement): string[] {
   return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-/** Every close the Inbox sends, with the note's words where it carries one, answered as the service takes it: the item closed by the reader. */
-export function takenCloses(): { itemId: string; revision: number; text?: string }[] {
-  const sent: { itemId: string; revision: number; text?: string }[] = [];
+/**
+ * Every close that reaches the service, answered as the service takes it:
+ * the item closed by the reader. As the host does, a close the window holds
+ * for its Undo is drawn closed at once and reaches the service only once let
+ * go as sent (`letResolvesGo`); one let go as taken back stands open again
+ * and never reaches it.
+ */
+export function takenCloses(): { itemId: string; revision: number }[] {
+  const sent: { itemId: string; revision: number }[] = [];
+  const held = new Map<string, (send: boolean) => void>();
+  const early = new Map<string, boolean>();
+  const gone = new Set<string>();
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE) {
+        const { clientKey, send } = request.payload;
+        const release = held.get(clientKey);
+        held.delete(clientKey);
+        // Note that a release before its close comes to wait is kept for it, as the host keeps one.
+        if (release === undefined && !gone.has(clientKey)) early.set(clientKey, send);
+        release?.(send);
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: { held: !gone.has(clientKey) || release !== undefined },
+        });
+      }
       if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
-      const { itemId, revision, text } = request.payload;
-      sent.push({ itemId, revision, ...(text === undefined ? undefined : { text }) });
-      const asked = [...world.inboxes.values()]
-        .flat()
-        .find((each) => each.id === request.payload.itemId);
+      const { itemId, revision, clientKey } = request.payload;
+      const asked = [...world.inboxes.values()].flat().find((each) => each.id === itemId);
       // The close withdraws the ask it leaves open, with no reason, and reads the item, as the service closes it.
       const closed = closedNow(asked ?? THRESHOLD, READER, 6_000);
       // Note that the host lands the item as the service answered it in every inbox it follows before the close answers.
       drawnByHost((each) => (each.id === closed.id ? closed : undefined));
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: { item: closed, taken: true },
-      });
+      const taken = (): FakeActAnswer => {
+        sent.push({ itemId, revision });
+        return { status: FAKE_ANSWER.DONE, value: { item: closed, taken: true } };
+      };
+      if (request.payload.held !== true) return Promise.resolve(taken());
+      const answer = Promise.withResolvers<FakeActAnswer>();
+      const settle = (send: boolean) => {
+        gone.add(clientKey);
+        if (send) {
+          answer.resolve(taken());
+          return;
+        }
+        drawnByHost((each) => (each.id === itemId && asked !== undefined ? asked : undefined));
+        answer.resolve({ status: FAKE_ANSWER.DONE, value: { failure: "unanswered" } });
+      };
+      const decided = early.get(clientKey);
+      early.delete(clientKey);
+      if (decided === undefined) held.set(clientKey, settle);
+      else settle(decided);
+      return answer.promise;
     },
   });
   return sent;
 }
 
-/** The question Resolve asks, answered by its act, Resolve item or Resolve items. */
-export async function confirmClose(): Promise<void> {
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
-    assert.fail("Resolve asks first");
-  assert.strictEqual(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
-  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
-    /^Resolve items?$/u.test(button.textContent ?? ""),
-  );
-  await act(async () => (resolve ?? assert.fail("the question offers Resolve item")).click());
+/** Lets every resolve the window holds for its Undo go as sent, as the window leaving does once its toast can no longer be pressed. */
+export async function letResolvesGo(): Promise<void> {
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
   await settle();
 }
 
@@ -1210,7 +1261,12 @@ export function standKeymap(): Root {
     return null;
   }
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => keys.render(createElement(Keymap)));
+  // Note that the keymap stands on the test's client beside the page's own tree, which already holds its one subscription.
+  act(() =>
+    keys.render(
+      createElement(QueryClientProvider, { client: testQueryClientNow() }, createElement(Keymap)),
+    ),
+  );
   return keys;
 }
 
@@ -1577,8 +1633,9 @@ export async function mountThread(shown: InboxItem): Promise<HTMLElement> {
     [INVITES.id, [EXPIRY]],
   ]);
   const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, shown.title).click());
+  // Note that the item's row stands once the Inbox's reads have each landed, which may take more notifications than a settle waits out.
+  const row = await vi.waitFor(() => rowNamed(page, shown.title));
+  act(() => row.click());
   await settle();
   return itemPane(page);
 }

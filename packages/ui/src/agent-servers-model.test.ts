@@ -23,8 +23,8 @@ import {
 
 /**
  * What the MCP servers popover draws of a connected integration, from what
- * its server answered when asked for its tools: its switch and tools where
- * it answered with them, and its reason with Reconnect where it answered
+ * its server answered when asked for its tools: its switch where it
+ * answered with them, and its reason with Reconnect where it answered
  * why not, so a grant the server will not take never reads as working;
  * which section each server stands under; and what a search finds.
  */
@@ -61,7 +61,6 @@ test("a connected server whose tools read failed offers Reconnect, saying so in 
   assert.equal(row.kind, SERVER_ROW.RECONNECT);
   assert.equal(row.problem, "Slack could not be reached.");
   assert.equal(row.said, "Slack said: “App is not enabled for Slack MCP server access”");
-  assert.equal(row.tools, undefined);
 });
 
 test("a server that refused the sign-in says so", () => {
@@ -77,18 +76,12 @@ test("a server that could not be reached keeps its switch and says so, since rec
   assert.equal(row.kind, SERVER_ROW.SWITCH);
   assert.equal(row.problem, "Slack could not be reached.");
   assert.equal(row.said, undefined);
-  assert.equal(row.tools, undefined);
 });
 
-test("a working server keeps its switch and the tools it listed", () => {
-  const tools = [
-    { name: "slack_search_public", description: "Search public channels" },
-    { name: "slack_read_thread", description: "Read a thread" },
-  ];
-  const row = slackRow({ tools });
+test("a working server keeps its switch and says nothing more", () => {
+  const row = slackRow({ tools: [{ name: "slack_read_thread", description: "Read a thread" }] });
 
   assert.equal(row.kind, SERVER_ROW.SWITCH);
-  assert.deepEqual(row.tools, tools);
   assert.equal(row.problem, undefined);
 });
 
@@ -104,15 +97,13 @@ test("a connection is checked until its server answers, and says its tools could
   assert.equal(checking.problem, undefined);
   assert.equal(failed.kind, SERVER_ROW.SWITCH, "the agent's switch stays");
   assert.equal(failed.problem, "The tools could not be read.");
-  assert.equal(failed.tools, undefined);
 });
 
-/** Every offered server's row where each stands as `standing` says, Linear's server answering `tools`. */
+/** Every offered server's row where each stands as `standing` says, every connected server working. */
 function rowsWhere(
   standing: Partial<
     Record<IntegrationProvider, (typeof INTEGRATION_STATUS)[keyof typeof INTEGRATION_STATUS]>
   >,
-  tools: IntegrationToolsView = { tools: [] },
 ) {
   return serverRows({
     statusOf: (server) => {
@@ -122,10 +113,9 @@ function rowsWhere(
         : (standing[provider] ?? INTEGRATION_STATUS.UNAVAILABLE);
     },
     healthOf: (server) =>
-      connectionHealth(
-        integrationProviderFromWire(server) ?? INTEGRATION_PROVIDER.GITHUB,
-        server === INTEGRATION_PROVIDER.LINEAR ? tools : { tools: [] },
-      ),
+      connectionHealth(integrationProviderFromWire(server) ?? INTEGRATION_PROVIDER.GITHUB, {
+        tools: [],
+      }),
     signInOf: () => undefined,
     readFailed: false,
     disabled: [],
@@ -170,81 +160,21 @@ test("servers whose standing is unread stand first under no heading", () => {
   assert.equal(groups[0]?.heading, undefined);
 });
 
-test("a search finds servers by name or what they are for and any connected server's tools by name or description, alphabetically", () => {
-  const rows = rowsWhere(
-    {
-      [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
-      [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.DISCONNECTED,
-    },
-    {
-      tools: [
-        { name: "save_issue", description: "Creates or updates an issue." },
-        { name: "list_projects", description: "Lists projects." },
-        { name: "get_issue", description: "Gets one issue." },
-      ],
-    },
-  );
+test("a search finds servers by name or by what they are for", () => {
+  const rows = rowsWhere({
+    [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
+    [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.DISCONNECTED,
+  });
 
-  const byTool = searchServers(rows, "Issue");
   assert.deepEqual(
-    byTool.rows.map((row) => row.provider),
-    [INTEGRATION_PROVIDER.LINEAR],
-  );
-  assert.deepEqual(
-    byTool.tools.map((hit) => [hit.row.provider, hit.tool.name]),
-    [
-      [INTEGRATION_PROVIDER.LINEAR, "get_issue"],
-      [INTEGRATION_PROVIDER.LINEAR, "save_issue"],
-    ],
-  );
-
-  const byName = searchServers(rows, "ne");
-  assert.deepEqual(
-    byName.rows.map((row) => row.provider),
+    searchServers(rows, "ne").map((row) => row.provider),
     [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NEON],
   );
-  assert.deepEqual(searchServers(rows, "  ").tools, []);
-});
-
-test("a search finds a server by what it is for, and a word naming a server counts toward its tools, as Settings › Integrations' filter does", () => {
-  const rows = rowsWhere(
-    {
-      [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED,
-      [INTEGRATION_PROVIDER.NEON]: INTEGRATION_STATUS.DISCONNECTED,
-    },
-    {
-      tools: [
-        { name: "save_issue", description: "Creates or updates an issue." },
-        { name: "get_issue", description: "Gets one issue." },
-      ],
-    },
-  );
-
   assert.deepEqual(
-    searchServers(rows, "postgres").rows.map((row) => row.provider),
+    searchServers(rows, "postgres").map((row) => row.provider),
     [INTEGRATION_PROVIDER.NEON],
   );
-  assert.deepEqual(
-    searchServers(rows, "linear get").tools.map((hit) => hit.tool.name),
-    ["get_issue"],
-  );
-});
-
-test("a search finds a tool by the title its server gave it", () => {
-  const rows = rowsWhere(
-    { [INTEGRATION_PROVIDER.LINEAR]: INTEGRATION_STATUS.CONNECTED },
-    {
-      tools: [
-        { name: "save_issue", title: "Write ticket", description: "Creates or updates an issue." },
-        { name: "list_issues", description: "Lists issues." },
-      ],
-    },
-  );
-
-  assert.deepEqual(
-    searchServers(rows, "ticket").tools.map((hit) => hit.tool.name),
-    ["save_issue"],
-  );
+  assert.equal(searchServers(rows, "  ").length, rows.length);
 });
 
 test("switching one server keeps every other one off, an account this window draws no row of among them", () => {

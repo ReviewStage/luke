@@ -10,7 +10,7 @@ import { user } from "@repo/database/schemas/auth";
 import { messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@repo/database/testing";
-import { CLAUDE_CODE_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL } from "@repo/features/agent-tools";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option } from "effect";
@@ -22,8 +22,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../core.js";
-import { recordingEve } from "../testing/recording-eve.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { recordingSessions } from "../testing/recording-sessions.js";
 import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
@@ -33,9 +32,9 @@ import { runAgentRemember } from "./memory-tools.js";
  *
  * Through `runAgentRemember`, over a real dialect, with the turn under way
  * written as the relay writes it: a turn an automation's run opened keeps
- * nothing, an eve agent an automation started included, whose first line
- * the relay wrote with no sender, nor a
- * turn whose journal already holds a web read, eve's or Claude Code's; a
+ * nothing, an agent from before the native harnesses an automation started
+ * included, whose first line its relay wrote with no sender, nor a
+ * turn whose journal already holds a web read, the retired runtime's or Claude Code's; a
  * turn a member's own line opened, which read nothing of the web, keeps the
  * memory; and a turn that settled refuses nothing. Synthetic accounts,
  * workspaces, and words throughout.
@@ -54,7 +53,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
     const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Tidy the docs.",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -129,11 +128,11 @@ const writeTurn = (
 
 /** A `remember` from the agent, as its tool door calls it. */
 const remember = (agent: Agent) => {
-  const { sessions } = recordingEve();
+  const { sessions } = recordingSessions();
   const call: AgentCall = {
-    caller: { kind: AGENT_CALLER.AGENT, agent },
-    eve: sessions,
-    eveAs: () => sessions,
+    caller: { kind: AGENT_CALLER.AGENT, agent, descriptionsOn: false },
+    agentSessions: sessions,
+    agentSessionsAs: () => sessions,
     writer: Effect.die(new Error("a memory call writes no line")),
     clientKey: randomUUID(),
   };
@@ -155,7 +154,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
   );
 
   it.effect(
-    "an eve agent's first turn, whose line the relay wrote with no sender, keeps nothing where an automation started the agent",
+    "the first turn of an agent from before the native harnesses, whose line its relay wrote with no sender, keeps nothing where an automation started the agent",
     () =>
       Effect.gen(function* () {
         const origin = {

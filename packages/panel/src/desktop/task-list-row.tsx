@@ -21,13 +21,13 @@ import {
   RowHintOptions,
   TASK_AGENTS_MARK_SIZE,
   TASK_ROW_CELL,
-  TaskAgentsMark,
   TaskRow,
   type TaskRowCell,
   type TaskRowEdges,
   Time,
   VisuallyHidden,
 } from "@repo/ui";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
@@ -38,14 +38,17 @@ import {
 import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useRef } from "react";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
+import { renameWrite } from "../rename-write.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useMarkedUnread } from "../tasks/use-task-looks.js";
+import { useTaskPullRequests } from "../tasks/use-task-work.js";
+import { TASK_RENAME_SHAPE } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
@@ -55,6 +58,7 @@ import {
   type TaskRowTab,
   useTaskMenuItems,
 } from "./task-actions.js";
+import { TaskRowStatus } from "./task-card.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
 
@@ -98,16 +102,16 @@ function stillOpen(
   return open && pullRequest.url !== undefined;
 }
 
-/** A task's pull requests still open on GitHub, which its row draws a chip for each of. */
-export function openPullRequests(task: TaskSummary) {
-  return (task.agents?.pullRequests ?? []).filter(stillOpen);
+/** Those of a task's pull requests (`pullRequestsOfTask`) still open on GitHub, which its row draws a chip for each of. */
+export function openPullRequests(pullRequests: readonly TaskPullRequestLine[]) {
+  return pullRequests.filter(stillOpen);
 }
 
 /** Each of a task's open pull requests as its chip, hanging its card; nothing where it has none. */
 function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | null {
   // Its page opens as a link to it does: in its agent's Pull request tab where the window knows the agent, else on GitHub.
   const openLink = useOpenLink();
-  const open = openPullRequests(task);
+  const open = openPullRequests(useTaskPullRequests(task.id));
   if (open.length === 0) return null;
   return (
     <>
@@ -202,7 +206,8 @@ export function TaskListRow({
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const marked = useMarkedUnread(task.id);
-  const rename = useInlineRename(task.id, tasks.onRenameTask);
+  const renaming = useMutation(tasks.renameTask);
+  const rename = useInlineRename(task.id, renameWrite(renaming, TASK_RENAME_SHAPE));
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const drawn = (cell: TaskRowCell) => cells.includes(cell);
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
@@ -304,7 +309,7 @@ export function TaskListRow({
                 </ReplayWords>
               ) : null,
               [TASK_ROW_CELL.AGENTS]: drawn(TASK_ROW_CELL.AGENTS) ? (
-                <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
+                <TaskRowStatus task={task} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
               ) : null,
               [TASK_ROW_CELL.UPDATED]: drawn(TASK_ROW_CELL.UPDATED) ? (
                 <Time at={taskTime(task, TASK_ORDER.UPDATED)} hint={false} />

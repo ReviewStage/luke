@@ -191,7 +191,7 @@ export const queuedUnopenedTurn = (
     const turnId = randomUUID();
     yield* writer.enqueueTurn(
       { userId, conversationId },
-      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+      { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
     );
     return true;
   });

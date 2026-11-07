@@ -121,12 +121,12 @@ import type { ConversationTarget } from "./writer.js";
  * serializes two Starts of one task, so a retry carrying the key of a Start
  * already made finds that agent rather than opening a second conversation
  * beside it, and says which it did, since only a Start that made the agent
- * opens its eve session. The agent's conversation is a `coding_agent`
+ * opens its runtime session. The agent's conversation is a `coding_agent`
  * conversation of the account that started it, opened here and named on the
  * row, which carries that account as `userId`, so a member reads the
  * conversation under its starter; its messages and turns are the
  * relay's to write, and the newest turn is what the agent's status is read
- * from. A Start whose eve session could not be opened discards the agent
+ * from. A Start whose session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
  * rather than finding an agent nothing runs. The model, effort, and context
  * window on the row are read at every step, so a change to them is the next
@@ -134,19 +134,17 @@ import type { ConversationTarget } from "./writer.js";
  * branch is the head of the pull request the agent opened, written as it
  * opens one (`coder-host/pull-request.ts`) and read where the agent's pull
  * request is looked up (`coder-host/published.ts`). A delegation is a child
- * conversation under the agent's, which an eve agent's `delegate` opened
+ * conversation under the agent's, which `delegate` opened for an agent on the retired runtime
  * ahead of its worker's session with the model and effort the agent chose
  * for it written beside it here, so the tabs read the worker's transcript
  * under the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
- * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
- * because the routes bundle this module and the eve host's modules reach
- * eve, which runs in a service of its own (`function-bundles.ts`). The
+ * which is kept on the delegation for that. The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the
  * developer gave, and renamed, which replaces whatever stands. The newest
- * model step of the agent's own conversation and eve's last compaction of
- * it are written by the coder host as eve tells them, and read back with
+ * model step of the agent's own conversation and its harness's last compaction of
+ * it are written by the runner events route as the harness tells them, and read back with
  * the transcript, which is what the tab's context ring draws. The pull
  * request from the agent's branch is written as GitHub answered each read
  * of it (`coder-host/published.ts`), and read back beside the agents of
@@ -197,9 +195,9 @@ export interface Agent {
   readonly model: string;
   readonly effort: string;
   readonly contextWindow: ContextWindow;
-  /** The plan text the agent was handed; null where it was handed a prompt instead. */
-  readonly planSnapshot: string | null;
-  /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
+  /** The description text the agent was handed; null where it was handed a prompt instead. */
+  readonly descriptionSnapshot: string | null;
+  /** The developer's words the agent was handed in the description's place; null where it was handed the description. */
   readonly prompt: string | null;
   /** The GitHub repository the agent works in, as `owner/name`; null for an agent with none, which does no repository work. */
   readonly repository: string | null;
@@ -230,15 +228,16 @@ export interface Agent {
 
 /**
  * One coding agent as a list line reads it (`AGENT_LINE_COLUMNS`):
- * the agent without what it was handed, the plan's text or the developer's
+ * the agent without what it was handed, the description's text or the developer's
  * prompt, and without the run that started it, which only its own page and
  * its own turns read; which of the two it was handed, or neither, which its
  * tab's brief is drawn from, and its automation's name stand in their place.
  */
-export interface AgentLine extends Omit<Agent, "automationOrigin" | "planSnapshot" | "prompt"> {
+export interface AgentLine
+  extends Omit<Agent, "automationOrigin" | "descriptionSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
-  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  /** What the agent was handed as its first message: the description, the developer's prompt, or nothing, for one started blank. */
   readonly brief: AgentBrief;
 }
 
@@ -282,17 +281,17 @@ export function hasRepository<A extends { readonly repository: string | null }>(
   return agent.repository !== null;
 }
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
+/** What a Start hands the agent as its first message: the description's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
 export type AgentBriefText =
-  | { readonly planSnapshot: string; readonly prompt: null }
-  | { readonly planSnapshot: null; readonly prompt: string }
-  | { readonly planSnapshot: null; readonly prompt: null };
+  | { readonly descriptionSnapshot: string; readonly prompt: null }
+  | { readonly descriptionSnapshot: null; readonly prompt: string }
+  | { readonly descriptionSnapshot: null; readonly prompt: null };
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
  * whose text or the developer's prompt it is handed, a coder or the task's
  * pilot; or in a workspace with no task, as an automation's run puts one,
- * handed a prompt, since there is no plan to hand it.
+ * handed a prompt, since there is no description to hand it.
  */
 export type AgentPlace =
   | (AgentBriefText & {
@@ -303,7 +302,7 @@ export type AgentPlace =
   | {
       readonly taskId: null;
       readonly organizationId: string;
-      readonly planSnapshot: null;
+      readonly descriptionSnapshot: null;
       readonly prompt: string;
       readonly kind?: typeof AGENT_KIND.CODER | undefined;
     };
@@ -361,12 +360,12 @@ export interface NewAgentRepository {
 
 /**
  * How an agent is run, as its rows hold it: what answers its conversation,
- * eve for a conversation from before the column, the harness's own session
+ * the retired runtime for a conversation from before the column, the harness's own session
  * or thread id, the digest of its runner's bearer, and who pays for it.
  */
 export interface AgentRouting {
   readonly runtime: ConversationRuntime;
-  /** The harness's session or thread id; null on eve and before the harness answers one. */
+  /** The harness's session or thread id; null on the retired runtime and before the harness answers one. */
   readonly nativeSession: string | null;
   /** The digest of the runner's bearer at our MCP server; null where no runner holds one. */
   readonly runnerTokenHash: string | null;
@@ -390,7 +389,7 @@ const AGENT_COLUMNS = {
   model: agentTable.model,
   effort: agentTable.effort,
   contextWindow: agentTable.contextWindow,
-  planSnapshot: agentTable.planSnapshot,
+  descriptionSnapshot: agentTable.descriptionSnapshot,
   prompt: agentTable.prompt,
   repository: agentTable.repository,
   branch: agentTable.branch,
@@ -409,7 +408,7 @@ const AGENT_COLUMNS = {
 
 /**
  * The columns a list line projects (`AgentLine`): every one of
- * `AGENT_COLUMNS` but the plan's text, the prompt, and the run that
+ * `AGENT_COLUMNS` but the description's text, the prompt, and the run that
  * started the agent, whose prompt and webhook body it carries, with whether
  * a prompt was handed and the run's automation name read in their place.
  * Note that the lists read these, because they read every agent of every
@@ -432,7 +431,7 @@ const AGENT_LINE_COLUMNS = {
   contextWindow: agentTable.contextWindow,
   brief: sql<AgentBrief>`case
     when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT}
-    when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN}
+    when ${agentTable.descriptionSnapshot} is not null then ${AGENT_BRIEF.DESCRIPTION}
     else ${AGENT_BRIEF.BLANK}
   end`,
   repository: agentTable.repository,
@@ -450,15 +449,20 @@ const AGENT_LINE_COLUMNS = {
   deviceId: agentTable.deviceId,
 } as const;
 
-/** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
-export function agentBriefOf(agent: Pick<Agent, "planSnapshot" | "prompt">): AgentBrief {
+/** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the description, else nothing. */
+export function agentBriefOf(agent: Pick<Agent, "descriptionSnapshot" | "prompt">): AgentBrief {
   if (agent.prompt !== null) return AGENT_BRIEF.PROMPT;
-  return agent.planSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
+  return agent.descriptionSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.DESCRIPTION;
 }
 
 /** The line a full read of an agent draws, as `AGENT_LINE_COLUMNS` reads it from the row. */
 export function agentLineOf(agent: Agent): AgentLine {
-  const { automationOrigin, planSnapshot: _planSnapshot, prompt: _prompt, ...line } = agent;
+  const {
+    automationOrigin,
+    descriptionSnapshot: _descriptionSnapshot,
+    prompt: _prompt,
+    ...line
+  } = agent;
   return {
     ...line,
     automationName: automationOrigin?.name ?? null,
@@ -509,6 +513,8 @@ const StartedFromColumnSchema = Schema.NullOr(
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),
+    drive: Schema.optionalKey(Schema.String),
+    session: Schema.optionalKey(Schema.String),
   }),
 );
 /** An author as the agent's row holds it. */
@@ -529,7 +535,7 @@ const AgentRowSchema = Schema.Struct({
   model: Schema.String,
   effort: Schema.String,
   contextWindow: contextWindowSchema,
-  planSnapshot: Schema.NullOr(Schema.String),
+  descriptionSnapshot: Schema.NullOr(Schema.String),
   prompt: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   branch: Schema.NullOr(Schema.String),
@@ -548,7 +554,7 @@ const AgentRowSchema = Schema.Struct({
 
 const {
   automationOrigin: _automationOrigin,
-  planSnapshot: _planSnapshot,
+  descriptionSnapshot: _descriptionSnapshot,
   prompt: _prompt,
   ...LINE_ROW_FIELDS
 } = AgentRowSchema.fields;
@@ -822,7 +828,7 @@ const insertAgent = SqlSchema.findOne({
     model: Schema.String,
     effort: Schema.String,
     contextWindow: contextWindowSchema,
-    planSnapshot: Schema.NullOr(Schema.String),
+    descriptionSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.NullOr(Schema.String),
     startBranch: Schema.NullOr(Schema.String),
@@ -855,7 +861,7 @@ const insertAgent = SqlSchema.findOne({
           model: write.model,
           effort: write.effort,
           contextWindow: write.contextWindow,
-          planSnapshot: write.planSnapshot,
+          descriptionSnapshot: write.descriptionSnapshot,
           prompt: write.prompt,
           repository: write.repository,
           startBranch: write.startBranch,
@@ -1035,7 +1041,7 @@ const markTurnFastRefused = SqlSchema.void({
     ),
 });
 
-/** The turn a reservation of plan notes is held against, as the subquery of the update names it apart from the row it updates. */
+/** The turn a reservation of description notes is held against, as the subquery of the update names it apart from the row it updates. */
 const runningTurn = alias(turns, "running_turn");
 
 const reserveTurnNotes = SqlSchema.findOneOption({
@@ -1049,7 +1055,7 @@ const reserveTurnNotes = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ planNotesTaken: sql`${turns.planNotesTaken} + ${requested}` })
+        .set({ descriptionNotesTaken: sql`${turns.descriptionNotesTaken} + ${requested}` })
         .where(
           and(
             eq(turns.userId, userId),
@@ -1070,7 +1076,7 @@ const reserveTurnNotes = SqlSchema.findOneOption({
             ),
           ),
         )
-        .returning({ turnId: turns.id, taken: turns.planNotesTaken }),
+        .returning({ turnId: turns.id, taken: turns.descriptionNotesTaken }),
     ),
 });
 
@@ -1080,7 +1086,9 @@ const releaseTurnNotes = SqlSchema.void({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ planNotesTaken: sql`greatest(0, ${turns.planNotesTaken} - ${released})` })
+        .set({
+          descriptionNotesTaken: sql`greatest(0, ${turns.descriptionNotesTaken} - ${released})`,
+        })
         .where(and(eq(turns.userId, userId), eq(turns.id, turnId))),
     ),
 });
@@ -1435,33 +1443,6 @@ const findNativeAgentConversations = SqlSchema.findAll({
 });
 
 /**
- * The agents whose conversation runs on eve in the session named, read with
- * no account in hand, because the sweep that asks acts for every account at
- * once. Note that a conversation from before the runtime column runs on eve
- * too, and that a deleted conversation is still its agent's: its sandbox is
- * no less the agent's to stop once its turn ended. At most two, which is
- * enough to tell one from several.
- */
-const findEveAgentsOfSession = SqlSchema.findAll({
-  Request: Schema.Struct({ runtimeSessionId: Schema.String }),
-  Result: Schema.Struct({ agentId: Schema.String, conversationId: Schema.String }),
-  execute: ({ runtimeSessionId }) =>
-    Database.use((db) =>
-      db
-        .select({ agentId: agentTable.id, conversationId: conversations.id })
-        .from(conversations)
-        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
-        .where(
-          and(
-            eq(conversations.runtimeSessionId, runtimeSessionId),
-            or(isNull(conversations.runtime), eq(conversations.runtime, CONVERSATION_RUNTIME.EVE)),
-          ),
-        )
-        .limit(2),
-    ),
-});
-
-/**
  * The native runtime of each conversation named that runs on one, read with
  * no account in hand: only for ids a gate already read, as
  * `latestTurnsOfReached`, such as the agents a member's workspace reaches.
@@ -1504,24 +1485,6 @@ const findNativeRoute = SqlSchema.findOneOption({
             inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
           ),
         )
-        .limit(1),
-    ),
-});
-
-/** The conversation's newest turn: where it stands, and when it settled. */
-const findNewestTurnStanding = SqlSchema.findOneOption({
-  Request: Schema.Struct({ conversationId: Schema.String }),
-  Result: Schema.Struct({
-    status: Schema.String,
-    settledAt: Schema.NullOr(InstantColumnSchema),
-  }),
-  execute: ({ conversationId }) =>
-    Database.use((db) =>
-      db
-        .select({ status: turns.status, settledAt: turns.settledAt })
-        .from(turns)
-        .where(eq(turns.conversationId, conversationId))
-        .orderBy(desc(turns.queuedAt), desc(turns.id))
         .limit(1),
     ),
 });
@@ -2342,7 +2305,7 @@ const markAgentUnread = SqlSchema.findOneOption({
 /**
  * The columns of an agent that a caller holding only its conversation most
  * often needs: who it is, who started it, its task, repository, title, and
- * archive. Note that these leave out the plan's text and the prompt, the bulk
+ * archive. Note that these leave out the description's text and the prompt, the bulk
  * of a row, since every tool call of ours an agent makes reads its agent.
  */
 const AGENT_HEADER_COLUMNS = {
@@ -2423,7 +2386,7 @@ const kindUnderLock = Effect.fnUntraced(function* (started: NewAgent) {
  * Starts an agent on a task of the account's workspace, or in a workspace
  * of the account's with no task: a `coding_agent` conversation of the
  * account's and the row that binds it to the task or the workspace, with
- * the plan text or the prompt, the repository, the automation whose run
+ * the description text or the prompt, the repository, the automation whose run
  * started it with that run, and the account's own agent whose `start_agent`
  * started it, as handed. A continue of a pilot takes over its agents in the
  * same transaction: the account's agents it started, or any pilot that
@@ -2480,7 +2443,7 @@ export function createAgent(
           model: started.model,
           effort: started.effort,
           contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
-          planSnapshot: started.planSnapshot,
+          descriptionSnapshot: started.descriptionSnapshot,
           prompt: started.prompt,
           repository: started.repository,
           startBranch: started.startBranch ?? null,
@@ -2518,7 +2481,7 @@ export function createAgent(
 }
 
 /**
- * Discards an agent a Start could not open an eve session for: its row and
+ * Discards an agent a Start could not open a session for: its row and
  * its conversation, with every message and turn the conversation holds,
  * which is none. The agents a continue of a pilot took over go back to the
  * pilot it was started from first, since the row's delete would leave them
@@ -2553,17 +2516,16 @@ export interface AgentDeleteGuard<R> {
 }
 
 /**
- * Deletes the agent for good: its row, which takes its pins, its inbox, and
- * its pull request polls with it and leaves what else named it naming no
- * one; and its conversation stamped deleted, so
- * the purge takes its transcript seven days on, as a task's delete does
+ * Deletes the agent for good: its row, which takes its pins and its inbox
+ * with it and leaves what else named it naming no one; and its
+ * conversation stamped deleted, so the purge takes its transcript seven days on, as a task's delete does
  * for each of its agents. Answers the transaction its row went in, as a
  * task's delete does; none where the account reaches no such agent.
  *
  * Everything runs under the agent's conversation lock, the one every write
  * of its lines and turns takes, and the agent is read again under it, so a
  * message handed over after the caller stopped it either landed first, its
- * line standing from before eve hears it (`dispatch-claim.ts`), and
+ * line standing from before its runtime hears it (`dispatch-claim.ts`), and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -3093,19 +3055,19 @@ export function updateAgentServersCommitted(
 }
 
 /**
- * The hand-over of a message mentioning MCP servers to eve, run with those
+ * The hand-over of a message mentioning MCP servers to the runtime, run with those
  * servers standing among the ones the agent's next turn takes whatever its
- * switches say, and left standing only where the hand-over answers that eve
+ * switches say, and left standing only where the hand-over answers that the runtime
  * took the message. The servers not already standing are added, the
  * hand-over run, and those same servers taken out again for one that
  * answered nothing, failed, or was interrupted at its deadline, so a send
- * eve did not take leaves no server for a later turn.
+ * the runtime did not take leaves no server for a later turn.
  * No transaction is open across the hand-over, so a turn may take the
  * servers meanwhile; each change is one statement over the row as it then
  * stands, so the take-out never writes back what that turn took. Note that
  * the caller runs this as the dispatch under the conversation's dispatch claim
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
- * added only for a send eve hears, and no other send's hand-over stands
+ * added only for a send the runtime hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
  * server, or for an agent of a workspace the account is not in.
  */
@@ -3170,30 +3132,30 @@ export function recordTurnFastRefused(userId: string, turnId: string): AgentStor
   return markTurnFastRefused({ userId, turnId });
 }
 
-/** A turn's count of plan notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
-export interface TurnPlanNotes {
+/** A turn's count of description notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
+export interface TurnDescriptionNotes {
   readonly turnId: string;
   readonly taken: number;
 }
 
 /**
- * Reserves a call's plan notes against the conversation's running turn
+ * Reserves a call's description notes against the conversation's running turn
  * before its save goes out, and answers the turn and its count with them;
  * nothing where no turn of the conversation runs, or the account does not
  * hold it. Note that the count is raised in one statement, because a
  * native agent's calls of one step run at once, and each must see the
- * other's reservation, as eve's session state does (`plan-edit.ts`).
+ * other's reservation (`description-edit.ts`).
  */
-export function reserveTurnPlanNotes(
+export function reserveTurnDescriptionNotes(
   userId: string,
   conversationId: string,
   requested: number,
-): AgentStoreEffect<Option.Option<TurnPlanNotes>> {
+): AgentStoreEffect<Option.Option<TurnDescriptionNotes>> {
   return reserveTurnNotes({ userId, conversationId, requested });
 }
 
 /** Settles a reservation once its save answered: the notes it reserved and did not take given back, which is all of them for a refused call. */
-export function settleTurnPlanNotes(
+export function settleTurnDescriptionNotes(
   userId: string,
   turnId: string,
   requested: number,
@@ -3276,7 +3238,9 @@ const lockAgentArchivedAt = SqlSchema.findOneOption({
  * The agent archived or brought back, as `archiveAgent` does it, and the
  * transaction its row was written in; an archive reads the row under its
  * lock first, so of two archives at once only the first answers that it
- * archived the agent.
+ * archived the agent, and an archive already standing is kept as it stands,
+ * its stamp and record unmoved, so bringing the agent back opens again every
+ * item it settled.
  */
 export function archiveAgentCommitted(
   userId: string,
@@ -3292,6 +3256,11 @@ export function archiveAgentCommitted(
         const archivedBefore = archived
           ? Option.getOrUndefined(yield* lockAgentArchivedAt({ userId, agentId }))?.archivedAt
           : undefined;
+        // An archive already standing is kept as it stands, so its stamp still names the items it settled.
+        if (archived && archivedBefore !== undefined && archivedBefore !== null) {
+          const kept = yield* findAgent({ userId, agentId });
+          return Option.map(kept, (agent) => ({ agent, archivedNow: false }));
+        }
         // The archive standing before the write, whose stamp names the items it settled.
         const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
         const written = yield* updateAgentArchived({
@@ -3314,16 +3283,6 @@ export function archiveAgentCommitted(
   );
 }
 
-/** What an archive of an idle agent came to: archived now, archived already, still working, or no agent the account reaches. */
-export const IDLE_ARCHIVE = {
-  ARCHIVED: "archived",
-  ALREADY: "already",
-  WORKING: "working",
-  NOT_FOUND: "not-found",
-} as const;
-
-export type IdleArchive = (typeof IDLE_ARCHIVE)[keyof typeof IDLE_ARCHIVE];
-
 /** The agent's conversation row under its own lock, the one every write of its lines and turns takes; nothing where no such conversation stands. */
 const lockAgentConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -3337,61 +3296,6 @@ const lockAgentConversation = SqlSchema.findOneOption({
         .for("update"),
     ),
 });
-
-const archiveIfUnarchived = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    agentId: Schema.String,
-    archivedAt: Schema.Date,
-    archivedBy: ArchivedByColumnSchema,
-  }),
-  Result: IdRowSchema,
-  execute: ({ userId, agentId, archivedAt, archivedBy }) =>
-    Database.use((db) =>
-      db
-        .update(agentTable)
-        .set({ archivedAt, archivedBy })
-        .where(and(reachableAgent(userId, agentId), isNull(agentTable.archivedAt)))
-        .returning({ id: agentTable.id }),
-    ),
-});
-
-/**
- * Archives the agent under who archived it, but only while `idle` says it
- * is, read under its conversation's lock, the one every write of its lines
- * and turns takes, so no turn queued and no message handed over between
- * the read and the stamp leaves an agent archived at work. An agent
- * archived already keeps the archive standing.
- */
-export function archiveIdleAgent(
-  userId: string,
-  agentId: string,
-  archivedBy: StoredArchive,
-  idle: (agent: Agent) => AgentStoreEffect<boolean>,
-): AgentStoreEffect<IdleArchive> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const found = yield* findAgent({ userId, agentId });
-        if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
-        const locked = yield* lockAgentConversation({
-          conversationId: found.value.conversationId,
-        });
-        if (Option.isNone(locked)) return IDLE_ARCHIVE.NOT_FOUND;
-        // The row is read again under the lock, so an archive made meanwhile is seen.
-        const agent = yield* findAgent({ userId, agentId });
-        if (Option.isNone(agent)) return IDLE_ARCHIVE.NOT_FOUND;
-        if (agent.value.archivedAt !== null) return IDLE_ARCHIVE.ALREADY;
-        if (!(yield* idle(agent.value))) return IDLE_ARCHIVE.WORKING;
-        const archivedAt = yield* DateTime.nowAsDate;
-        const rows = yield* archiveIfUnarchived({ userId, agentId, archivedAt, archivedBy });
-        if (rows.length === 0) return IDLE_ARCHIVE.ALREADY;
-        yield* settleAgentInboxItems([agentId], archivedAt);
-        return IDLE_ARCHIVE.ARCHIVED;
-      }),
-    ),
-  );
-}
 
 const unarchiveIfStamped = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -3661,7 +3565,8 @@ export function readAgentRouting(
 ): AgentStoreEffect<Option.Option<AgentRouting>> {
   return Effect.map(
     findAgentRouting({ userId, agentId }),
-    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+    // Note that a conversation from before the runtime column ran on the retired runtime, so it reads as that one.
+    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.RETIRED })),
   );
 }
 
@@ -3678,7 +3583,7 @@ export function readVisibleAgentWorkspace(
 
 /**
  * The native runtime of each conversation named, keyed by conversation;
- * one on eve, or from before the column, is absent. Only for ids a gate
+ * one on the retired runtime, or from before the column, is absent. Only for ids a gate
  * already read, as above.
  */
 export function nativeRuntimesOfReached(
@@ -3700,7 +3605,7 @@ export interface NativeRoute {
 
 /**
  * The native runtime of the agent of the conversation named and its payer;
- * none on eve, or from before the column. Only for an id a gate already
+ * none on the retired runtime, or from before the column. Only for an id a gate already
  * read, as above.
  */
 export function nativeRouteOfReached(
@@ -3781,7 +3686,6 @@ export function readRunnerTokenConversation(
   });
 }
 
-/** When the conversation's newest turn ended; null while it is queued or running, or before any turn. */
 /** When the newest turn ended, or null where it has not or there is none. */
 function endedAtOf(
   newest: Option.Option<{ readonly status: string; readonly settledAt: Date | null }>,
@@ -3791,10 +3695,6 @@ function endedAtOf(
   );
   // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
   return Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
-}
-
-function newestTurnEndedAt(conversationId: string): AgentStoreEffect<Date | null> {
-  return Effect.map(findNewestTurnStanding({ conversationId }), endedAtOf);
 }
 
 /** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
@@ -3811,7 +3711,7 @@ export interface NativeRunStanding {
  * Where the run of the agent under this id stands, read with no account in
  * hand, because the scheduled sweep stops ended native sandboxes for every
  * account: its conversation, and when its newest turn ended. Nothing for an
- * id that names no agent, an agent on eve, or one whose conversation was
+ * id that names no agent, an agent on the retired runtime, or one whose conversation was
  * deleted. Only for an id a sandbox we opened carries; it answers nothing
  * a member wrote.
  */
@@ -3845,37 +3745,7 @@ export function readNativeRunStandings(
   });
 }
 
-/** Where an eve agent's run stands, as the sweep reads it from its sandbox's session tag. */
-export interface EveRunStanding {
-  readonly agentId: string;
-  /** The agent's conversation, which a Terminal's or a watched browser's lease is held on. */
-  readonly conversationId: string;
-  /** When its newest turn ended; null while that turn is queued or running, or before it has any turn. */
-  readonly endedAt: Date | null;
-}
-
-/**
- * Where the run of the eve agent whose conversation runs in the session
- * named stands, read with no account in hand, because the scheduled sweep
- * stops orphaned eve sandboxes for every account: the agent, its
- * conversation, and when its newest turn ended. Nothing where no agent's
- * eve conversation runs in the session, or where more than one does, since
- * a sandbox the sweep cannot name one agent for is not its to stop. Only
- * for a session id a sandbox's tag carries; it answers nothing a member
- * wrote.
- */
-export function readEveRunStanding(
-  runtimeSessionId: string,
-): AgentStoreEffect<Option.Option<EveRunStanding>> {
-  return Effect.gen(function* () {
-    const found = yield* findEveAgentsOfSession({ runtimeSessionId });
-    const [only] = found;
-    if (only === undefined || found.length > 1) return Option.none();
-    return Option.some({ ...only, endedAt: yield* newestTurnEndedAt(only.conversationId) });
-  });
-}
-
-/** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
+/** The agent whose conversation this is, which is what a session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
 export function readAgentOfConversation(
   userId: string,
   conversationId: string,
@@ -3901,7 +3771,7 @@ export function readAgentHeaderOfConversation(
   return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
-/** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
+/** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when its harness last compacted it; null for each of the last two before it happens. */
 export interface AgentContextRow {
   readonly model: string;
   readonly contextWindow: ContextWindow;
@@ -3918,7 +3788,7 @@ export function recordAgentStep(
   return updateAgentStep({ userId, agentId, lastStep });
 }
 
-/** When eve compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
+/** When the harness compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
 export function recordAgentCompaction(
   userId: string,
   agentId: string,
@@ -4045,7 +3915,12 @@ export type LineSent =
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
   | { readonly kind: typeof MESSAGE_SENDER.APP }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AUTOMATION;
+      readonly name: string;
+      /** The automation's id, where the line kept it. */
+      readonly automationId: string | undefined;
+    }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
@@ -4068,6 +3943,7 @@ const LineSenderRowSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
+  automationId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -4088,6 +3964,7 @@ const findLineSenders = SqlSchema.findAll({
           senderName: messages.senderName,
           senderModel: messages.senderModel,
           agentId: agentTable.id,
+          automationId: messages.senderAutomationId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
@@ -4119,7 +3996,11 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined
-        : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+        : {
+            kind: MESSAGE_SENDER.AUTOMATION,
+            name: row.senderName,
+            automationId: row.automationId ?? undefined,
+          };
     case MESSAGE_SENDER.GITHUB:
       return row.senderName === null
         ? undefined

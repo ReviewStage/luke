@@ -3,7 +3,10 @@
  *
  * It keeps every sandbox, command, stdin, upload, network policy, and run it
  * was asked for, opens and resumes sandboxes as Vercel does, and answers a
- * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`).
+ * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`). A
+ * command `@vercel/sandbox` starts as a user (`asUser`) is kept as that user's
+ * command, its environment read back off `sudo`'s command line, where the SDK
+ * writes it.
  * Beside it, the lines a launch reads from our store (`runner_line`),
  * read back the way a test reads a command's stdin, and stamped taken as a
  * runner's ACCEPTED would, which no fake runner posts. Synthetic team,
@@ -19,34 +22,40 @@ import { Database } from "@repo/database/core/query";
 import { runnerLine } from "@repo/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
-import { runnerTag } from "../agents/machine/vercel-machine.js";
+import { Effect, Layer } from "effect";
+import { agentTag } from "../agents/machine/vercel-machine.js";
 import type { NetworkPolicy } from "../agents/vercel-sandbox-api.js";
 import {
+  commandAnswered,
+  commandLogsStreamed,
+  commandRunStreamed,
+  sandboxDeleted,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
   sandboxListRefusal,
   sandboxStopRefusal,
   sandboxTagsRefusal,
+  sessionAnswered,
+  snapshotOf,
 } from "./vercel-sandbox-fake.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 
-/** An unsigned token naming the fixture's project and team, a year from expiring. */
-export function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
-  ).toString("base64url");
-  return `${header}.${payload}.`;
-}
+/** The user and group the image runs the API's commands as, which `@vercel/sandbox` reads off `id` before it makes a user. */
+const DEFAULT_USER = "ubuntu";
+
+/** What `@vercel/sandbox` runs to read the default user and its group. */
+const DEFAULT_USER_READ = "id -un; id -gn";
 
 export interface FakeSandbox {
   name: string;
   status: string;
   currentSessionId: string;
   tags: Record<string, string>;
-  snapshotId: string;
+  /** The image it was created from. */
+  image: string;
   deleted: boolean;
   /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
   timeout: number;
@@ -58,11 +67,15 @@ export interface FakeSandbox {
   createdAt: number;
   /** The snapshot it resumes from, which its last snapshot made; none before one is taken. */
   currentSnapshotId?: string;
+  /** The drives its create mounted, by path, as the create's body carried them. */
+  mounts?: Record<string, { readonly drive: string; readonly mode: string }>;
 }
 
 export interface FakeCommand {
   readonly id: string;
   readonly sandboxSessionId: string;
+  /** The user `@vercel/sandbox` started the command as (`asUser`); none for one the API started as its own. */
+  readonly user?: string;
   /** The agent the command's sandbox was tagged for as it started, whose queued lines a launch reads. */
   readonly agentId: string | undefined;
   readonly command: string;
@@ -107,9 +120,14 @@ export async function commandRead(
     await once(init.signal, "abort");
     throw new Error("the reader gave up");
   }
-  return Response.json({
-    command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
-  });
+  const sessionId = /\/sessions\/([^/]+)\//u.exec(url.pathname)?.[1] ?? "";
+  return Response.json(
+    commandAnswered({
+      id: command.id,
+      sessionId,
+      exitCode: command.recorded === true ? command.exitCode : null,
+    }),
+  );
 }
 
 /** The files a gzipped tar holds, by path. */
@@ -137,16 +155,43 @@ function untar(archive: Uint8Array): Map<string, string> {
   return files;
 }
 
+/**
+ * A command `@vercel/sandbox`'s `asUser` started, as it wrote it:
+ * `sudo -u <user> -- bash -c <cd and exec> bash <cwd> [env K=V…] <command> <args…>`,
+ * read back as the user's command, its folder, and its environment; none for
+ * a command written any other way.
+ */
+function asUserCommand(command: string, args: readonly string[]) {
+  const [flag, user, dashes, shell, , script, , cwd, ...rest] = args;
+  if (command !== "sudo" || flag !== "-u" || dashes !== "--" || shell !== "bash") return undefined;
+  if (user === undefined || script === undefined || cwd === undefined) return undefined;
+  const env: Record<string, string> = {};
+  let at = 0;
+  if (rest[0] === "env") {
+    at = 1;
+    for (; at < rest.length; at += 1) {
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/su.exec(rest[at] ?? "");
+      if (match === null) break;
+      env[match[1] ?? ""] = match[2] ?? "";
+    }
+  }
+  const [run = "", ...runArgs] = rest.slice(at);
+  return { user, cwd, env, command: run, args: runArgs };
+}
+
 /** Vercel Sandbox's REST API, as a store of the sandboxes and commands it was asked for. */
 export function runnerSandboxApi() {
   const sandboxes: FakeSandbox[] = [];
   /** How many stdin writes with data the API refuses next, and with what status: a passing outage by default. */
   const failStdin = { remaining: 0, status: 502 };
-  /** How many deletes the API refuses next, as a passing outage. */
+  /**
+   * How many deletes the API refuses next. Note that the refusal is a 400
+   * rather than a passing outage's 503, because `@vercel/sandbox` tries a
+   * 5xx again on a real timer, so only a status it never retries fails the
+   * delete at once, as a test reads it.
+   */
   const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
-  /** The snapshots Vercel no longer holds, which a create from one is refused for. */
-  const goneSnapshots = new Set<string>();
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const runs: {
@@ -154,9 +199,12 @@ export function runnerSandboxApi() {
     readonly args: readonly string[];
     readonly env: Readonly<Record<string, string>>;
   }[] = [];
-  /** How many reads of a command the API refuses next, as a passing outage. */
+  /**
+   * How many reads of a command, and how many network policy updates, the
+   * API refuses next. Note that each refusal is a 400 rather than a passing
+   * outage's 503, for the reason `failDelete` gives.
+   */
   const failCommandReads = { remaining: 0 };
-  /** How many network policy updates the API refuses next, as a passing outage. */
   const failPolicy = { remaining: 0 };
   /** How many network policy updates the API holds next, answering none until the caller gives up. */
   const holdPolicy = { remaining: 0 };
@@ -170,12 +218,53 @@ export function runnerSandboxApi() {
    * sandbox's next session.
    */
   const stopsAt: { call?: ((rest: string) => boolean) | undefined } = {};
+  /** How many resumes the API refuses next with 422 `sandbox_snapshotting`, as Vercel answers one while the last stop's snapshot is still being taken. */
+  const snapshotting = { remaining: 0 };
   /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
     runExit?: ((args: readonly string[]) => number) | undefined;
-    onRun?: ((env: Readonly<Record<string, string>>) => Promise<void>) | undefined;
+    onRun?:
+      | ((
+          env: Readonly<Record<string, string>>,
+          command: string,
+          args: readonly string[],
+        ) => Promise<void>)
+      | undefined;
   } = {};
+  /** The drives standing, by name. */
+  const drives = new Set<string>();
+  /** Each drive a fork made, by its name, and the drive it was forked from. */
+  const driveForks = new Map<string, string>();
+  /**
+   * The drives of a sandbox deleted while its session ran, which Vercel's
+   * delete answers before that session stops: the next delete of each is
+   * refused as still attached, as Vercel refuses one a few seconds after,
+   * and the one after it goes through.
+   */
+  const releasingDrives = new Set<string>();
+  /** The live running sandbox a drive is mounted in, which Vercel refuses the drive's delete and a second mount for. */
+  const mountedIn = (drive: string) =>
+    sandboxes.find(
+      (each) =>
+        !each.deleted &&
+        each.status === "running" &&
+        Object.values(each.mounts ?? {}).some((mount) => mount.drive === drive),
+    );
+  const driveFound = (name: string) => ({
+    drive: {
+      id: `drv_${name}`,
+      name,
+      projectId: PROJECT,
+      region: "iad1",
+      maxSizeBytes: 2 ** 40,
+      createdAt: 1,
+      updatedAt: 1,
+      ...(mountedIn(name) === undefined
+        ? undefined
+        : { currentSandboxName: mountedIn(name)?.name }),
+    },
+  });
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
   /** The expiration each snapshot was asked with, by its id, as the API's body carried it. */
@@ -208,46 +297,67 @@ export function runnerSandboxApi() {
     if (method === "POST" && path === "/api/v3/sandboxes") {
       const asked = await body();
       assert.equal(asked.projectId, PROJECT);
-      assert.equal(asked.persistent, true);
-      // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
-      if (goneSnapshots.has(asked.source.snapshotId)) {
-        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
-      }
+      assert.equal(typeof asked.persistent, "boolean");
       // A name a sandbox still holds is refused, which is what makes a name a lock.
       if (sandboxes.some((each) => !each.deleted && each.name === asked.name)) {
         return Response.json({ error: { code: "conflict" } }, { status: 409 });
       }
       const tagsRefused = sandboxTagsRefusal(asked.tags);
       if (tagsRefused !== undefined) return tagsRefused;
+      const mounts: Record<string, { drive: string; mode: string }> = asked.mounts ?? {};
+      for (const mount of Object.values(mounts)) {
+        if (!drives.has(mount.drive)) return new Response(null, { status: 404 });
+        if (mountedIn(mount.drive) !== undefined) {
+          return Response.json({ error: { code: "conflict" } }, { status: 409 });
+        }
+      }
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
         currentSessionId: mintSession(),
         tags: asked.tags,
-        snapshotId: asked.source.snapshotId,
+        image: asked.image,
         deleted: false,
         createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
         resumedWith: [],
+        ...(asked.mounts === undefined ? undefined : { mounts }),
       };
       sandboxes.push(sandbox);
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      return Response.json(sandboxFound(listed(sandbox)));
     }
     if (method === "GET" && path === "/api/v2/sandboxes") {
-      const prefix = parsed.searchParams.get("namePrefix");
-      if (prefix !== null) {
-        const named = sandboxes
-          .filter((each) => !each.deleted && each.name.startsWith(prefix))
-          .sort((left, right) => left.name.localeCompare(right.name));
-        return Response.json({ sandboxes: named.map(listed), pagination: { next: null } });
-      }
       const refused = sandboxListRefusal(parsed);
       if (refused !== undefined) return refused;
       const [key, value] = (parsed.searchParams.get("tags") ?? "").split(":");
       const found = sandboxes.filter(
         (each) => !each.deleted && key !== undefined && each.tags[key] === value,
       );
-      return Response.json({ sandboxes: found.map(listed) });
+      return Response.json(sandboxesListed(found.map(listed)));
+    }
+    const fork = /^\/api\/v2\/sandboxes\/drives\/([^/]+)\/fork$/u.exec(path);
+    if (method === "POST" && fork !== null) {
+      const source = decodeURIComponent(fork[1] ?? "");
+      if (!drives.has(source)) return new Response(null, { status: 404 });
+      const { name } = await body();
+      drives.add(name);
+      driveForks.set(name, source);
+      return Response.json(driveFound(name));
+    }
+    const drive = /^\/api\/v2\/sandboxes\/drives\/([^/]+)$/u.exec(path);
+    if (drive !== null) {
+      const name = decodeURIComponent(drive[1] ?? "");
+      if (method === "POST") drives.add(name);
+      if (!drives.has(name)) return new Response(null, { status: 404 });
+      if (method === "DELETE") {
+        if (mountedIn(name) !== undefined || releasingDrives.delete(name)) {
+          return Response.json({ error: { code: "drive_attached" } }, { status: 409 });
+        }
+        const found = driveFound(name);
+        drives.delete(name);
+        return Response.json(found);
+      }
+      return Response.json(driveFound(name));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path);
     if (named !== null) {
@@ -264,19 +374,29 @@ export function runnerSandboxApi() {
         if (tagsRefused !== undefined) return tagsRefused;
         if (asked.tags !== undefined) sandbox.tags = asked.tags;
         if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
-        return Response.json({ sandbox: listed(sandbox) });
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
       if (method === "DELETE" && failDelete.remaining > 0) {
         failDelete.remaining -= 1;
-        return new Response(null, { status: 503 });
+        return Response.json({ error: { code: "bad_request" } }, { status: 400 });
       }
       if (method === "DELETE") {
+        if (sandbox.status === "running") {
+          for (const mount of Object.values(sandbox.mounts ?? {})) releasingDrives.add(mount.drive);
+        }
         sandbox.deleted = true;
-        return Response.json({});
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
       const resuming = parsed.searchParams.get("resume") === "true";
       if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
+      }
+      if (resuming && snapshotting.remaining > 0) {
+        snapshotting.remaining -= 1;
+        return Response.json(
+          { error: { code: "sandbox_snapshotting", message: "Sandbox is being snapshotted." } },
+          { status: 422 },
+        );
       }
       // A resume of a sandbox still stopping waits the stop out and opens its next session, which
       // `@vercel/sandbox`'s `withResume` relies on.
@@ -285,7 +405,7 @@ export function runnerSandboxApi() {
         sandbox.currentSessionId = mintSession();
         sandbox.resumedWith.push(sandbox.timeout);
       }
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      return Response.json(sandboxFound(listed(sandbox)));
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(path);
     assert.ok(session !== null, `an unexpected call: ${method} ${path}`);
@@ -299,7 +419,7 @@ export function runnerSandboxApi() {
       for (const command of commands.filter((each) => each.sandboxSessionId === sessionId)) {
         command.exitCode = command.exitCode ?? 143;
       }
-      return Response.json({ session: { id: sessionId } });
+      return Response.json(sessionAnswered({ id: sessionId, status: "stopped" }));
     }
     const current = sandboxes.find((each) => !each.deleted && each.currentSessionId === sessionId);
     if (current?.status === "running" && stopsAt.call?.(rest) === true) {
@@ -331,7 +451,10 @@ export function runnerSandboxApi() {
       snapshotExpirations.set(snapshot, (await body()).expiration);
       taking.status = "stopped";
       taking.currentSnapshotId = snapshot;
-      return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
+      return Response.json({
+        snapshot: snapshotOf({ id: snapshot, status: "created", sourceSessionId: sessionId }),
+        ...sessionAnswered({ id: sessionId, status: "stopped" }),
+      });
     }
     if (rest === "network-policy" && holdPolicy.remaining > 0) {
       holdPolicy.remaining -= 1;
@@ -341,11 +464,11 @@ export function runnerSandboxApi() {
     }
     if (rest === "network-policy" && failPolicy.remaining > 0) {
       failPolicy.remaining -= 1;
-      return new Response(null, { status: 503 });
+      return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
     if (rest === "network-policy") {
       policies.push({ session: sessionId, policy: await body() });
-      return Response.json({});
+      return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
     }
     if (rest === "fs/write") {
       assert.equal(new Headers(init.headers).get("content-type"), "application/gzip");
@@ -355,26 +478,30 @@ export function runnerSandboxApi() {
       }
       return Response.json({});
     }
+    if (rest === "fs/mkdir") return Response.json({});
     if (rest === "cmd") {
       const asked = await body();
       if (asked.wait === true) {
-        await hooks.onRun?.(asked.env ?? {});
+        await hooks.onRun?.(asked.env ?? {}, asked.command, asked.args);
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
-        return new Response(`${JSON.stringify({ command: { exitCode } })}\n`);
+        const stdout =
+          asked.args[1] === DEFAULT_USER_READ ? `${DEFAULT_USER}\n${DEFAULT_USER}\n` : "";
+        return commandRunStreamed({ id: id("cmd"), sessionId }, { exitCode, stdout, stderr: "" });
       }
       assert.equal(asked.attachStdin, true);
+      const asUser = asUserCommand(asked.command, asked.args);
       const command: FakeCommand = {
         id: id("cmd"),
         sandboxSessionId: sessionId,
-        agentId: runnerTag(
+        ...(asUser === undefined ? undefined : { user: asUser.user }),
+        agentId: agentTag(
           sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags,
-          "AGENT",
         ),
-        command: asked.command,
-        args: asked.args,
-        cwd: asked.cwd,
-        env: asked.env,
+        command: asUser?.command ?? asked.command,
+        args: asUser?.args ?? asked.args,
+        cwd: asUser?.cwd ?? asked.cwd,
+        env: asUser?.env ?? asked.env,
         sudo: asked.sudo,
         policiesBefore: policies.length,
         stdin: "",
@@ -382,7 +509,7 @@ export function runnerSandboxApi() {
       };
       commands.push(command);
       await hooks.onStart?.(command);
-      return Response.json({ command: { id: command.id, exitCode: null } });
+      return Response.json(commandAnswered({ id: command.id, sessionId, exitCode: null }));
     }
     const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill|\/logs)?$/u.exec(rest);
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
@@ -390,15 +517,11 @@ export function runnerSandboxApi() {
     if (command === undefined) return new Response(null, { status: 404 });
     if (commandCall[2] === "/kill") {
       command.exitCode = command.exitCode ?? 143;
-      return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
+      return Response.json(
+        commandAnswered({ id: command.id, sessionId, exitCode: command.exitCode }),
+      );
     }
-    if (commandCall[2] === "/logs") {
-      const lines =
-        command.stderr === undefined ? [] : [{ stream: "stderr", data: command.stderr }];
-      return new Response(lines.map((each) => `${JSON.stringify(each)}\n`).join(""), {
-        headers: { "content-type": "application/x-ndjson" },
-      });
-    }
+    if (commandCall[2] === "/logs") return commandLogsStreamed(command.stderr ?? "");
     if (commandCall[2] === "/stdin") {
       // Vercel refuses stdin to a command that already exited.
       if (command.exitCode !== null) {
@@ -420,14 +543,20 @@ export function runnerSandboxApi() {
         const data = Buffer.from(asked.data, "base64");
         command.stdin = Buffer.concat([bytes.subarray(0, asked.offset), data]).toString("utf8");
       }
-      return Response.json({
-        command: { id: command.id, exitCode: command.recorded === true ? command.exitCode : null },
-        bytesWritten: Buffer.byteLength(command.stdin),
-      });
+      return Response.json(
+        commandAnswered(
+          {
+            id: command.id,
+            sessionId,
+            exitCode: command.recorded === true ? command.exitCode : null,
+          },
+          Buffer.byteLength(command.stdin),
+        ),
+      );
     }
     if (failCommandReads.remaining > 0) {
       failCommandReads.remaining -= 1;
-      return new Response(null, { status: 503 });
+      return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
     return commandRead(command, parsed, init, waits.hold);
   };
@@ -439,12 +568,13 @@ export function runnerSandboxApi() {
           .slice(0, command.policiesBefore)
           .findLast((each) => each.session === command.sandboxSessionId)?.policy;
   return {
-    layer: fakeHttpClientLayer(respond),
+    layer: Layer.merge(fakeHttpClientLayer(respond), sandboxFetchOver(respond)),
     respond,
     policyAtStart,
     sandboxes,
+    drives,
+    driveForks,
     commands,
-    goneSnapshots,
     snapshots,
     snapshotExpirations,
     uploads,
@@ -457,6 +587,7 @@ export function runnerSandboxApi() {
     holdPolicy,
     waits,
     stopsAt,
+    snapshotting,
     hooks,
   };
 }

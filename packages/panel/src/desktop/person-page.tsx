@@ -1,4 +1,4 @@
-import { AGENT_BOUNDS } from "@repo/features/agent-wire";
+import { AGENT_BOUNDS, type AgentPullRequest } from "@repo/features/agent-wire";
 import {
   automationOwner,
   automationRunStanding,
@@ -20,8 +20,11 @@ import {
   Fill,
   GAP,
   InlineEdit,
+  LIST_DENSITY,
   List,
+  type ListDensity,
   ListRow,
+  type ListRun,
   MoreButton,
   moreLabel,
   NOT_FOUND_THING,
@@ -40,11 +43,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Time,
   type ToolbarPickUp,
   useLeaving,
   useMenu,
   useMinute,
+  usePageScroll,
 } from "@repo/ui";
 import {
   ACTOR_KIND,
@@ -63,14 +66,15 @@ import {
   personRef,
 } from "@repo/ui/person-page-model";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { changesTab } from "@repo/ui/tab-strip-model";
 import { ASSIGNED_TO } from "@repo/ui/task-list-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useQueryClient } from "@tanstack/react-query";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { useInboxRowDrafts } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
   copyLinkItem,
@@ -79,23 +83,24 @@ import {
   useCopyLinkItem,
 } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
-import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
+import { AgentCard, listedRowSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
-import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
-import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
-import { agentEndMark } from "../tasks/tab-look.js";
+import { InboxItemRows } from "../tasks/inbox-item-rows.js";
+import { InboxListSkeleton } from "../tasks/inbox-list.js";
+import { INBOX_HOLDER, NEEDS_YOU, waitsOnReaderNow } from "../tasks/inbox-model.js";
 import { readAgentById } from "../tasks/use-agents.js";
-import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
+import { AgentListRow } from "./agent-list-row.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
@@ -178,24 +183,28 @@ function PersonSection({
   title,
   count,
   tone,
-  rowsMasked = false,
+  density = LIST_DENSITY.REGULAR,
+  run,
   children,
 }: {
   title: string;
   count: number;
   tone?: StatusTone | undefined;
-  /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
-  rowsMasked?: boolean | undefined;
-  children: ReactNode;
+  /** How tightly its rows stand. */
+  density?: ListDensity;
+  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
+  run?: ListRun | undefined;
+  /** Its rows, where it draws every one. */
+  children?: ReactNode;
 }): React.JSX.Element {
   const list = (
-    <List label={title} moves>
+    <List label={title} density={density} moves run={run}>
       {children}
     </List>
   );
   return (
     <PersonSectionFrame label={title} title={title} count={count} tone={tone}>
-      {rowsMasked ? <ReplayMask>{list}</ReplayMask> : list}
+      {list}
     </PersonSectionFrame>
   );
 }
@@ -210,8 +219,13 @@ const AGENT_THING = "Agent";
 const AUTOMATION_THING = "Automation";
 
 /**
- * One of their agents as a row: its tile, its name, the task it works on,
- * and when it last moved; a press opens its tab, and its ⋯, right-click,
+ * One of their agents as a row, the row the task's own agents stand in at
+ * the head of its description (`agent-list-row.tsx`): its glyph wearing
+ * where it stands and its name on one dense line, muted after it the task
+ * it works on where the agent goes by another name, then where it runs,
+ * its failed mark once its turn failed, and its pull request's chip, which
+ * opens its Pull request tab on that task; its card says when it last
+ * moved; a press opens its tab, and its ⋯, right-click,
  * long press and menu key offer the agent's one menu over the doors a row has
  * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
  * which turns the row into its name's field, Archive, asking first while a
@@ -222,19 +236,26 @@ const AUTOMATION_THING = "Automation";
 function AgentRow({
   each,
   tasks,
-  now,
+  pullRequests,
+  place,
 }: {
   each: PersonAgent;
   tasks: TasksControl;
-  now: number;
+  /** The pull request each listed agent opened, by agent. */
+  pullRequests: ReadonlyMap<string, AgentPullRequest>;
+  /** Where it stands in its section's run of rows (`VirtualRows`). */
+  place: VirtualRowPlace;
 }): React.JSX.Element {
-  const { task, agent } = each;
-  const subject = lineSubject(agent, tasks.agents.models, tasks.me);
-  const card = <AgentCard subject={subject} models={tasks.agents.models} />;
-  const { act } = useAct();
+  const { task, agent, at } = each;
+  const { models, macs } = tasks.agents;
+  const subject = listedRowSubject(agent, at, { models, me: tasks.me, pullRequests });
+  const queryClient = useQueryClient();
   // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
-  const control = { ...tasks.agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
-  const actions = useAgentActions({ ...agent, planId: task.id }, control, {
+  const control = {
+    ...tasks.agents,
+    readAgent: (agentId: string) => readAgentById(queryClient, agentId),
+  };
+  const actions = useAgentActions(agent, control, {
     label: subject.name,
     shown: tasks.shown,
     terminals: { onOpenTerminal: undefined },
@@ -249,54 +270,43 @@ function AgentRow({
   const coarse = useCoarsePointer();
   return (
     <>
-      <RowHintOptions card={card}>
-        <ListRow
-          ref={hold}
-          motionKey={agent.id}
-          leading={
-            <span className={HOME_ROW_PICTURE}>
-              <ActorMark actor={subject.tile} />
-            </span>
-          }
-          title={
-            editing && rename !== undefined ? (
-              <InlineEdit
-                value={rename.asked ?? subject.name}
-                label="Agent name"
-                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
-                editing
-                onEnd={(edit) => {
-                  endedByKey(edit.byKey);
-                  rename.end(edit.value);
-                }}
-              />
-            ) : (
-              subject.name
-            )
-          }
-          titleReplayMasked
-          description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
-          hint={editing ? undefined : { Hint: RowHint, label: subject.name }}
-          meta={
-            editing ? null : (
-              <span className={HOME_ROW_META}>
-                <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
-                  <ReplayMask>{task.name}</ReplayMask>
-                </OneLine>
-                {agentEndMark(agent, false)}
-                {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
-              </span>
-            )
-          }
-          onPress={editing ? undefined : () => tasks.onShowAgent(task.id, agent.id)}
-          menu={
-            editing
-              ? undefined
-              : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown, true)
-          }
-          more={!coarse}
-        />
-      </RowHintOptions>
+      <AgentListRow
+        agent={agent}
+        subject={subject}
+        title={
+          editing && rename !== undefined ? (
+            <InlineEdit
+              value={rename.asked ?? subject.name}
+              label="Agent name"
+              maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
+              editing
+              onEnd={(edit) => {
+                endedByKey(edit.byKey);
+                rename.end(edit.value);
+              }}
+            />
+          ) : undefined
+        }
+        card={<AgentCard subject={subject} models={models} />}
+        models={models}
+        devices={macs}
+        pullRequest={pullRequests.get(agent.id)}
+        refused={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
+        // Note that the task is named only where the agent goes by another name, since most are named for their task.
+        about={task.name === subject.name ? undefined : task.name}
+        editing={editing}
+        motionKey={agent.id}
+        place={place}
+        rowRef={hold}
+        menu={
+          editing
+            ? undefined
+            : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown, true)
+        }
+        more={!coarse}
+        onPress={() => tasks.onShowAgent(task.id, agent.id)}
+        onOpenPullRequest={() => tasks.onShowPanelTab(task.id, changesTab(agent.id))}
+      />
       {actions.dialog}
     </>
   );
@@ -307,23 +317,55 @@ function agentKey({ agent }: PersonAgent): string {
   return agent.id;
 }
 
-/** A section's agents, a row no longer listed drawn on until its exit has played (`useLeaving`). */
-function AgentRows({
+/** The height an agent's row is taken to have before it is measured, in pixels: a dense `ListRow`'s, a control's height. */
+const AGENT_ROW_ESTIMATE_PX = 30;
+
+/** The room between two agents' rows, in pixels: a list's (`--ui-list-gap`). */
+const AGENT_ROW_GAP_PX = 2;
+
+/**
+ * A section of their agents: its name and count over its rows, each drawn
+ * on after it is no longer listed until its exit has played (`useLeaving`),
+ * drawing only those near the view of the page's scroller (`usePageScroll`),
+ * every row while a find bar stands open (`List`'s `run`).
+ */
+function PersonAgentsSection({
+  title,
   agents,
   tasks,
-  now,
+  pullRequests,
 }: {
+  title: string;
   agents: readonly PersonAgent[];
   tasks: TasksControl;
-  now: number;
+  /** The pull request each listed agent opened, by agent. */
+  pullRequests: ReadonlyMap<string, AgentPullRequest>;
 }): React.JSX.Element {
   const drawn = useLeaving(agents, agentKey);
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
+  const { scroller, shiftedBy } = usePageScroll();
+  // Note that the run draws every row while a find bar stands open over the page.
+  const finding = useFindOpen();
   return (
-    <>
-      {drawn.map(({ key, value }) => (
-        <AgentRow key={key} each={value} tasks={tasks} now={now} />
-      ))}
-    </>
+    <PersonSection
+      title={title}
+      count={agents.length}
+      density={LIST_DENSITY.DENSE}
+      run={{
+        scroller,
+        shiftedBy,
+        keys,
+        estimate: AGENT_ROW_ESTIMATE_PX,
+        gap: AGENT_ROW_GAP_PX,
+        overscan: finding ? keys.length : undefined,
+        row: (index, at) => {
+          const entry = drawn[index];
+          return entry === undefined ? null : (
+            <AgentRow each={entry.value} tasks={tasks} pullRequests={pullRequests} place={at} />
+          );
+        },
+      }}
+    />
   );
 }
 
@@ -688,7 +730,7 @@ function PersonColumn({
   const known = opened === undefined ? undefined : { userId, name: opened };
   // Note that someone who left having only revised or answered is named by the former members read alone, since a link to them opens with no name.
   const left = former?.find((each) => each.userId === userId);
-  const ref = personRef(userId, listed) ?? member ?? known ?? left;
+  const ref = personRef(userId, listed, tasks.liveAgents) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
   // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
@@ -699,24 +741,30 @@ function PersonColumn({
       userId === tasks.me ? { kind: ASSIGNED_TO.ME } : { kind: ASSIGNED_TO.MEMBER, userId },
     );
   // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
-  const page = useMemo(() => personPage(userId, listed), [userId, listed]);
+  const { liveAgents, listedPullRequests } = tasks;
+  const page = useMemo(() => personPage(userId, listed, liveAgents), [userId, listed, liveAgents]);
+  // The pull request each agent the list follows opened, as a task's agents' rows chip it.
+  const pullRequests = useMemo(
+    () => new Map((listedPullRequests ?? []).map((each) => [each.agentId, each.pullRequest])),
+    [listedPullRequests],
+  );
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
   const unread = useUnreadTasks({ staged });
   const you = userId === tasks.me;
+  const waitingTitle = you ? NEEDS_YOU.LABEL : "Waiting on their answer";
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
-  const drafts = useInboxRowDrafts();
-  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
+  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the list followed live from a service that names neither.
+  // On the reader's own page it must also wait on them now as the sidebar's Inbox row counts it (`waitsOnReaderNow`), so one with a reminder still ahead is left out until it comes due.
   const waiting = read.items.filter(
     ({ holder, item }) =>
       (inboxWaitsOn(item)?.userId ??
         (holder.kind === INBOX_HOLDER.TASK
-          ? agentStarter(holder.task, item.agentId)
-          : undefined)) === userId,
+          ? agentStarter(liveAgents, item.agentId)
+          : undefined)) === userId &&
+      (!you || waitsOnReaderNow(item, tasks.me, now)),
   );
-  const { inboxView } = tasks;
-  const openItem = (listed: InboxListed) => inboxView.onOpenItem(choiceOf(listed));
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
@@ -796,9 +844,12 @@ function PersonColumn({
             <RecentTasksSkeleton label={`Reading ${theirs} tasks…`} face={false} />
           ) : null}
           {page.working.length === 0 ? null : (
-            <PersonSection title="Working now" count={page.working.length}>
-              <AgentRows agents={page.working} tasks={tasks} now={now} />
-            </PersonSection>
+            <PersonAgentsSection
+              title="Working now"
+              agents={page.working}
+              tasks={tasks}
+              pullRequests={pullRequests}
+            />
           )}
           {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
           {read.failed ? (
@@ -816,25 +867,20 @@ function PersonColumn({
             </SectionSkeleton>
           ) : null}
           {waiting.length === 0 ? null : (
-            <PersonSection
-              title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
+            <PersonSectionFrame
+              label={waitingTitle}
+              title={waitingTitle}
               count={waiting.length}
               tone={you ? STATUS_TONE.ATTENTION : undefined}
-              rowsMasked
             >
-              {waiting.map((listed) => (
-                <InboxItemRow
-                  key={listed.item.id}
-                  listed={listed}
-                  chosen={false}
-                  {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-                  models={tasks.agents.models}
-                  readerId={tasks.me}
-                  needsYouShown={you}
-                  onChoose={openItem}
-                />
-              ))}
-            </PersonSection>
+              <InboxItemRows
+                label={waitingTitle}
+                listed={waiting}
+                tasks={tasks}
+                needsYouShown={you}
+                moves
+              />
+            </PersonSectionFrame>
           )}
           <PersonTasks
             title={you ? "Assigned to you" : "Assigned"}
@@ -850,9 +896,12 @@ function PersonColumn({
             unread={unread}
           />
           {page.agents.length === 0 ? null : (
-            <PersonSection title="Agents" count={page.agents.length}>
-              <AgentRows agents={page.agents} tasks={tasks} now={now} />
-            </PersonSection>
+            <PersonAgentsSection
+              title="Agents"
+              agents={page.agents}
+              tasks={tasks}
+              pullRequests={pullRequests}
+            />
           )}
           {automations.length === 0 ? null : (
             <PersonSection title="Automations" count={automations.length}>

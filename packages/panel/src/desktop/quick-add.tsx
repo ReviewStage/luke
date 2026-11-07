@@ -15,18 +15,18 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { AssigneeChip, PriorityChip, StatusChip } from "./task-row-parts.js";
 
 /**
- * quick-add.tsx -- a Tasks page group's quick add: its + opens a new task's draft at the group's top, its title written in place as a line on a plan is, and Return adds the task there with no agent, opening nothing.
+ * quick-add.tsx -- a Tasks page group's quick add: its + opens a new task's draft at the group's top, its title written in place as a line on a description is, and Return adds the task there with no agent, opening nothing.
  *
  * The draft is drawn as its view draws a task, a Board's card or a List's
  * row (`QuickAddLine`), so it reads as the task it is about to be: the
  * title in `InlineEdit`'s well look, bare in the type around it with no
  * ring, its muted placeholder saying what to write, as an empty line on a
- * plan does, and the chips a task's card wears for its status, priority,
+ * description does, and the chips a task's card wears for its status, priority,
  * and assignee, each changing the draft as it changes a task. The draft
  * starts where the group stands (`quickAddInto`), and keeps what its chips
  * chose from one add to the next. Return adds the task with the draft's
  * title and standing, and its repository where the group is one's, and
- * opens the draft again, empty, for the next, as Return on a plan opens the
+ * opens the draft again, empty, for the next, as Return on a description opens the
  * next line. Escape, Return on nothing, or a press outside an empty draft
  * lets it go; the focus leaving for a chip's menu keeps it, so the title
  * ends by its keys alone.
@@ -150,7 +150,7 @@ export function useQuickAdd(tasks: TasksControl, into: QuickAddInto): QuickAdd {
   };
   const end = ({ value, byKey }: InlineEditEnd) => {
     if (value !== undefined) add(value);
-    // Note that Return on words opens the next draft, as Return on a plan opens the next line.
+    // Note that Return on words opens the next draft, as Return on a description opens the next line.
     if (value !== undefined && byKey) setRound((was) => was + 1);
     else setDrafting(false);
   };

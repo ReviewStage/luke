@@ -2,22 +2,21 @@
  * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine we open for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
  *
  * The launch machinery the `claude_code` and `codex` implementations of
- * `AgentSessions` (`eve-host/eve-sessions.ts`) share; each names what is
+ * `AgentSessions` (`sessions/agent-sessions.ts`) share; each names what is
  * its own as a `RunnerHarness` (`claude-code-sessions.ts`,
  * `codex-sessions.ts`): the credential its runner is started with, its
  * config line, and the lines that go ahead of a message to a runner already
  * running. Its session is our own: an id minted as the session opens,
  * which the machine finds the agent's place by (in a sandbox, its
  * `sessionId` tag, so the Terminal tab, the stop and the cleanup sweep find
- * the sandbox by it exactly as they find eve's: `terminal/agent-sandbox.ts`,
+ * the sandbox by it: `terminal/agent-sandbox.ts`,
  * `session-sandboxes.ts`). The
  * harness's own session or thread id is the conversation's
  * `native_session`, which the events route records from what the runner
  * reports, and a relaunch resumes.
  *
  * `open` reads the harness's credential and answers; past the answer (`after-response.ts`) it opens
- * the agent's place with its repository checked out, waiting while the
- * machine's image is prepared, writes the skills its member installed into
+ * the agent's place with its repository checked out, writes the skills its member installed into
  * the app beside it (`native-skills.ts`), and launches the runner. A launch that
  * fails there is the agent's failed turn. The place, the launch, and every
  * write to the runner's stdin go through the agent's machine
@@ -27,16 +26,19 @@
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. A credential the harness holds at the place's firewall
- * (`HarnessLaunch`'s `held`) is set there before the runner starts, its
- * placeholder in the environment in its place, and is taken off with every
- * other at the place's stop, or alone at a launch's end that leaves the place
- * up, for a Terminal or for the launch that hands its lines on. In a sandbox
- * the bearer goes no further than its firewall either: the runner is handed
- * a placeholder for it, which the firewall swaps for the bearer on requests
- * to our host (`heldBearer`), set and taken off on the same terms. The config
- * line and the first message are its first lines.
- * The machine records the runner and the first event number of its launch
+ * or a record. A credential held at the place's firewall (one of
+ * `HarnessLaunch`'s `credentials` its machine holds there) is kept there with the launch's swaps before
+ * the runner starts, its placeholder in the environment in its place, and
+ * sent with every write to the place's firewall while the launch stands
+ * (`../sandbox-firewall.ts`); it stays there, with every other credential,
+ * until the place stops or the next launch writes its own, a place a
+ * launch's end leaves up, for a Terminal or for the launch that hands its
+ * lines on, included. The launch declares the bearer as a credential its
+ * machine hands over (`AgentMachineService`'s `deliverCredentials`): in a
+ * sandbox it goes no further than its firewall either, the runner handed a
+ * placeholder for it, which the firewall swaps for the bearer on requests to
+ * our host, kept on the same terms. The config line and the first message
+ * are its first lines. The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
  * A message's words go as text and its images as image blocks; any other
@@ -45,9 +47,10 @@
  *
  * `send` writes the harness's lines and then a message line to that runner
  * while it runs. Where the place stopped or the runner ended, it resumes
- * the place, sets the repository's credential at its firewall again, and
- * launches the runner anew with the harness's session to resume and the
- * next event number, whose session files the machine's disk kept. A
+ * the place and launches the runner anew, the launch setting the
+ * repository's credential at its firewall again, with the harness's session
+ * to resume and the next event number, whose session files the machine's
+ * disk kept. A
  * runner warm past its machine's window (`CODER.RUNNER_WARM`), or one a
  * Stop was written to since its launch, is ended rather than written to,
  * and the message relaunches it, so no line goes to a runner on its way down.
@@ -72,7 +75,7 @@
  * the earlier one launched. A call that waits past `CODER.RUNNER_LEASE.WAIT`
  * fails as unavailable.
  *
- * Every call answers in eve's outcomes, so a caller holds one interface
+ * Every call answers in `AgentSessions`' outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (the machine, the store, GitHub, a
  * missing credential or snapshot) answers `failed`, said once in the log as an
  * error naming the agent, in the failure's own words, Vercel's answer for a
@@ -80,7 +83,9 @@
  * a launch refused for the account's plan says which way its plan failed.
  * A launch past its Start's answer says each step it reaches, and one that
  * fails, dies, or is interrupted there is the agent's failed turn, with why.
- * Nothing is retried.
+ * Nothing is retried but a resume that meets its sandbox still stopping or
+ * being snapshotted, and a create on an image the registry is still preparing
+ * (`vercel-machine.ts`).
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -111,6 +116,7 @@ import {
   recordAgentRunnerToken,
 } from "@repo/database/models/agent-store";
 import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
+import { holdsSessionEntries } from "@repo/database/models/claude-session-entries";
 import {
   clearNativeRewindHanded,
   readNativeRewind,
@@ -124,6 +130,7 @@ import {
   withdrawRunnerLine,
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -140,6 +147,7 @@ import {
   Option,
   Redacted,
   Ref,
+  Schedule,
 } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
@@ -151,23 +159,10 @@ import {
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
-  AgentSandboxImage,
-  IMAGE_PREPARING_STATUS,
-  ImagePreparing,
-} from "../agent-sandbox-image.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  PLAN_REFUSAL,
-  RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
-import {
   AgentMachine,
   type AgentMachineService,
+  CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineLayout,
@@ -177,22 +172,24 @@ import {
   PLACE_RESUME,
   type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
 } from "../machine/agent-machine.js";
 import { deploymentLifecycle } from "../machine/agent-machines.js";
-import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
+import { LAUNCH_SWAP } from "../sandbox-firewall.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
-  FIREWALL_SLOT,
-  type FirewallEntry,
-  type FirewallSlot,
-  githubEntry,
-  newPlaceholder,
-  placeholderSwap,
-  RUNNER_SLOTS,
-} from "../sandbox-firewall.js";
+  PLAN_REFUSAL,
+  RUNTIME_REFUSAL,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -201,24 +198,19 @@ import {
   sessionEnding,
 } from "../vercel-sandbox-api.js";
 import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
+import { type AgentImage, AgentImageMissing } from "./agent-image.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
+import { agentFirewallSources, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
-import type { RunnerBundle } from "./runner-bundle.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
 
-/** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
-export type RunnerServices =
-  | CheckoutServices
-  | AgentMachine
-  | AgentSandboxImage
-  | RunnerBundle
-  | HostedEnvironment;
+/** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the agents' image, and the deployment's key ring. */
+export type RunnerServices = CheckoutServices | AgentMachine | AgentImage | HostedEnvironment;
 
 /** What every harness's sessions are composed with. */
 export interface RunnerSessionsOptions {
@@ -228,13 +220,15 @@ export interface RunnerSessionsOptions {
    * Where the runner posts its events: the events route, which the composing
    * edge names. Every address the runner reaches us at is under its origin
    * (`native-agent-sessions.ts`), whose host a sandbox's firewall swaps the
-   * runner's bearer in on (`heldBearer`).
+   * runner's bearer in on (`runnerBearer`).
    */
   readonly eventsUrl: string;
   /** Where a runner on a machine that has it read its lines reads them (`RUNNER_LINES`), which the composing edge names. */
   readonly linesUrl: string;
   /** Our MCP server's endpoint, which the composing edge names. */
   readonly mcpUrl: string;
+  /** Where a runner on a machine that keeps it keeps the CLI's transcript (`RUNNER_TRANSCRIPTS`), which the composing edge names. */
+  readonly transcriptsUrl: string;
   /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside ours. */
   readonly integrations: (agent: Agent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Our coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
@@ -250,16 +244,10 @@ export interface RunnerSessionsOptions {
 
 /** What a launch's command is started with of the harness's own. */
 export interface HarnessLaunch {
-  /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
+  /** The variables beside the bearer and the declared credentials: whatever else the harness reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
-  /** The credential held at the place's firewall rather than handed to the command: the variables carrying the launch's placeholder, the swap set in its slot before the runner starts, and what a fingerprint reads in the placeholder's place. */
-  readonly held?: {
-    readonly env: Readonly<Record<string, string>>;
-    readonly slot: FirewallSlot;
-    readonly entry: FirewallEntry;
-    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches; none where the service renews the swap itself. */
-    readonly fingerprint?: Redacted.Redacted;
-  };
+  /** The harness's credentials, which its machine hands over beside the bearer (`AgentMachineService`'s `deliverCredentials`). */
+  readonly credentials?: readonly RunnerCredential[];
 }
 
 /** The lines a message to a running runner goes behind. */
@@ -279,9 +267,10 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly runtime: (typeof SERVER_AGENT_HARNESS)[keyof typeof SERVER_AGENT_HARNESS];
   /** What a session id it mints begins with, before a fresh UUID. */
   readonly sessionPrefix: string;
-  /** The credential a launch starts with, read afresh for every launch. */
+  /** The credential a launch on a machine of the layout given starts with, read afresh for every launch. */
   readonly launch: (
     agent: Agent,
+    layout: MachineLayout,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
   /** The config line of a launch on a machine of the layout given, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
@@ -323,8 +312,7 @@ const MINTED_AT_DIGITS = 12;
  * A session id the harness's prefix begins, minted at the instant given: the
  * instant in fixed-width hex, then a fresh UUID. The instant first is what
  * lets a session opened later claim the conversation's record over one that
- * ended (`claimRuntimeSession`, forward only, by the ids' order), as eve's
- * own ids do.
+ * ended (`claimRuntimeSession`, forward only, by the ids' order).
  */
 function sessionIdOf(prefix: string, mintedAt: number): string {
   return `${prefix}${mintedAt.toString(16).padStart(MINTED_AT_DIGITS, "0")}-${randomUUID()}`;
@@ -336,34 +324,24 @@ const BEARER_BYTES = 32;
 /** The header the runner presents its bearer in, named in lower case as the firewall matches it. */
 const BEARER_HEADER = "authorization";
 
-/** The bearer as a launch hands it to its runner, and the swap its machine's firewall carries for it, where it carries one. */
-interface HeldBearer {
-  readonly handed: string;
-  readonly swap: FirewallEntry | undefined;
-}
-
 /**
- * The runner's bearer as its launch holds it. In a sandbox, whose firewall
- * holds a launch's secrets, the runner is handed a placeholder minted for
- * the launch, and the firewall sets the bearer in its place on requests to
- * our host that present it, so the bearer's bytes never enter the machine.
- * Note that the swap matches the placeholder and not our host alone, because
- * every process in the sandbox reaches us through that firewall, a
- * Terminal's shell and a page in the agent's browser among them, and only
- * one that reads the placeholder, the runner's own user, may act as the
- * agent. A Mac has no firewall of ours, and its runner is handed the bearer
- * itself.
+ * The runner's bearer as its launch declares it: presented to our host in
+ * the authorization header as a bearer, and fixed for the launch. Its
+ * machine hands it over (`AgentMachineService`'s `deliverCredentials`): a
+ * sandbox holds it at its firewall behind a placeholder, so its bytes never
+ * enter the machine, and a Mac, which has no firewall of ours, hands the
+ * runner the bearer itself.
  */
-function heldBearer(bearer: string, agent: Agent, host: string): HeldBearer {
-  if (agent.machine === AGENT_MACHINE.DEVICE) return { handed: bearer, swap: undefined };
-  const placeholder = Redacted.value(newPlaceholder());
-  const swap = placeholderSwap({
-    domain: host,
+function runnerBearer(bearer: string, host: string): RunnerCredential {
+  return {
+    variable: RUNNER_ENV.BEARER,
+    value: Redacted.make(bearer),
+    target: { domain: host },
     header: BEARER_HEADER,
-    placeholder: Redacted.make(`${BEARER_PREFIX}${placeholder}`),
-    value: Redacted.make(`${BEARER_PREFIX}${bearer}`),
-  });
-  return { handed: placeholder, swap };
+    scheme: BEARER_PREFIX,
+    slot: LAUNCH_SWAP.RUNNER,
+    renewal: CREDENTIAL_RENEWAL.FIXED,
+  };
 }
 
 /** How a file written for the agent is kept: readable by every user, written by none but the API's. */
@@ -381,7 +359,7 @@ type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE
 interface RunnerMessage {
   readonly line: MessageLine;
   readonly files: readonly SandboxFile[];
-  readonly turn: EveHostTurn;
+  readonly turn: SessionTurn;
   readonly timeZone: string | undefined;
 }
 
@@ -408,8 +386,8 @@ function attachmentFileName(name: string, at: number): string {
  * A message's content as the runner's lines carry it, and the files it
  * names: words as text, an image as an image block, and any other file,
  * such as a PDF, written into the machine under the line's own folder of
- * the attachments folder given and named by its path, as eve stages a file
- * part in its sandbox. A file whose bytes are not in the message, a URL
+ * the attachments folder given and named by its path. A file whose bytes
+ * are not in the message, a URL
  * elsewhere, is named as not passed.
  */
 function runnerContent(
@@ -504,24 +482,34 @@ function stopLine(launch: number): InputLine {
  * runner whose fingerprint no longer matches is relaunched rather than
  * handed the next message (`sendHolding`). The digest is one-way and
  * truncated, so the record carries nothing of the credential. Note that a
- * credential held at the firewall is read by its slot and its real value,
- * never its placeholder, which every launch mints afresh; and that a launch
- * holding none digests what it did before any was held.
+ * credential held at the firewall is read by its kind and its real value,
+ * never its placeholder, which every launch mints afresh, under the key a
+ * slot once named it by, so a digest reads as it did; that a declared
+ * credential its machine hands the runner itself is read among the
+ * variables, as one the harness set there itself once was; and that a
+ * launch holding none digests what it did before any was held.
  */
 function launchFingerprint(
   credential: HarnessLaunch,
+  delivered: DeliveredCredentials,
   integrations: readonly IntegrationServer[],
 ): string {
-  const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
+  const declared = credential.credentials ?? [];
+  const isHeld = (each: RunnerCredential) => delivered.swaps.has(each.slot);
+  const handed = declared.flatMap((each) => {
+    const value = delivered.env[each.variable];
+    return isHeld(each) || value === undefined ? [] : [[each.variable, value] as const];
+  });
+  const env = [...Object.entries(credential.env), ...handed].sort(([one], [other]) =>
+    one.localeCompare(other),
+  );
   const names = integrations.map((each) => each.name).sort();
-  const { held } = credential;
-  const swapped =
-    held === undefined
-      ? undefined
-      : {
-          slot: held.slot,
-          credential: held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
-        };
+  const slots = declared.filter(isHeld).map((each) => ({
+    slot: each.slot,
+    credential: each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+  }));
+  // Note that one slot is digested alone, under the key it was digested by, as the one a launch could hold before credentials were declared.
+  const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
   return createHash("sha256")
     .update(JSON.stringify({ env, names, held: swapped }))
     .digest("hex")
@@ -532,7 +520,7 @@ function launchFingerprint(
  * Whether the agent's turn ended longer ago than the warm window of the
  * machine given (`CODER.RUNNER_WARM`), so we have closed or are closing it,
  * and the runner may soon end itself at its own idle cap. Never where the
- * window is zero, which the IDLE's own retire closes (`runnerIdled`). An
+ * window is zero, whose runner is launched to end at its turn's end. An
  * ended turn with no settle time stamped reads as ended long ago, as the
  * sweep reads it.
  */
@@ -549,17 +537,34 @@ function pastWarmWindow(
 
 /** The place a runner's handle names, without the runner. */
 function placeOfHandle(handle: RunnerHandle): MachinePlace {
-  return { machine: handle.machine, session: handle.session, running: handle.running };
+  return {
+    machine: handle.machine,
+    session: handle.session,
+    name: handle.name,
+    running: handle.running,
+  };
 }
 
-/** Where a found place's record is kept, under the agent given. */
-function recordOf(found: FoundPlace, agentId: string) {
-  return { machine: found.machine, session: found.session, name: found.name, agentId };
+/** Where a found place's record is kept, under the account and agent given. */
+function recordOf(found: FoundPlace, userId: string, agentId: string) {
+  return { machine: found.machine, session: found.session, name: found.name, userId, agentId };
 }
 
-/** The place found first under the session: the newest, which is listed first (`findPlaces`). */
-function firstPlace(machine: MachineLifecycle, sessionId: string) {
-  return Effect.map(machine.findPlaces(sessionId), (places) => Option.fromNullishOr(places[0]));
+/** How a message reached its runner, as the handoff counts it. */
+type HandoffPath = (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH];
+
+/** A resume past an answer tried again while its sandbox is still stopping or being snapshotted (`CODER.RESUME_WHILE_ENDING`). */
+const RESUME_WHILE_ENDING = {
+  schedule: Schedule.spaced(CODER.RESUME_WHILE_ENDING.SPACING),
+  times: CODER.RESUME_WHILE_ENDING.TRIES,
+  while: sessionEnding,
+};
+
+/** The place found first under the account's session: the newest, which is listed first (`findPlaces`). */
+function firstPlace(machine: MachineLifecycle, userId: string, sessionId: string) {
+  return Effect.map(machine.findPlaces(userId, sessionId), (places) =>
+    Option.fromNullishOr(places[0]),
+  );
 }
 
 /**
@@ -567,16 +572,19 @@ function firstPlace(machine: MachineLifecycle, sessionId: string) {
  * runner was started in, and that runner has not exited. Only an exit read,
  * or a command no longer known, says the runner is down; the machine not
  * answering fails the call, so a passing outage neither relaunches a runner
- * beside one still running nor drops a Stop.
+ * beside one still running nor drops a Stop. The exit is waited for at most
+ * `within`, the machine's own wait where none is given, which a live runner
+ * costs whole.
  */
 function liveRunner(
   machine: MachineLifecycle,
   found: FoundPlace,
+  within?: Duration.Duration,
 ): Effect.Effect<RecordedRunner | undefined, SandboxUnavailable> {
   const runner = found.runner;
   if (runner === undefined) return Effect.succeed(undefined);
   return machine
-    .runnerExit(runner.handle)
+    .runnerExit(runner.handle, within)
     .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
 }
 
@@ -644,8 +652,7 @@ function failedStatus(failure: { readonly _tag: string }): number {
       ? FAILED_STATUS.UNAVAILABLE
       : FAILED_STATUS.REFUSED;
   }
-  if (failure._tag === "RunnerBundleMissing") return FAILED_STATUS.REFUSED;
-  if (failure instanceof ImagePreparing) return IMAGE_PREPARING_STATUS;
+  if (failure instanceof AgentImageMissing) return FAILED_STATUS.REFUSED;
   return failure instanceof SandboxUnavailable
     ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
     : FAILED_STATUS.UNAVAILABLE;
@@ -690,11 +697,9 @@ function kindOf(failure: { readonly _tag: string }): string {
 /**
  * Whether a failure is a named outcome the developer is told as such, which
  * is logged and never reported: the account's plan or key refused, its
- * device removed or away, the repository its workspace no longer reaches,
- * or the image still being prepared, which a Start is made again for.
+ * device removed or away, or the repository its workspace no longer reaches.
  */
 function namedOutcome(failure: { readonly _tag: string }): boolean {
-  if (failure instanceof ImagePreparing) return true;
   if (failure instanceof CheckoutRefused) return failure.reason === CODER_REFUSAL.NOT_REACHABLE;
   return (
     failure instanceof LaunchRefused &&
@@ -708,7 +713,7 @@ function namedOutcome(failure: { readonly _tag: string }): boolean {
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
-  Turn extends EveHostTurn = EveHostTurn,
+  Turn extends SessionTurn = SessionTurn,
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,
@@ -741,17 +746,12 @@ export const runnerSessions = <
           )
         : Effect.succeed([]);
 
-    /** The repository's credential set at the running place's firewall again, minted afresh; an agent with no repository has none. */
+    /** The repository's credential set at the running place's firewall again, minted afresh, beside the launch's swaps; an agent with no repository has none, and nothing is written. */
     const renewCredential = (target: ConversationTarget, agent: Agent, place: MachinePlace) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
-        const minted = yield* agentRepositoryToken(target, agent);
-        const entry = githubEntry({
-          token: minted.token,
-          fullName: minted.fullName,
-          access: minted.access,
-        });
-        yield* machine.firewall.set(place, agent.userId, FIREWALL_SLOT.GITHUB, entry);
+        const sources = yield* agentFirewallSources(target, agent);
+        yield* machine.firewall.write(place, agent.userId, sources);
       });
 
     /**
@@ -770,12 +770,14 @@ export const runnerSessions = <
       );
 
     /**
-     * One launch of the runner in the running place: a fresh bearer
-     * recorded, the launch's record written, its config read, and the caller's
-     * own steps (`alongside`) run, and the bearer's swap set at the place's
-     * firewall where its machine holds it there (`heldBearer`), all at once
-     * beside the machine's own, since none waits on another and the runner
-     * waits on them all; then the runner
+     * One launch of the runner in the running place: its swaps kept at the
+     * place's firewall where its machine holds them there (`runnerBearer`,
+     * `HarnessLaunch`'s `credentials`), ahead of every write that composes the
+     * place's policy; then a fresh bearer recorded, the launch's record
+     * written, its config read, the caller's own steps (`alongside`) run,
+     * and the place's whole policy written, the repository's credential
+     * minted afresh beside the swaps, all at once beside the machine's own,
+     * since none waits on another and the runner waits on them all; then the runner
      * started, recorded by the machine before it reads anything, and its
      * config line and first message handed to it as its first lines. On a
      * machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
@@ -801,14 +803,30 @@ export const runnerSessions = <
       alongside: Effect.Effect<void, AE, AR>,
       /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again, its words marked handed once the runner has it. */
       queuedFirst?: OpenedLine,
+      /** Whether the session resumed is the source's of a continued or forked agent, which the CLI forks as its own. */
+      fork = false,
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        const runnerBearer = heldBearer(bearer, agent, serviceHost);
+        const delivered = machine.deliverCredentials(agent, [
+          ...(credential.credentials ?? []),
+          runnerBearer(bearer, serviceHost),
+        ]);
+        // The swaps its machine keeps for what it delivered; none on a machine with no firewall of ours.
+        const { swaps } = delivered;
+        // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
+        if (swaps.size > 0) {
+          yield* machine.firewall.keepLaunch(place.running, agent.userId, {
+            agentId: agent.id,
+            swaps,
+          });
+        }
+        const target: ConversationTarget = { userId, conversationId: agent.conversationId };
         const recorded = {
           machine: place.running.machine,
           session: place.running.session,
           name: place.name,
+          userId,
           agentId: agent.id,
         };
         const launching = (firstSequence: number) =>
@@ -834,8 +852,19 @@ export const runnerSessions = <
                   firstSequence,
                   rewindBefore,
                 );
+                // Note that a runner stays warm past the agent's turn only on a machine with a warm
+                // window (`CODER.RUNNER_WARM`), for its sweep to retire; a sandbox's ends at its turn's end.
+                const warm = !Duration.isZero(CODER.RUNNER_WARM[place.running.machine]);
                 return {
-                  config: layout.linesRead ? { ...config, linesUrl: options.linesUrl } : config,
+                  config: {
+                    ...config,
+                    ...(layout.linesRead ? { linesUrl: options.linesUrl } : undefined),
+                    ...(layout.transcriptsKept
+                      ? { transcriptsUrl: options.transcriptsUrl }
+                      : undefined),
+                    ...(fork ? { fork } : undefined),
+                    ...(warm ? { warm } : undefined),
+                  },
                   rewind,
                 };
               });
@@ -860,25 +889,13 @@ export const runnerSessions = <
             // An earlier launch's lines go but its untaken messages in the window, which this launch is handed.
             layout.linesRead ? clearedForLaunch(userId, agent.id) : Effect.void,
             recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
-            // The held credential's swap and the bearer's stand before the runner starts, so its
-            // first request carries the real value: the machine starts the runner once every step
-            // here, each firewall write's settle included, is done. Note that a post refused for
-            // want of its bearer is refused for good.
-            credential.held === undefined
+            // The launch's swaps stand before the runner starts, so its first request carries the
+            // real value: the machine starts the runner once every step here is done. Note that a
+            // post refused for want of its bearer is refused for good.
+            swaps.size === 0
               ? Effect.void
-              : machine.firewall.set(
-                  place.running,
-                  agent.userId,
-                  credential.held.slot,
-                  credential.held.entry,
-                ),
-            runnerBearer.swap === undefined
-              ? Effect.void
-              : machine.firewall.set(
-                  place.running,
-                  agent.userId,
-                  FIREWALL_SLOT.RUNNER,
-                  runnerBearer.swap,
+              : Effect.flatMap(agentFirewallSources(target, agent), (sources) =>
+                  machine.firewall.write(place.running, agent.userId, sources),
                 ),
             alongside,
           ],
@@ -890,9 +907,9 @@ export const runnerSessions = <
         } = yield* machine.launchRunner(place.running, {
           env: {
             ...credential.env,
-            ...credential.held?.env,
-            [RUNNER_ENV.BEARER]: runnerBearer.handed,
+            ...delivered.env,
           },
+          userId,
           agentId: agent.id,
           extraCheckouts: yield* extraCheckoutsOf(agent),
           name: place.name,
@@ -901,7 +918,11 @@ export const runnerSessions = <
             Effect.gen(function* () {
               const mark: RunnerMark = {
                 firstSequence: made.firstSequence,
-                fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
+                fingerprint: launchFingerprint(
+                  credential,
+                  delivered,
+                  yield* options.integrations(agent),
+                ),
                 ...(layout.linesRead ? { linesRead: true } : undefined),
               };
               const opened = made.opening === undefined ? [] : [made.opening.line];
@@ -953,7 +974,7 @@ export const runnerSessions = <
       deliveredTo(machine, userId, agent.id, runner, lines);
 
     /** The message as a line, under our id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
-    const messageLine = (message: EveMessage<Turn>, layout: MachineLayout): RunnerMessage => {
+    const messageLine = (message: SessionMessage<Turn>, layout: MachineLayout): RunnerMessage => {
       const uuid = message.lineId ?? randomUUID();
       const { content, files } = runnerContent(
         message.message,
@@ -1008,20 +1029,17 @@ export const runnerSessions = <
      * A failure as the log says it and the caller reads it, in its own words
      * (`failureWords`): said once as an error, since the caller refuses what
      * was asked, and reported where no named refusal explains it
-     * (`agentFailureSaid`); an image still being prepared, which the caller
-     * asks again for, is a warning.
+     * (`agentFailureSaid`).
      */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
-        failure instanceof ImagePreparing
-          ? Effect.logWarning(`A ${harness.name} ${call} waits on its image being prepared`)
-          : agentFailureSaid(
-              `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
-              kindOf(failure),
-              !namedOutcome(failure),
-            ),
+        agentFailureSaid(
+          `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
+          kindOf(failure),
+          !namedOutcome(failure),
+        ),
         {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: failedStatus(failure),
           ...(failure instanceof LaunchRefused && failure.planRefusal !== undefined
             ? { planRefusal: failure.planRefusal }
@@ -1054,17 +1072,39 @@ export const runnerSessions = <
       );
 
     /**
+     * The session a new place resumes where the service keeps the CLI's
+     * transcript: the conversation's own where the service holds it, as for
+     * a place made anew in place of one whose disk was lost, or, at a
+     * continued or forked agent's first
+     * open, its source's, whose transcript the Start copied, forked as its
+     * own; none for an agent that has neither.
+     */
+    const keptSessionOf = (agent: Agent) =>
+      Effect.gen(function* () {
+        const routing = yield* readAgentRouting(userId, agent.id);
+        const own = Option.getOrUndefined(
+          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+        );
+        // Note that an agent from before the store keeps no transcript there, so its session starts fresh.
+        if (own !== undefined) {
+          const held = yield* holdsSessionEntries(userId, agent.conversationId);
+          return held ? { resume: own, fork: false } : {};
+        }
+        const source = agent.startedFrom?.session;
+        return source === undefined ? {} : { resume: source, fork: true };
+      });
+
+    /**
      * A new place opened under the session given on the agent's machine, the
-     * agent's repository checked out in it, then at once its deepen
-     * (`deepenCheckoutWith`, the machine's `finishCheckout`): the
+     * agent's repository checked out in it, then at once its finish
+     * (`finishCheckoutWith`, the machine's `finishCheckout`): the
      * write token at the firewall and the commit identity, since the
      * harness's own shell has no hook for a first write; and the runner
      * launched on the first line. The member's installed skills are read
-     * beside the opening, and the deepen and the skills' upload run beside
-     * the launch's own uploads. A place whose launch failed is thrown away
-     * again by the machine, since no conversation records the session that
-     * would find it. `sandboxOpened` runs once the place stands, before the
-     * launch.
+     * beside the opening, and the finish and the skills' upload run beside
+     * the launch's own uploads. A place whose launch failed is left standing
+     * for the session's next message. `sandboxOpened` runs once the place
+     * stands, before the launch.
      */
     const openedPlace = (
       agent: Agent,
@@ -1072,19 +1112,18 @@ export const runnerSessions = <
       layout: MachineLayout,
       first: RunnerMessage | undefined,
       credential: HarnessLaunch,
-      waitOnImage: boolean,
       queuedFirst?: OpenedLine,
       sandboxOpened: Effect.Effect<void> = Effect.void,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
+        const from = layout.transcriptsKept ? yield* keptSessionOf(agent) : {};
         yield* machine.open(
           {
             session: sessionId,
             target,
             agent,
             harness: harness.name,
-            waitOnImage,
             beside: Effect.map(nativeSkills(target, agent, harness.skillRoots), (skills) =>
               nativeSkillFiles(skills, layout.skillsUpload),
             ),
@@ -1100,19 +1139,30 @@ export const runnerSessions = <
                 { name: opened.name, running: opened.place, session: sessionId },
                 layout,
                 first,
-                undefined,
+                from.resume,
                 credential,
                 Effect.all([opened.finishCheckout, writeInstalledSkills(opened.place, skills)], {
                   concurrency: "unbounded",
                   discard: true,
                 }),
                 queuedFirst,
+                from.fork,
               ),
             ).pipe(Effect.annotateLogs(runningLogId(opened.place.running))),
         );
       });
 
-    /** The runner launched again in the running place given, its credential set afresh and the harness's session resumed; with no message of its own where it only hands on the lines an earlier launch never took. */
+    /**
+     * The runner launched again in the running place given, its credential set
+     * afresh by the launch and the harness's session resumed; with no message
+     * of its own where it only hands on the lines an earlier launch never
+     * took. In a place made anew in place of one whose disk was lost
+     * (`created`), the harness's session and the member's installed skills
+     * went with that disk, so the skills are uploaded again, as a new
+     * place's are, and its session resumes only where the service keeps its
+     * transcript (`MachineLayout`'s `transcriptsKept`) and holds it, starting
+     * fresh otherwise.
+     */
     const relaunched = (
       agent: Agent,
       sessionId: string,
@@ -1120,22 +1170,28 @@ export const runnerSessions = <
       running: MachinePlace,
       layout: MachineLayout,
       sent: RunnerMessage | undefined,
+      created = false,
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
-        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares.
-        const [, , routing, credential] = yield* Effect.all(
+        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares,
+        // as is the agent's own where the place holds no checkout of it, as a launch whose checkout failed leaves it.
+        const [, routing, credential] = yield* Effect.all(
           [
-            renewCredential(target, agent, running),
-            machine.checkOutExtras(running, target, agent, false),
+            machine.checkOutMissing(running, target, agent, false),
             readAgentRouting(userId, agent.id),
-            harness.launch(agent),
+            harness.launch(agent, layout),
           ],
           { concurrency: "unbounded" },
         );
-        const resume = Option.getOrUndefined(
-          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
-        );
+        // Note that a place made anew still resumes the session where the service keeps its transcript.
+        const kept =
+          created && layout.transcriptsKept
+            ? yield* holdsSessionEntries(userId, agent.conversationId)
+            : !created;
+        const resume = kept
+          ? Option.getOrUndefined(Option.flatMapNullishOr(routing, (read) => read.nativeSession))
+          : undefined;
         yield* launch(
           agent,
           { name, running, session: sessionId },
@@ -1143,7 +1199,11 @@ export const runnerSessions = <
           sent,
           resume,
           credential,
-          Effect.void,
+          created
+            ? Effect.flatMap(nativeSkills(target, agent, harness.skillRoots), (skills) =>
+                writeInstalledSkills(running, nativeSkillFiles(skills, layout.skillsUpload)),
+              )
+            : Effect.void,
         );
       });
 
@@ -1154,36 +1214,49 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: Agent, runner: RunnerMark, turnRunning: boolean) =>
+    const staleWarm = (
+      agent: Agent,
+      layout: MachineLayout,
+      runner: RunnerMark,
+      turnRunning: boolean,
+    ) =>
       Effect.gen(function* () {
         if (runner.fingerprint === undefined || turnRunning) return false;
-        const credential = yield* harness.launch(agent);
-        const now = launchFingerprint(credential, yield* options.integrations(agent));
+        const credential = yield* harness.launch(agent, layout);
+        const delivered = machine.deliverCredentials(agent, credential.credentials ?? []);
+        const now = launchFingerprint(credential, delivered, yield* options.integrations(agent));
         return now !== runner.fingerprint;
       });
 
-    /** A message to the session, under the agent's runner lease: the place and the agent read afresh, since a call the lease waited behind may have relaunched. */
+    /**
+     * A message to the session, under the agent's runner lease: the place and
+     * the agent read afresh, since a call the lease waited behind may have
+     * relaunched. `handsOn` says whether a runner that must be resumed or
+     * launched again is left to the hand-on past the answer (`handedOnAfter`),
+     * the message queued for the launch it starts.
+     */
     const sendHolding = (
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       layout: MachineLayout,
       sent: RunnerMessage,
+      handsOn: boolean,
     ) =>
       Effect.gen(function* () {
         // The agent is read beside the place, and its read answers only for a place found.
         const [found, agentRead] = yield* Effect.all(
-          [firstPlace(machine, sessionId), Effect.exit(agentOf(message.conversationId))],
+          [firstPlace(machine, userId, sessionId), Effect.exit(agentOf(message.conversationId))],
           { concurrency: "unbounded" },
         );
-        if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        if (Option.isNone(found)) return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         const agent = yield* agentRead;
         // The session must be the conversation's own agent's, which the account reaches.
         if (found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
         const accepted = {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1192,7 +1265,7 @@ export const runnerSessions = <
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
         const handedAt = yield* Clock.currentTimeMillis;
-        const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
+        const handed = (path: HandoffPath) =>
           recordServerEvent(
             SERVER_EVENT.AGENT_HANDOFF,
             { userId, workspaceId: agent.organizationId },
@@ -1222,7 +1295,7 @@ export const runnerSessions = <
           if (
             pastWarmWindow(found.value.machine, turn, handedAt) ||
             (yield* stopWritten(machine, running)) ||
-            (yield* staleWarm(agent, running.mark, turnRunning))
+            (yield* staleWarm(agent, layout, running.mark, turnRunning))
           ) {
             yield* machine.kill(running.handle);
             yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
@@ -1308,24 +1381,50 @@ export const runnerSessions = <
         }
         // The place stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         const wasUp = found.value.running !== undefined;
+        if (handsOn) {
+          // Note that the request answers once the message is queued, the turn's words ahead of it
+          // composed on whether the harness's session resumes, and the resume and the launch that
+          // reads it run past the answer, so a resume that waits out a stop's snapshot never holds
+          // the send past the store's dispatch deadline. Its words count as handed once queued, as
+          // a warm runner's do, since whichever launch runs next reads the line.
+          const routing = yield* readAgentRouting(userId, agent.id);
+          const fresh = Option.isNone(
+            Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+          );
+          const opened = yield* openedLine(agent, sessionId, sent, fresh);
+          yield* queued(agent, ANY_LAUNCH, [opened.line]);
+          yield* opened.taken;
+          yield* handedOnAfter(sessionId, agent, sent.line.uuid, handed);
+          return accepted;
+        }
         // Note that a place whose stop began as the send reached it (a launch's end or the sweep
         // stopped it a moment before) refuses every call until it has stopped, so it is resumed
         // once more and the runner launched in the session that opens, as Vercel's SDK does.
         const resumed = yield* Effect.gen(function* () {
-          const place = yield* machine.resume(found.value);
+          const place = yield* machine.resume(found.value, agent);
           if (place === PLACE_RESUME.GONE) return place;
-          yield* relaunched(agent, sessionId, found.value.name, place, layout, sent);
+          yield* relaunched(
+            agent,
+            sessionId,
+            found.value.name,
+            place.place,
+            layout,
+            sent,
+            place.created,
+          );
           return place;
         }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
         if (resumed === PLACE_RESUME.GONE) {
-          // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
-          // the session goes on in a fresh one, a clean checkout of the repository under the
-          // session's tag. The harness's own session files went with the old filesystem, so none is
-          // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
-          // that fails (the image still preparing, a clone refused) leaves the session standing
-          // for the next message to try again rather than retired; a delete that fails leaves
-          // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent), false);
+          // Note that the snapshot of a sandbox opened before `getOrCreate` expired
+          // (`CODER.SANDBOX_SNAPSHOTS`), so it can never resume: the session goes on in a fresh one
+          // under the session's tag, on the session's drive. The harness's own session files went
+          // with the old filesystem, so its session resumes from the transcript the service keeps
+          // (`keptSessionOf`). The expired sandbox is deleted only once
+          // the fresh one runs, so a launch that fails (a clone refused, say) leaves the session
+          // standing for the next message to try again rather than retired; a delete that fails
+          // leaves the expired one beside the fresh one, which `listTagged` lists after it as the
+          // older.
+          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent, layout));
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1338,7 +1437,13 @@ export const runnerSessions = <
           yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
-        yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
+        yield* handed(
+          resumed.created
+            ? SERVER_HANDOFF_PATH.FRESH
+            : wasUp
+              ? SERVER_HANDOFF_PATH.RELAUNCHED
+              : SERVER_HANDOFF_PATH.RESUMED,
+        );
         return accepted;
       });
 
@@ -1352,17 +1457,18 @@ export const runnerSessions = <
      */
     const cancelHolding = (sessionId: string, turnId: string, agent: Agent) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found) || found.value.agentId !== agent.id) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
-        const live = yield* liveRunner(machine, found.value);
-        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+        // Note that its exit is read at most `CODER.RUNNER_EXIT_READ`, as a message reads it, so a Stop never waits out a live runner's exit.
+        const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
+        if (live === undefined) return { outcome: SESSION_CANCEL_OUTCOME.ACCEPTED } as const;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]).pipe(
           Effect.catchIf(
             (failure) =>
@@ -1370,7 +1476,10 @@ export const runnerSessions = <
             () => Effect.void,
           ),
         );
-        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED, launch: live.mark.firstSequence } as const;
+        return {
+          outcome: SESSION_CANCEL_OUTCOME.ACCEPTED,
+          launch: live.mark.firstSequence,
+        } as const;
       });
 
     /**
@@ -1402,7 +1511,7 @@ export const runnerSessions = <
             const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
             if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) return;
             if (turn.cancelRequestedAt === null) return;
-            const found = yield* firstPlace(machine, sessionId);
+            const found = yield* firstPlace(machine, userId, sessionId);
             const live =
               Option.isSome(found) && found.value.agentId === agent.id
                 ? yield* liveRunner(machine, found.value)
@@ -1413,7 +1522,7 @@ export const runnerSessions = <
               );
               yield* machine.kill(live.handle);
               yield* recordAgentRunnerToken(userId, agent.id, null);
-              yield* machine.recordRunner(recordOf(found.value, agent.id), {
+              yield* machine.recordRunner(recordOf(found.value, userId, agent.id), {
                 kind: RUNNER_RECORD.NONE,
               });
             }
@@ -1437,7 +1546,7 @@ export const runnerSessions = <
      */
     const haltHolding = (sessionId: string, conversationId: string) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found)) return;
         const agent = yield* agentOf(conversationId);
         if (found.value.agentId !== agent.id) return;
@@ -1453,13 +1562,15 @@ export const runnerSessions = <
           yield* exited;
         }
         yield* recordAgentRunnerToken(userId, agent.id, null);
-        yield* machine.recordRunner(recordOf(found.value, agent.id), { kind: RUNNER_RECORD.NONE });
+        yield* machine.recordRunner(recordOf(found.value, userId, agent.id), {
+          kind: RUNNER_RECORD.NONE,
+        });
       });
 
     /** A change of model or effort, under the agent's runner lease. */
     const retuneHolding = (sessionId: string, conversationId: string) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found)) return RUNNER_CHOICE.NOT_LIVE;
         const agent = yield* agentOf(conversationId);
         if (found.value.agentId !== agent.id) return RUNNER_CHOICE.NOT_LIVE;
@@ -1477,13 +1588,13 @@ export const runnerSessions = <
      * A repository added beside the agent's own handed to the place it runs
      * in now, under the agent's runner lease: the credential set afresh for
      * the whole set, and every extra the place does not hold cloned and
-     * shared with the runner's user (`checkOutExtras`). Nothing where no place
+     * shared with the runner's user (`checkOutMissing`). Nothing where no place
      * runs, since the next launch clones it, a fresh place's with the rest
      * and a resumed one's as it relaunches (`relaunched`).
      */
     const checkOutHolding = (sessionId: string, conversationId: string) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found)) return RUNNER_CHECKOUT.NOT_LIVE;
         const agent = yield* agentOf(conversationId);
         const running = found.value.running;
@@ -1492,7 +1603,7 @@ export const runnerSessions = <
         }
         const target = { userId, conversationId: agent.conversationId };
         yield* renewCredential(target, agent, running);
-        yield* machine.checkOutExtras(running, target, agent, true);
+        yield* machine.checkOutMissing(running, target, agent, true);
         return RUNNER_CHECKOUT.CHECKED_OUT;
       });
 
@@ -1502,33 +1613,49 @@ export const runnerSessions = <
      * ago than a line reads as awaiting its turn (`CODER.LINE_GRACE`), and no
      * runner runs to read it, the place is resumed, or a fresh one opened
      * where its disk is gone, and the runner launched on the harness's session
-     * with no message of its own, which reads them. Nothing on a machine
-     * whose runner takes its lines on stdin, which queues none. Answers
-     * whether a runner was launched.
+     * with no message of its own, which reads them. A resume that meets the
+     * sandbox still stopping or being snapshotted waits it out
+     * (`RESUME_WHILE_ENDING`), since this runs past an answer. Nothing on a
+     * machine whose runner takes its lines on stdin, which queues none.
+     * Answers how the launch reached its runner, or none where no runner was
+     * launched.
      */
     const deliverWaitingHolding = (sessionId: string, agent: Agent) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
-        if (Option.isNone(found) || found.value.agentId !== agent.id) return false;
-        if (!(yield* linesWaitAt(userId, agent.id))) return false;
-        if ((yield* liveRunner(machine, found.value)) !== undefined) return false;
+        const found = yield* firstPlace(machine, userId, sessionId);
+        if (Option.isNone(found) || found.value.agentId !== agent.id) return undefined;
+        if (!(yield* linesWaitAt(userId, agent.id))) return undefined;
+        if ((yield* liveRunner(machine, found.value)) !== undefined) return undefined;
         const layout = yield* machine.layout(agent);
-        if (!layout.linesRead) return false;
-        const resumed = yield* machine.resume(found.value);
+        if (!layout.linesRead) return undefined;
+        const wasUp = found.value.running !== undefined;
+        const resumed = yield* Effect.gen(function* () {
+          const place = yield* machine.resume(found.value, agent);
+          if (place === PLACE_RESUME.GONE) return place;
+          yield* relaunched(
+            agent,
+            sessionId,
+            found.value.name,
+            place.place,
+            layout,
+            undefined,
+            place.created,
+          );
+          return place;
+        }).pipe(Effect.retry(RESUME_WHILE_ENDING));
         if (resumed === PLACE_RESUME.GONE) {
           yield* openedPlace(
             agent,
             sessionId,
             layout,
             undefined,
-            yield* harness.launch(agent),
-            false,
+            yield* harness.launch(agent, layout),
           );
           yield* Effect.ignore(machine.discard(found.value));
-          return true;
+          return SERVER_HANDOFF_PATH.FRESH;
         }
-        yield* relaunched(agent, sessionId, found.value.name, resumed, layout, undefined);
-        return true;
+        if (resumed.created) return SERVER_HANDOFF_PATH.FRESH;
+        return wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED;
       });
 
     /**
@@ -1555,7 +1682,7 @@ export const runnerSessions = <
           const turnId = randomUUID();
           yield* writer.enqueueTurn(
             { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
           // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason,
@@ -1626,24 +1753,53 @@ export const runnerSessions = <
       }).pipe(Effect.annotateLogs(agentLogIds(agent, sessionId)));
 
     /**
-     * A message queued while another call held the lease handed on once that
-     * call let go, under the lease: by `deliverWaitingHolding`, where the
-     * session's place is the agent's; taken back where no place stands for the
-     * session by then, said in the log, so no line waits that no launch will
-     * read.
+     * A queued message handed on, under the lease: by `deliverWaitingHolding`,
+     * where the session's place is the agent's, how it reached its runner
+     * counted where `handed` is given, as warm where a runner already up, or
+     * one another call launched, reads it; taken back where no place stands
+     * for the session by then, said in the log, so no line waits that no
+     * launch will read.
      */
-    const handedOn = (sessionId: string, agent: Agent, lineId: string) =>
+    const handedOn = (
+      sessionId: string,
+      agent: Agent,
+      lineId: string,
+      handed: ((path: HandoffPath) => Effect.Effect<void>) | undefined,
+    ) =>
       Effect.gen(function* () {
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isSome(found) && found.value.agentId === agent.id) {
-          return yield* deliverWaitingHolding(sessionId, agent);
+          const path = yield* deliverWaitingHolding(sessionId, agent);
+          if (handed !== undefined) yield* handed(path ?? SERVER_HANDOFF_PATH.WARM);
+          return;
         }
         yield* Effect.logWarning(
           `A ${harness.name} message queued behind another call found its session ended`,
         );
         yield* withdrawRunnerLine(userId, agent.id, lineId);
-        return false;
       });
+
+    /**
+     * A queued message's hand-on (`handedOn`) run past the answer, under the
+     * lease, waiting on it as long as a lease can stand, so it outlasts a
+     * launch it is behind. Note that a hand-on that fails is only
+     * logged, and its line read as failed once it has waited past
+     * `CODER.LINE_GRACE`, which offers Continue.
+     */
+    const handedOnAfter = (
+      sessionId: string,
+      agent: Agent,
+      lineId: string,
+      handed?: (path: HandoffPath) => Effect.Effect<void>,
+    ) =>
+      afterResponse(
+        `A ${harness.name} hand-on`,
+        holdingRunner(
+          agent.id,
+          handedOn(sessionId, agent, lineId, handed),
+          CODER.RUNNER_LEASE.HOLD,
+        ),
+      );
 
     /**
      * A message to the session for the agent its conversation is, as `send`
@@ -1654,52 +1810,26 @@ export const runnerSessions = <
     const sentTo = (
       agent: Agent,
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       answersFirst: boolean,
     ) =>
       Effect.gen(function* () {
         const layout = yield* machine.layout(agent);
         const sent = messageLine(message, layout);
         const queues = layout.linesRead && sent.files.length === 0 && answersFirst;
-        const handed = yield* (
-          queues
-            ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
-            : Effect.map(
-                holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                Option.some,
-              )
-        ).pipe(
-          Effect.catchIf(
-            (failure) => failure instanceof ImagePreparing && answersFirst,
-            () =>
-              Effect.as(
-                afterResponse(
-                  `A ${harness.name} relaunch`,
-                  Effect.flatMap(AgentSandboxImage, (image) => Effect.ignore(image.prepared)).pipe(
-                    Effect.andThen(
-                      Effect.retry(
-                        holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                        IMAGE_READY,
-                      ),
-                    ),
-                    Effect.catch(launchFailed(agent, sessionId)),
-                  ),
-                ),
-                Option.some({
-                  outcome: EVE_SEND_OUTCOME.ACCEPTED,
-                  sessionId,
-                  deliveryId: sent.line.uuid,
-                } as const),
-              ),
-          ),
-        );
+        const handed = yield* queues
+          ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent, true))
+          : Effect.map(
+              holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
+              Option.some,
+            );
         if (Option.isSome(handed)) return handed.value;
         // A session another agent's place stands for has ended for this one, as `sendHolding`
         // answers it. Note that no place at all is no answer yet, because a Start's launch still
         // opening its sandbox holds the lease, which is the very case this queue is for.
-        const found = yield* firstPlace(machine, sessionId);
+        const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isSome(found) && found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
         // the message, and go ahead of it for a recorded runner's launch; with none recorded, the
@@ -1712,16 +1842,9 @@ export const runnerSessions = <
         yield* recorded === undefined
           ? queued(agent, ANY_LAUNCH, [sent.line])
           : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
-        yield* afterResponse(
-          `A ${harness.name} hand-on`,
-          holdingRunner(
-            agent.id,
-            handedOn(sessionId, agent, sent.line.uuid),
-            CODER.RUNNER_LEASE.HOLD,
-          ),
-        );
+        yield* handedOnAfter(sessionId, agent, sent.line.uuid);
         return {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1741,8 +1864,8 @@ export const runnerSessions = <
             const agent = yield* agentOf(message.conversationId);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
             return yield* Effect.gen(function* () {
-              const credential = yield* harness.launch(agent);
               const layout = yield* machine.layout(agent);
+              const credential = yield* harness.launch(agent, layout);
               const first = messageLine(message, layout);
               const withdrawn = layout.linesRead
                 ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
@@ -1759,20 +1882,11 @@ export const runnerSessions = <
                   agent,
                   sessionId,
                   (sandboxOpened) =>
-                    openedPlace(
-                      agent,
-                      sessionId,
-                      layout,
-                      first,
-                      credential,
-                      true,
-                      opened,
-                      sandboxOpened,
-                    ),
+                    openedPlace(agent, sessionId, layout, first, credential, opened, sandboxOpened),
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));
-              return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+              return { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId } as const;
             }).pipe(
               Effect.catch(failed("open")),
               Effect.annotateLogs(agentLogIds(agent, sessionId)),
@@ -1786,17 +1900,14 @@ export const runnerSessions = <
           );
         }),
 
-      // A relaunch on a fresh sandbox that finds the image still being prepared takes the message
-      // all the same, and waits on the image's build once the answer has left. Note that the wait
-      // holds no runner lease, because a message sent meanwhile waits on the lease no longer than
-      // its own deadline; the lease is taken once the build ended and the message sent afresh, so
-      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
-      // let go again for another wait where the relaunch finds the image's snapshot gone. A
-      // caller with no after-response door is answered that the image is being prepared.
       // A message to a runner that reads its lines never waits behind another call's lease, as a
       // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
       // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).
-      // Note that one naming files still waits on the lease, since they are written into a running place.
+      // One that finds no runner up is queued too, and its sandbox resumed and its runner launched
+      // past the answer (`handedOnAfter`), so the send answers once its line is written. Note that
+      // one naming files still waits on the lease, and resumes in the request, since they are
+      // written into a running place before its line names them, which a launch another message's
+      // hand-on started could read first.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1824,17 +1935,17 @@ export const runnerSessions = <
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
           return yield* Effect.gen(function* () {
-            const found = yield* firstPlace(machine, sessionId);
+            const found = yield* firstPlace(machine, userId, sessionId);
             const agentId = Option.isSome(found) ? found.value.agentId : undefined;
             const agent = agentId === undefined ? Option.none() : yield* readAgent(userId, agentId);
             if (Option.isNone(agent)) {
-              return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+              return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
             }
             const canceled = yield* holdingRunner(
               agent.value.id,
               cancelHolding(sessionId, turnId, agent.value),
             );
-            if (canceled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
+            if (canceled.outcome !== SESSION_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
               return { outcome: canceled.outcome } as const;
             }
             const launch = "launch" in canceled ? canceled.launch : undefined;
@@ -1856,8 +1967,9 @@ export const runnerSessions = <
 
       reset: (sessionId) =>
         Effect.gen(function* () {
-          const places = yield* machine.findPlaces(sessionId);
-          if (places.length === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          const places = yield* machine.findPlaces(userId, sessionId);
+          if (places.length === 0)
+            return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           let retired = 0;
           for (const place of places) {
             if (!(yield* ownsPlace(place))) continue;
@@ -1869,9 +1981,11 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          return retired === 0
-            ? ({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
-            : ({ outcome: EVE_RESET_OUTCOME.RESET } as const);
+          if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          // Note that the session's drive goes through the delete queue rather than here, because a
+          // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
+          yield* queueSessionSandboxes([sessionId]);
+          return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),
@@ -1902,6 +2016,7 @@ export const runnerSessions = <
         Effect.gen(function* () {
           const agent = yield* agentOf(conversationId);
           return yield* holdingRunner(agent.id, deliverWaitingHolding(sessionId, agent)).pipe(
+            Effect.map((path) => path !== undefined),
             Effect.catch((failure) => Effect.as(launchFailed(agent, sessionId)(failure), false)),
             Effect.annotateLogs(agentLogIds(agent, sessionId)),
           );
@@ -2005,9 +2120,9 @@ interface WarmRunner {
 const retiredHolding = (machine: MachineLifecycle, retiring: WarmRunner) =>
   Effect.gen(function* () {
     if (yield* runnerMayBeAtWork(retiring.agentId, yield* DateTime.nowAsDate)) return false;
-    const found = yield* firstPlace(machine, retiring.sessionId);
+    const found = yield* firstPlace(machine, retiring.userId, retiring.sessionId);
     if (Option.isNone(found)) return false;
-    const live = yield* liveRunner(machine, found.value);
+    const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
     if (live === undefined || live.handle.running !== retiring.running) return false;
     const retire: InputLine = { type: INPUT_LINE.RETIRE };
     yield* deliveredTo(machine, retiring.userId, retiring.agentId, live, [retire]);
@@ -2015,7 +2130,7 @@ const retiredHolding = (machine: MachineLifecycle, retiring: WarmRunner) =>
     // relaunches it rather than landing behind the retire, which the runner ends on unread.
     const { launch } = found.value;
     yield* machine.recordRunner(
-      recordOf(found.value, found.value.agentId ?? retiring.agentId),
+      recordOf(found.value, retiring.userId, found.value.agentId ?? retiring.agentId),
       launch === undefined
         ? { kind: RUNNER_RECORD.NONE }
         : { kind: RUNNER_RECORD.LAUNCHED, mark: launch },
@@ -2054,7 +2169,7 @@ export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(fu
   retiring: Omit<WarmRunner, "running">,
 ) {
   const machine = yield* deploymentLifecycle;
-  const found = yield* firstPlace(machine, retiring.sessionId);
+  const found = yield* firstPlace(machine, retiring.userId, retiring.sessionId);
   const running = Option.getOrUndefined(found)?.running;
   if (running === undefined) return Option.some(false);
   return yield* holdingRunnerIfFree(
@@ -2066,7 +2181,7 @@ export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(fu
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
-  /** A developer's Terminal holds the place, which the sweep stops once its lease lapses. */
+  /** A developer's Terminal holds the place, left up with its credentials, for its timeout to stop. */
   HELD: "held",
   /** The END is from a launch a newer one replaced, or the place is gone or already down. */
   STALE: "stale",
@@ -2082,19 +2197,20 @@ export const RUNNER_ENDED = {
 
 /**
  * A launch's end, as its END event tells it, for either harness: the place
- * stopped, every credential taken off the firewall first, unless a
- * developer's Terminal holds it or a message waits for the launch that hands
- * it on, either of which takes off only the credentials the ended runner
- * alone sent (`RUNNER_SLOTS`), and nothing for an END older than the launch
- * its place runs now. Decided and stopped under the agent's runner lease,
- * read again once it is held, so a `send` relaunching the runner either
- * finishes first, and its newer launch makes this END stale, or starts after
- * the stop and resumes the place. Fails where the machine or the store could
- * not be asked, or the lease stayed held past its wait.
+ * stopped, its kept launch deleted first, unless a developer's Terminal
+ * holds it, which leaves it up with its credentials to its timeout; where a message waits for the launch that hands it on, the
+ * place is left up as it stands, the launch that hands it on setting its own
+ * swaps; and nothing for an END older than the launch its place runs now.
+ * Decided and stopped under the agent's runner lease, read again once it is
+ * held, so a `send` relaunching the runner either finishes first, and its
+ * newer launch makes this END stale, or starts after the stop and resumes
+ * the place; a message sent meanwhile is queued and handed on once the
+ * lease is let go. Fails where the machine or the store could not be asked,
+ * or the lease stayed held past its wait.
  */
 export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
-  const found = yield* firstPlace(machine, ending.sessionId);
+  const found = yield* firstPlace(machine, ending.target.userId, ending.sessionId);
   if (Option.isNone(found)) return RUNNER_ENDED.STALE;
   const { agentId } = found.value;
   // A place no agent is recorded for was never launched into, so no runner of it has a lease to wait out.
@@ -2103,31 +2219,28 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
 });
 
 /**
- * A launch's IDLE, its runner warm past the agent's turn: the runner
- * retired at once (`retireWarmRunner`), whose END then stops the place,
- * where its machine's warm window is zero (`CODER.RUNNER_WARM`), as a
- * sandbox's is, or where its device last beat that it waits to switch
- * release (`HOST_UPDATE.WAITING`), so a host waiting to update goes idle as
- * its last turn ends. A device's runner otherwise stays warm for the next
- * message, and is retired past its window by the sweep
+ * A device's launch's IDLE, its runner warm past the agent's turn: the
+ * runner retired at once (`retireWarmRunner`) where its device last beat
+ * that it waits to switch release (`HOST_UPDATE.WAITING`), so a host waiting
+ * to update goes idle as its last turn ends. It otherwise stays warm for the
+ * next message, and is retired past its window by the sweep
  * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it
  * (`sendHolding`). Retiring under the runner lease is what keeps a message
  * sent at the turn's end: one a send wrote first is taken by the runner,
  * which still reads its stdin, and one sent after finds the runner no
- * longer told of and relaunches. Nothing for an IDLE older than the launch
- * its place runs now. Answers whether the retire line was written.
+ * longer told of and relaunches. Nothing for a sandbox's runner, which is
+ * launched to end at its turn's end rather than warm, nor for an IDLE older
+ * than the launch its place runs now. Answers whether the retire line was
+ * written.
  */
 export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
-  const found = yield* firstPlace(machine, idle.sessionId);
-  if (Option.isNone(found)) return false;
+  const found = yield* firstPlace(machine, idle.target.userId, idle.sessionId);
+  if (Option.isNone(found) || found.value.machine !== AGENT_MACHINE.DEVICE) return false;
   const { agentId, launch, running } = found.value;
   if (agentId === undefined || running === undefined) return false;
   if (launch !== undefined && idle.sequence < launch.firstSequence) return false;
-  const closes =
-    Duration.isZero(CODER.RUNNER_WARM[found.value.machine]) ||
-    (yield* deviceAgentAwaitsUpdate(idle.target.userId, agentId));
-  if (!closes) return false;
+  if (!(yield* deviceAgentAwaitsUpdate(idle.target.userId, agentId))) return false;
   return yield* retireWarmRunner({
     sessionId: idle.sessionId,
     userId: idle.target.userId,
@@ -2154,18 +2267,12 @@ const linesWaitAt = (userId: string, agentId: string) =>
     );
   });
 
-/** The credentials only a runner sent (`RUNNER_SLOTS`) taken off a place its end leaves up. */
-const runnerSlotsWithdrawn = (machine: MachineLifecycle, running: MachinePlace, userId: string) =>
-  Effect.forEach(RUNNER_SLOTS, (slot) => machine.firewall.withdraw(running, userId, slot), {
-    discard: true,
-  });
-
 /** The stop `runnerEnded` decides, on the place as it stands when read here. */
 const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   machine: MachineLifecycle,
   ending: RunnerEnding,
 ) {
-  const found = yield* firstPlace(machine, ending.sessionId);
+  const found = yield* firstPlace(machine, ending.target.userId, ending.sessionId);
   if (Option.isNone(found)) return RUNNER_ENDED.STALE;
   // Read apart from the runner's record, which a launch writes only once its command started.
   const { launch, running, agentId } = found.value;
@@ -2177,25 +2284,15 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
     ending.reason !== RUNNER_END.FAILED &&
     (yield* linesWaitAt(ending.target.userId, agentId))
   ) {
-    // Note that credentials that would not come off are said and passed over, because the launch that
-    // hands the lines on sets its own in their slots, and an END that failed would hand nothing on.
-    yield* runnerSlotsWithdrawn(machine, running, ending.target.userId).pipe(
-      Effect.catch((failure) =>
-        Effect.logWarning(
-          `an ended runner's credentials stayed on a place left up for its lines: ${keptFailureWords(failureWords(failure))}`,
-        ),
-      ),
-    );
     return RUNNER_ENDED.LINES_WAITING;
   }
-  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place,
-  // less the credentials only the ended runner sent.
+  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the
+  // place, its credentials with it, which its timeout then stops once nothing keeps it alive.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
-    yield* runnerSlotsWithdrawn(machine, running, ending.target.userId);
     return RUNNER_ENDED.HELD;
   }
-  // Every credential comes off first, and a place they would not come off is left up rather than
-  // stopped with them: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
+  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
+  // credentials stay on its firewall until the stop.
   yield* machine.firewall.clear(running);
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;

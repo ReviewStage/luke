@@ -28,7 +28,7 @@ afterEach(() => {
 /** The plan's page drawn into the document, its secondary column `secondary`. */
 function draw({
   secondary,
-  description = "A plan in the platform workspace.",
+  description = "A task in the platform workspace.",
 }: {
   secondary?: DetailSecondary;
   description?: string;
@@ -95,7 +95,7 @@ test("a page with no secondary column has no complementary landmark, and shows i
 test("an empty description draws no paragraph under the title", () => {
   const container = draw({ description: "" });
   expect(container.querySelectorAll("header p")).toHaveLength(0);
-  expect(draw({}).querySelector("header p")?.textContent).toBe("A plan in the platform workspace.");
+  expect(draw({}).querySelector("header p")?.textContent).toBe("A task in the platform workspace.");
 });
 
 test("the main content and the secondary column each take the keyboard's focus", () => {

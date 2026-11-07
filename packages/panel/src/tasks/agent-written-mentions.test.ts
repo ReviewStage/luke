@@ -26,7 +26,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * write (`packages/service/src/agents/coder-host/instructions.ts`), drawn
  * in the words its replies and its Inbox items are drawn in, on its task's
  * page: a page it
- * showed, another agent, a section of its plan, and a file of its
+ * showed, another agent, a section of its description, and a file of its
  * repository, each as the chip of what it names, called by the name the
  * agent wrote, and a page's chip opens the page in the window and hangs its
  * tab's card, previewing it, where the page is the open plan's. Synthetic

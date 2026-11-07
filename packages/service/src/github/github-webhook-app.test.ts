@@ -144,6 +144,8 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     cronSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
+    titleAnthropicApiKey: undefined,
+    previewApiKeys: {},
   };
 }
 
@@ -233,7 +235,7 @@ const openAgent = (pull: PullRequestFixture) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

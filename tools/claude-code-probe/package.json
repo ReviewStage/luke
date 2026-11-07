@@ -11,9 +11,8 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@repo/service": "workspace:*",
     "@repo/wire": "workspace:*",
-    "@vercel/sandbox": "3.8.0",
+    "@vercel/sandbox": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

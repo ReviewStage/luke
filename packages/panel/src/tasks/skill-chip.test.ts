@@ -10,6 +10,7 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -79,11 +80,13 @@ async function mounted(view: ReactNode, source: SkillSource = reading) {
   roots.push(root);
   await act(async () => {
     root.render(
-      createElement(SkillFiles, {
-        source,
-        onOpen: (skill) => opened.push(skill.path),
-        children: view,
-      }),
+      withQueryClient(
+        createElement(SkillFiles, {
+          source,
+          onOpen: (skill) => opened.push(skill.path),
+          children: view,
+        }),
+      ),
     );
   });
   await settleFrames();
@@ -275,7 +278,7 @@ function loadedTurn(skill: string, state = "output-available"): AgentTranscriptM
 function agentTurn(message: AgentTranscriptMessage): ReactNode {
   return createElement(AgentMessage, {
     message,
-    plan: false,
+    description: false,
     lead: AGENT_LEAD,
     moving: false,
     delegation: undefined,

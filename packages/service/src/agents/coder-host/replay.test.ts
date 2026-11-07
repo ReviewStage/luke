@@ -17,7 +17,7 @@ import {
 } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { it } from "vitest";
-import { callEntry, replayOf, type StartFrom } from "./replay.js";
+import { callEntry, replayOf, type StartFrom, TAKEN_ON } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
 
 /** A step of the agent's own words. */
@@ -42,7 +42,7 @@ const source: Agent = {
   model: "claude-sonnet",
   effort: "high",
   contextWindow: CONTEXT_WINDOW.STANDARD,
-  planSnapshot: "The plan.",
+  descriptionSnapshot: "The description.",
   prompt: null,
   repository: "acme/app",
   branch: null,
@@ -71,7 +71,7 @@ const startFrom = (total: number, extras: StartFrom["told"]["extras"] = []): Sta
   serverWords: undefined,
   told: {
     published: null,
-    copy: { copied: false, miss: SNAPSHOT_MISS.NO_SANDBOX },
+    work: { on: TAKEN_ON.COPY, copy: { copied: false, miss: SNAPSHOT_MISS.NO_SANDBOX } },
     carried: undefined,
     forked: { at: false, edited: undefined },
     unkept: [],
@@ -95,6 +95,37 @@ it("a source in other repositories beside its own is told to have left its unpus
   assert.match(preamble, /what it had not pushed in them did not come along/u);
   assert.match(preamble, /In `acme\/web` it pushed `agent\/invite`/u);
   assert.doesNotMatch(replayOf(startFrom(1), [], undefined).replay.preamble, /beside its own/u);
+});
+
+it("a source on a drive is told to stand in the new agent's own checkout, its other repositories with it, and a fork to move off its branch before committing", () => {
+  const from = startFrom(1, [
+    { repository: "acme/web", baseBranch: null, headBranch: "agent/invite", pullRequest: null },
+  ]);
+  const onDrive = (inPullRequest: boolean) =>
+    replayOf(
+      {
+        ...from,
+        source: { ...source, branch: "agent/relay" },
+        told: { ...from.told, work: { on: TAKEN_ON.DRIVE, drive: "agent-drive-1" }, inPullRequest },
+      },
+      from.steps,
+      undefined,
+    );
+
+  const forked = onDrive(false);
+  assert.match(forked.replay.preamble, /Your checkout is a copy of its own/u);
+  assert.match(forked.replay.preamble, /Switch to a branch of your own before you commit/u);
+  assert.match(
+    forked.replay.preamble,
+    /`acme\/web` beside its own repository.*copied with its own/u,
+  );
+  assert.doesNotMatch(forked.replay.preamble, /git fetch|did not come along/u);
+  assert.equal(forked.startedFrom.drive, "agent-drive-1");
+  assert.equal(forked.startedFrom.branch, undefined);
+  assert.match(
+    onDrive(true).replay.preamble,
+    /work and push on `agent\/relay`, and open no new pull request/u,
+  );
 });
 
 it("a summary beside steps left out is told as some of those that did not fit, never as the oldest", () => {
@@ -192,7 +223,7 @@ it("a source that never made a branch of its own sends the new agent to the work
   );
 });
 
-it("a native harness's calls replay named as eve's are, its edits by the files they touched", () => {
+it("a native harness's calls replay named as the retired runtime's are, its edits by the files they touched", () => {
   const settled = (tool: string, input: Record<string, unknown>) =>
     callEntry({
       type: `tool-${tool}`,
@@ -232,4 +263,17 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
       "Opened pull request: feat: export invoices",
     ],
   );
+});
+
+it("a source whose transcript is carried is told it goes on from that transcript, with no steps replayed, and its session kept", () => {
+  const from = startFrom(0);
+  const carried = replayOf(
+    { ...from, told: { ...from.told, transcript: "6f1c2a4e-0d3b-4c55-9a8e-2f7d1b9c0e11" } },
+    [],
+    undefined,
+  );
+
+  assert.match(carried.replay.preamble, /you go on from its transcript as it stood/u);
+  assert.doesNotMatch(carried.replay.preamble, /Its steps follow/u);
+  assert.equal(carried.startedFrom.session, "6f1c2a4e-0d3b-4c55-9a8e-2f7d1b9c0e11");
 });

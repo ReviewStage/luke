@@ -17,8 +17,9 @@ import {
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { SENTRY_TUNNEL } from "@repo/features/sentry-tunnel";
 import { sendShownFailure } from "@repo/features/shown-failure";
-import { appStateNow } from "@repo/panel/use-app-state";
+import { appStateQuery } from "@repo/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
@@ -31,6 +32,7 @@ import {
   startBrowserTracingPageLoadSpan,
   withStreamedSpan,
 } from "@sentry/browser";
+import type { QueryClient } from "@tanstack/react-query";
 import { PANEL_PATH } from "./web-address";
 import type { WebSentry, WebSentryBuild } from "./web-sentry";
 
@@ -94,8 +96,8 @@ function nameByRoute(client: Client): void {
 }
 
 /** The account the tab's host has signed in, as its document says now. */
-function accountId(): string | undefined {
-  return signedInAccountId(appStateNow()?.account);
+function accountId(queryClient: QueryClient): string | undefined {
+  return signedInAccountId(queryClient.getQueryData(appStateQuery.queryKey)?.account);
 }
 
 /**
@@ -108,11 +110,14 @@ function accountId(): string | undefined {
  * failure the panel showed is sent as a log line, and as an issue besides
  * where nothing named it (`@repo/features/shown-failure`). Each event and log
  * line names the account signed in as it leaves, by its id alone, as
- * Sentry's user (`@repo/features/sentry-account`).
+ * Sentry's user (`@repo/features/sentry-account`). Every envelope is posted
+ * to a path on the tab's own origin, which passes it on to Sentry, because
+ * tracker blockers refuse Sentry's own host (`@repo/features/sentry-tunnel`).
  */
-export function initWebSentry(build: WebSentryBuild): WebSentry {
+export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): WebSentry {
   init({
     dsn: build.dsn,
+    tunnel: SENTRY_TUNNEL.PATH,
     environment: build.environment,
     ...(build.release ? { release: build.release } : undefined),
     integrations: [
@@ -123,8 +128,9 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
-    beforeSend: (event) => eventWithoutAccessTokens(eventNamingAccount(event, accountId())),
-    beforeSendLog: (log) => logNamingAccount(log, accountId()),
+    beforeSend: (event) =>
+      eventWithoutAccessTokens(eventNamingAccount(event, accountId(queryClient))),
+    beforeSendLog: (log) => logNamingAccount(log, accountId(queryClient)),
     ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });

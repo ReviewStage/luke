@@ -15,7 +15,6 @@ import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-mo
 import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { TerminalCardFoot } from "../tasks/terminal-shells.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import {
   type FixedSidePanelTab,
@@ -39,6 +38,9 @@ import {
  * glyph and the name the place knows it by, rather than falling back to
  * the hint the control would have hung.
  */
+
+/** What a cloud terminal tab's card says under its agent's: whose sandbox its shell runs in. */
+const TERMINAL_CARD_FOOT = "Terminal in this agent’s sandbox";
 
 /** What a place knows of the thing a tab shows, by its kind, as its card reads it. */
 export type CardSubject =
@@ -83,8 +85,13 @@ export type CardSubject =
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
-      readonly agentId: string;
-      /** The agent whose sandbox its shells run in. */
+      /** The agent whose sandbox its shell runs in. */
+      readonly subject: AgentSubject;
+      readonly models: readonly CatalogModel[] | undefined;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** The agent whose mirror its shells stand in. */
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
@@ -153,7 +160,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 /** A fixed tab's card: the Plan tab's its task's; the panel's other kinds hang none, their names saying all there is. */
 function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }>) {
   switch (subject.tab) {
-    case SIDE_PANEL_TAB.PLAN:
+    case SIDE_PANEL_TAB.DESCRIPTION:
       return subject.plan === undefined ? null : (
         <PlanCard taskId={subject.plan.taskId} standing={subject.plan.standing} />
       );
@@ -178,7 +185,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PlanCard
           taskId={subject.taskId}
           standing={{
-            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.PLAN].label,
+            name: subject.name ?? SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.DESCRIPTION].label,
             status: subject.status,
           }}
         />
@@ -221,18 +228,18 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     }
-    // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
+    // A cloud terminal tab hangs its agent's card, saying at its foot whose sandbox its shell runs in.
     case TAB_KIND.TERMINAL:
       return (
         <AgentCard
           subject={subject.subject}
           models={subject.models}
-          foot={{
-            glyph: <GLYPH.TERMINAL />,
-            words: <TerminalCardFoot agentId={subject.agentId} />,
-          }}
+          foot={{ glyph: <GLYPH.TERMINAL />, words: TERMINAL_CARD_FOOT }}
         />
       );
+    // A Local tab hangs its agent's card.
+    case TAB_KIND.LOCAL:
+      return <AgentCard subject={subject.subject} models={subject.models} />;
     case TAB_KIND.FILE:
       return <FileCard path={subject.path} />;
     case TAB_KIND.PAGE:

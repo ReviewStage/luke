@@ -12,11 +12,12 @@ import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { CommentEditor } from "./comment-editor.js";
 
 /**
  * comment-editor.test.ts -- the box a member writes GitHub Markdown in, on
- * the plan's editor, as its owner meets it: the words formatted by the
+ * the description's editor, as its owner meets it: the words formatted by the
  * writing chords and handed over as Markdown, ⌘↩ and Esc the owner's, a
  * menu's Esc the box's alone, a comment opened again handed back byte for
  * byte, `@user` and `#123` kept as GitHub reads them, and words past
@@ -113,7 +114,9 @@ function mount(
   const holder = pane.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Owner, { start, heard, answers, suggestion })));
+  act(() =>
+    root.render(withQueryClient(createElement(Owner, { start, heard, answers, suggestion }))),
+  );
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");

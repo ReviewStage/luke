@@ -21,6 +21,9 @@ import {
   ProgressCount,
   PULL_REQUEST_GLYPH,
   RELATED_TASK_CELLS,
+  RowCount,
+  SCROLL_SIZE,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   STATUS_TONE,
@@ -36,10 +39,13 @@ import {
   TEXT_VARIANT,
   Text,
   TrashIcon,
+  taskRowFit,
   UnassignedAvatar,
+  VirtualTaskRows,
 } from "@repo/ui";
 import { GLYPH, HandIcon, OctagonMinusIcon } from "@repo/ui/icons";
-import { type ReactNode, useState } from "react";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { type ReactNode, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -54,8 +60,12 @@ import { CatalogSection } from "../section";
  * ⇧-click, and a menu their ⋯, a right-click, and the menu key open; a
  * composer's dock of related tasks, bare of a box's gutter and a ⋯, its
  * rows' kinds leading and their × at their ends; and a quick add's draft
- * raised as a card over a row, its chips in their cells; and a list never
- * chosen still being read, its rows' blocks in their cells. Synthetic tasks.
+ * raised as a card over a row, its chips in their cells; the same related
+ * tasks drawn only near the view of the scroller they stand in, each row
+ * placed out of the list's grid at its columns' widths; tasks as the Tasks
+ * page lists them, one counting the threads that need the reader in the
+ * attention tone; and a list never chosen still being read, its rows'
+ * blocks in their cells. Synthetic tasks.
  */
 
 /** Does nothing: the catalog's menus act on nothing. */
@@ -193,11 +203,14 @@ function CatalogTaskRow({
   depth,
   nest,
   fold,
+  place,
 }: {
   task: CatalogTask;
   depth?: number;
   nest?: ListRowNest;
   fold?: { open: boolean; onOpenChange: (open: boolean) => void };
+  /** Where it stands in a run drawing only the rows near the view; none where its list draws every row. */
+  place?: VirtualRowPlace;
 }): React.JSX.Element {
   return (
     <TaskRow
@@ -240,6 +253,7 @@ function CatalogTaskRow({
       depth={depth}
       nest={nest}
       fold={fold === undefined ? undefined : { ...fold, label: `Child tasks of ${task.name}` }}
+      place={place}
     />
   );
 }
@@ -262,6 +276,46 @@ function RelatedTasks(): React.JSX.Element {
       {open ? <CatalogTaskRow task={CHILD} depth={1} nest={{ position: 1, size: 1 }} /> : null}
       <CatalogTaskRow task={RELATED} nest={{ position: 2, size: 2 }} />
     </TaskRows>
+  );
+}
+
+/** The related tasks a run draws, flat. */
+const RUN_TASKS = [PARENT, CHILD, RELATED] as const;
+
+/**
+ * The same related tasks in a scroller of their own, drawing only the rows
+ * near its view, each row placed out of the list's grid and laying its
+ * columns out at the widths every task says there (`taskRowFit`).
+ */
+function RelatedTasksRun(): React.JSX.Element {
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const fit = taskRowFit(
+    RUN_TASKS.map((task) => ({
+      key: task.key,
+      relation: task.kind?.words,
+      pullRequests: task.pullRequests.map((number) => `#${number}`),
+      subTasks:
+        task.subTasks === undefined
+          ? undefined
+          : `${task.subTasks.finished}/${task.subTasks.total}`,
+    })),
+  );
+  return (
+    <ScrollArea ref={scroller} size={SCROLL_SIZE.CONTENT}>
+      <VirtualTaskRows
+        label="Related tasks"
+        selection={{ selected, onChange: setSelected }}
+        scroller={scroller}
+        keys={RUN_TASKS.map((task) => task.id)}
+        fit={fit}
+      >
+        {(index, place) => {
+          const task = RUN_TASKS[index];
+          return task === undefined ? null : <CatalogTaskRow task={task} place={place} />;
+        }}
+      </VirtualTaskRows>
+    </ScrollArea>
   );
 }
 
@@ -350,6 +404,61 @@ const GLANCE_CELLS = [
   TASK_ROW_CELL.UPDATED,
 ] as const;
 
+/** The cells the Tasks page's List draws by default, what waits on the reader among them. */
+const TASKS_PAGE_CELLS = [
+  TASK_ROW_CELL.PRIORITY,
+  TASK_ROW_CELL.KEY,
+  TASK_ROW_CELL.STATUS,
+  TASK_ROW_CELL.WAITING,
+  TASK_ROW_CELL.ASSIGNEE,
+] as const;
+
+/** Tasks as the Tasks page lists them: one with threads waiting on the reader, counted in the attention tone, and one with none. */
+function TasksPageRows(): React.JSX.Element {
+  return (
+    <TaskRows label="Tasks" cells={TASKS_PAGE_CELLS}>
+      {[
+        { task: PARENT, waiting: 2 },
+        { task: RELATED, waiting: 0 },
+      ].map(({ task, waiting }) => (
+        <TaskRow
+          key={task.id}
+          taskId={task.id}
+          name={task.name}
+          cells={TASKS_PAGE_CELLS}
+          content={{
+            [TASK_ROW_CELL.PRIORITY]: (
+              <MarkChip
+                mark={<TaskPriorityMark priority={task.priority} />}
+                words={task.priority}
+              />
+            ),
+            [TASK_ROW_CELL.KEY]: <Key task={task} />,
+            [TASK_ROW_CELL.STATUS]: (
+              <MarkChip mark={<TaskStatusMark status={task.status} />} words={task.status} />
+            ),
+            [TASK_ROW_CELL.WAITING]: (
+              <RowCount
+                value={waiting}
+                noun={waiting === 1 ? "needs you" : "need you"}
+                tone={STATUS_TONE.ATTENTION}
+              />
+            ),
+            [TASK_ROW_CELL.ASSIGNEE]:
+              task.assignee === undefined ? (
+                <UnassignedAvatar size={AVATAR_SIZE.MARK} />
+              ) : (
+                <Avatar name={task.assignee} size={AVATAR_SIZE.MARK} />
+              ),
+          }}
+          menu={{ thing: "Task", groups: taskMenu(task.name) }}
+          onOpen={ignore}
+        />
+      ))}
+    </TaskRows>
+  );
+}
+
 /** How wide each placeholder row's name stands. */
 const READING_NAMES = ["46%", "38%", "54%"] as const;
 
@@ -382,6 +491,15 @@ function TaskRowsExample(): React.JSX.Element {
         title="A task's related tasks, led by their relations, one nested"
       >
         <RelatedTasks />
+      </CatalogSection>
+      <CatalogSection
+        id="task-rows-waiting"
+        title="Tasks as the Tasks page lists them, counting what needs you"
+      >
+        <TasksPageRows />
+      </CatalogSection>
+      <CatalogSection id="task-rows-run" title="Related tasks drawn only near the view">
+        <RelatedTasksRun />
       </CatalogSection>
       <CatalogSection id="task-rows-dock" title="A composer's dock of related tasks, bare">
         <ComposerDock />

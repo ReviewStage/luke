@@ -21,12 +21,14 @@ import {
 } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
+import { vi } from "vitest";
 import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import { codexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
 import { processTable } from "./processes.js";
 import {
   CODEX_EFFORT,
+  CODEX_PLAN_BACKEND,
   CODEX_TOKEN_COMMAND,
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
@@ -337,6 +339,14 @@ it.effect(
         ],
       });
       yield* service.seen;
+      // The catalog app-server reads on the plan, while it runs: every bundled model, none offering Codex's subagents, whose messages OpenAI refuses on a plan.
+      const catalogOverride = override(spawned[0], "model_catalog_json");
+      const catalog = JSON.parse(readFileSync(JSON.parse(catalogOverride ?? '""'), "utf8"));
+      assert.deepEqual(
+        catalog.models.map((model: { slug: string }) => model.slug),
+        JSON.parse(CODEX_BUNDLED_MODELS_JSON).models.map((model: { slug: string }) => model.slug),
+      );
+      assert.ok(catalog.models.every((model: object) => !("multi_agent_version" in model)));
       yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
@@ -377,6 +387,7 @@ it.effect(
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
         "features.fast_mode=true",
+        `model_catalog_json=${catalogOverride}`,
         'mcp_servers.workspace.url="https://app.test/runner/mcp"',
         'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.workspace.default_tools_approval_mode="approve"',
@@ -493,6 +504,48 @@ it.effect("interrupts the running turn on a stop and ends the launch as stopped"
       reason: RUNNER_END.STOPPED,
     });
   }),
+);
+
+it.effect(
+  "a thread resumed in a sandbox that no longer holds its rollout has it written back from the service's store first",
+  () =>
+    Effect.gen(function* () {
+      const home = mkdtempSync(join(tmpdir(), "codex-home-"));
+      const subpath = `sessions/2026/11/06/rollout-2026-11-06T18-00-00-${THREAD}.jsonl`;
+      const kept = [
+        { type: "session_meta", payload: { id: THREAD } },
+        { type: "response_item", payload: { type: "message", role: "user" } },
+      ];
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        const call = JSON.parse(String(init?.body));
+        const answer =
+          call.call === "listSubkeys"
+            ? { subkeys: [subpath] }
+            : call.call === "load"
+              ? { entries: kept }
+              : {};
+        return new Response(JSON.stringify(answer));
+      });
+      const service = fakeService("What exact line");
+      const { write, run } = yield* launch([{ exchanges: [...RESUME, RESUMED_TURN] }], service, {
+        ...ENV,
+        CODEX_HOME: home,
+      });
+      yield* write({
+        ...CONFIG,
+        threadId: THREAD,
+        transcriptsUrl: "https://app.test/api/agents/runner-transcripts",
+      });
+      yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.equal(
+        readFileSync(join(home, subpath), "utf8"),
+        kept.map((entry) => `${JSON.stringify(entry)}\n`).join(""),
+      );
+      vi.restoreAllMocks();
+      rmSync(home, { recursive: true, force: true });
+    }),
 );
 
 it.effect(
@@ -908,6 +961,52 @@ it.effect("never starts app-server on the plan when it does not know its own bun
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
     assert.deepEqual(spawned, []);
   }),
+);
+
+it.effect(
+  "on a device-code plan, app-server's provider sends to Codex's ChatGPT backend naming the workspace, its token from the same command; a backend this runner does not know starts nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const device = {
+        ...ENV,
+        [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
+        [RUNNER_ENV.CHATGPT_ACCOUNT_ID]: "chatgpt-workspace-fixture",
+      };
+      const { spawned, write, run } = yield* launch(
+        [{ exchanges: [...RESUME, RESUMED_TURN] }],
+        service,
+        device,
+      );
+      yield* write({ ...CONFIG, threadId: THREAD });
+      yield* write(message("What exact line did you first write to PROBE.md?"));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      const provider = (spawned[0]?.args ?? []).filter(
+        (arg, index, args) => args[index - 1] === "-c" && arg.startsWith("model_provider"),
+      );
+      assert.deepEqual(provider, [
+        'model_provider="chatgpt_backend_plan"',
+        'model_providers.chatgpt_backend_plan.name="ChatGPT plan"',
+        'model_providers.chatgpt_backend_plan.base_url="https://chatgpt.com/backend-api/codex"',
+        `model_providers.chatgpt_backend_plan.auth.command="${SELF.executable}"`,
+        `model_providers.chatgpt_backend_plan.auth.args=["${SELF.script}", "codex-token", "${TOKEN_URL}"]`,
+        "model_providers.chatgpt_backend_plan.auth.timeout_ms=30000",
+        "model_providers.chatgpt_backend_plan.auth.refresh_interval_ms=300000",
+        'model_providers.chatgpt_backend_plan.http_headers={ "ChatGPT-Account-ID" = "chatgpt-workspace-fixture", "version" = "0.163.0" }',
+        'model_providers.chatgpt_backend_plan.wire_api="responses"',
+        "model_providers.chatgpt_backend_plan.requires_openai_auth=false",
+        "model_providers.chatgpt_backend_plan.supports_websockets=false",
+      ]);
+
+      const unknown = yield* launch([WORKFLOW], fakeService(), {
+        ...ENV,
+        [RUNNER_ENV.CODEX_PLAN_BACKEND]: "elsewhere",
+      });
+      yield* unknown.write(CONFIG);
+      assert.equal(yield* Fiber.join(unknown.run), RUNNER_END.FAILED);
+      assert.deepEqual(unknown.spawned, []);
+    }),
 );
 
 /** A page of the thread's turns, newest first, each naming the client id of the line it took. */

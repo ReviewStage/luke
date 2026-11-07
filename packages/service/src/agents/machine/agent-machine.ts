@@ -35,17 +35,23 @@
  * machine that did not answer.
  */
 
-import type { DatabaseServices } from "@repo/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
+import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
-import { type Brand, Context, Data, type Duration, type Effect } from "effect";
-import type { AgentSandboxImage } from "../agent-sandbox-image.js";
+import { type Brand, Context, Data, type Duration, type Effect, type Redacted } from "effect";
+import type { AgentImage, AgentImageMissing } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
-import type { RunnerBundle } from "../coder-host/runner-bundle.js";
-import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
-import type { FirewallEntry, FirewallSlot } from "../sandbox-firewall.js";
-import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
+import type {
+  FirewallLaunch,
+  FirewallSources,
+  LaunchSwapKind,
+  LaunchSwaps,
+  PlaceholderSwap,
+} from "../sandbox-firewall.js";
+import type { KeyRefusal, PlanRefusal } from "../sessions/agent-sessions.js";
+import type { CommandExit, SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
 export type MachineRunning = string & Brand.Brand<"MachineRunning">;
@@ -56,10 +62,11 @@ export type MachineName = string & Brand.Brand<"MachineName">;
 /** What a machine keeps of a place it found, for its own later calls on it. Opaque to every caller but the machine. */
 export type MachineKept = Brand.Brand<"MachineKept">;
 
-/** One agent's place on a machine: which machine, our runtime session id, and where that session runs now. */
+/** One agent's place on a machine: which machine, our runtime session id, the place's lifecycle name, and where that session runs now. */
 export interface MachinePlace {
   readonly machine: AgentMachineKind;
   readonly session: string;
+  readonly name: MachineName;
   readonly running: MachineRunning;
 }
 
@@ -68,8 +75,9 @@ export interface MachinePlace {
  * a launch names them before the machine is asked anything: its checkout,
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
- * folder a message's files are written under, and the Claude Code CLI and
- * the Codex a launch runs, none where the harness's own default stands.
+ * folder a message's files are written under, the Claude Code CLI and the
+ * Codex a launch runs, none where the harness's own default stands, and the
+ * home Codex keeps its threads in.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -79,8 +87,10 @@ export interface MachineLayout {
   /** Where the agent saves a file the service reads back, a screenshot it shows or a page it posts: a folder the service's reads reach on that machine. */
   readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
-  /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
+  /** The image's Codex in a sandbox, and on a Mac the one it checked against the pin; none on a Mac that checked none yet, which runs no Codex agent. */
   readonly codexExecutable: string | undefined;
+  /** Where Codex keeps its threads (`CODEX_HOME`): a sandbox's home on its persisted disk; none on a Mac, whose Codex keeps its default under the agent's own home. */
+  readonly codexHome: string | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
    * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
@@ -88,6 +98,13 @@ export interface MachineLayout {
    * release bundled.
    */
   readonly linesRead: boolean;
+  /**
+   * Whether the runner keeps the CLI's transcript at the service
+   * (`@repo/agent-runner`'s `RUNNER_TRANSCRIPTS`), as a sandbox's does, so
+   * a place made anew still resumes the CLI's session; a Mac's CLI keeps
+   * its own files on the Mac.
+   */
+  readonly transcriptsKept: boolean;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */
@@ -137,31 +154,120 @@ export interface FoundPlace {
   readonly kept: MachineKept;
 }
 
-/** A found place's resume: where it runs now, or gone where it can never run again, its disk lost. */
+/** A found place's resume where it can never run again, its disk lost. */
 export const PLACE_RESUME = { GONE: "gone" } as const;
 
 /**
+ * A found place running again: where it runs now, and whether it was made
+ * anew in place of one whose disk was lost (`created`), which holds nothing
+ * the place kept off its drive, the harness's own session among it.
+ */
+export interface ResumedPlace {
+  readonly place: MachinePlace;
+  readonly created: boolean;
+}
+
+/**
  * A running place's firewall, the account whose agent it is named beside
- * it: an entry set or renewed in its slot, one withdrawn, or every one
- * cleared ahead of a stop, its record kept in the store
- * (`../sandbox-firewall.ts`). A machine with no firewall of ours does
- * nothing.
+ * it: the whole policy written from the sources given and the swaps of the
+ * launch kept for it; a launch's swaps kept ahead of its first write;
+ * that launch deleted ahead of a stop, the policy left as it stands
+ * (`../sandbox-firewall.ts`); or a standing launch's renewed credential set
+ * afresh, as the sweep does. A machine with no firewall of ours does nothing.
  */
 interface MachineFirewall {
-  readonly set: (
+  readonly write: (
     place: MachinePlace,
     userId: string,
-    slot: FirewallSlot,
-    entry: FirewallEntry,
+    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly withdraw: (
+  readonly keepLaunch: (
     place: MachinePlace,
     userId: string,
-    slot: FirewallSlot,
+    launch: FirewallLaunch,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   readonly clear: (
     place: MachinePlace,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  /**
+   * The swap a standing launch holds for a renewed credential set afresh,
+   * at the firewall of the sandbox session its owner names
+   * (`SwapRenewalAsk`): the launch kept for the session read, the fresh
+   * value asked only where the launch holds the slot, its swap renewed
+   * behind the same placeholder where it stands on the target's host and
+   * does not set that value already, and the session's whole policy written
+   * with the agent's repository credential minted afresh, since every write
+   * is whole. What failed short of the write answers how it came out
+   * (`SWAP_RENEWAL`), and the read of the kept launch or the write failing
+   * fails the call. A machine with no firewall of ours leaves it.
+   */
+  readonly renew: <E extends { readonly _tag: string }, R>(
+    owner: FirewallOwner,
+    ask: SwapRenewalAsk<E, R>,
+  ) => Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices>;
+}
+
+/** A renewal of a standing launch's swap: the slot, where the credential is sent and behind which scheme, as its launch declared it, and the read answering its fresh value, without its scheme, or none where there is none to set. */
+export interface SwapRenewalAsk<E, R> {
+  readonly credential: Pick<RunnerCredential, "slot" | "target" | "scheme">;
+  readonly fresh: Effect.Effect<Redacted.Redacted<string> | undefined, E, R>;
+}
+
+/** How a renewal of a launch's swap came out (`MachineFirewall`'s `renew`). */
+export const SWAP_RENEWAL = {
+  /** The fresh value set behind the swap's placeholder, and the session's policy written. */
+  RENEWED: "renewed",
+  /** Nothing to set: no launch holds the slot, its swap sets the fresh value already, or no sandbox runs the session any more. */
+  LEFT: "left",
+  /** The swap stands on another host than the credential's target, which the fresh value is never sent to. */
+  ELSEWHERE: "elsewhere",
+  /** The fresh read answered none. */
+  UNANSWERED: "unanswered",
+  /** The fresh read, the sandbox's lookup, or the repository credential failed, by the failure's tag. */
+  FAILED: "failed",
+} as const;
+
+export type SwapRenewal =
+  | {
+      readonly outcome: Exclude<
+        (typeof SWAP_RENEWAL)[keyof typeof SWAP_RENEWAL],
+        typeof SWAP_RENEWAL.FAILED
+      >;
+    }
+  | { readonly outcome: typeof SWAP_RENEWAL.FAILED; readonly failure: string };
+
+/** Whether the service renews a runner's credential while its launch stands. */
+export const CREDENTIAL_RENEWAL = {
+  /** Fixed for its launch: a Mac hands it to the runner, and a sandbox holds it at its firewall. */
+  FIXED: "fixed",
+  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall, which the sweep renews. */
+  RENEWED: "renewed",
+} as const;
+
+export type CredentialRenewal = (typeof CREDENTIAL_RENEWAL)[keyof typeof CREDENTIAL_RENEWAL];
+
+/**
+ * A credential a launch declares for its runner, which the machine decides
+ * how to hand over (`deliverCredentials`): the variable the runner reads it
+ * in, its value, without its scheme, where the runner sends it (the domain,
+ * and the path prefix where one is named), in which header, named in lower
+ * case, behind which scheme (`Bearer ` or nothing), the slot a firewall
+ * holds it in, and whether the service renews it.
+ */
+export interface RunnerCredential {
+  readonly variable: string;
+  readonly value: Redacted.Redacted<string>;
+  readonly target: Pick<PlaceholderSwap, "domain" | "path">;
+  readonly header: string;
+  readonly scheme: string;
+  readonly slot: LaunchSwapKind;
+  readonly renewal: CredentialRenewal;
+}
+
+/** Credentials as a machine hands them over: the variables the runner is started with, every one secret, and the swaps its place's firewall keeps for the launch, none on a machine with no firewall of ours. */
+export interface DeliveredCredentials {
+  readonly env: Readonly<Record<string, string>>;
+  readonly swaps: LaunchSwaps;
 }
 
 /** A runner launched in a place: the place, and the machine's own id for the runner's process. */
@@ -169,18 +275,8 @@ export interface RunnerHandle extends MachinePlace {
   readonly command: string;
 }
 
-/** What a machine's calls reach of the caller's services: the store, GitHub, the image, and the runner's bundle. */
-type MachineServices = CheckoutServices | AgentSandboxImage | RunnerBundle;
-
-/**
- * A failure as the log says it: a machine's own words, which name the call
- * that failed, its status, and the machine's error or the cause's, never
- * what was sent; the kind alone for any other, since a store failure's
- * message may name a statement.
- */
-export function describeFailure(failure: { readonly _tag: string }): string {
-  return failure instanceof SandboxUnavailable ? failure.message : failure._tag;
-}
+/** What a machine's calls reach of the caller's services: the store, GitHub, and the agents' image. */
+type MachineServices = CheckoutServices | AgentImage;
 
 /** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan or API key refused. */
 export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
@@ -205,8 +301,6 @@ export interface MachineOpen<B, EB, RB> {
   readonly agent: Agent;
   /** How the log names the agent's harness. */
   readonly harness: string;
-  /** Whether the open waits on a machine image still being prepared, rather than failing at once. */
-  readonly waitOnImage: boolean;
   /** The caller's reads that need no place, run beside the open, whose result `use` is handed. */
   readonly beside: Effect.Effect<B, EB, RB>;
 }
@@ -229,6 +323,8 @@ export interface RunnerLaunch<A, E, R, EL, RL> {
    * or a log.
    */
   readonly env: Readonly<Record<string, string>>;
+  /** The account the runner's record is kept under: the agent's starter's. */
+  readonly userId: string;
   /** The agent the runner is launched for, whose place's record names it. */
   readonly agentId: string;
   /** Where the repositories the agent works in beside its own are checked out (`extraCheckoutPaths`), which a sandbox's launch marks as it marks the agent's own checkout; none for an agent in one repository or none. */
@@ -258,10 +354,20 @@ export interface AgentMachineService {
     agent: Agent,
   ) => Effect.Effect<MachineLayout, LaunchRefused | { readonly _tag: string }>;
   /**
+   * The credentials a launch of the agent's runner declares, as the machine
+   * hands them over: in a sandbox, each held at its firewall behind a
+   * placeholder minted for the launch, which the variable carries in its
+   * place, so no value enters the machine; on a Mac, which has no firewall
+   * of ours, a fixed one in its variable and a renewed one not at all.
+   */
+  readonly deliverCredentials: (
+    agent: Agent,
+    credentials: readonly RunnerCredential[],
+  ) => DeliveredCredentials;
+  /**
    * The agent's place opened under the session, its repository checked out
    * there where it has one, and handed to `use`; a place `use` fails in is
-   * thrown away again, since no conversation records the session that would
-   * find it.
+   * left standing for the session's next message.
    */
   readonly open: <A, E, R, B, EB, RB>(
     ask: MachineOpen<B, EB, RB>,
@@ -271,44 +377,59 @@ export interface AgentMachineService {
     E | EB | LaunchRefused | { readonly _tag: string },
     R | RB | MachineServices
   >;
-  /** Every place opened under the session, the newest first; none where none stands. */
+  /** Every place opened under the account's session, the newest first; none where none stands. */
   readonly findPlaces: (
+    userId: string,
     session: string,
-  ) => Effect.Effect<readonly FoundPlace[], SandboxUnavailable>;
-  /** What the place's record says of its runner, in place of whatever it said. */
+  ) => Effect.Effect<readonly FoundPlace[], SandboxUnavailable | StoreFailure, DatabaseServices>;
+  /** What the place's record says of its runner, in place of whatever it said, kept under the account given. */
   readonly recordRunner: (
     place: {
       readonly machine: AgentMachineKind;
       readonly session: string;
       readonly name: MachineName;
+      readonly userId: string;
       readonly agentId: string;
     },
     record: RunnerRecord,
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
   /** The running place's firewall, every write to it composing what stands whole. */
   readonly firewall: MachineFirewall;
-  /** The found place run again, where it is not, and where it runs now; gone where its disk is lost for good. */
+  /**
+   * The agent's found place run again, where it is not, and where it runs
+   * now: made anew on the machine's own terms where its disk is lost, or
+   * gone where the machine cannot make it again.
+   */
   readonly resume: (
     found: FoundPlace,
-  ) => Effect.Effect<MachinePlace | typeof PLACE_RESUME.GONE, SandboxUnavailable>;
+    agent: Agent,
+  ) => Effect.Effect<
+    ResumedPlace | typeof PLACE_RESUME.GONE,
+    SandboxUnavailable | CheckoutRefused | AgentImageMissing,
+    AgentImage | DatabaseServices
+  >;
   /** The running place stopped, its disk kept for a later resume. */
   readonly stop: (place: MachinePlace) => Effect.Effect<void, SandboxUnavailable>;
-  /** The found place thrown away, with whatever runs in it. */
-  readonly discard: (found: FoundPlace) => Effect.Effect<void, SandboxUnavailable>;
+  /** The found place thrown away, with whatever runs in it and its record. */
+  readonly discard: (
+    found: FoundPlace,
+  ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
   /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,
     files: readonly SandboxFile[],
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /**
-   * The repositories the agent works in beside its own that the running
-   * place does not hold yet cloned into their folders, on the token minted
-   * for each, the ones it holds left as they stand; where the runner already
-   * runs (`shared`), each folder is then shared with the runner's user as a
-   * launch shares it, which a launch to come does itself. Nothing on a
-   * machine that clones no extras, a device's, nor for an agent with none.
+   * What the running place does not hold yet of the agent's repositories
+   * cloned: before a relaunch (not `shared`), its own checkout where the
+   * place holds none; then the repositories it works in beside its own,
+   * into their folders, on the token minted for each, the ones it holds
+   * left as they stand; where the runner already runs (`shared`), each
+   * folder is then shared with the runner's user as a launch shares it,
+   * which a launch to come does itself. Nothing on a machine that clones
+   * nothing for a launch, a device's, nor for an agent with no repository.
    */
-  readonly checkOutExtras: (
+  readonly checkOutMissing: (
     place: MachinePlace,
     target: ConversationTarget,
     agent: Agent,
@@ -369,10 +490,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place, checking out what it clones beside the agent's own, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what the place does not hold yet, handing a runner its credentials, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "checkOutExtras" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutMissing" | "deliverCredentials" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

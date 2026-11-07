@@ -84,6 +84,22 @@
   -webkit-app-region: drag;
 }
 
+/* The workspace's head (`workspace-switcher.tsx`) is one control's row under
+   the strip, so its middle stands where the agents' tabs beside it stand
+   theirs, and the list under it starts as far below as the tabs' row ends
+   below its tabs (`desktop.css`'s `--task-tabs-gap`), level with the work's
+   card. */
+.sidebar-workspace {
+  padding-bottom: calc(var(--title-bar-middle) - var(--ui-control-height) / 2);
+}
+
+/* Note that the strip over it keeps a top row's hairline the work's own row
+   beside it leaves out (`.desktop-main`'s `--desktop-bar-height`), so the
+   head rises by it to stand level. A drawer keeps no strip. */
+:where(:root):not([data-ui-room="narrow"]) .sidebar-workspace {
+  margin-top: calc(2 * var(--title-bar-middle) - var(--desktop-bar-height));
+}
+
 .desktop-shell {
   display: grid;
   height: 100%;
@@ -462,7 +478,7 @@
         .ui-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
       )
     ),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
     .ui-toolbar:nth-child(1 of :not([hidden]))
   ):not(
     :is(
@@ -488,7 +504,8 @@
           )
         )
       ):not(
-        :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *
+        :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+          > *
       )
       *
   ) {
@@ -499,9 +516,9 @@
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   :is(.ui-pane-bar, .ui-toolbar):is(
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-child(1 of :not([hidden]))),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-child(1 of :not([hidden])))
       *
   ) {
@@ -511,9 +528,9 @@
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   :is(.ui-pane-bar, .ui-toolbar):is(
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-last-child(1 of :not([hidden]))),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-last-child(1 of :not([hidden])))
       *
   ) {
@@ -561,6 +578,63 @@
   transform: none;
 }
 
+/* Beside a wide room's work, the folded sidebar floats as a pane of glass
+   rather than a column cut off at the work: a sheet's gap in from the
+   window's edges with a sheet's corners, so it reads as one more sheet
+   lifted over the work, the work blurred through it. It keeps that shape
+   folded away too, so its slide in and out is the card's own; folded, it
+   slides past the gap as well as its width. Its top row is a gap shorter,
+   so the back and forward it holds stay level with the title bar's other
+   buttons, and those buttons rest on the glass's own ground. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar {
+  margin: var(--sheet-gap) 0 var(--sheet-gap) var(--sheet-gap);
+  border-radius: var(--sheet-radius);
+  transform: translateX(calc(-100% - var(--sheet-gap)));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar
+  > .desktop-drag-strip {
+  height: calc(var(--desktop-bar-height) - var(--sheet-gap));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar
+  > .title-bar-controls[data-edge="column"] {
+  --title-bar-ground: var(--ui-color-float-solid);
+  top: calc(var(--title-bar-middle) - var(--ui-control-height) / 2 - var(--sheet-gap));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .desktop-sidebar {
+  --ui-list-row-ground: var(--ui-color-float-solid);
+
+  background: var(--ui-color-float);
+  box-shadow: var(--ui-float-shadow);
+  backdrop-filter: var(--ui-float-backdrop);
+  transform: none;
+}
+
+/* The gap between the floating card and the window's left edge is the
+   card's own to the pointer, so a peek opened at the edge (desktop.css's
+   `.sidebar-peek-edge`, gone once it opens) hears the pointer leave it
+   there, as it did when the sidebar stood flush to the edge. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .desktop-sidebar::before {
+  position: absolute;
+  top: 0;
+  bottom: calc(-1 * var(--sheet-gap));
+  left: calc(-1 * var(--sheet-gap));
+  width: var(--sheet-gap);
+  content: "";
+}
+
 /* A narrow room's sidebar is a drawer: the same float, standing on the
    window's left edge over the work, as wide as a phone's drawer stands
    rather than the sidebar's dragged width, which a drawer has no edge to
@@ -594,18 +668,6 @@
   .desktop-sidebar
   > .desktop-drag-strip {
   display: none;
-}
-
-/* Note that Back and Forward still stand at the drawer's top right where
-   they are drawn (an installed web app's, `HistoryButtons`), on the head's
-   own row now that no strip holds them above it, so the head ends short of
-   their two buttons rather than running its press and its name under them. */
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell[data-sidebar-collapsed]
-  .desktop-sidebar
-  > .title-bar-controls[data-edge="column"]
-  ~ :is(.sidebar-workspace, .sidebar-identity) {
-  margin-inline-end: calc(2 * var(--ui-control-height) + var(--ui-space-8));
 }
 
 /* A finger swiping the drawer in or out (`@repo/ui`'s `use-drawer-swipe.ts`)
@@ -705,6 +767,13 @@
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--ui-color-sidebar);
+}
+
+/* Over a wide room's floating sidebar, its glass's ground. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .title-bar-controls:not([data-edge]) {
+  --title-bar-ground: var(--ui-color-float-solid);
 }
 
 .desktop-sidebar {

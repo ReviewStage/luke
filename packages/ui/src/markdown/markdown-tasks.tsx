@@ -4,12 +4,13 @@
 
 import { isWireString } from "@repo/wire";
 import type { Element, ElementContent, Root } from "hast";
-import { useState } from "react";
+import { Fragment } from "react";
 import type { Components } from "streamdown";
 import { Checkbox } from "../components/checkbox/checkbox.js";
+import { MARKDOWN_CLASS } from "./markdown-class.js";
 
-/** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`). */
-const TASK_BOX_CLASS = "ui-markdown-task";
+/** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`), the description's editor's box alike. */
+const TASK_BOX_CLASS = MARKDOWN_CLASS.TASK_BOX;
 
 /** A task item's checkbox as drawn: the offset its item starts at in the words, where they say it, and the item's own words, which name it. */
 interface TaskItem {
@@ -18,12 +19,31 @@ interface TaskItem {
 }
 
 /**
- * Ticks or clears the task item whose marker starts at an offset in the
- * words, as `ticked` says, answering whether the change was saved. Note that
- * it names the state the box was pressed to rather than a flip, so a press
- * waiting behind one that failed still asks for what the reader saw.
+ * A task item's tick as its caller's mutation stands (`useMutation`): how
+ * the box asks for a state, and the state it was pressed to while that ask is
+ * out or once it saved, none once refused or never asked. Note that it names
+ * the state the box was pressed to rather than a flip, so a press waiting
+ * behind one that failed still asks for what the reader saw.
  */
-export type MarkdownTaskToggler = (at: number, ticked: boolean) => Promise<boolean>;
+export interface TaskWrite {
+  readonly run: (ticked: boolean) => void;
+  readonly asked: boolean | undefined;
+}
+
+/** A task item a reader can tick, as its box is drawn: the offset its marker starts at in the words, its words, which name it, and whether the words tick it. */
+export interface TaskBoxItem {
+  readonly at: number;
+  readonly label: string;
+  readonly checked: boolean;
+}
+
+/**
+ * Draws a task item's box a reader can tick: the place's own component,
+ * which holds the item's tick and draws `TaskBox` from it. Note that the
+ * box is drawn afresh whenever the words' own state changes, so a change
+ * arriving from anyone redraws it from them.
+ */
+export type MarkdownTaskBox = (item: TaskBoxItem) => React.ReactNode;
 
 /** Each task item's checkbox, by the tree's own node. */
 const TASK_ITEMS = new WeakMap<Element, TaskItem>();
@@ -59,39 +79,25 @@ function placeTasks(parent: Root | Element, item: Element | undefined): void {
 export const placeTaskItems = () => (tree: Root) => placeTasks(tree, undefined);
 
 /**
- * A task item's checkbox that ticks or clears its item. It flips at the
- * press, since the words come back changed only once the change is saved,
- * and flips back to where that press found it where it was not, whatever a
- * later press of it is still waiting on. Note that its caller keys it by the
- * words' own state, so a change arriving from anyone redraws it from them.
+ * A task item's checkbox that ticks or clears its item through `write`. It
+ * stands at the state pressed while its tick is out and once it saved, since
+ * the words come back changed only after, and at the words' own state where
+ * it was refused.
  */
-function TaskBox({
-  item,
+export function TaskBox({
+  label,
   checked,
-  toggle,
+  write,
 }: {
-  item: { readonly at: number; readonly label: string };
+  label: string;
   checked: boolean;
-  toggle: MarkdownTaskToggler;
+  write: TaskWrite;
 }): React.JSX.Element {
-  const [shown, setShown] = useState(checked);
   // Note that the box stands in the bullet's gutter (`prose.css`), and
   // takes a finger's press around it there, as the editor's does.
   return (
     <span className={TASK_BOX_CLASS}>
-      <Checkbox
-        label={item.label}
-        checked={shown}
-        onChange={(next) => {
-          setShown(next);
-          toggle(item.at, next).then(
-            (saved) => {
-              if (!saved) setShown(!next);
-            },
-            () => setShown(!next),
-          );
-        }}
-      />
+      <Checkbox label={label} checked={write.asked ?? checked} onChange={write.run} />
     </span>
   );
 }
@@ -117,20 +123,17 @@ export const readTaskInput: NonNullable<Components["input"]> = ({ node, ...props
   );
 };
 
-/** How a note draws a task item's checkbox where its reader can tick it, asking `toggle` at the press. */
-export function taskInput(toggle: MarkdownTaskToggler): NonNullable<Components["input"]> {
+/** How a note draws a task item's checkbox where its reader can tick it, as `drawBox` draws it. */
+export function taskInput(drawBox: MarkdownTaskBox): NonNullable<Components["input"]> {
   return ({ node, ...props }) => {
     const item = node === undefined ? undefined : TASK_ITEMS.get(node);
     const at = item?.at;
     return item === undefined || at === undefined ? (
       <Checkbox label="Task" checked={props.checked === true} disabled onChange={() => undefined} />
     ) : (
-      <TaskBox
-        key={String(props.checked === true)}
-        item={{ at, label: item.label }}
-        checked={props.checked === true}
-        toggle={toggle}
-      />
+      <Fragment key={String(props.checked === true)}>
+        {drawBox({ at, label: item.label, checked: props.checked === true })}
+      </Fragment>
     );
   };
 }

@@ -24,24 +24,24 @@ import { imageDimensions, sniffImageType } from "@repo/features/image-signature"
 import { MENTION_KIND, memberMentionOf } from "@repo/features/mention-link";
 import type { FileUIPart, UserContent } from "ai";
 import { Effect, Option } from "effect";
-import type { MessageReceivedPart } from "eve/client";
 
 /**
- * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, and as eve's receipt of them reads back. How the journal keeps them is `@repo/database/models/attached-file-parts`.
+ * attached-files.ts -- the files a developer attached to a coding agent's message: as its session is handed them, and as a receipt of them reads back. How the journal keeps them is `@repo/database/models/attached-file-parts`.
  *
- * A message is words, files, or both. eve is handed the words first where
+ * A message is words, files, or both. The session is handed the words first where
  * there are any, then each text file inlined as its own text part, headed
  * by its name and fenced, since no provider path takes a text file as a
  * file, then each image and PDF as a file part over a `data:` URL, which
- * eve stages in the sandbox, opening it to do so. The journal keeps the words
+ * the runner hands on as an image block or writes into the agent's machine
+ * (`coder-host/runner-sessions.ts`). The journal keeps the words
  * as the row's first part, empty where there are none, and every file
  * after it as the SDK's file part over the same `data:` URL, a text file
  * under `text/plain`, so the transcript draws a thumbnail or a name for
- * each from the row alone. eve's receipt of a message flattens its files
+ * each from the row alone. The retired runtime's receipt of a message flattened its files
  * into placeholders, so a line is matched by its parts instead: the words
- * and each text file as eve was handed them, and each image and PDF by its
- * name and type, joined by the separator eve joins coalesced steers with,
- * which is what eve's received parts join to whether the steers it
+ * and each text file as the session was handed them, and each image and PDF by its
+ * name and type, joined by the separator the retired runtime joined coalesced steers with,
+ * which is what its received parts joined to whether the steers it
  * coalesced carried words, files, or both. A receipt the relay writes as a
  * row of its own, such as a task's, reads its text files back to file
  * parts by their heading, so the developer's bubble shows a name rather
@@ -49,17 +49,17 @@ import type { MessageReceivedPart } from "eve/client";
  *
  * Every image a coding agent is handed, whoever sent it, is first kept
  * beside the agent's conversation as a tool's pictures are
- * (`keptHandedImages`, `conversation-pictures.ts`), and eve is handed one
+ * (`keptHandedImages`, `conversation-pictures.ts`), and the session is handed one
  * more text part right after the image: the line naming the attachment it
  * was kept as, or why it was not kept, which a native harness reads as
  * text alike. The journal keeps that on the image's file part, a line is
- * matched by the line in the place eve was handed it, and a receipt's own
+ * matched by the line in the place the session was handed it, and a receipt's own
  * row reads the id back from it onto its file part, so a Start's first
- * message, whose row eve's receipt writes with no bytes, still names the
+ * message, whose row the retired runtime's receipt wrote with no bytes, still names the
  * picture its Continue attaches again (`replay.ts`).
  */
 
-/** A text file as eve's receipt carries it: the heading's name, a fence, the file, and the same fence. */
+/** A text file as a message inlines it and a receipt carries it: the heading's name, a fence, the file, and the same fence. */
 const INLINED_FILE = /^Attached file: ([^\n]+)\n(`{3,})\n([\s\S]*)\n\2$/u;
 
 /** The types an attached file is a picture under, which a conversation keeps. */
@@ -125,7 +125,7 @@ export function senderLabel(teammate: string): string {
   return `${SENDER_LABEL_LEAD}${teammate}${SENDER_LABEL_TAIL}`;
 }
 
-/** Whether a text part eve was handed is a message's sender label rather than its words. */
+/** Whether a text part a session was handed is a message's sender label rather than its words. */
 function isSenderLabel(text: string): boolean {
   if (!text.startsWith(SENDER_LABEL_LEAD) || !text.endsWith(SENDER_LABEL_TAIL)) return false;
   // Note that only a person's mention link written whole between the two counts, as `senderLabel` writes it,
@@ -135,7 +135,7 @@ function isSenderLabel(text: string): boolean {
 }
 
 /**
- * What eve is handed for a message: the words alone where nothing is
+ * What a session is handed for a message: the words alone where nothing is
  * attached, nothing mentioned, and no teammate named, as every message went
  * before files, and otherwise the sender label where a teammate sent it, the
  * words where there are any, what they mention that the agent cannot read
@@ -144,7 +144,7 @@ function isSenderLabel(text: string): boolean {
  * kept of it where it was kept or refused, so a model is never handed an
  * empty text part.
  */
-export function eveContent(
+export function turnContent(
   text: string,
   attachments: readonly HandedFile[],
   mentioned?: string,
@@ -180,7 +180,7 @@ export function eveContent(
   ];
 }
 
-/** A message eve received, read back: the parts a line is matched by, joined, and the words and files a receipt's own row keeps. */
+/** A message the retired runtime received, read back: the parts a line is matched by, joined, and the words and files a receipt's own row keeps. */
 export interface ReceivedMessage {
   readonly text: string;
   readonly words: string;
@@ -212,16 +212,26 @@ function keptOnto(image: FileUIPart, text: string): FileUIPart | undefined {
   return { ...image, url, providerMetadata: keptImageMetadata(kept) };
 }
 
+/** One part of a message as its receipt lists it: words, or a file staged by its name and type with no bytes. */
+export type MessageReceivedPart =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "file";
+      readonly mediaType: string;
+      readonly filename?: string;
+      readonly url?: string;
+    };
+
 /**
- * eve's receipt of a message read back. Its parts joined, each image and
- * PDF by its mark, are what a line is matched by; an eve that projects no
+ * The retired runtime's receipt of a message read back. Its parts joined, each image and
+ * PDF by its mark, are what a line is matched by; a receipt that lists no
  * parts is read by its summary, which for words alone is the words. A text
  * part right after an image that names what was kept of it is that, and
  * goes onto the image's part; a text part spelled as a text file's heading
  * and fence is that file, and every other is words, since a message may
  * carry files with no words. A file staged in the sandbox carries no URL,
- * so its part keeps its name and no bytes; eve stages every file a message
- * carries, a task's included, so a receipt's own row names each file and
+ * so its part keeps its name and no bytes; the retired runtime staged every file a message
+ * carried, a task's included, so a receipt's own row names each file and
  * draws none. A sender label leading the parts is the model's alone, so it
  * is neither matched nor kept as words.
  */

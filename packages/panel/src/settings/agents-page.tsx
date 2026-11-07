@@ -29,13 +29,13 @@ import {
   TextButton,
   TextLink,
 } from "@repo/ui";
-import { useSettingWrite } from "@repo/ui/use-setting-write";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useAgentDefault, useOfferedModels } from "../account-choices.js";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { modelsRetryMutation } from "../live-reads.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
   choiceModelId,
@@ -64,10 +64,10 @@ import {
 } from "../tasks/agent-model.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
+import { type RowWrite, refusalToast, rowWrite } from "./row-write.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
@@ -107,7 +107,7 @@ import { SwitchRow } from "./switch-row.js";
  * where the next model offers two. A write is one ask of the service, which
  * the host draws over the account's preferences on the press, so the rows
  * stay live while it is out; the model, Effort, and Context rows each write through
- * `useSettingWrite`, so each says its own refusal under it and ticks Saved
+ * a mutation of their own (`row-write.ts`), so each says its own refusal under it and ticks Saved
  * once its write lands, and Modified while it differs from the fallback this
  * account would start on with none stored. Fast is a `SwitchRow` like every other settings switch, so its
  * refusal is said in a toast as the switch flips back. With no account signed in
@@ -140,14 +140,17 @@ const DEFAULT_SKELETON: readonly SettingsRowSkeletonShape[] = [
 /** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
 
-/** A write the service kept. */
-const WRITE_ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+/** A default's write refused, in the page's words; one the service kept answers no failure. */
+function choiceRefused(answer: object): string | undefined {
+  return "failure" in answer ? PAGE_LINE.WRITE_FAILED : undefined;
+}
 
-/** A write the service refused or never answered. */
-const WRITE_REFUSED: ActionResult = {
-  status: ACTION_RESULT_STATUS.REJECTED,
-  reason: PAGE_LINE.WRITE_FAILED,
-};
+/** A row's write of the default, as its mutation stands, resting on it until answered. */
+function choiceWrite<Answer extends object>(
+  mutation: UseMutationResult<Answer, Error, ModelChoice>,
+): RowWrite<ModelChoice> {
+  return rowWrite(mutation, { ask: (choice: ModelChoice) => choice, refused: choiceRefused });
+}
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
@@ -156,7 +159,6 @@ function DefaultRows({
   ownKeys,
   modelsRetrying,
   onRetryModels,
-  onChange,
 }: {
   choice: ModelChoice;
   /** The catalog, or nothing where it could not be read. */
@@ -167,14 +169,16 @@ function DefaultRows({
   modelsRetrying: boolean;
   /** Reads the catalog again: the failure's Retry. */
   onRetryModels: () => void;
-  /** Asks the service to keep `choice`, answering whether it did. */
-  onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
-  // Fast's switch says its own refusal in a toast, and each of the others words its own under its row and ticks Saved when its write lands.
-  const modelWrite = useSettingWrite(onChange);
-  const effortWrite = useSettingWrite(onChange);
-  const speedWrite = useSettingWrite(onChange);
-  const contextWrite = useSettingWrite(onChange);
+  // Fast's switch says its own refusal in a toast, and each of the others words its own under its row and ticks Saved when its write lands, each on a mutation of its own.
+  const modelWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
+  const effortWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
+  const speedWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
+  const contextWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
+  const fastMutation = useMutation({
+    ...actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE),
+    onSettled: refusalToast(choiceRefused),
+  });
   const listed = models?.find((model) => model.id === choice.model);
   // Modified reads against the default this account would run on with none stored, as its credentials decide it.
   const fallback = agentFallbackChoice(models ?? []);
@@ -214,6 +218,14 @@ function DefaultRows({
       },
       choice.contextWindow,
     );
+  const fastWrite = rowWrite(fastMutation, {
+    ask: (fast: boolean) =>
+      base === undefined
+        ? choice
+        : choiceAt(choiceModelId(base, fast ? MODEL_SPEED.FAST : MODEL_SPEED.STANDARD)),
+    refused: choiceRefused,
+    drawn: (asked) => readModelChoice(models ?? [], asked.model).speed === MODEL_SPEED.FAST,
+  });
   return (
     <>
       <PickerRow
@@ -223,8 +235,8 @@ function DefaultRows({
         labelReplayUnmasked
         detail={note}
         changed={read.base !== fallback.model}
-        saves={modelWrite.saves}
-        error={refusalShown(modelWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
+        saves={modelWrite.savedAt}
+        error={refusalShown(modelWrite.refusal, FAILURE_SURFACE.SETTING_WRITE)}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -272,9 +284,12 @@ function DefaultRows({
         <SettingsRow
           label={SPEED_LABEL}
           adornment={
-            <SettingMarks changed={read.speed !== MODEL_SPEED.STANDARD} saves={speedWrite.saves} />
+            <SettingMarks
+              changed={read.speed !== MODEL_SPEED.STANDARD}
+              saves={speedWrite.savedAt}
+            />
           }
-          error={refusalShown(speedWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
+          error={refusalShown(speedWrite.refusal, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (
             <ChoiceBar
@@ -321,23 +336,24 @@ function DefaultRows({
           checked={read.speed === MODEL_SPEED.FAST}
           anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
           disabled={base?.fast === undefined}
-          onChange={(fast) => {
-            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+          write={{
+            ...fastWrite,
             // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
-            const missing = modelConnectFailure(base.model);
-            if (missing !== undefined) return remedy(missing)?.();
-            return onChange(
-              choiceAt(choiceModelId(base, fast ? MODEL_SPEED.FAST : MODEL_SPEED.STANDARD)),
-            );
+            run: (fast) => {
+              if (base === undefined) return;
+              const missing = modelConnectFailure(base.model);
+              if (missing !== undefined) return remedy(missing)?.();
+              fastWrite.run(fast);
+            },
           }}
         />
       )}
       <SettingsRow
         label="Effort"
         adornment={
-          <SettingMarks changed={choice.effort !== fallback.effort} saves={effortWrite.saves} />
+          <SettingMarks changed={choice.effort !== fallback.effort} saves={effortWrite.savedAt} />
         }
-        error={refusalShown(effortWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
+        error={refusalShown(effortWrite.refusal, FAILURE_SURFACE.SETTING_WRITE)}
       >
         {() => (
           <ChoiceBar
@@ -354,10 +370,10 @@ function DefaultRows({
         <SettingsRow
           label="Context"
           adornment={
-            <SettingMarks changed={window !== CONTEXT_WINDOW.LONG} saves={contextWrite.saves} />
+            <SettingMarks changed={window !== CONTEXT_WINDOW.LONG} saves={contextWrite.savedAt} />
           }
           description={longWindowNote(windows)}
-          error={refusalShown(contextWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
+          error={refusalShown(contextWrite.refusal, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (
             <ChoiceBar
@@ -391,28 +407,13 @@ function AgentsSection({
   /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
   const drawn = useAgentDefault();
   const offered = useOfferedModels(signedIn);
-  const models = offered.rows?.models;
-  const modelsFailed = offered.status === HOST_READ_STATUS.FAILED;
-  // Whether the catalog's Retry is out, which the menu says while it is.
-  const [modelsRetrying, setModelsRetrying] = useState(false);
-  const retryModels = offered.retry;
-  const onRetryModels = useCallback(() => {
-    setModelsRetrying(true);
-    retryModels().then(() => setModelsRetrying(false));
-  }, [retryModels]);
-
-  const write = useCallback(
-    (next: ModelChoice): Promise<ActionResult> =>
-      act(ACT_KIND.AGENTS_DEFAULT_WRITE, next)
-        .catch(() => undefined)
-        .then((answer) =>
-          answer === undefined || "failure" in answer ? WRITE_REFUSED : WRITE_ACCEPTED,
-        ),
-    [act],
-  );
+  const models = offered.data?.models;
+  const modelsFailed = offered.isError;
+  // Note that the catalog's Retry is out while its mutation is pending, which the menu says while it is.
+  const { mutate: retryModels, isPending: modelsRetrying } = useMutation(modelsRetryMutation());
+  const onRetryModels = useCallback(() => retryModels(), [retryModels]);
 
   return (
     <SettingsSection title="Default model">
@@ -425,9 +426,8 @@ function AgentsSection({
           ownKeys={ownKeys ?? new Map()}
           modelsRetrying={modelsRetrying}
           onRetryModels={onRetryModels}
-          onChange={write}
         />
-      ) : drawn.status === HOST_READ_STATUS.FAILED ? (
+      ) : drawn.failed ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AGENT_DEFAULTS_READ)}

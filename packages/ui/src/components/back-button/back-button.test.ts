@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@repo/brand";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -43,14 +41,12 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
-/** Draws `element` on a registry of its own, as an app's root provides one. */
+/** Draws `element` on a root of its own. */
 function draw(element: ReactElement): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, element)),
-  );
+  act(() => root.render(element));
 }
 
 /** A way back to the inbox drawn in `look`, and how many times it went back. */

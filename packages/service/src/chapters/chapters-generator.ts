@@ -5,7 +5,7 @@ import {
   type PullRequestChaptersFailure,
 } from "@repo/database/pull-request-chapters-vocabulary";
 import type { AgentChangedFile } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { type ChaptersModelId, chaptersModelOn } from "@repo/features/chapters-model-choice";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
@@ -74,10 +74,9 @@ import {
  *
  * The model is a seam (`ChaptersModel`), as an agent's title model is:
  * production reaches the provider on the API key the member who pressed
- * Generate saved, never ours: on the Claude model they chose in Settings,
- * Haiku unless they changed it (`chaptersModelOf`,
- * `@repo/features/chapters-model-choice`), where they saved an Anthropic
- * key, and on OpenAI's model of the same tier where they saved only an
+ * Generate saved, never ours: on the Claude model the route names, Haiku
+ * (`chaptersModelOf`, `@repo/features/chapters-model-choice`), where they
+ * saved an Anthropic key, and on OpenAI's model of the same tier where they saved only an
  * OpenAI key; a test hands in a scripted model. The whole generation is bounded in time
  * (`CHAPTERS_BOUNDS.TIMEOUT`), and every way it fails is one of the store's
  * four kinds (`PULL_REQUEST_CHAPTERS_FAILURE`). A failure is logged by its
@@ -101,13 +100,6 @@ export const CHAPTERS_BOUNDS = {
   /** How hard the model is asked to think: grouping and judging risk earn more than a title's least. */
   EFFORT: "medium",
 } as const;
-
-/** OpenAI's model of each Claude choice's tier, which an account holding only an OpenAI key tells chapters on. */
-const OPENAI_CHAPTERS_MODEL = {
-  [CHAPTERS_MODEL.HAIKU]: "gpt-6-luna",
-  [CHAPTERS_MODEL.SONNET]: "gpt-6.1-sol",
-  [CHAPTERS_MODEL.OPUS]: "gpt-6-astra",
-} as const satisfies Record<ChaptersModelId, string>;
 
 /** The AI SDK's word for a call the provider stopped on its own policy, as Anthropic's refusal reads. */
 const FINISH_REFUSED = "content-filter";
@@ -391,8 +383,8 @@ function unseen(each: ChapterHunk): boolean {
 
 /**
  * The model chapters are told on, on the presser's own API key (`ownKeyOf`):
- * the Claude model they chose on an Anthropic key, and OpenAI's of the
- * same tier on an OpenAI key, since Settings offers Claude's alone. Its id
+ * the Claude model named on an Anthropic key, and OpenAI's of the same
+ * tier on an OpenAI key (`chaptersModelOn`). Its id
  * is the provider's own, which the chapters' row names.
  */
 export function chaptersModelOf(
@@ -405,11 +397,11 @@ export function chaptersModelOf(
     apiKey: Redacted.value(own.key),
     ...(fetch === undefined ? undefined : { fetch }),
   };
+  const id = chaptersModelOn(own.provider, modelId);
   if (own.provider === MODEL_PROVIDER.ANTHROPIC) {
-    return { id: modelId, model: createAnthropic(settings)(modelId) };
+    return { id, model: createAnthropic(settings)(id) };
   }
-  const openAiId = OPENAI_CHAPTERS_MODEL[modelId];
-  return { id: openAiId, model: createOpenAI(settings).responses(openAiId) };
+  return { id, model: createOpenAI(settings).responses(id) };
 }
 
 /**

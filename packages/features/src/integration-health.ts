@@ -3,8 +3,6 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
-  type IntegrationToolAnnotations,
-  type IntegrationToolParameter,
   type IntegrationToolsProblemReason,
 } from "./integration-wire.js";
 
@@ -15,7 +13,7 @@ import {
  * which says nothing of whether the provider's MCP server takes it: Slack's
  * refuses a token from an app whose MCP access is off, and the grant still
  * stands. So a surface says a provider is connected only once its server
- * answered with its tools, and draws its count; one whose server answered
+ * answered with its tools; one whose server answered
  * why it would not is a problem, said in a sentence of ours, with the
  * server's message, where it sent one, quoted on a second line that names
  * it (`saidWords`), never inside our sentence. A refusal, or the server's own error,
@@ -26,19 +24,6 @@ import {
  * answer says nothing of the server, so a surface says the tools could not be
  * read and offers to read them again, never that the connection works.
  */
-
-/**
- * One tool as a list draws it: the title a person reads where its server
- * gave one, the hints its server annotated it with where it sent any, and the
- * arguments it takes where its server's input schema was readable.
- */
-export interface IntegrationTool {
-  readonly name: string;
-  readonly title?: string;
-  readonly description: string;
-  readonly annotations?: IntegrationToolAnnotations;
-  readonly parameters?: readonly IntegrationToolParameter[];
-}
 
 /** How far a connected provider's server is known to work. */
 export const CONNECTION_HEALTH = {
@@ -53,7 +38,6 @@ export const CONNECTION_HEALTH = {
 } as const;
 
 export type ConnectionHealth =
-  | { readonly kind: typeof CONNECTION_HEALTH.WORKING; readonly tools: readonly IntegrationTool[] }
   | {
       readonly kind: typeof CONNECTION_HEALTH.BROKEN;
       readonly problem: string;
@@ -62,12 +46,12 @@ export type ConnectionHealth =
       /** Whether reconnecting mends it: a refusal or the server's own error, never an outage. */
       readonly reconnect: boolean;
     }
-  | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.FAILED };
-
-/** How a connected server's count of tools reads. */
-export function toolsCount(count: number): string {
-  return count === 1 ? "1 tool" : `${count} tools`;
-}
+  | {
+      readonly kind:
+        | typeof CONNECTION_HEALTH.WORKING
+        | typeof CONNECTION_HEALTH.CHECKING
+        | typeof CONNECTION_HEALTH.FAILED;
+    };
 
 /**
  * Someone else's words as a line of their own under a sentence of ours:
@@ -111,5 +95,5 @@ export function connectionHealth(
         reason === INTEGRATION_TOOLS_PROBLEM.REJECTED,
     };
   }
-  return { kind: CONNECTION_HEALTH.WORKING, tools: read.tools };
+  return { kind: CONNECTION_HEALTH.WORKING };
 }

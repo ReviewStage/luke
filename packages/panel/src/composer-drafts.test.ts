@@ -14,9 +14,9 @@ import {
 } from "@repo/features/inbox-wire";
 import type { Task } from "@repo/features/task-wire";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
-import { sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { agentTab, draftTab, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import { Clock, Context, Effect } from "effect";
+import { Clock, Context, Effect, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
@@ -27,6 +27,7 @@ import {
   DRAFT_PLACE,
   type DraftControl,
   type DraftWriter,
+  keptLines,
   useDraft,
   useDraftsOwner,
   useDraftWriter,
@@ -177,7 +178,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       account,
     }: { onTask?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
-    const agentTab = { agent: open.agent.id };
+    const openTab = agentTab(open.agent.id);
     const tasks = tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       tasks: [INVITES.plan, BILLING.plan],
@@ -185,8 +186,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [agentTab],
-        tab: onTask ? undefined : agentTab,
+        tabs: [openTab],
+        tab: onTask ? undefined : openTab,
         openAgents: [open.agent.id],
       },
       agents: agentsControl({
@@ -368,6 +369,68 @@ test("a draft outlasts a reload of the window, words and mark alike", async () =
   assert.equal(after.rowDrafted(INVITES.plan.name), true);
   await after.show(INVITES);
   assert.equal(after.box(), "Expire invites after a week");
+});
+
+test("lines a window keeps for its account outlast a reload, but for what storage leaves out, and reach no other account", async () => {
+  const lines = keptLines<
+    { readonly id: string; readonly words: string; readonly files: readonly string[] },
+    { readonly id: string; readonly words: string }
+  >({
+    key: "app.testKeptLines",
+    kept: Schema.Struct({ id: Schema.String, words: Schema.String }),
+    toKept: ({ files: _files, ...kept }) => kept,
+    fromKept: (kept) => ({ ...kept, files: [] }),
+    idOf: (kept) => kept.id,
+  });
+  const signedIn = (account: { readonly id: string; readonly email: string }) => {
+    const registry = AtomRegistry.make();
+    const Owner = () => {
+      useDraftsOwner(account);
+      return null;
+    };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    act(() => root.render(onRegistry(registry, createElement(Owner))));
+    return registry;
+  };
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+
+  signedIn(ada).set(lines, [{ id: "held-1", words: "Say who it goes to.", files: ["invite.png"] }]);
+
+  assert.deepEqual(signedIn(ada).get(lines), [
+    { id: "held-1", words: "Say who it goes to.", files: [] },
+  ]);
+  assert.deepEqual(signedIn({ id: "account-grace", email: "grace@acme.test" }).get(lines), []);
+});
+
+test("a window that read kept lines before another let them go never writes them back as it adds its own", () => {
+  const lines = keptLines<{ readonly id: string }, { readonly id: string }>({
+    key: "app.testKeptLinesStale",
+    kept: Schema.Struct({ id: Schema.String }),
+    toKept: (line) => line,
+    fromKept: (kept) => kept,
+    idOf: (kept) => kept.id,
+  });
+  const signedIn = () => {
+    const registry = AtomRegistry.make();
+    const Owner = () => {
+      useDraftsOwner({ id: "account-ada", email: "ada@acme.test" });
+      return null;
+    };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    act(() => root.render(onRegistry(registry, createElement(Owner))));
+    return registry;
+  };
+  const sending = signedIn();
+  sending.set(lines, [{ id: "sent" }]);
+  const stale = signedIn();
+  assert.deepEqual(stale.get(lines), [{ id: "sent" }]);
+
+  sending.set(lines, []);
+  stale.set(lines, [...stale.get(lines), { id: "new" }]);
+
+  assert.deepEqual(signedIn().get(lines), [{ id: "new" }]);
 });
 
 test("a message sent takes its words out of the draft, so the box comes back empty and nothing is marked", async () => {
@@ -620,7 +683,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   fakeAppBridge({});
   const pin = {
     task: open.plan.id,
-    tab: { agent: open.agent.id },
+    tab: agentTab(open.agent.id),
     label: "Agent",
     at: 5,
     model: open.agent.model,
@@ -779,7 +842,7 @@ async function columnOn(
       ...tasksControl().mainTabs,
       tabs,
       tab: chosen,
-      openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
+      openAgents: tabs.some((tab) => sameTab(tab, agentTab(INVITES.agent.id)))
         ? [INVITES.agent.id]
         : [],
     },
@@ -850,10 +913,10 @@ test("a draft agent's first message marks its tab while another is chosen, never
       },
     ]),
   );
-  const tabs = [{ draft: DRAFT_KEY }];
+  const tabs = [draftTab(DRAFT_KEY)];
   for (const [chosen, draftMarked] of [
     [undefined, true],
-    [{ draft: DRAFT_KEY }, false],
+    [draftTab(DRAFT_KEY), false],
   ] as const) {
     const column = await columnOn(tabs, chosen, INVITES.agent, "Write the expiry job");
     assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), draftMarked);
@@ -863,7 +926,7 @@ test("a draft agent's first message marks its tab while another is chosen, never
 });
 
 test("a draft agent's tab holding no words wears no Draft pencil", async () => {
-  const column = await columnOn([{ draft: DRAFT_KEY }], undefined);
+  const column = await columnOn([draftTab(DRAFT_KEY)], undefined);
   assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
 });
 
@@ -879,7 +942,7 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
+  const marked = await columnOn([agentTab(INVITES.agent.id)], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });
@@ -1051,7 +1114,8 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
-  await settle();
+  // Note that the feed draws once its rows reach its query.
+  await vi.waitFor(() => assert.equal(control?.drawn, true));
   assert.equal(control?.draftOf(older).note, "Reply later", "the feed drawing first drops nothing");
 
   await act(async () =>
@@ -1060,8 +1124,9 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
       [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: { rows: [mine] } },
     }),
   );
-  await settle();
-  assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone");
+  await vi.waitFor(() =>
+    assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone"),
+  );
 });
 
 test("another item landing in the inbox leaves the answer being written on one as it was", async () => {

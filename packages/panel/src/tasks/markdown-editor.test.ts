@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { BLOCK_MENU_GROUP } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -8,15 +10,20 @@ import { Effect } from "effect";
 import { act, createElement, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { type PlanEditorHandle, SLASH_INSERT } from "../plan-editor/contract.js";
+import { type DescriptionEditorHandle, SLASH_INSERT } from "../description-editor/contract.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
 
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
+
 /**
- * markdown-editor.test.ts -- the plan's editor mounted by a document that
- * takes none of the plan's options, as a pull request's description or a
+ * markdown-editor.test.ts -- the description's editor mounted by a document that
+ * takes none of the description's options, as a pull request's description or a
  * review's comment mounts it: a GitHub-flavored body handed back byte for
  * byte, and changed only where it is edited; the whole format toolbar over
  * selected words; and the `/` menu offering the document's own block, less
@@ -24,7 +31,7 @@ import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
  * Synthetic body.
  */
 
-/** A pull request's description as GitHub holds it, every construct its Markdown has that the plan's text has not among it. */
+/** A pull request's description as GitHub holds it, every construct its Markdown has that the description's text has not among it. */
 const BODY = [
   "## Summary",
   "",
@@ -90,26 +97,28 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on `markdown` with none of the plan's options but those given, each draft it hands over kept. */
+/** The editor mounted on `markdown` with none of the description's options but those given, each draft it hands over kept. */
 function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   const drafts: string[] = [];
-  const handle: RefObject<PlanEditorHandle | undefined> = { current: undefined };
+  const handle: RefObject<DescriptionEditorHandle | undefined> = { current: undefined };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() =>
     root.render(
-      createElement(MarkdownEditor, {
-        markdown,
-        label: "Description",
-        roomLabel: "Editing the description",
-        placeholder: "Add a description",
-        className: "markdown",
-        onDraft: (draft) => drafts.push(draft),
-        onFinish: () => undefined,
-        handle,
-        ...options,
-      }),
+      withQueryClient(
+        createElement(MarkdownEditor, {
+          markdown,
+          label: "Description",
+          roomLabel: "Editing the description",
+          placeholder: "Add a description",
+          className: "markdown",
+          onDraft: (draft) => drafts.push(draft),
+          onFinish: () => undefined,
+          handle,
+          ...options,
+        }),
+      ),
     ),
   );
   const element = container.querySelector<TiptapEditorHTMLElement>(".ProseMirror");
@@ -146,7 +155,7 @@ function offered(container: HTMLElement): string[] {
   );
 }
 
-test("a document with none of the plan's options hands a GitHub body back byte for byte, and a word changed in one paragraph changes that paragraph's source alone", () => {
+test("a document with none of the description's options hands a GitHub body back byte for byte, and a word changed in one paragraph changes that paragraph's source alone", () => {
   const { editor, handle, last } = mounted(BODY);
 
   assert.equal(handle.markdown(), BODY);
@@ -159,7 +168,19 @@ test("a document with none of the plan's options hands a GitHub body back byte f
   assert.equal(last(), BODY.replace("This lifts the editor", "This moves the editor"));
 });
 
-test("words selected in a document with none of the plan's options raise the whole format toolbar, Turn into among it, and no Comment", () => {
+test("a task item's box in the editor is the shared checkbox the read view draws, named by its item's words, and a press on it ticks that item alone", () => {
+  const { container, last } = mounted(BODY);
+  const box =
+    container.querySelector<HTMLElement>(
+      '[role="checkbox"][aria-label="A description mounts it"]',
+    ) ?? assert.fail("the item's box is drawn");
+
+  act(() => box.click());
+
+  assert.equal(last(), BODY.replace("- [ ] A description", "- [x] A description"));
+});
+
+test("words selected in a document with none of the description's options raise the whole format toolbar, Turn into among it, and no Comment", () => {
   const { container, editor } = mounted(BODY);
 
   act(() => {
@@ -327,7 +348,7 @@ test("while the / menu stands the text is a combobox naming the menu and its hig
   assert.deepEqual(named(editor), TEXTBOX);
 });
 
-test("while the @ list stands over a plan's text the text is a combobox naming the list and its highlighted row, and a textbox again once the list closes", () => {
+test("while the @ list stands over a description's text the text is a combobox naming the list and its highlighted row, and a textbox again once the list closes", () => {
   const { container, editor } = mounted("## Rollout\n\nIntro.\n", {
     mentions: {
       doors: {

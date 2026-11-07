@@ -7,7 +7,7 @@ import {
   deleteTask,
   listTasks,
   readTask,
-  savePlanText,
+  saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
@@ -19,25 +19,25 @@ import {
   type TestTask,
 } from "@repo/database/testing";
 import { noDatabase } from "@repo/database/testing/no-database";
-import { planSections } from "@repo/features/plan-document";
-import type { PlanNote } from "@repo/features/plan-template";
-import { type PlanDocument, TASK_STATUS } from "@repo/features/task-wire";
+import { descriptionSections } from "@repo/features/description-document";
+import type { DescriptionNote } from "@repo/features/description-notes";
+import { type DescriptionDocument, TASK_STATUS } from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { INVITATIONS_TEXT, makeDocumentTask } from "../testing/plan-documents.js";
+import { INVITATIONS_TEXT, makeDocumentTask } from "../testing/description-documents.js";
 import { added } from "../testing/task-contents.js";
 import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
-  type PlanDocumentBinding,
-  type PlanSaveResult,
+  DESCRIPTION_SAVE_REFUSAL,
+  DESCRIPTION_SAVE_STATUS,
+  type DescriptionDocumentBinding,
+  type DescriptionSaveResult,
   saveNotes,
-} from "./plan-notes.js";
+} from "./description-notes.js";
 
 /**
  * The named tasks and their one document, through the store's public
- * functions and `saveNotes`, the plan's one write, against a real dialect.
- * Every plan is one Markdown text: each note lands in the section under the
+ * functions and `saveNotes`, the description's one write, against a real dialect.
+ * Every description is one Markdown text: each note lands in the section under the
  * heading it names and nowhere else, and what is saved is the text the window
  * and the brain both read (`readTask`). Nothing but the binding the
  * service built names the account and the task, so no note can move a save
@@ -60,8 +60,8 @@ const INVITATIONS_CONTEXT =
 
 const INVITATIONS_HARD_PART = "- A withdrawn invite's link never grants access.";
 
-/** Notes that write an invitations draft into a plan: its context, a hard part, an open question, and an assumption. */
-const INVITATIONS_NOTES: readonly PlanNote[] = [
+/** Notes that write an invitations draft into a description: its context, a hard part, an open question, and an assumption. */
+const INVITATIONS_NOTES: readonly DescriptionNote[] = [
   added("Context", INVITATIONS_CONTEXT),
   added("Hard parts", INVITATIONS_HARD_PART),
   added("Open questions", "- Who can withdraw an invite?"),
@@ -71,8 +71,8 @@ const INVITATIONS_NOTES: readonly PlanNote[] = [
 const EMPTY_STATE_CONTEXT =
   "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.";
 
-/** Notes that write a small copy change into a plan: its context and its goal. */
-const EMPTY_STATE_NOTES: readonly PlanNote[] = [
+/** Notes that write a small copy change into a description: its context and its goal. */
+const EMPTY_STATE_NOTES: readonly DescriptionNote[] = [
   added("Context", EMPTY_STATE_CONTEXT),
   added("Goal", 'The empty list reads "No plans yet. Start one with New plan."'),
 ];
@@ -85,13 +85,13 @@ const openUser = Effect.gen(function* () {
 });
 
 /** The binding the service builds for a task: its account and its id. */
-function bound(userId: string, taskId: string): PlanDocumentBinding {
+function bound(userId: string, taskId: string): DescriptionDocumentBinding {
   return { userId, taskId };
 }
 
 /** The document a saved result carries, failing the test on any other outcome. */
-function savedDocument(result: PlanSaveResult): PlanDocument {
-  if (result.status !== PLAN_SAVE_STATUS.SAVED) {
+function savedDocument(result: DescriptionSaveResult): DescriptionDocument {
+  if (result.status !== DESCRIPTION_SAVE_STATUS.SAVED) {
     return assert.fail(`expected a save, got: ${JSON.stringify(result)}`);
   }
   return result.document;
@@ -108,7 +108,7 @@ const resumedDocument = (userId: string, taskId: string) =>
 
 /** One section of a text as it stands, its heading line among its lines, failing the test where the text has none under that heading. */
 function sectionText(text: string, heading: string): string {
-  const section = planSections(text).find((each) => each.heading === heading);
+  const section = descriptionSections(text).find((each) => each.heading === heading);
   return section?.text ?? assert.fail(`the text holds no section under ${heading}`);
 }
 
@@ -261,8 +261,8 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         );
         assert.deepEqual(yield* resumedDocument(starter, started.id), saved);
         const edited = `${saved.body}\n## Rollout\n\nBehind a flag first.\n`;
-        assert.equal(Option.isNone(yield* savePlanText(stranger, started.id, edited)), true);
-        assert.equal(Option.isSome(yield* savePlanText(teammate, started.id, edited)), true);
+        assert.equal(Option.isNone(yield* saveDescriptionText(stranger, started.id, edited)), true);
+        assert.equal(Option.isSome(yield* saveDescriptionText(teammate, started.id, edited)), true);
         assert.equal((yield* resumedDocument(starter, started.id)).body, edited);
 
         assert.deepEqual(yield* listTasks(stranger), []);
@@ -285,8 +285,8 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       const result = yield* saveNotes(bound(intruder, taskId), EMPTY_STATE_NOTES);
 
       assert.deepEqual(result, {
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.NO_TASK,
+        status: DESCRIPTION_SAVE_STATUS.NOT_SAVED,
+        reason: DESCRIPTION_SAVE_REFUSAL.NO_TASK,
       });
       assert.equal(Option.isNone(yield* readTask(intruder, taskId)), true);
       assert.equal(yield* deleteTask(intruder, taskId), false);
@@ -395,8 +395,8 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       );
 
       assert.deepEqual(result, {
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.UNAVAILABLE,
+        status: DESCRIPTION_SAVE_STATUS.NOT_SAVED,
+        reason: DESCRIPTION_SAVE_REFUSAL.UNAVAILABLE,
       });
       assert.deepEqual(yield* resumedDocument(userId, taskId), before);
     }),

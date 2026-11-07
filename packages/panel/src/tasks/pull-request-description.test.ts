@@ -23,7 +23,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -42,7 +42,7 @@ import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
 /**
  * pull-request-description.test.ts -- a pull request's description edited
  * in place from its Pull request tab: a click on GitHub's rendering opens
- * the plan's editor on the Markdown where the member may edit it, and none
+ * the description's editor on the Markdown where the member may edit it, and none
  * where they may not; Esc with nothing changed writes nothing; a change is
  * written to GitHub with the words it began from, and the description is
  * drawn again from the read that follows; and where the description changed
@@ -114,7 +114,8 @@ let changeHeld: Promise<void> | undefined;
 beforeAll(async () => {
   bundles = await Effect.runPromise(
     landedBundles({
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
   await Effect.runPromise(markdownHtmlParserLanded);
@@ -243,9 +244,13 @@ function description(container: HTMLElement): HTMLElement {
  * words clicked, and on no element of the editor's.
  */
 async function clickWords(container: HTMLElement, words: string, at = 0): Promise<void> {
-  const target =
-    [...description(container).querySelectorAll("p")].find((each) => each.textContent === words) ??
-    assert.fail(`${words} are drawn`);
+  // Note that the words stand once the pull request's read reaches its query.
+  const target = await vi.waitFor(
+    () =>
+      [...description(container).querySelectorAll("p")].find(
+        (each) => each.textContent === words,
+      ) ?? assert.fail(`${words} are drawn`),
+  );
   const text = target.firstChild ?? assert.fail("the words are a text node");
   Object.defineProperty(document, "caretRangeFromPoint", {
     configurable: true,
@@ -359,7 +364,8 @@ test("a description changed on GitHub keeps the draft open and says so, and Relo
   const kept = editorIn(container) ?? assert.fail("the editor stays open");
   assert.match(kept.textContent ?? "", /seven days\. Mine\./u, "the draft stays");
   const alert =
-    description(container).querySelector(".plan-editor-note") ?? assert.fail("a refusal is said");
+    description(container).querySelector(".description-editor-note") ??
+    assert.fail("a refusal is said");
   assert.match(alert.textContent ?? "", /changed on GitHub/u);
   assert.match(announcedAsAlert(), /changed on GitHub/u, "and announced as an alert");
 
@@ -431,5 +437,7 @@ test("leaving while an edit is on its way to GitHub writes it once, and holds no
   changeHeld = undefined;
   const again = await drawTab();
   assert.equal(editorIn(again), null, "no refused draft opens again");
-  assert.match(description(again).textContent ?? "", /Accepted ones stay\./u);
+  await vi.waitFor(() =>
+    assert.match(description(again).textContent ?? "", /Accepted ones stay\./u),
+  );
 });

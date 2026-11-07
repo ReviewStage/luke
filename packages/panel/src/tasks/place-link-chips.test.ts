@@ -18,12 +18,12 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -77,21 +77,7 @@ const TASK: TaskSummary = {
   updatedAt: AT,
   repository: "acme/relay",
   number: 42,
-  agents: {
-    total: 1,
-    working: 1,
-    agents: [
-      {
-        id: AGENT,
-        title: "Expire old invitations",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 
 /** Main's document holding the task, its agent, its page, and an Inbox item waiting on it. */
@@ -103,6 +89,21 @@ const STATE: AppStateSnapshot = (() => {
       ...IDLE_TASKS_VIEW,
       workspaces: [ACME],
       tasks: [TASK],
+      // The task's agent, as the list followed live holds it.
+      taskAgents: [
+        {
+          id: AGENT,
+          planId: TASK_ID,
+          title: "Expire old invitations",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: AGENT_STATUS.RUNNING,
+          createdAt: AT,
+          turnId: null,
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+        },
+      ],
       tasklessAgents: [
         {
           id: TRIAGE_AGENT,
@@ -162,6 +163,8 @@ async function drawn(
     act: (): Promise<FakeActAnswer> =>
       Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined }),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -213,19 +216,21 @@ test("a bare link to a place the window knows is called by its name, the task's 
     [],
   );
 
-  assert.deepEqual(chips(container), [
-    ["plan", "Teammate invitations"],
-    ["plan", "Teammate invitations"],
-    ["page", "Unfurl matrix"],
-    ["place", "Keep expired links?"],
-    ["agent", "Expire old invitations"],
-    ["page", "Unfurl matrix"],
-    ["place", "Keep expired links?"],
-    ["place", "Message from Expire old invitations"],
-    ["person", "Sam Okafor"],
-    ["agent", "Triage new Sentry issues"],
-    ["place", "Nightly triage"],
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(chips(container), [
+      ["plan", "Teammate invitations"],
+      ["plan", "Teammate invitations"],
+      ["page", "Unfurl matrix"],
+      ["place", "Keep expired links?"],
+      ["agent", "Expire old invitations"],
+      ["page", "Unfurl matrix"],
+      ["place", "Keep expired links?"],
+      ["place", "Message from Expire old invitations"],
+      ["person", "Sam Okafor"],
+      ["agent", "Triage new Sentry issues"],
+      ["place", "Nightly triage"],
+    ]),
+  );
   assert.deepEqual(
     [...container.querySelectorAll("a")].map((link) => link.textContent),
     [],

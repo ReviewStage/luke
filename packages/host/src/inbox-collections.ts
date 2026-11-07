@@ -38,6 +38,8 @@ export const INBOX_CHANGE = {
   SETTLED: "settled",
   /** Items marked read or unread, as a reply of the reader's marks its item read. */
   MARKED: "marked",
+  /** The item's reminder set by the reader for an instant, or canceled; whether it is read stands as it was. */
+  REMINDED: "reminded",
   /** The item as the service answered it. */
   ANSWERED: "answered",
 } as const;
@@ -47,13 +49,21 @@ export type InboxChange =
   | {
       readonly kind: typeof INBOX_CHANGE.SETTLED;
       readonly itemId: string;
-      /** What the item becomes, from the item as the read holds it. */
-      readonly item: (item: InboxItem) => InboxItem;
+      /** What the item becomes, from the item as the read holds it; none where the agent has posted over what the reader settled since. */
+      readonly item: (item: InboxItem) => InboxItem | undefined;
     }
   | {
       readonly kind: typeof INBOX_CHANGE.MARKED;
       readonly itemIds: ReadonlySet<string>;
       readonly unread: boolean;
+    }
+  | {
+      readonly kind: typeof INBOX_CHANGE.REMINDED;
+      readonly itemId: string;
+      /** When, in epoch milliseconds; null where the reminder is canceled. */
+      readonly until: number | null;
+      /** When the write was asked, which a canceled reminder comes due at. */
+      readonly at: number;
     }
   | { readonly kind: typeof INBOX_CHANGE.ANSWERED; readonly item: InboxItem };
 
@@ -65,11 +75,38 @@ export interface InboxWritten {
 }
 
 /**
+ * When a reminder standing for `was` comes due once the change is drawn
+ * over it: until the change's instant, or, where the change ends it, until
+ * when it was asked, as the service ends one by bringing the item back
+ * then; one already past, or none, stands as it was.
+ */
+export function remindAtAfter(
+  was: number | null | undefined,
+  change: { readonly until: number | null; readonly at: number },
+): number | undefined {
+  if (change.until !== null) return change.until;
+  if (was === undefined || was === null) return undefined;
+  return Math.min(was, change.at);
+}
+
+/** The item as a reminder change leaves it; none where it stands so already. */
+function remindedItem(
+  item: InboxItem,
+  change: Extract<InboxChange, { readonly kind: typeof INBOX_CHANGE.REMINDED }>,
+): InboxItem | undefined {
+  const until = remindAtAfter(item.remindAt, change);
+  if (item.remindAt === until) return undefined;
+  const { remindAt: _was, ...rest } = item;
+  return until === undefined ? rest : { ...rest, remindAt: until };
+}
+
+/**
  * The item as the change leaves it, from the item as a read holds it; none
  * where it leaves it alone. Note that a settle leaves an item no longer
- * open alone, and the service's item one changed since, because a change
- * is drawn again over each answer while it stands, and the service's own
- * newer item is what it draws.
+ * open alone, and one the agent has posted over since, as an answered item
+ * the agent's next post opens again, and the service's item one changed
+ * since, because a change is drawn again over each answer while it stands,
+ * and the service's own newer item is what it draws.
  */
 function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefined {
   switch (change.kind) {
@@ -78,9 +115,13 @@ function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefine
         ? change.item(item)
         : undefined;
     case INBOX_CHANGE.MARKED:
-      return change.itemIds.has(item.id) && (item.unread === true) !== change.unread
-        ? { ...item, unread: change.unread }
+      // Note that a mark sets the reader's own mark as well, since Open reads it on a closed thread.
+      return change.itemIds.has(item.id) &&
+        ((item.unread === true) !== change.unread || (item.markedUnread === true) !== change.unread)
+        ? { ...item, unread: change.unread, markedUnread: change.unread }
         : undefined;
+    case INBOX_CHANGE.REMINDED:
+      return item.id === change.itemId ? remindedItem(item, change) : undefined;
     case INBOX_CHANGE.ANSWERED:
       return item.id === change.item.id && item.updatedAt <= change.item.updatedAt
         ? change.item
@@ -95,6 +136,8 @@ export function changedIds(change: InboxChange): readonly string[] {
       return [change.itemId];
     case INBOX_CHANGE.MARKED:
       return [...change.itemIds];
+    case INBOX_CHANGE.REMINDED:
+      return [change.itemId];
     case INBOX_CHANGE.ANSWERED:
       return [change.item.id];
   }

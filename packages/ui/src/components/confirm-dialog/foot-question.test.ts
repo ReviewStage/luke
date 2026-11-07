@@ -5,6 +5,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { answerOldest, onQueryClient, useMutationAct } from "../../testing/confirm-act.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 import { Dialog } from "../dialog/dialog.js";
 import { DialogActions } from "../dialog/dialog-actions.js";
@@ -52,11 +53,12 @@ function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }
   const [key, setKey] = useState(true);
   const confirm = useConfirmDialog(
     { subject: key, surfaceOpen: true },
-    () =>
+    useMutationAct(() =>
       new Promise<ActionResult>((answer) => answers.push(answer)).then((result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setKey(false);
         return result;
       }),
+    ),
     () => FAILURE,
   );
   return createElement(Dialog, {
@@ -133,14 +135,11 @@ function asked() {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(KeyDialog, { answers, onDone })));
+  act(() => root.render(onQueryClient(createElement(KeyDialog, { answers, onDone }))));
   const opener = button("Delete key") ?? assert.fail("no opener");
   opener.focus();
   act(() => opener.click());
-  const settle = async (result: ActionResult) => {
-    const answer = answers.shift() ?? assert.fail("no answer pending");
-    await act(async () => answer(result));
-  };
+  const settle = (result: ActionResult) => answerOldest(answers, result);
   return { opener, onDone, settle };
 }
 

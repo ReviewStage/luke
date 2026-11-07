@@ -3,7 +3,7 @@
  *
  * Note that this module imports nothing, because Sentry's options reach it
  * (`sentry-addresses.ts`, beneath the service's `sentry.ts` and every
- * client's `Sentry.init`), and an eve root loads those before its agent.
+ * client's `Sentry.init`), which load before anything else a process runs.
  */
 
 /**

@@ -4,10 +4,9 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
-  type InstalledSkillFileInput,
+  type InstalledSkillFile,
   type InstalledSkillOwner,
   installSkill,
-  setInstalledSkillEnabled,
 } from "@repo/database/models/installed-skill-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -31,7 +30,7 @@ import { nativeSkills } from "./skills.js";
  * over the real migrations on PGlite and a GitHub answering the agent's
  * repository's skills: the workspace's, then the member's personal ones, a
  * name offered once by the earliest, less a name the repository holds where
- * the harness reads it; a skill turned off left out; none while the member
+ * the harness reads it; none while the member
  * has the Skills experiment off; and an installed read that fails offering
  * none.
  *
@@ -78,7 +77,7 @@ const install = (
   owner: InstalledSkillOwner,
   name: string,
   words: string,
-  more: readonly InstalledSkillFileInput[] = [],
+  more: readonly InstalledSkillFile[] = [],
 ) =>
   Effect.map(
     installSkill(userId, {
@@ -108,7 +107,7 @@ const startAgent = (repository: string | null, skillsOn = true) =>
       idempotencyKey: `start-${task.id}`,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: null,
       repository,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -182,24 +181,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (i
           skillText("release-notes", "The workspace's release notes."),
         );
       }),
-  );
-
-  it.effect("leaves out an installed skill turned off", () =>
-    Effect.gen(function* () {
-      const { userId, agent, target, workspace } = yield* startAgent(null);
-      const off = yield* install(userId, workspace, "release-notes", "Turned off.");
-      yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-      yield* setInstalledSkillEnabled(userId, off.id, false);
-
-      const skills = yield* nativeSkills(target, agent, [SKILL_ROOT.AGENTS]).pipe(
-        Effect.provide(repositoryWithSkills([])),
-      );
-
-      assert.deepEqual(
-        skills.map((skill) => skill.name),
-        ["pr-style"],
-      );
-    }),
   );
 
   it.effect("hands none of the installed skills while the member has Skills off", () =>

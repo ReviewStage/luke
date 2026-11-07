@@ -6,8 +6,8 @@
  * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
  */
 
+import { DESCRIPTION_MARKDOWN_MAX_CHARS } from "@repo/features/description-markdown";
 import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
-import { PLAN_MARKDOWN_MAX_CHARS } from "@repo/features/plan-markdown";
 import {
   LID_STATE,
   MICROPHONE_STATUS,
@@ -26,7 +26,7 @@ import { WINDOW_SURFACE_ACT_KIND } from "./kinds.js";
  * the act rather than sent by the panel, so the act can open no other
  * address.
  */
-export const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+export const CONTACT_MAILTO = "mailto:founders@vespin.dev";
 
 /**
  * The longest text a File tab copies or saves of its file: the service
@@ -138,7 +138,7 @@ export const windowSurfaceActsContract = {
     .input(
       exactInput(
         EffectSchema.Struct({
-          words: textUpTo(Math.max(PLAN_MARKDOWN_MAX_CHARS, FILE_TEXT_MAX_CHARS)),
+          words: textUpTo(Math.max(DESCRIPTION_MARKDOWN_MAX_CHARS, FILE_TEXT_MAX_CHARS)),
         }),
       ),
     )
@@ -167,11 +167,6 @@ export const windowSurfaceActsContract = {
     "Could not tell this system about unsaved work.",
   )
     .input(exactInput(EffectSchema.Struct({ holding: EffectSchema.Boolean })))
-    .output(EffectSchema.Void),
-  [WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL]: actProcedure(
-    "Could not show or hide this build's label.",
-  )
-    .input(exactInput(EffectSchema.Struct({ shown: EffectSchema.Boolean })))
     .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS]: actProcedure(
     "Could not tell the menu bar what this window offers.",

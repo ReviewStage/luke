@@ -2,22 +2,23 @@ import { accountGateOpen, SignInFailed } from "@repo/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
-  isAccountProvider,
   signedInAccountId,
 } from "@repo/credentials/snapshot";
 import type { AccountToken, CallCredential } from "@repo/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@repo/features/analytics";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, invalid, RefusedRefusal } from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal } from "@repo/gateway";
 import { Effect, FiberSet, Result, type Scope, Stream } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
 import type { AppAccessSlice, SessionReplayState } from "./app-state.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
+import type { ACCOUNT_ACTS } from "./contract/index.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource } from "./effect/seams.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import type { HostActTable } from "./host-acts.js";
 
 /** What a refused account step says, worded by the step alone. */
 const SIGN_IN_REFUSED = "the sign-in did not finish";
@@ -37,6 +38,8 @@ interface AccountLinks {
 }
 
 export interface AccountComposer extends Composer {
+  /** The account's declared asks, which a window's act port answers directly. */
+  readonly acts: HostActTable<typeof ACCOUNT_ACTS>;
   /** The account's session, as the shell's account source opened it. */
   readonly session: AccountSession;
   snapshot: () => AccountSnapshot;
@@ -245,7 +248,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
    */
   const signInAnswer = (step: Effect.Effect<AccountSnapshot, Error>) =>
     step.pipe(
-      Effect.map((snapshot) => ({ account: carried(snapshot) })),
+      Effect.map((account) => ({ account })),
       Effect.catch((error) =>
         Effect.sync(() => {
           report(`${SIGN_IN_REFUSED}: ${error.message}`);
@@ -287,32 +290,22 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
       Effect.succeed({ account: carried(session.snapshot()) }),
-    [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
-      Effect.gen(function* () {
-        const provider = params.provider;
-        if (!isAccountProvider(provider))
-          return yield* invalid("provider is not one this build knows");
-        yield* recordSignInStart;
-        return yield* signInAnswer(session.beginSignIn(provider));
-      }),
-    [GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN]: (params) =>
-      Effect.gen(function* () {
-        const provider = params.provider;
-        if (!isAccountProvider(provider))
-          return yield* invalid("provider is not one this build knows");
-        yield* recordSignInStart;
-        // Whether a session landed, and nothing of it: the account follows on its own event.
-        return { signedIn: yield* refusedAs(SIGN_IN_REFUSED)(session.signInAgain(provider)) };
-      }),
-    [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
+  };
+
+  const acts: HostActTable<typeof ACCOUNT_ACTS> = {
+    ACCOUNT_BEGIN_SIGN_IN: ({ provider }) =>
+      Effect.andThen(recordSignInStart, signInAnswer(session.beginSignIn(provider))),
+    // Whether a session landed, and nothing of it: the account follows on its own event.
+    ACCOUNT_SIGN_IN_AGAIN: ({ provider }) =>
+      Effect.andThen(recordSignInStart, refusedAs(SIGN_IN_REFUSED)(session.signInAgain(provider))),
+    ACCOUNT_CANCEL_SIGN_IN: () =>
       Effect.sync(() => {
         settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
           account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
         });
         session.cancelSignIn();
-        return {};
       }),
-    [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: () =>
+    ACCOUNT_SIGN_OUT: () =>
       Effect.gen(function* () {
         settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
           account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
@@ -321,12 +314,9 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         // authenticated with; queued behind the sign-out it would wait for the
         // next sign-in.
         yield* settings.flushProductEvents;
-        const snapshot = yield* refusedAs(SIGN_OUT_REFUSED)(
-          session.signOut({ revokeRemote: true }),
-        );
-        return { account: carried(snapshot) };
+        return yield* refusedAs(SIGN_OUT_REFUSED)(session.signOut({ revokeRemote: true }));
       }),
-    [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
+    ACCOUNT_DELETE: () =>
       Effect.gen(function* () {
         settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
           account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
@@ -340,14 +330,20 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         // would be interrupted with it, dropping the very reply that is
         // supposed to stand recording down.
         yield* Effect.forkDetach(emitSessionReplay);
-        return { account: carried(snapshot) };
+        return snapshot;
       }),
     // Note that the access is read again before the answer, so a window that
     // drew the grant from it finds the new one there once the press settles.
-    [GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS]: (params) =>
+    ACCOUNT_SUPPORT_ACCESS: ({ grant }) =>
       Effect.gen(function* () {
-        const grant = params.grant;
-        if (typeof grant !== "boolean") return yield* invalid("grant is true or false");
+        // Note that the session is read again first, because a browser's cookie
+        // may name someone else since another tab signed in, and a grant for
+        // anyone but the person the window shows is refused.
+        const pressedFor = signedInAccountId(session.snapshot());
+        yield* session.confirmAccount?.() ?? Effect.void;
+        if (pressedFor === undefined || signedInAccountId(session.snapshot()) !== pressedFor) {
+          return yield* new RefusedRefusal({ message: SUPPORT_ACCESS_REFUSED });
+        }
         const written = yield* Effect.result(accessClient.writeSupportAccess(grant));
         if (Result.isFailure(written)) {
           report(`${SUPPORT_ACCESS_REFUSED}: ${written.failure._tag}`);
@@ -360,6 +356,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 
   return {
     methods,
+    acts,
     session,
     snapshot: session.snapshot,
     signedIn: () => session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN,

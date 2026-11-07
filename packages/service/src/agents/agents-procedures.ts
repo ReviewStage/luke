@@ -39,29 +39,22 @@ import {
   type Agent,
   type AgentCommitted,
   type AgentLine,
-  archiveAgentCommitted,
   deleteAgent,
   hasRepository,
   listAgentLines,
   listWorkspaceAgentLines,
   markAgentReadCommitted,
   nativeRouteOfReached,
-  nativeRuntimesOfReached,
-  pinAgentCommitted,
   readVisibleAgentWorkspace,
-  renameAgentCommitted,
-  updateAgentChoiceCommitted,
-  updateAgentServersCommitted,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
-import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
-import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { runtimeChoiceRefusal } from "@repo/features/agent-runtime-models";
 import {
+  AGENT_ARCHIVER,
   AGENT_BOUNDS,
   AGENT_LIST_ARCHIVED,
   type AgentPullRequest,
@@ -72,13 +65,7 @@ import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
-import {
-  recordServerEvent,
-  recordServerEventIn,
-  SERVER_AGENT_SETTING,
-  SERVER_AGENT_TOOL,
-  SERVER_EVENT,
-} from "../events/server-events.js";
+import { recordServerEventIn, SERVER_AGENT_TOOL, SERVER_EVENT } from "../events/server-events.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import {
   pullRequestByNumber,
@@ -95,7 +82,8 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
-import { controlsAgent, reachedAgentById } from "./agent-reach.js";
+import { archivedAgent, changedAgent } from "./agent-change.js";
+import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPullRequest,
   githubReadRefusal,
@@ -110,12 +98,11 @@ import {
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
 import { rewoundAgent } from "./coder-host/rewind.js";
-import { routedSessions, runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
+import { routedSessions } from "./coder-host/runtime-sessions.js";
 import {
   acceptedAgentChoice,
   placeOfAgent,
   requestedChoice,
-  startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
@@ -130,18 +117,19 @@ import {
   continuedByOf,
   standingsOf,
   standsStopped,
+  stoppedAgent,
   stoppedForGood,
-  stoppedTurn,
   summaryOf,
 } from "./coder-host/stop.js";
+import { startedFromBefore } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
-import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
-import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
+import type { SandboxStopReach } from "./session-sandboxes.js";
+import type { TypedTurn } from "./sessions/agent-sessions.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
-import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
-import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
+import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
+import { listedPage } from "./workspace-agents.js";
+import { runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -152,8 +140,7 @@ export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
 }
 
 /**
- * How long a developer's resume holds the sandbox it wakes: the Terminal
- * relay's idle bound (`terminal/relay.ts`'s `TERMINAL_RELAY_BOUNDS.IDLE`),
+ * How long a developer's resume holds the sandbox it wakes: five minutes,
  * since a resume is a Terminal about to attach, whose own lease takes over
  * within seconds; one that never attaches is stopped by the lease sweep once
  * this lapses past its grace, rather than at Vercel's timeout.
@@ -216,51 +203,9 @@ const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return txid === undefined ? { agent } : { agent, txid };
 });
 
-/**
- * The agent the path names, still standing: its conversation, which a
- * sandbox's lease is held on, and the eve session its sandbox is tagged
- * with, or none where the agent has not run yet. An archived agent
- * is gone, as its tab is, and one on its starter's own GitHub token gives its
- * sandbox to its starter alone.
- */
-const reachedAgentSession = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  id: string,
-): Effect.fn.Return<
-  { readonly conversationId: string; readonly sessionId: string | undefined },
-  HostedRefusal,
-  DatabaseServices
-> {
-  const { agent } = yield* reachedAgentById(userId, id);
-  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-  const [session] = yield* hostedStoreOrUnavailable(
-    standingSessionsOf(agent.userId, [agent.conversationId]),
-  );
-  return { conversationId: agent.conversationId, sessionId: session?.sessionId };
-});
-
-/** The eve session alone of the agent the path names, as `reachedAgentSession` reads it. */
+/** The session alone of the agent the path names, as `reachedAgentSession` reads it. */
 const reachedSession = (userId: string, id: string) =>
   Effect.map(reachedAgentSession(userId, id), ({ sessionId }) => sessionId);
-
-/**
- * A sandbox Vercel could not be asked about, as the upstream's refusal a
- * caller may retry, apart from the store's own unavailable, so the tab can
- * say it was the agent's sandbox that did not answer: Vercel Sandbox's API,
- * or tmux in a sandbox that API answered for. The log names the status
- * Vercel answered, where it answered one.
- */
-function sandboxOrUpstream<A, R>(
-  effect: Effect.Effect<A, SandboxUnavailable, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) =>
-    Effect.andThen(
-      Effect.logWarning(`a terminal's sandbox call failed: ${failure.message}`),
-      Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR),
-    ),
-  );
-}
 
 /** Why a shell could not be had, as the refusal the route answers. */
 function shellRefusal(refusal: ShellRefusal): HostedRefusal {
@@ -353,27 +298,14 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
-  // Which of our own tools the agent is offered, by the rules its runtime narrows them by, and whether its `run_on_mac` would run now.
+  // Whether the agent's `run_on_mac` would run now.
   const workspaceToolsOf = (userId: string, agentId: string) =>
     Effect.gen(function* () {
       const { agent, target } = yield* reachedAgentById(userId, agentId);
       // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
       const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
       if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const runtimes = yield* hostedStoreOrUnavailable(
-        nativeRuntimesOfReached([agent.conversationId]),
-      );
-      const memoryOn = yield* memoryOnFor(agent.userId);
-      const heard = yield* hostedStoreOrUnavailable(heardFromAnotherAccount(target));
-      return {
-        tools: offeredWorkspaceTools({
-          agent,
-          native: runtimes.has(agent.conversationId),
-          memoryOn,
-          heardFromAnotherAccount: heard,
-        }),
-        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
-      };
+      return { runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)) };
     });
   return {
     /**
@@ -381,8 +313,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * the archived ones left out unless `archived=include` asks, narrowed to
      * one repository where the query names one and to agents whose title or
      * task's name holds the query's words where it names some, as the plan
-     * list answers them; a workspace the account is not in is not found, as
-     * a plan is.
+     * list answers them, a page at a time from the query's `offset` with the
+     * next page's offset where more stand, as the agent tools' list pages
+     * (`workspace-agents.ts`); a workspace the account is not in is not
+     * found, as a plan is.
      */
     listOfWorkspace: signedIn.listOfWorkspace.effect(function* ({ input, context }) {
       const workspaceId = input.workspaceId ?? "";
@@ -400,15 +334,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         isWorkspaceMember(context.userId, workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const agents = yield* hostedStoreOrUnavailable(
+      const offset = input.offset ?? 0;
+      const listed = yield* hostedStoreOrUnavailable(
         listWorkspaceAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
-          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS,
+          offset,
+          // One past the bound tells whether a next page stands.
+          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS + 1,
         }),
       );
-      return yield* listedSummaries(context.userId, agents);
+      const { page, nextOffset } = listedPage(listed, offset, AGENT_BOUNDS.MAX_WORKSPACE_AGENTS);
+      const summaries = yield* listedSummaries(context.userId, page);
+      return nextOffset === null ? summaries : { ...summaries, nextOffset };
     }),
     /** The task's agents with their status. */
     listOfTask: signedIn.listOfTask.effect(function* ({ input, context }) {
@@ -425,12 +364,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * An agent started on the task, or the one a retry under the same key
      * already started, on the one start path (`coder-host/start.ts`),
-     * reaching eve as the developer.
+     * reaching the agent's sessions as the developer.
      */
     start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const started = yield* startRequestedAgent(
-        routedSessions<EveTypedTurn>(context.userId),
+        routedSessions<TypedTurn>(context.userId),
         context.userId,
         { taskId },
         input.body,
@@ -469,7 +408,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       }
       const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
       const started = yield* startRequestedAgent(
-        routedSessions<EveTypedTurn>(context.userId),
+        routedSessions<TypedTurn>(context.userId),
         context.userId,
         placeOfAgent(source),
         input.body,
@@ -521,44 +460,27 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
       const { body } = input;
       if ("title" in body) {
-        const { title } = body;
         return yield* committedAgent(
           userId,
-          yield* hostedStoreOrUnavailable(
-            renameAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
-          ),
+          yield* hostedStoreOrUnavailable(changedAgent(userId, agent, { title: body.title })),
         );
       }
       if ("archived" in body) {
-        if (body.archived) {
-          // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-          yield* stoppedForGood(writer, userId, agent);
-        }
-        const archived = yield* hostedStoreOrUnavailable(
-          archiveAgentCommitted(userId, agent.id, body.archived),
-        );
-        // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
-        if (body.archived && Option.isSome(archived)) {
-          yield* stoppedInBackground(seams, [agent]);
-          // Counted only where this write archived an agent standing unarchived, under the member who archived it.
-          if (archived.value.archivedNow) {
-            yield* recordServerEvent(
-              SERVER_EVENT.AGENT_ARCHIVE,
-              { userId, workspaceId: agent.organizationId },
-              {
-                agent_kind: agent.kind,
-              },
-            );
-          }
-        }
-        return yield* committedAgent(userId, archived);
-      }
-      if ("pinned" in body) {
+        const why = body.reason === undefined ? undefined : { reason: body.reason };
         return yield* committedAgent(
           userId,
-          yield* hostedStoreOrUnavailable(
-            pinAgentCommitted(userId, agent.id, body.pinned, body.position),
-          ),
+          yield* archivedAgent(seams, writer, userId, agent, body.archived, {
+            by: AGENT_ARCHIVER.MEMBER,
+            userId,
+            ...why,
+          }),
+        );
+      }
+      if ("pinned" in body) {
+        const { pinned, position } = body;
+        return yield* committedAgent(
+          userId,
+          yield* hostedStoreOrUnavailable(changedAgent(userId, agent, { pinned, position })),
         );
       }
       if ("readMark" in body) {
@@ -568,17 +490,16 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         );
       }
       if ("disabledServers" in body) {
+        const { disabledServers } = body;
         return yield* committedAgent(
           userId,
-          yield* hostedStoreOrUnavailable(
-            updateAgentServersCommitted(userId, agent.id, body.disabledServers),
-          ),
+          yield* hostedStoreOrUnavailable(changedAgent(userId, agent, { disabledServers })),
         );
       }
       if ("addRepository" in body) {
         // The member adds it as `update_agent` does, and the agent hears it in its conversation.
         const added = yield* addAgentRepository({ userId }, agent, body.addRepository, {
-          eve: yield* routedSessions<EveTypedTurn>(userId),
+          agentSessions: yield* routedSessions<TypedTurn>(userId),
           writer,
           clientKey: randomUUID(),
         });
@@ -591,41 +512,17 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
-      const changed = yield* hostedStoreOrUnavailable(
-        updateAgentChoiceCommitted(userId, agent.id, choice),
-      );
-      if (Option.isSome(changed)) {
-        yield* runnerChoiceApplied(changed.value.agent);
-        // Counted for each of the two the member's change moved, under the member; a window alone counts none.
-        if (choice.model !== agent.model) {
-          yield* recordServerEvent(
-            SERVER_EVENT.AGENT_SETTINGS_CHANGE,
-            { userId, workspaceId: agent.organizationId },
-            {
-              changed: SERVER_AGENT_SETTING.MODEL,
-            },
-          );
-        }
-        if (choice.effort !== agent.effort) {
-          yield* recordServerEvent(
-            SERVER_EVENT.AGENT_SETTINGS_CHANGE,
-            { userId, workspaceId: agent.organizationId },
-            {
-              changed: SERVER_AGENT_SETTING.EFFORT,
-            },
-          );
-        }
-      }
+      const changed = yield* hostedStoreOrUnavailable(changedAgent(userId, agent, { choice }));
       return yield* committedAgent(userId, changed);
     }),
     /**
      * The agent deleted for good, by the steps a task's delete takes for
      * each of its agents (`tasks-procedures.ts`): stopped for good first,
-     * then, under its conversation's lock, its eve session retired
+     * then, under its conversation's lock, its session retired
      * (`retire-sessions.ts`), the words said on its calls deleted, its row
      * deleted, and its conversation stamped deleted for the purge. Any
      * member who reaches the agent may delete it, as any member may delete
-     * a task. An eve that refuses the Stop, an agent with a turn still
+     * a task. A harness that refuses the Stop, an agent with a turn still
      * coming that no Stop can name yet, or one a message woke after the
      * Stop, stands and is refused as not ready.
      */
@@ -643,18 +540,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { deleted: true as const, txid: deleted.value.txid };
     }),
-    /** The agent stopped: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
+    /** The agent stopped: the harness's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
     stop: signedIn.stop.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
-      const stopped = yield* stoppedTurn(writer, userId, agent);
-      // Counted only where the Stop stopped a turn, under the member who pressed it.
-      if (stopped) {
-        yield* recordServerEvent(
-          SERVER_EVENT.AGENT_STOP,
-          { userId, workspaceId: agent.organizationId },
-          { agent_kind: agent.kind },
-        );
-      }
+      yield* stoppedAgent(writer, userId, agent);
       return { agent: yield* summaryOf(userId, agent) };
     }),
     /** The agent taken back to just before one of the developer's lines (`rewind.ts`), answered as it then stands. */

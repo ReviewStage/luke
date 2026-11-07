@@ -22,10 +22,13 @@
  * - an open refused, reaching nothing, or not done within `OPEN_WITHIN`
  *   sends every ask over HTTP for `HTTP_AFTER_FAILED_OPEN`, as a deployment
  *   serving no socket, such as the local server, does always;
- * - an ask unanswered within `ANSWER_WITHIN` takes its socket as stalled
- *   and closes it, and is asked again over HTTP, as is every ask a socket
- *   held when it ended, so a socket's end is never a poll's failure, nor
- *   the service's silence where the client keeps its reach (`ServiceReach`);
+ * - every ask a socket held when it ended early is asked again over HTTP,
+ *   so a socket's end is never a poll's failure, nor the service's silence
+ *   where the client keeps its reach (`ServiceReach`);
+ * - an ask unanswered within its bound (`ANSWER_WITHIN`) takes its socket as
+ *   stalled, closes it, and fails, since an HTTP ask then would have too
+ *   little of its deadline left to answer: the read's own retry asks again,
+ *   on the next socket or over HTTP while that opens;
  * - a 401 closes the socket, whose credential may be one since renewed or
  *   another account's, and asks again over HTTP, where the account call
  *   renews the credential as it does for any request.
@@ -33,6 +36,7 @@
 
 import { type CallCredential, readServiceAnswer, webSocketOrigin } from "@repo/features";
 import {
+  LIVE_POLL,
   LIVE_SOCKET,
   type LiveSocketAnswer,
   type LiveSocketAsk,
@@ -40,7 +44,12 @@ import {
 } from "@repo/features/live-wire";
 import { unparsedWire } from "@repo/wire";
 import { Clock, Deferred, Duration, Effect, Exit, Result, Schema, Scope, Stream } from "effect";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
+import {
+  HttpClient,
+  HttpClientError,
+  type HttpClientRequest,
+  HttpClientResponse,
+} from "effect/http";
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";
 import { openedUnderCredential } from "./relay-credential.js";
 
@@ -54,8 +63,18 @@ const LIVE_SOCKET_BOUNDS = {
   OPEN_WITHIN: Duration.seconds(10),
   /** How long asks go over HTTP after an open was refused or reached nothing. */
   HTTP_AFTER_FAILED_OPEN: Duration.seconds(30),
-  /** How long an ask waits for its answer before its socket is taken as stalled: past the service's 25 s hold. */
-  ANSWER_WITHIN: Duration.seconds(30),
+  /**
+   * How long an ask waits for its answer before its socket is taken as
+   * stalled, each shorter than the account call's deadline it travels under
+   * (`@repo/features/hosted-link`), or the deadline ends the ask first and
+   * the socket is never taken as stalled: a held read's past the service's
+   * 25 s hold and inside its 35 s held deadline, any other's inside the
+   * usual 10 s.
+   */
+  ANSWER_WITHIN: {
+    HELD: Duration.seconds(30),
+    USUAL: Duration.seconds(8),
+  },
 } as const;
 
 const UNAUTHORIZED = 401;
@@ -73,9 +92,14 @@ interface StandingSocket {
   ended: boolean;
 }
 
-/** Why an ask was never answered: its socket ended, or stalled, first. */
+/** Why an ask was never answered: its socket ended first. */
 class SocketEnded {
   readonly _tag = "SocketEnded";
+}
+
+/** Why an ask was never answered: its socket gave no answer within the ask's bound. */
+class SocketStalled {
+  readonly _tag = "SocketStalled";
 }
 
 /** What the wrapper is handed: the client it passes everything else to, how sockets open, and the account and service they open on. */
@@ -96,6 +120,13 @@ function isLiveRead(
     request.method === "GET" &&
     url.origin === serviceOrigin &&
     url.pathname.startsWith(LIVE_SOCKET.READ_PREFIX)
+  );
+}
+
+/** Whether a live read is one the service holds until its rows move: one past a digest, or past a sync id (`@repo/features/hosted-link`'s `askLive`). */
+function isHeldRead(url: URL): boolean {
+  return (
+    url.searchParams.has(LIVE_POLL.AFTER) || (url.searchParams.get(LIVE_POLL.SYNC) ?? "") !== ""
   );
 }
 
@@ -225,31 +256,50 @@ export function liveSocketClient(
     });
 
     /** One ask over the socket, answered, or failed where the socket ended or stalled first. */
-    const ask = (standing: StandingSocket, path: string) =>
+    const ask = (standing: StandingSocket, url: URL) =>
       Effect.gen(function* () {
+        const path = `${url.pathname}${url.search}`;
         const id = nextId++;
         const answered = yield* Deferred.make<LiveSocketAnswer, SocketEnded>();
         if (standing.ended) return yield* Effect.fail(new SocketEnded());
         standing.waiting.set(id, answered);
         const asked: LiveSocketAsk = { id, path };
         yield* standing.socket.send({ text: JSON.stringify(asked) });
+        const within = isHeldRead(url)
+          ? LIVE_SOCKET_BOUNDS.ANSWER_WITHIN.HELD
+          : LIVE_SOCKET_BOUNDS.ANSWER_WITHIN.USUAL;
         return yield* Deferred.await(answered).pipe(
+          Effect.mapError((): SocketEnded | SocketStalled => new SocketEnded()),
           Effect.timeoutOrElse({
-            duration: LIVE_SOCKET_BOUNDS.ANSWER_WITHIN,
-            orElse: () => Effect.andThen(end(standing), Effect.fail(new SocketEnded())),
+            duration: within,
+            orElse: () => Effect.andThen(end(standing), Effect.fail(new SocketStalled())),
           }),
           Effect.ensuring(Effect.sync(() => standing.waiting.delete(id))),
         );
       });
 
-    /** A live read asked over the socket where one answers, and over HTTP where none does, it ended or stalled first, or it was refused. */
+    /**
+     * A live read asked over the socket where one answers, and over HTTP
+     * where none does, it ended first, or it was refused; failed where it
+     * stalled, which the read's own retry asks again.
+     */
     const live = (request: HttpClientRequest.HttpClientRequest, url: URL) =>
       Effect.gen(function* () {
         const standing = yield* socketFor;
         if (standing === undefined) return yield* http.execute(request);
-        const asked = yield* Effect.result(ask(standing, `${url.pathname}${url.search}`));
+        const asked = yield* Effect.result(ask(standing, url));
         if (Result.isSuccess(asked) && asked.success.status !== UNAUTHORIZED) {
           return responseOf(request, asked.success);
+        }
+        if (Result.isFailure(asked) && asked.failure instanceof SocketStalled) {
+          return yield* Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request,
+                description: "The live socket gave no answer in time",
+              }),
+            }),
+          );
         }
         yield* end(standing);
         return yield* http.execute(request);

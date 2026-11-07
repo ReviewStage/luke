@@ -8,7 +8,6 @@ import {
   CHAPTER_CLAIM_OUTCOME,
   claimChapterGeneration,
 } from "@repo/database/models/pull-request-chapters-store";
-import { accountPreference } from "@repo/database/schemas/preferences";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import { HOSTED_API_ERROR } from "@repo/features";
@@ -25,7 +24,6 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { MockLanguageModelV4 } from "ai/test";
-import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { requestUserId } from "../auth/bearer.js";
@@ -54,15 +52,12 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
  * answers the workspace's newest chapters for the number it names, asking
  * GitHub for no pull request; a Generate claims the head, tells the chapters on a scripted
  * model, lands them or the kind they failed with, and counts the outcome by
- * counts alone, on the model the member who pressed it chose in Settings,
- * Haiku where they never chose or stored one no build offers; a claim another request holds answers as generating without
+ * counts alone, on Haiku whatever model an earlier build stored for the
+ * member who pressed it; a claim another request holds answers as generating without
  * asking the model; and a deployment with no model key answers unavailable.
  * GitHub is a script, the model a mock, the store PGlite. Synthetic
  * accounts, repositories, and words throughout.
  */
-
-// SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
-const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
 const ORIGIN = "https://app.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -99,6 +94,8 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */
@@ -227,7 +224,7 @@ const standing = (
     const agent = Option.getOrThrow(
       yield* createAgent(owner, {
         taskId: task.id,
-        planSnapshot: "# Invitations",
+        descriptionSnapshot: "# Invitations",
         prompt: null,
         idempotencyKey: randomUUID(),
         model: AGENT_DEFAULT_CHOICE.model,
@@ -341,6 +338,12 @@ function chaptersOf(answer: Answer): PullRequestChaptersAnswer {
 
 const refused = (status: number, error: string) => ({ status, body: { error } });
 
+/** What a member who saved both keys may generate on, Anthropic's first as the providers' own order puts it. */
+const BOTH_CHOICES = [
+  { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+  { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+];
+
 it.layer(getTestDB())("a pull request's chapters", (it) => {
   it.effect(
     "an unsigned caller is refused as unauthenticated on both procedures, before the agent or a body is read",
@@ -373,7 +376,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers no chapters, and whether the reader can generate them, asking GitHub for no pull request: not where they saved no API key, since Vespin's own key tells no chapters",
+    "a read before any Generate answers no chapters, and what the reader's Generate would run on, Haiku on their Anthropic key where they saved both with both offered, asking GitHub for no pull request: nothing where they saved no API key, since Vespin's own key tells no chapters",
     () =>
       Effect.gen(function* () {
         const { owner, github, ask } = yield* standing();
@@ -381,6 +384,8 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           pullRequest: {
             number: NUMBER,
             generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -388,6 +393,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         const keyless = yield* standing({ keys: [] });
         const read = chaptersOf(yield* keyless.ask(keyless.owner, { number: NUMBER }));
         assert.equal(read.pullRequest?.generatable, false);
+        assert.equal(read.pullRequest?.runsOn, undefined);
       }),
   );
 
@@ -405,7 +411,13 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           chapters: [{ kind: CHAPTER_KIND.STORY, ...TOLD.chapters[0] }],
         };
         assert.deepEqual(generated, {
-          pullRequest: { number: NUMBER, generatable: true, chapters: ready },
+          pullRequest: {
+            number: NUMBER,
+            generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
+            chapters: ready,
+          },
         });
         assert.deepEqual(chaptersOf(yield* ask(teammate, { number: NUMBER })), generated);
         assert.deepEqual(
@@ -487,6 +499,8 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           pullRequest: {
             number: NUMBER,
             generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            runsOnChoices: BOTH_CHOICES,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -532,51 +546,64 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a Generate runs on the model the member who pressed it chose in Settings, not another member's",
+    "a Generate runs on Haiku, even for a member whose earlier build stored another model, and the chapters stay the workspace's",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, ask } = yield* standing();
-        yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.SONNET });
         yield* writeAccountPreferences(teammate, { chaptersModel: CHAPTERS_MODEL.OPUS });
         const answer = chaptersOf(yield* ask(teammate, { method: "POST", number: NUMBER }));
         const chapters = answer.pullRequest?.chapters;
         assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
-        assert.equal("model" in chapters ? chapters.model : undefined, CHAPTERS_MODEL.OPUS);
-        // The chapters stay the workspace's: the owner reads the ones the teammate's model told.
+        assert.equal("model" in chapters ? chapters.model : undefined, CHAPTERS_MODEL.HAIKU);
         assert.deepEqual(chaptersOf(yield* ask(owner, { number: NUMBER })), answer);
       }),
   );
 
   it.effect(
-    "a Generate by a member who saved only an OpenAI key runs on OpenAI's model of the tier they chose, and the chapters name it",
+    "a member who saved both keys and last picked OpenAI's is offered both and told their Generate runs on OpenAI's model, and it does, while one who picked OpenAI's but saved only an Anthropic key runs on Anthropic's with nothing to pick",
     () =>
       Effect.gen(function* () {
-        const { owner, ask } = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.OPENAI] });
-        yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.SONNET });
+        const { owner, ask } = yield* standing();
+        yield* writeAccountPreferences(owner, { chaptersModel: "gpt-6-luna" });
         const read = chaptersOf(yield* ask(owner, { number: NUMBER }));
-        assert.equal(read.pullRequest?.generatable, true);
+        assert.deepEqual(read.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.OPENAI,
+          model: "gpt-6-luna",
+        });
+        assert.deepEqual(read.pullRequest?.runsOnChoices, BOTH_CHOICES);
         const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
         const chapters = answer.pullRequest?.chapters;
         assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
-        assert.equal("model" in chapters ? chapters.model : undefined, "gpt-6.1-sol");
+        assert.equal("model" in chapters ? chapters.model : undefined, "gpt-6-luna");
+
+        const anthropicOnly = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.ANTHROPIC] });
+        yield* writeAccountPreferences(anthropicOnly.owner, { chaptersModel: "gpt-6-luna" });
+        const fallen = chaptersOf(
+          yield* anthropicOnly.ask(anthropicOnly.owner, { number: NUMBER }),
+        );
+        assert.deepEqual(fallen.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          model: CHAPTERS_MODEL.HAIKU,
+        });
+        assert.equal(fallen.pullRequest?.runsOnChoices, undefined, "one key offers no choice");
       }),
   );
 
-  it.effect("a Generate by a member whose stored model no build offers runs on Haiku", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* standing();
-      yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.OPUS });
-      const db = yield* Database;
-      yield* db
-        .update(accountPreference)
-        .set({ chaptersModel: RETIRED_MODEL })
-        .where(eq(accountPreference.userId, owner));
-      const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
-      const chapters = answer.pullRequest?.chapters;
-      assert.equal(
-        chapters !== undefined && "model" in chapters ? chapters.model : undefined,
-        CHAPTERS_MODEL.HAIKU,
-      );
-    }),
+  it.effect(
+    "a member who saved only an OpenAI key is told their Generate runs on OpenAI's model of Haiku's tier on that key, it does, and the chapters name it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.OPENAI] });
+        const read = chaptersOf(yield* ask(owner, { number: NUMBER }));
+        assert.equal(read.pullRequest?.generatable, true);
+        assert.deepEqual(read.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.OPENAI,
+          model: "gpt-6-luna",
+        });
+        const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
+        const chapters = answer.pullRequest?.chapters;
+        assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
+        assert.equal("model" in chapters ? chapters.model : undefined, "gpt-6-luna");
+      }),
   );
 });

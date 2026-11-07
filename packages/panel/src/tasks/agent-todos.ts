@@ -14,7 +14,7 @@ import { todosView } from "./tool-call-model.js";
 /**
  * agent-todos.ts -- the agent's to-do lists as its tab reads them: the list each call carries, the newest standing, and the one docked while it is worked.
  *
- * A call of eve's `write_todos`, Claude Code's `TodoWrite`, or Codex's plan
+ * A call of the retired runtime's `write_todos`, Claude Code's `TodoWrite`, or Codex's plan
  * carries the whole list as its input (`native-tool-calls.ts`), so each is
  * read on its own. Claude Code's task list is kept one task at a time
  * instead: `TaskCreate` adds one, whose id only the CLI's answer names,

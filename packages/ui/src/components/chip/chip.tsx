@@ -1,9 +1,11 @@
 import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -40,7 +42,9 @@ import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
  * answers at once, so what it named is gone on the press; one that names a
  * thing a reader may go to (`onOpen`, a task another waits on) takes a press
  * on its words too, which opens it, the × its sibling rather than inside it,
- * since a button holds no button. It springs in as
+ * since a button holds no button, and whose words may carry a hint
+ * (`hint`), said on a rest, under a finger, and to a reader, as why an
+ * address is wrong. It springs in as
  * it arrives; its exit is the list's that draws it, a `ListMotion`
  * following it by its `motionKey`, which plays its arrival in its place,
  * since its caller has already let it go.
@@ -162,7 +166,7 @@ type ButtonChipProps = ChipFace & {
 /** A chip that is a link: its face, and the address a press goes to. */
 type LinkChipProps = ChipFace & {
   href: string;
-  /** Called as the press leaves, before the browser follows the link; `preventDefault` leaves the following to the caller. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link; `preventDefault` leaves the following to the caller. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   chevron?: never;
   busy?: never;
@@ -180,6 +184,8 @@ type RemovableChipProps = ChipFace & {
   onOpen?: (() => void) | undefined;
   /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
+  /** What the chip's words say on a rest, under a finger's long press or tap, and to a reader as their description (`Tooltip`). */
+  hint?: string | undefined;
   href?: never;
   children: ReactNode;
 };
@@ -318,7 +324,10 @@ function faceClasses(
   const smallGlyphs = look === CHIP_LOOK.PILL && size === CHIP_SIZE.COMPACT;
   return [
     FACE_BASE,
-    smallGlyphs ? "[&>:is(svg,img)]:size-chip-chevron" : "[&>:is(svg,img)]:size-control-icon",
+    // Note that a glyph wearing a status dot is sized as a bare one, its own glyph inside the dot's box.
+    smallGlyphs
+      ? "[&>:is(svg,img)]:size-chip-chevron [&>.ui-status-glyph>svg]:size-chip-chevron"
+      : "[&>:is(svg,img)]:size-control-icon [&>.ui-status-glyph>svg]:size-control-icon",
     look === CHIP_LOOK.FIELD && !iconOnly ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
     iconOnly ? "[&>.settings-chevron]:hidden" : "",
     // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
@@ -358,9 +367,23 @@ function RemovableChip({
   removeLabel,
   onOpen,
   motionKey,
+  hint,
   children,
   ...face
 }: RemovableChipProps): React.JSX.Element {
+  const words =
+    onOpen === undefined ? (
+      <span className={faceClasses(face, false)}>{children}</span>
+    ) : (
+      <button
+        type="button"
+        className={`${faceClasses(face, false)} ${OPEN_FACE}`}
+        onClick={pulseOnPress(onOpen, PRESS_PULSE.FACE)}
+        {...PRESS_FACE}
+      >
+        {children}
+      </button>
+    );
   return (
     <span
       className={chipClasses(face, true, false)}
@@ -368,18 +391,7 @@ function RemovableChip({
       {...faceAttributes(face)}
       {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
     >
-      {onOpen === undefined ? (
-        <span className={faceClasses(face, false)}>{children}</span>
-      ) : (
-        <button
-          type="button"
-          className={`${faceClasses(face, false)} ${OPEN_FACE}`}
-          onClick={pulseOnPress(onOpen, PRESS_PULSE.FACE)}
-          {...PRESS_FACE}
-        >
-          {children}
-        </button>
-      )}
+      {hint === undefined ? words : <Tooltip label={hint}>{words}</Tooltip>}
       <button
         type="button"
         className={REMOVE}
@@ -404,13 +416,15 @@ function LinkChip({
   children,
   ...anchor
 }: LinkChipProps): React.JSX.Element {
+  const press = pulseOnPress(onClick, PRESS_PULSE.FACE);
   return (
     <a
       {...anchor}
       className={chipClasses({ look, tone, width, size, iconOnly }, false, false)}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
       href={href}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.FACE)}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       <span className={faceClasses({ look, size, iconOnly }, false)} {...PRESS_FACE}>
         {children}
@@ -442,36 +456,61 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
-/** A static chip's own options: its tone and whether it draws its mark alone, its look the toolbar's. */
-type StaticChipProps = Pick<ChipFace, "tone" | "iconOnly"> & {
+/** The looks a static chip comes in: a toolbar chip's, or a pill's, as a removable pill stands beside it. */
+type StaticChipLook = typeof CHIP_LOOK.TOOLBAR | typeof CHIP_LOOK.PILL;
+
+/** A static chip's own options: its look, the toolbar's where none is named, its tone, its size, and whether it draws its mark alone. */
+type StaticChipProps = Pick<ChipFace, "tone" | "iconOnly" | "size"> & {
+  look?: StaticChipLook | undefined;
   children: ReactNode;
 } & Omit<ComponentPropsWithRef<"span">, "style" | "className" | "children">;
 
-/** A static chip's box: a toolbar chip's at rest, washing under no pointer, since it takes no press. */
+/** A static chip's box, whatever its look, washing under no pointer, since it takes no press. */
 const STATIC_BOX =
-  "ui-chip group/chip m-0 inline-flex min-w-0 max-w-full items-center justify-center rounded-control border border-transparent bg-transparent text-body-foreground font-body font-label h-control text-label gap-icon-gap whitespace-nowrap cursor-default";
+  "ui-chip group/chip m-0 inline-flex min-w-0 max-w-full items-center justify-center border font-body whitespace-nowrap cursor-default";
+
+/** Each static look's face at rest: a toolbar chip's, or a pill's capsule inside its hairline. */
+const STATIC_FACE = {
+  [CHIP_LOOK.TOOLBAR]: "rounded-control border-transparent bg-transparent text-body-foreground",
+  [CHIP_LOOK.PILL]: "rounded-full border-chip-edge bg-chip text-foreground",
+} as const satisfies Record<StaticChipLook, string>;
 
 /**
  * A chip that only says: a toolbar chip's face taking no press, for a value
  * fixed where it stands, as where an agent runs stands in its message box
- * beside the chips that change things. Its hint (`Tooltip`) opens on a rest,
+ * beside the chips that change things; or a pill's, at the control's size or
+ * compact, for a thing named that can no longer be lifted, as an address
+ * already invited stands among the removable pills of those still to invite. Its hint (`Tooltip`) opens on a rest,
  * or under a finger on a tap, since it is no control of its own. Its mark
  * alone stands centered in a square, as a toolbar chip's does.
  */
 export function StaticChip({
+  look = CHIP_LOOK.TOOLBAR,
   tone,
+  size = CHIP_SIZE.CONTROL,
   iconOnly = false,
   children,
   ...span
 }: StaticChipProps): React.JSX.Element {
-  const look = CHIP_LOOK.TOOLBAR;
+  const compact = size === CHIP_SIZE.COMPACT;
+  // Note that a compact pill's room is a removable compact pill's, so one standing beside the other lines up.
+  const room = iconOnly
+    ? "flex-none w-control p-0"
+    : compact
+      ? "flex-initial px-chip-compact-inset"
+      : look === CHIP_LOOK.PILL
+        ? `flex-initial ${LOOK_INSET[CHIP_LOOK.PILL]}`
+        : "flex-initial px-chip-inset";
+  const box = compact
+    ? "h-chip-compact gap-chip-tight text-caption leading-caption font-tag"
+    : "h-control text-label gap-icon-gap font-label";
   return (
     <span
       {...span}
-      className={`${STATIC_BOX} ${iconOnly ? "flex-none w-control p-0" : "flex-initial px-chip-inset"}`}
-      {...faceAttributes({ look, tone, iconOnly })}
+      className={`${STATIC_BOX} ${STATIC_FACE[look]} ${box} ${room}`}
+      {...faceAttributes({ look, tone, size, iconOnly })}
     >
-      <span className={faceClasses({ look, iconOnly }, false)}>{children}</span>
+      <span className={faceClasses({ look, size, iconOnly }, false)}>{children}</span>
     </span>
   );
 }

@@ -61,19 +61,13 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { isWireString } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import {
-  Fragment,
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -85,6 +79,7 @@ import {
 import {
   Conversation,
   ConversationContent,
+  ConversationRows,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
@@ -94,7 +89,7 @@ import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -105,7 +100,6 @@ import {
   AskControls,
   bareKey,
   DraftQuestion,
-  DraftResolving,
   HeldControls,
   hasControls,
   INBOX_ASK_BOX,
@@ -119,7 +113,7 @@ import {
   WithdrawnWhy,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { closeAction, type InboxCloser, useInboxClose } from "./inbox-close.js";
+import { type InboxResolver, resolveAction } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
@@ -152,7 +146,7 @@ import {
   sentStamp,
 } from "./inbox-model.js";
 import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
-import type { InboxSnoozer } from "./inbox-snooze.js";
+import type { InboxReminder } from "./inbox-remind.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { REPLY_SCOPE, ReplyDoorProvider } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -332,7 +326,7 @@ const DRAFT_HEAD = {
 
 /** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
 function useReader(readerId: string | undefined): Actor {
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const { members } = useMemberDirectory();
   const member = members?.find((each) => each.userId === readerId);
   if (member !== undefined) return memberActor(member, readerId);
@@ -353,14 +347,17 @@ function useReader(readerId: string | undefined): Actor {
  */
 function DraftReply({
   readerId,
+  place,
   children,
 }: {
   readerId: string | undefined;
+  place: VirtualRowPlace;
   children: React.ReactNode;
 }): React.JSX.Element {
   const reader = useReader(readerId);
   return (
     <InboxComment
+      place={place}
       kind={COMMENT.DRAFT}
       author={commentAuthor(reader)}
       nameRef={<ActorRef actor={reader} nameOnly />}
@@ -384,14 +381,17 @@ function PendingReply({
   readerId,
   reply,
   now,
+  place,
 }: {
   readerId: string | undefined;
   reply: PendingInboxReply;
   now: number;
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const reader = useReader(readerId);
   return (
     <InboxComment
+      place={place}
       kind={COMMENT.MESSAGE}
       author={commentAuthor(reader)}
       nameRef={<ActorRef actor={reader} nameOnly />}
@@ -460,9 +460,16 @@ function AnswerValues({
 }
 
 /** Where a thread read carries only its latest messages: a line saying the earlier ones stand in the agent's tab, the agent's name opening it. */
-function EarlierMessages({ by }: { by: ItemAgent }): React.JSX.Element {
+function EarlierMessages({
+  by,
+  place,
+}: {
+  by: ItemAgent;
+  place: VirtualRowPlace;
+}): React.JSX.Element {
   return (
     <li
+      {...place}
       className="inbox-thread-earlier relative pb-ui-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-ui-2 before:bg-border before:content-['']"
       data-inbox-earlier=""
     >
@@ -491,12 +498,10 @@ function footPadding(scroller: HTMLElement): number {
  * be sliding in (`AGENTS.md`'s panel motion): far enough that the draft
  * reply under it, the box written in again, stands whole over the board's
  * foot, and no further than the message's head. A message another wrote,
- * or another item opened, scrolls nothing. Note that a reader already at
- * the thread's end is kept there by the log itself (`Conversation`), whose
- * observer has the last word once the thread's new height is reported, so
- * this is what brings the message in for a reader scrolled up, whom the
- * log leaves where they are; the two never pull different ways for long,
- * since a scroll that lands at the end hands the thread back to the log.
+ * or another item opened, scrolls nothing. Note that a reader already near
+ * the thread's end is followed there by the log itself
+ * (`ConversationRows`' `followOnAppend`), so this is what brings the
+ * message in for a reader scrolled up, whom the log leaves where they are.
  */
 function useScrollToOwnMessage(
   board: React.RefObject<HTMLDivElement | null>,
@@ -812,11 +817,74 @@ function closeNotes(events: ThreadEventsAfter): ReadonlySet<string> {
   return notes;
 }
 
+/** What a row of the thread draws: a line of what happened to it, a message, the line saying earlier messages are cut, a reply on its way, or the reader's draft reply. */
+const THREAD_ROW = {
+  EVENT: "event",
+  MESSAGE: "message",
+  EARLIER: "earlier",
+  PENDING: "pending",
+  DRAFT: "draft",
+} as const;
+
+type ThreadRow =
+  | { readonly kind: typeof THREAD_ROW.EVENT; readonly key: string; readonly line: ThreadEventLine }
+  | {
+      readonly kind: typeof THREAD_ROW.MESSAGE;
+      readonly key: string;
+      readonly message: InboxMessage;
+    }
+  | { readonly kind: typeof THREAD_ROW.EARLIER; readonly key: string }
+  | {
+      readonly kind: typeof THREAD_ROW.PENDING;
+      readonly key: string;
+      readonly reply: PendingInboxReply;
+    }
+  | { readonly kind: typeof THREAD_ROW.DRAFT; readonly key: string };
+
+/** The height a row of the thread is taken to have before it is drawn, in pixels: a short message's. */
+const THREAD_ROW_ESTIMATE_PX = 96;
+
+/**
+ * The thread's rows in order, each one of its comments, as the log's run
+ * draws them (`ConversationRows`): the lines of what happened before its
+ * first message, then each message, a close's note drawn under the close's
+ * own line instead, with the lines that follow it, the line saying earlier
+ * messages are cut after the first, which always stands, the reader's
+ * replies on their way, and the draft reply last. Note that the run names
+ * its rows by one string each (`VirtualRows`), and a line of what happened
+ * is kept by the message it follows, so its row is that message's id with
+ * the line's kind after it.
+ */
+function threadRows(
+  thread: readonly InboxMessage[],
+  events: ThreadEventsAfter,
+  pending: readonly PendingInboxReply[],
+): readonly ThreadRow[] {
+  const notes = closeNotes(events);
+  const eventsAt = (after: number): ThreadRow[] =>
+    (events.get(after) ?? []).map((line) => ({
+      kind: THREAD_ROW.EVENT,
+      key: `${line.key}/${line.kind}`,
+      line,
+    }));
+  const rows: ThreadRow[] = eventsAt(-1);
+  for (const [at, message] of thread.entries()) {
+    if (!notes.has(message.id)) rows.push({ kind: THREAD_ROW.MESSAGE, key: message.id, message });
+    if (at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ) {
+      rows.push({ kind: THREAD_ROW.EARLIER, key: THREAD_ROW.EARLIER });
+    }
+    rows.push(...eventsAt(at));
+  }
+  for (const reply of pending) rows.push({ kind: THREAD_ROW.PENDING, key: reply.key, reply });
+  rows.push({ kind: THREAD_ROW.DRAFT, key: THREAD_ROW.DRAFT });
+  return rows;
+}
+
 /** What a member resolving the item says after their name. */
 const RESOLVED_IT = "resolved this without an answer";
 
 /**
- * A line of what happened to the thread, drawn as a plan comment's
+ * A line of what happened to the thread, drawn as a description comment's
  * "resolved this" is: whoever did it, their face on the gutter's line, their
  * name, what they did, and when; a close's note under it, as a member's
  * message draws its words and files, and a withdrawal's why, in the muted
@@ -828,17 +896,20 @@ function ThreadEvent({
   by,
   now,
   images,
+  place,
 }: {
   itemId: string;
   line: ThreadEventLine;
   by: ItemAgent;
   now: number;
   images: InboxImageReads;
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const closer = usePerson(line.kind === THREAD_EVENT.RESOLVED ? line.closer : undefined);
   if (line.kind === THREAD_EVENT.RESOLVED) {
     return (
       <InboxComment
+        place={place}
         kind={COMMENT.CLOSED}
         author={commentAuthor(closer)}
         nameRef={<ActorRef actor={closer} nameOnly />}
@@ -857,6 +928,7 @@ function ThreadEvent({
   if (line.kind === THREAD_EVENT.WITHDRAWN) {
     return (
       <InboxComment
+        place={place}
         kind={COMMENT.WITHDRAWN}
         {...agent}
         said={AGENT_DID.WITHDREW}
@@ -873,33 +945,15 @@ function ThreadEvent({
       : line.by.ask === undefined
         ? AGENT_DID.REPLACED_BY_MESSAGE
         : AGENT_DID.REPLACED_BY_QUESTION;
-  return <InboxComment kind={COMMENT.REPLACED} {...agent} said={said} at={line.at} now={now} />;
-}
-
-/** The lines of what happened to the thread that follow the message at `after`, each in its place (`threadEvents`). */
-function ThreadEventsAt({
-  itemId,
-  events,
-  after,
-  by,
-  now,
-  images,
-}: {
-  itemId: string;
-  events: ThreadEventsAfter;
-  after: number;
-  by: ItemAgent;
-  now: number;
-  images: InboxImageReads;
-}): React.JSX.Element | null {
-  const lines = events.get(after);
-  if (lines === undefined) return null;
   return (
-    <>
-      {lines.map((line) => (
-        <ThreadEvent key={line.key} itemId={itemId} line={line} by={by} now={now} images={images} />
-      ))}
-    </>
+    <InboxComment
+      place={place}
+      kind={COMMENT.REPLACED}
+      {...agent}
+      said={said}
+      at={line.at}
+      now={now}
+    />
   );
 }
 
@@ -1018,6 +1072,7 @@ const ThreadMessage = memo(function ThreadMessage({
   now,
   images,
   waitingOn,
+  place,
 }: {
   itemId: string;
   /** The item's title, as `cardTitle` reads it. */
@@ -1030,6 +1085,7 @@ const ThreadMessage = memo(function ThreadMessage({
   now: number;
   images: InboxImageReads;
   waitingOn: InboxItem["startedBy"];
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const writer = useMessageWriter(message, by);
   const answers = message.answers;
@@ -1040,6 +1096,7 @@ const ThreadMessage = memo(function ThreadMessage({
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
     <InboxComment
+      place={place}
       kind={COMMENT.MESSAGE}
       messageId={message.id}
       author={writer.author}
@@ -1169,38 +1226,36 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U, and Snooze, naming H; and, while the
- * item is open, Resolve without answering, asked first. It is keyed by its
- * item where it is drawn, so a question asked on one item never closes the
- * next, and the menu and the question go with the pane once it is hidden.
+ * agent; Mark as read or unread, naming U, Remind me, naming H, and, while the
+ * item is open, Resolve, naming E. It is keyed by its item where it is drawn,
+ * and the menu goes with the pane once it is hidden.
  */
 function InboxItemMenu({
   item,
   shown,
   onMark,
   onClose,
-  onSnooze,
+  onRemind,
   lead = NO_LEAD,
   heading,
 }: {
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
-  onSnooze?: InboxSnoozer | undefined;
-  onClose: InboxCloser | undefined;
+  onRemind?: InboxReminder | undefined;
+  onClose: InboxResolver | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
   /** Muted over the items, pressed by nothing: where the item stands in the list, on a phone. */
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const close = useInboxClose(item, onClose, shown);
   // Note that a time of the reader's own is picked from the item's row, whose list holds the picker, so this menu offers the times alone.
   const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
-    onAskClose: close.ask,
+    onResolve: onClose,
     keyed: true,
-    snooze: onSnooze === undefined ? undefined : { onSnooze },
+    remind: onRemind === undefined ? undefined : { onRemind },
   });
   // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
   const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
@@ -1218,53 +1273,40 @@ function InboxItemMenu({
           onClose={menu.close}
         />
       )}
-      {close.dialog}
     </>
   );
 }
 
 /**
- * The open question's ×, at its card's top end: Resolve without answering,
- * which asks nothing and only stages the resolve on the item's draft, the
- * box's Send doing it (`DraftResolving`), so the item's ⋯ keeps its own
- * close and the question it asks (`inbox-close.tsx`). It is keyed by its
- * item where it is drawn, so a resolve staged on one item never lands on
- * the next, and takes back the focus Undo had where it came of Undo's press.
+ * The open question's ×, at its card's top end: Resolve, as the item's ⋯
+ * offers it, resolving at once with Undo (`inbox-close.tsx`), so Send only
+ * ever sends an answer. Note that it wears ×, not Resolve's circle-check,
+ * because on the card it turns down the very question it sits on, which
+ * reads clearest as ×, and it takes no room from the options; its name and
+ * tooltip say Resolve.
  */
-function QuestionClose({
+function QuestionResolve({
   item,
-  closer,
-  takesFocus,
-  onStage,
+  resolver,
 }: {
   item: InboxItem;
-  closer: InboxCloser | undefined;
-  takesFocus: boolean;
-  /** Stages the resolve on the item's draft. */
-  onStage: () => void;
+  resolver: InboxResolver | undefined;
 }): React.JSX.Element | null {
-  const cross = useRef<HTMLButtonElement>(null);
-  // Note that only the mount reads it, so a question drawn as the item opens takes no focus from where the reader stands.
-  const focused = useRef(takesFocus);
-  useEffect(() => {
-    if (focused.current) cross.current?.focus();
-  }, []);
-  const close = closeAction(item, closer === undefined ? undefined : onStage);
-  return close === undefined ? null : (
-    <Tooltip label={close.label}>
+  const resolve = resolveAction([item], resolver);
+  return resolve === undefined ? null : (
+    <Tooltip label={resolve.label}>
       <IconButton
-        ref={cross}
-        icon={close.icon}
-        label={close.label}
+        icon={<GLYPH.CLOSE />}
+        label={resolve.label}
         size={BUTTON_SIZE.COMPACT}
-        onClick={close.onSelect}
+        onClick={resolve.onSelect}
       />
     </Tooltip>
   );
 }
 
 /**
- * The thread's subject, as a plan or a pull request leads with one: the
+ * The thread's subject, as a description or a pull request leads with one: the
  * item's title alone, the thread under it, its words quoted into a reply
  * as the thread's are.
  */
@@ -1366,10 +1408,10 @@ export interface InboxPaneDoors {
   readonly code: InboxCodeDoors;
   /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Snoozes the item from its ⋯ menu, or ends its snooze; none where the pane offers no snooze. */
-  readonly onSnooze?: InboxSnoozer | undefined;
-  /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
-  readonly onClose?: InboxCloser | undefined;
+  /** Sets the item's reminder from its ⋯ menu, or cancels it; none where the pane offers no reminder. */
+  readonly onRemind?: InboxReminder | undefined;
+  /** Resolves open items without an answer, from the bar's ⋯ menu and the question card; none where the pane offers no resolve. */
+  readonly onClose?: InboxResolver | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
@@ -1551,6 +1593,7 @@ export function InboxPane({
   mentions,
   phone,
   newThread,
+  within,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1576,6 +1619,14 @@ export function InboxPane({
   phone?: InboxPanePhone | undefined;
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
+  /**
+   * Whether the pane stands inside the room of what holds the item, an
+   * agent's card in its task's column (`agent-threads.tsx`): its bar names
+   * neither the task nor the agent, which the card's tab and the task's
+   * topbar already name, holding the item's title alone, in a bar title's
+   * type, once its heading has scrolled away.
+   */
+  within?: boolean | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
   const now = useMinute();
@@ -1615,17 +1666,14 @@ export function InboxPane({
     }),
     [listedAgents, archived, models, me, pullRequests, item.agentId, onOpenAgent],
   );
-  const { images: pictures, onImage, onRetryImage } = control;
-  const images: InboxImageReads = useMemo(
-    () => ({ images: pictures, onImage, onRetryImage }),
-    [pictures, onImage, onRetryImage],
-  );
+  const { images } = control;
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
   const pending = pendingRepliesOn(control.pendingReplies, item);
   const events = useMemo(() => threadEvents(item, thread), [item, thread]);
-  const notes = useMemo(() => closeNotes(events), [events]);
+  const rows = useMemo(() => threadRows(thread, events, pending), [thread, events, pending]);
+  const rowKeys = useMemo(() => rows.map((row) => row.key), [rows]);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1642,37 +1690,11 @@ export function InboxPane({
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
   // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
-  // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
-  const resolving = open && draft.resolving === true && doors.onClose !== undefined;
-  // Which of the × and Undo was pressed last, and on which item, so the one that takes its place takes its focus, and never on another item the pane goes on to show.
-  const [pressed, setPressed] = useState<
-    { readonly itemId: string; readonly which: "close" | "undo" } | undefined
-  >(undefined);
-  const pressedHere = pressed?.itemId === item.id ? pressed.which : undefined;
   const question =
-    openAsk === undefined || wordsAlone ? undefined : resolving ? (
-      <DraftResolving
-        takesFocus={pressedHere === "close"}
-        onUndo={() => {
-          setPressed({ itemId: item.id, which: "undo" });
-          onDraft({ ...draft, resolving: undefined });
-        }}
-      />
-    ) : (
+    openAsk === undefined || wordsAlone ? undefined : (
       <DraftQuestion
         pane={pane}
-        close={
-          <QuestionClose
-            key={item.id}
-            item={item}
-            closer={doors.onClose}
-            takesFocus={pressedHere === "undo"}
-            onStage={() => {
-              setPressed({ itemId: item.id, which: "close" });
-              onDraft({ ...draft, resolving: true });
-            }}
-          />
-        }
+        close={<QuestionResolve key={item.id} item={item} resolver={doors.onClose} />}
       >
         <AskControls
           ask={openAsk}
@@ -1682,9 +1704,9 @@ export function InboxPane({
       </DraftQuestion>
     );
   // The box stands at the thread's end as the reader's draft reply.
-  const draftReply = (
+  const draftReply = (place: VirtualRowPlace) => (
     <AnswerMentions value={mentions}>
-      <DraftReply readerId={readerId}>
+      <DraftReply readerId={readerId} place={place}>
         <InboxAnswerBox
           item={item}
           readerId={readerId}
@@ -1692,7 +1714,6 @@ export function InboxPane({
           agent={by.subject.agent}
           thread={thread}
           controls={question}
-          resolver={resolving ? doors.onClose : undefined}
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}
@@ -1734,7 +1755,7 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
-              onSnooze={doors.onSnooze}
+              onRemind={doors.onRemind}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1748,7 +1769,10 @@ export function InboxPane({
       ) : (
         <Toolbar
           place="inbox-item"
-          start={TOOLBAR_INSET.COLUMN}
+          // Note that a bar inside the item's holder's room that leads with no way back starts on the title it picks up, words rather than crumbs.
+          start={
+            within === true && onBack === undefined ? TOOLBAR_INSET.PAGE : TOOLBAR_INSET.COLUMN
+          }
           wrapHeading
           lead={
             onBack === undefined ? undefined : (
@@ -1758,14 +1782,18 @@ export function InboxPane({
             )
           }
           title={
-            <Crumbs
-              holder={holder}
-              by={by}
-              doors={doors}
-              title={cardTitle(item.title)}
-              titleShown={headingAway}
-            />
+            within === true ? undefined : (
+              <Crumbs
+                holder={holder}
+                by={by}
+                doors={doors}
+                title={cardTitle(item.title)}
+                titleShown={headingAway}
+              />
+            )
           }
+          pickUp={within === true ? { name: cardTitle(item.title), shown: headingAway } : undefined}
+          quiet={within === true}
           actions={
             <>
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
@@ -1780,7 +1808,7 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
-                onSnooze={doors.onSnooze}
+                onRemind={doors.onRemind}
                 onClose={doors.onClose}
               />
             </>
@@ -1789,7 +1817,7 @@ export function InboxPane({
       )}
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
-        <Conversation subject={item.id} list={board}>
+        <Conversation list={board}>
           <ConversationContent
             className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
           >
@@ -1797,55 +1825,64 @@ export function InboxPane({
             <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
               <ReplyDoorProvider value={quoteDoor?.lay}>
-                <Stack
-                  as={LAYOUT_ELEMENT.OL}
-                  gap={GAP.NONE}
+                {/* Each item's thread is a run of its own, so it opens at its newest message. Note that every row is drawn, because the thread is a few dozen messages at most and its comments' timeline is drawn from each to the next. */}
+                <ConversationRows
+                  key={item.id}
+                  keys={rowKeys}
+                  estimate={THREAD_ROW_ESTIMATE_PX}
+                  gap={0}
+                  overscan={rowKeys.length}
+                  listItems
                   className={INBOX_THREAD}
                   aria-label="Messages"
                 >
-                  <ThreadEventsAt
-                    itemId={item.id}
-                    events={events}
-                    after={-1}
-                    by={by}
-                    now={now}
-                    images={images}
-                  />
-                  {thread.map((message, at) => (
-                    <Fragment key={message.id}>
-                      {/* A close's note is drawn under the close's own line. */}
-                      {notes.has(message.id) ? null : (
-                        <ThreadMessage
-                          itemId={item.id}
-                          title={cardTitle(item.title)}
-                          threadAddressedTo={inboxAddressedTo(item)}
-                          message={message}
-                          thread={thread}
-                          by={by}
-                          now={now}
-                          images={images}
-                          waitingOn={waitingOn}
-                        />
-                      )}
-                      {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
-                      {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
-                        <EarlierMessages by={by} />
-                      ) : null}
-                      <ThreadEventsAt
-                        itemId={item.id}
-                        events={events}
-                        after={at}
-                        by={by}
-                        now={now}
-                        images={images}
-                      />
-                    </Fragment>
-                  ))}
-                  {pending.map((reply) => (
-                    <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
-                  ))}
-                  {draftReply}
-                </Stack>
+                  {(at, place) => {
+                    const row = rows[at];
+                    switch (row?.kind) {
+                      case THREAD_ROW.EVENT:
+                        return (
+                          <ThreadEvent
+                            itemId={item.id}
+                            line={row.line}
+                            by={by}
+                            now={now}
+                            images={images}
+                            place={place}
+                          />
+                        );
+                      case THREAD_ROW.MESSAGE:
+                        return (
+                          <ThreadMessage
+                            itemId={item.id}
+                            title={cardTitle(item.title)}
+                            threadAddressedTo={inboxAddressedTo(item)}
+                            message={row.message}
+                            thread={thread}
+                            by={by}
+                            now={now}
+                            images={images}
+                            waitingOn={waitingOn}
+                            place={place}
+                          />
+                        );
+                      case THREAD_ROW.EARLIER:
+                        return <EarlierMessages by={by} place={place} />;
+                      case THREAD_ROW.PENDING:
+                        return (
+                          <PendingReply
+                            readerId={readerId}
+                            reply={row.reply}
+                            now={now}
+                            place={place}
+                          />
+                        );
+                      case THREAD_ROW.DRAFT:
+                        return draftReply(place);
+                      default:
+                        return null;
+                    }
+                  }}
+                </ConversationRows>
               </ReplyDoorProvider>
             </ItemWords>
             {/* Note that the thread above keeps its words with no line under it while the app is offline, since the Offline mark says why. */}

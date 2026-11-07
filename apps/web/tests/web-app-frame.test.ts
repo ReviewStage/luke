@@ -60,7 +60,7 @@ test("a tab whose host cannot stand takes the frame down and says so with Reload
   await vi.waitFor(() => {
     assert.equal(
       root.querySelector('[role="alert"]')?.textContent,
-      "This page could not be shown.Reload",
+      "Something went wrongThis page could not be shown.Reload",
     );
   });
   assert.deepEqual(

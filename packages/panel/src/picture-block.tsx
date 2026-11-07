@@ -8,7 +8,7 @@ import {
   PictureTile,
   VideoPlayer,
 } from "@repo/ui";
-import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-read";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.

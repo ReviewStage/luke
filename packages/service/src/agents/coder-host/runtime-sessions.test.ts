@@ -49,7 +49,7 @@ import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import { sealCodexDeviceCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
@@ -66,20 +66,19 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
-import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
   KEY_REFUSAL,
   type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
   RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  SESSION_TURN,
+  type SessionMessage,
+} from "../sessions/agent-sessions.js";
 import { macOffers, THIS_MAC } from "./agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { rewoundAgent } from "./rewind.js";
@@ -100,29 +99,29 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 /**
  * runtime-sessions.test.ts -- every way the service reaches a coding agent's session answers it by the runtime its conversation runs on.
  *
- * Two agents stand side by side in one workspace: one on eve, as every
- * agent ran before native harnesses, and one on Claude Code, paid for by its
- * starter's Claude plan. eve and the native harness are each a fake that
- * writes down every call, so a test reads which of the two each call
- * reached and what it was handed. The eve agent is refused as ended, since
- * eve runs no agent any more: a launch or a message reaches nothing, and a
+ * Two agents stand side by side in one workspace: one on the retired runtime,
+ * as every agent ran before native harnesses, and one on Claude Code, paid for by its
+ * starter's Claude plan. The retired runtime's sessions and the native harness are
+ * each a fake that writes down every call, so a test reads which of the two each call
+ * reached and what it was handed. The retired runtime's agent is refused as ended,
+ * since that runtime runs no agent any more: a launch or a message reaches nothing, and a
  * Stop or a retire of its session is answered as nothing running; the
  * Claude Code agent's calls reach the harness,
- * acting for its starter, and eve hears nothing of them. That holds for the
+ * acting for its starter, and the retired runtime hears nothing of them. That holds for the
  * router itself, for every composition a route, the deployment, the agent
- * doors, and the planner's tools wrap their eve in, and for the paths that
+ * doors, and the planner's tools wrap their sessions in, and for the paths that
  * run through them: a Start, a message from the composer or an Inbox answer,
  * and a Stop. A Codex agent, paid for by its starter's ChatGPT plan, is
- * answered by Codex alike, and neither eve nor Claude Code hears it. Where no
+ * answered by Codex alike, and neither the retired runtime nor Claude Code hears it. Where no
  * harness is provided, nor a relay to one, a native agent is refused by name
- * and nothing reaches eve. Synthetic accounts and words throughout; the
+ * and nothing reaches the retired runtime. Synthetic accounts and words throughout; the
  * store is PGlite.
  */
 
 /** The sessions of one runtime, writing down every call it takes. */
 function recording(sessionPrefix: string) {
   const calls: string[] = [];
-  const messages: EveMessage[] = [];
+  const messages: SessionMessage[] = [];
   const answers: {
     open: string;
     status: number;
@@ -131,7 +130,7 @@ function recording(sessionPrefix: string) {
     halts: boolean;
     keyRefusal?: KeyRefusal;
   } = {
-    open: EVE_SEND_OUTCOME.ACCEPTED,
+    open: SESSION_SEND_OUTCOME.ACCEPTED,
     status: 0,
     halts: true,
   };
@@ -152,10 +151,10 @@ function recording(sessionPrefix: string) {
       Effect.sync(() => {
         calls.push(`open:${message.conversationId}`);
         messages.push(message);
-        return answers.open === EVE_SEND_OUTCOME.ACCEPTED
-          ? { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `${sessionPrefix}${randomUUID()}` }
+        return answers.open === SESSION_SEND_OUTCOME.ACCEPTED
+          ? { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId: `${sessionPrefix}${randomUUID()}` }
           : {
-              outcome: EVE_SEND_OUTCOME.FAILED,
+              outcome: SESSION_SEND_OUTCOME.FAILED,
               status: answers.status,
               ...(answers.planRefusal === undefined ? {} : { planRefusal: answers.planRefusal }),
             };
@@ -165,9 +164,9 @@ function recording(sessionPrefix: string) {
         calls.push(`send:${sessionId}`);
         messages.push(message);
         return answers.planRefusal === undefined && answers.keyRefusal === undefined
-          ? { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() }
+          ? { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() }
           : {
-              outcome: EVE_SEND_OUTCOME.FAILED,
+              outcome: SESSION_SEND_OUTCOME.FAILED,
               status: answers.status,
               ...(answers.planRefusal === undefined ? {} : { planRefusal: answers.planRefusal }),
               ...(answers.planResetsAt === undefined ? {} : { planResetsAt: answers.planResetsAt }),
@@ -177,12 +176,12 @@ function recording(sessionPrefix: string) {
     cancel: (sessionId, turnId) =>
       Effect.sync(() => {
         calls.push(`cancel:${sessionId}:${turnId}`);
-        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+        return { outcome: SESSION_CANCEL_OUTCOME.ACCEPTED };
       }),
     reset: (sessionId) =>
       Effect.sync(() => {
         calls.push(`reset:${sessionId}`);
-        return { outcome: EVE_RESET_OUTCOME.RESET };
+        return { outcome: SESSION_RESET_OUTCOME.RESET };
       }),
   };
   return { calls, messages, answers, sessions };
@@ -190,9 +189,9 @@ function recording(sessionPrefix: string) {
 
 type Recording = ReturnType<typeof recording>;
 
-/** The three runtimes: eve, and Claude Code and Codex behind `NativeAgentSessions`, which writes down whom it acts for. */
+/** The three runtimes: a fake for the retired runtime's sessions, and Claude Code and Codex behind `NativeAgentSessions`, which writes down whom it acts for. */
 function runtimes() {
-  const eve = recording("wrun_");
+  const agentSessions = recording("wrun_");
   const claudeCode = recording(`${NATIVE_SESSION_PREFIX.claude_code}000000000001-`);
   const codex = recording(NATIVE_SESSION_PREFIX.codex);
   const actingFor: string[] = [];
@@ -204,7 +203,7 @@ function runtimes() {
       );
     },
   });
-  return { eve, claudeCode, codex, actingFor, native };
+  return { agentSessions, claudeCode, codex, actingFor, native };
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -224,7 +223,7 @@ const GITHUB = githubReaching(INSTALLATIONS).layer;
 
 const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 
-/** The deployment's environment: its eve secret and the key ring. */
+/** The deployment's environment: the key ring, and nothing else set. */
 function environment(): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
     posthogPersonalApiKey: undefined,
@@ -235,6 +234,8 @@ function environment(): Layer.Layer<HostedEnvironment> {
     cronSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
+    titleAnthropicApiKey: undefined,
+    previewApiKeys: {},
   };
   return Layer.succeed(HostedEnvironment, values);
 }
@@ -243,7 +244,7 @@ function environment(): Layer.Layer<HostedEnvironment> {
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const teammate = yield* openGithubUser();
-  // The owner's agents on eve run on its own keys, since ours pays for no coding agent.
+  // The owner's agents run on its own keys where no plan pays, since ours pays for no coding agent.
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
   yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
   const workspaceId = yield* openWorkspace(owner);
@@ -260,7 +261,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" |
       idempotencyKey: randomUUID(),
       model: runtime === "codex" ? "openai/gpt-5.5" : "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       runtime,
@@ -277,7 +278,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" |
 
 const messageTo = (agent: Agent, text = "Expire invitations after a week.") => ({
   conversationId: agent.conversationId,
-  turn: EVE_HOST_TURN.TYPED,
+  turn: SESSION_TURN.TYPED,
   message: text,
 });
 
@@ -285,7 +286,7 @@ const messageTo = (agent: Agent, text = "Expire invitations after a week.") => (
 const everyCall = (sessions: AgentSessions, agent: Agent) =>
   Effect.gen(function* () {
     const opened = yield* sessions.open(messageTo(agent));
-    assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+    assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
     yield* sessions.send(opened.sessionId, messageTo(agent, "And the emails."));
     yield* sessions.cancel(opened.sessionId, "turn-1");
     yield* sessions.reset(opened.sessionId);
@@ -299,24 +300,26 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a coding agent's sessions answered by its runtime",
   (it) => {
     it.effect(
-      "a change of model reaches a Claude Code agent's runner through its harness, acting for its starter, and nothing of an eve agent's",
+      "a change of model reaches a Claude Code agent's runner through its harness, acting for its starter, and nothing of the agent's on the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, actingFor, native } = runtimes();
+          const { agentSessions, claudeCode, actingFor, native } = runtimes();
           const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           const nativeOpened = yield* sessions.open(messageTo(onClaudeCode));
-          assert.ok(nativeOpened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+          assert.ok(nativeOpened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
           yield* claimRuntimeSession(
-            { userId: owner, conversationId: onEve.conversationId },
+            { userId: owner, conversationId: onRetired.conversationId },
             "wrun_eve",
             new Date(0),
           );
           actingFor.length = 0;
 
-          const onEveApplied = yield* runnerChoiceApplied(onEve).pipe(Effect.provide(native));
+          const onRetiredApplied = yield* runnerChoiceApplied(onRetired).pipe(
+            Effect.provide(native),
+          );
           const onClaudeCodeApplied = yield* runnerChoiceApplied(onClaudeCode).pipe(
             Effect.provide(native),
           );
@@ -324,10 +327,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const unreached = yield* runnerChoiceApplied(onClaudeCode);
 
           assert.deepEqual(
-            [onEveApplied, onClaudeCodeApplied, unreached],
+            [onRetiredApplied, onClaudeCodeApplied, unreached],
             [RUNNER_CHOICE.NOT_LIVE, RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE],
           );
-          assert.deepEqual(heard(eve), []);
+          assert.deepEqual(heard(agentSessions), []);
           assert.deepEqual(claudeCode.calls.slice(1), [
             `retune:${nativeOpened.sessionId}:${onClaudeCode.conversationId}`,
           ]);
@@ -336,40 +339,40 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "an eve agent's launch and message are refused as ended, and a Stop and a retire of its session answered as nothing running, with eve hearing none of it, and a Claude Code agent's every call reaches the harness acting for its starter, whoever calls",
+      "the launch and message of an agent on the retired runtime are refused as ended, and a Stop and a retire of its session answered as nothing running, with no runtime hearing any of it, and a Claude Code agent's every call reaches the harness acting for its starter, whoever calls",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, actingFor, native } = runtimes();
+          const { agentSessions, claudeCode, actingFor, native } = runtimes();
           const retired = {
-            outcome: EVE_SEND_OUTCOME.FAILED,
+            outcome: SESSION_SEND_OUTCOME.FAILED,
             status: 409,
             runtimeRefusal: RUNTIME_REFUSAL.ENDED,
           };
 
           const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
-          assert.deepEqual(yield* sessions.open(messageTo(onEve)), retired);
+          assert.deepEqual(yield* sessions.open(messageTo(onRetired)), retired);
           assert.deepEqual(
-            yield* sessions.send("wrun_eve", messageTo(onEve, "And the emails.")),
+            yield* sessions.send("wrun_eve", messageTo(onRetired, "And the emails.")),
             retired,
           );
           assert.deepEqual(yield* sessions.cancel("wrun_eve", "turn-1"), {
-            outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN,
+            outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN,
           });
           assert.deepEqual(yield* sessions.reset("wrun_eve"), {
-            outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION,
+            outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION,
           });
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
           assert.deepEqual(claudeCode.calls, []);
 
           const nativeSession = yield* everyCall(sessions, onClaudeCode);
           assert.deepEqual(heard(claudeCode), ["open", "send", "cancel", "reset"]);
-          assert.deepEqual(eve.calls, []);
-          // A launch and a message act for the agent's starter, whose plan pays; a cancel or reset for the caller, as eve's does.
+          assert.deepEqual(agentSessions.calls, []);
+          // A launch and a message act for the agent's starter, whose plan pays; a cancel or reset for the caller.
           assert.deepEqual(actingFor, [owner, owner, teammate, teammate]);
-          // The session the harness opened is the conversation's record, as eve's door records eve's.
+          // The session the harness opened is the conversation's record.
           const recorded = yield* recordedRuntimeSession({
             userId: owner,
             conversationId: onClaudeCode.conversationId,
@@ -379,15 +382,15 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message from the composer or an Inbox answer to an eve agent is refused as ended and reaches nothing, and one to a Claude Code agent reaches its runner under its line's own id",
+      "a message from the composer or an Inbox answer to an agent on the retired runtime is refused as ended and reaches nothing, and one to a Claude Code agent reaches its runner under its line's own id",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           yield* claimRuntimeSession(
-            { userId: owner, conversationId: onEve.conversationId },
+            { userId: owner, conversationId: onRetired.conversationId },
             "wrun_eve",
             new Date(0),
           );
@@ -406,7 +409,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
 
           assert.deepEqual(
-            yield* Effect.result(steerAgent(sessions, writer, owner, onEve, line("key-eve"))),
+            yield* Effect.result(steerAgent(sessions, writer, owner, onRetired, line("key-eve"))),
             Result.fail(HOSTED_REFUSAL.AGENT_RETIRED),
           );
           assert.equal(
@@ -414,9 +417,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             STEER_OUTCOME.SENT,
           );
 
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
           assert.equal(
-            yield* sentLineStands(owner, onEve.conversationId, sentLineId("key-eve")),
+            yield* sentLineStands(owner, onRetired.conversationId, sentLineId("key-eve")),
             false,
           );
           assert.deepEqual(claudeCode.calls, [`send:${nativeSession}`]);
@@ -425,7 +428,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent on eve, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key, an API key since removed, or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches eve and no payer moves",
+      "a message to an agent on the retired runtime, its session recorded as every one's was, is refused as ended whoever paid for it, Vespin's key, an API key since removed, or none recorded, and one to an agent on Claude Code whose API key was since removed is refused by name; nothing reaches the retired runtime and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -434,7 +437,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             organizationId: yield* openWorkspace(bare),
             name: "Invitations",
           });
-          const onEveAs = (
+          const onRetiredAs = (
             starter: string,
             onTask: string,
             payer: AgentPayer | undefined,
@@ -446,7 +449,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 idempotencyKey: randomUUID(),
                 model: "anthropic/claude-opus-5.5",
                 effort: "high",
-                planSnapshot: "# Invitations\n",
+                descriptionSnapshot: "# Invitations\n",
                 prompt: null,
                 repository: null,
                 runtime,
@@ -454,13 +457,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               }),
               (started) => Option.getOrThrow(started).agent,
             );
-          const appText = yield* onEveAs(owner, taskId, AGENT_PAYER.APP);
-          const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
-          const eveKeyRemoved = yield* onEveAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
+          const appText = yield* onRetiredAs(owner, taskId, AGENT_PAYER.APP);
+          const unrecorded = yield* onRetiredAs(bare, bareTask.id, undefined);
+          const retiredKeyRemoved = yield* onRetiredAs(bare, bareTask.id, AGENT_PAYER.API_KEY);
           for (const [starter, agent] of [
             [owner, appText],
             [bare, unrecorded],
-            [bare, eveKeyRemoved],
+            [bare, retiredKeyRemoved],
           ] as const) {
             yield* claimRuntimeSession(
               { userId: starter, conversationId: agent.conversationId },
@@ -468,13 +471,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               new Date(0),
             );
           }
-          const nativeKeyRemoved = yield* onEveAs(
+          const nativeKeyRemoved = yield* onRetiredAs(
             bare,
             bareTask.id,
             AGENT_PAYER.API_KEY,
             "claude_code",
           );
-          const { eve } = runtimes();
+          const { agentSessions } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const send = (starter: string, agent: Agent) =>
             Effect.gen(function* () {
@@ -491,7 +494,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           for (const [name, starter, agent] of [
             ["Vespin's key paid, an API key saved since", owner, appText],
             ["no payer recorded, no API key", bare, unrecorded],
-            ["its API key removed", bare, eveKeyRemoved],
+            ["its API key removed", bare, retiredKeyRemoved],
             ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
           ] as const) {
             const sent = yield* send(starter, agent);
@@ -517,23 +520,23 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name,
             );
           }
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
         }),
     );
 
     it.effect(
-      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and cuts an eve agent's, whose session ended, with nothing to stop and nothing asked of eve",
+      "a rewind ends a Claude Code agent's runner before it cuts and cuts nothing where the runner could not be ended, and cuts the one of an agent on the retired runtime, whose session ended, with nothing to stop and nothing asked of the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const unhalted = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
           const lines = new Map<string, string>();
           for (const [agent, sessionId] of [
-            [onEve, "wrun_eve"],
+            [onRetired, "wrun_eve"],
             [onClaudeCode, nativeSession],
             [unhalted, `${nativeSession}0`],
           ] as const) {
@@ -574,45 +577,45 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(missing, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
           assert.deepEqual(claudeCode.calls, []);
 
-          const eveRewound = yield* rewind(onEve);
+          const retiredRewound = yield* rewind(onRetired);
           const nativeRewound = yield* rewind(onClaudeCode);
           claudeCode.answers.halts = false;
           const refused = yield* rewind(unhalted);
 
-          assert.ok(Result.isSuccess(eveRewound));
+          assert.ok(Result.isSuccess(retiredRewound));
           assert.ok(Result.isSuccess(nativeRewound));
           assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
           // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
           assert.deepEqual(claudeCode.calls, [
             `halt:${nativeSession}:${onClaudeCode.conversationId}`,
             `halt:${nativeSession}:${onClaudeCode.conversationId}`,
             `halt:${nativeSession}0:${unhalted.conversationId}`,
           ]);
           assert.deepEqual(
-            [yield* standing(onEve), yield* standing(onClaudeCode), yield* standing(unhalted)],
+            [yield* standing(onRetired), yield* standing(onClaudeCode), yield* standing(unhalted)],
             [0, 0, 1],
           );
         }),
     );
 
     it.effect(
-      "a Stop names a Claude Code agent's turn under way by the turn's own id, and finds none under way on an eve agent's session, which eve is never asked of",
+      "a Stop names a Claude Code agent's turn under way by the turn's own id, and finds none under way on the session of an agent on the retired runtime, which nothing is asked of",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
           const sessionOf = new Map([
-            [onEve.conversationId, "wrun_eve"],
+            [onRetired.conversationId, "wrun_eve"],
             [onClaudeCode.conversationId, nativeSession],
           ]);
           const nativeTurn = randomUUID();
-          for (const [agent, eveTurnId] of [
-            [onEve, "turn_3"],
+          for (const [agent, runtimeTurnId] of [
+            [onRetired, "turn_3"],
             [onClaudeCode, nativeTurn],
           ] as const) {
             const target = { userId: owner, conversationId: agent.conversationId };
@@ -623,15 +626,15 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             const write = yield* writer;
             yield* write.enqueueTurn(target, {
-              turnId: agent === onEve ? randomUUID() : nativeTurn,
-              eveTurnId,
+              turnId: agent === onRetired ? randomUUID() : nativeTurn,
+              runtimeTurnId,
               origin: TURN_ORIGIN.TYPED,
             });
           }
-          yield* stoppedTurn(writer, owner, onEve).pipe(Effect.provide(native));
+          yield* stoppedTurn(writer, owner, onRetired).pipe(Effect.provide(native));
           yield* stoppedTurn(writer, owner, onClaudeCode).pipe(Effect.provide(native));
 
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
           assert.deepEqual(claudeCode.calls, [`cancel:${nativeSession}:${nativeTurn}`]);
         }),
     );
@@ -641,7 +644,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
-          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onRetired = yield* agentOn(owner, taskId, "eve");
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const { claudeCode, actingFor, native } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -707,7 +710,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               writesToAgent(teammate, onClaudeCode, payer),
               writesToAgent(owner, onClaudeCode, payer, PLAN_AGENT_WRITERS.STARTER),
               writesToAgent(teammate, onClaudeCode, payer, PLAN_AGENT_WRITERS.STARTER),
-              writesToAgent(teammate, onEve, null, PLAN_AGENT_WRITERS.STARTER),
+              writesToAgent(teammate, onRetired, null, PLAN_AGENT_WRITERS.STARTER),
             ],
             [true, true, true, false, true],
           );
@@ -715,12 +718,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Codex agent's every call reaches Codex acting for its starter, through the router, the agent doors' composition, a message, and a Stop, and neither eve nor Claude Code hears it",
+      "a Codex agent's every call reaches Codex acting for its starter, through the router, the agent doors' composition, a message, and a Stop, and neither the retired runtime nor Claude Code hears it",
       () =>
         Effect.gen(function* () {
           const { owner, teammate, taskId } = yield* openTeam;
           const onCodex = yield* agentOn(owner, taskId, "codex");
-          const { eve, claudeCode, codex, actingFor, native } = runtimes();
+          const { agentSessions, claudeCode, codex, actingFor, native } = runtimes();
 
           const sessions = yield* routedSessions(teammate).pipe(Effect.provide(native));
           const session = yield* everyCall(sessions, onCodex);
@@ -757,24 +760,24 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const write = yield* writer;
           yield* write.enqueueTurn(
             { userId: owner, conversationId: onCodex.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           yield* stoppedTurn(writer, owner, onCodex).pipe(Effect.provide(native));
           assert.ok(
             codex.calls.at(-1)?.startsWith("cancel:") && codex.calls.at(-1)?.endsWith(turnId),
           );
 
-          assert.deepEqual([eve.calls, claudeCode.calls], [[], []]);
+          assert.deepEqual([agentSessions.calls, claudeCode.calls], [[], []]);
         }),
     );
 
     it.effect(
-      "a Codex agent whose starter's ChatGPT sign-in refuses is refused by name, signed out, OpenAI unreachable, the plan's limit reached or the account not eligible, and nothing turns to eve",
+      "a Codex agent whose starter's ChatGPT sign-in refuses is refused by name, signed out, OpenAI unreachable, the plan's limit reached or the account not eligible, and nothing turns to the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
           const onCodex = yield* agentOn(owner, taskId, "codex");
-          const { eve, codex, native } = runtimes();
+          const { agentSessions, codex, native } = runtimes();
           yield* claimRuntimeSession(
             { userId: owner, conversationId: onCodex.conversationId },
             `${NATIVE_SESSION_PREFIX.codex}${randomUUID()}`,
@@ -805,17 +808,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED.error,
             HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE.error,
           ]);
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
         }),
     );
 
     it.effect(
-      "a Claude Code agent whose starter's Claude plan is refused or at its limit is refused by name, the limit with the reset Claude Code named, and nothing turns to eve",
+      "a Claude Code agent whose starter's Claude plan is refused or at its limit is refused by name, the limit with the reset Claude Code named, and nothing turns to the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           yield* claimRuntimeSession(
             { userId: owner, conversationId: onClaudeCode.conversationId },
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
@@ -846,17 +849,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt },
             ],
           );
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
         }),
     );
 
     it.effect(
-      "a Claude Code agent whose starter's API key is saved but unreadable, or gone, is refused by name rather than as the service down, and nothing turns to eve",
+      "a Claude Code agent whose starter's API key is saved but unreadable, or gone, is refused by name rather than as the service down, and nothing turns to the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           yield* claimRuntimeSession(
             { userId: owner, conversationId: onClaudeCode.conversationId },
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
@@ -882,17 +885,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             [unreadable.failure, missing.failure],
             [HOSTED_REFUSAL.AGENT_API_KEY_UNREADABLE, HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING],
           );
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
         }),
     );
 
     it.effect(
-      "where no native harness is provided, nor a relay to one, a Claude Code agent is refused by name and eve hears nothing",
+      "where no native harness is provided, nor a relay to one, a Claude Code agent is refused by name and the retired runtime hears nothing",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
-          const { eve } = runtimes();
+          const { agentSessions } = runtimes();
           yield* claimRuntimeSession(
             { userId: owner, conversationId: onClaudeCode.conversationId },
             `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
@@ -910,7 +913,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           assert.ok(Result.isFailure(sent));
           assert.equal(sent.failure.error, HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE.error);
-          assert.deepEqual(eve.calls, []);
+          assert.deepEqual(agentSessions.calls, []);
         }),
     );
   },
@@ -1013,20 +1016,15 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
         ),
       );
       assert.ok(Result.isSuccess(ring));
-      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
-        ring.success,
-        owner,
-        {
-          clientId: "dynamic-client-fixture",
-          accountId: "chatgpt-subject",
-          accessToken: "access-0",
-          refreshToken: "refresh-0",
-          idToken: "id-token-0",
-          expiresInSeconds: 3600,
-          scopes: [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"],
-        },
-        new Date(0),
-      );
+      const accessExpiresAt = new Date(3_600_000);
+      const { sealed, hint } = sealCodexDeviceCredentials(ring.success, owner, {
+        accessToken: "access-0",
+        refreshToken: "refresh-0",
+        idToken: "id-token-0",
+        accountId: "chatgpt-subject",
+        chatgptAccountId: undefined,
+        accessExpiresAt,
+      });
       yield* saveProviderKey(
         owner,
         PROVIDER_KEY_PROVIDER.OPENAI,
@@ -1053,7 +1051,7 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
   });
 
 /** The account's own Anthropic API key, saved as Settings saves one. */
-/** An API key of the provider's saved for the owner, which eve's steps on its models run on. */
+/** An API key of the provider's saved for the owner, which a harness runs the provider's models on where no plan pays. */
 const saveApiKey = (
   owner: string,
   provider: typeof PROVIDER_KEY_PROVIDER.ANTHROPIC | typeof PROVIDER_KEY_PROVIDER.OPENAI,
@@ -1108,7 +1106,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a Start decides the runtime and the payer once",
   (it) => {
     it.effect(
-      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model or an account with no setup-token, none with an API key, is refused by name with the provider, since Vespin's key pays for no coding agent, and a function with no harness refuses it as not here rather than run it on eve; each leaves no agent",
+      "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model or an account with no setup-token, none with an API key, is refused by name with the provider, since Vespin's key pays for no coding agent, and a function with no harness refuses it as not here rather than run it on the retired runtime; each leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1143,7 +1141,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ] as const;
           for (const each of cases) {
             const { owner, workspaceId } = yield* openStarter(each.token);
-            const { eve, claudeCode, native } = runtimes();
+            const { agentSessions, claudeCode, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
@@ -1162,7 +1160,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 assertCredentialMissing(started, each.on, each.name);
               }
               assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-              assert.deepEqual([heard(eve), heard(claudeCode)], [[], []], each.name);
+              assert.deepEqual([heard(agentSessions), heard(claudeCode)], [[], []], each.name);
               continue;
             }
             assert.ok(Result.isSuccess(started), each.name);
@@ -1174,7 +1172,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
               each.name,
             );
-            assert.deepEqual([heard(eve), heard(claudeCode)], [[], ["open"]], each.name);
+            assert.deepEqual([heard(agentSessions), heard(claudeCode)], [[], ["open"]], each.name);
           }
         }),
     );
@@ -1321,7 +1319,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start handed words or the plan on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
+      "a Start handed words or the description on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1332,9 +1330,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
           const { native } = runtimes();
           const words = startOn(task.id, "anthropic/claude-opus-5.5");
-          const plan = { ...startOn(task.id, "anthropic/claude-opus-5.5"), prompt: undefined };
+          const description = {
+            ...startOn(task.id, "anthropic/claude-opus-5.5"),
+            prompt: undefined,
+          };
 
-          for (const ask of [words, plan]) {
+          for (const ask of [words, description]) {
             const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
               Effect.provide(Layer.mergeAll(CATALOG, environment(), native)),
               Effect.result,
@@ -1752,13 +1753,13 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           const keyed = yield* openStarter(false);
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-          const onEve = runtimes();
+          const onRetired = runtimes();
           yield* startAgent(
             routedSessions(keyed.owner),
             keyed.owner,
             startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
-          ).pipe(Effect.provide(layers(onEve.native)));
-          assert.equal(onEve.eve.messages[0]?.lineId, undefined);
+          ).pipe(Effect.provide(layers(onRetired.native)));
+          assert.equal(onRetired.agentSessions.messages[0]?.lineId, undefined);
         }),
     );
 
@@ -1787,23 +1788,23 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             [routing.runtime, routing.payer],
             ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
           );
-          assert.deepEqual([heard(onPlan.eve), heard(onPlan.claudeCode)], [[], ["open"]]);
+          assert.deepEqual([heard(onPlan.agentSessions), heard(onPlan.claudeCode)], [[], ["open"]]);
           assert.equal(started.agent.prompt, "Fix the flaky test.");
 
           const keyed = yield* openStarter(false);
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
           const onKey = runtimes();
-          const onEve = yield* startAgent(
+          const onRetired = yield* startAgent(
             routedSessions(keyed.owner),
             keyed.owner,
             callIn(keyed.workspaceId),
           ).pipe(Effect.provide(layers(onKey.native)));
-          const eveRouting = Option.getOrThrow(
-            yield* readAgentRouting(keyed.owner, onEve.agent.id),
+          const retiredRouting = Option.getOrThrow(
+            yield* readAgentRouting(keyed.owner, onRetired.agent.id),
           );
           // An API key pays a Claude model's agent on Claude Code too, as any Start on one does.
           assert.deepEqual(
-            [eveRouting.runtime, eveRouting.payer],
+            [retiredRouting.runtime, retiredRouting.payer],
             ["claude_code", AGENT_PAYER.API_KEY],
           );
 
@@ -1835,7 +1836,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               }),
             );
           const planned = yield* openStarter(true);
-          const { eve, claudeCode, native } = runtimes();
+          const { agentSessions, claudeCode, native } = runtimes();
           const layers = Layer.mergeAll(
             githubReaching(INSTALLATIONS).layer,
             CATALOG,
@@ -1854,7 +1855,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             [routing.runtime, routing.payer],
             ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
           );
-          assert.deepEqual([heard(eve), heard(claudeCode)], [[], []]);
+          assert.deepEqual([heard(agentSessions), heard(claudeCode)], [[], []]);
 
           const none = yield* openStarter(false);
           const refused = yield* Effect.result(
@@ -1869,7 +1870,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a sign-in OpenAI signed out or none, none with an API key, is refused by name, and so is a Claude agent with no Claude credential, and a function with no harness refuses it as not here rather than run it on eve",
+      "an account with a ChatGPT sign-in starts a GPT agent on Codex paid by its plan; a sign-in OpenAI signed out or none, none with an API key, is refused by name, and so is a Claude agent with no Claude credential, and a function with no harness refuses it as not here rather than run it on the retired runtime",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1918,7 +1919,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ] as const;
           for (const each of cases) {
             const { owner, workspaceId } = yield* openStarter(false, each.chatGpt);
-            const { eve, claudeCode, codex, native } = runtimes();
+            const { agentSessions, claudeCode, codex, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
@@ -1937,7 +1938,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 assertCredentialMissing(started, each.on, each.name);
               }
               assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-              assert.deepEqual([heard(eve), heard(codex), heard(claudeCode)], [[], [], []]);
+              assert.deepEqual(
+                [heard(agentSessions), heard(codex), heard(claudeCode)],
+                [[], [], []],
+              );
               continue;
             }
             assert.ok(Result.isSuccess(started), each.name);
@@ -1950,7 +1954,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
             assert.deepEqual(
-              [heard(eve), heard(codex), heard(claudeCode)],
+              [heard(agentSessions), heard(codex), heard(claudeCode)],
               [[], ["open"], []],
               each.name,
             );
@@ -1959,12 +1963,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on Codex whose ChatGPT sign-in refuses the launch is refused by name, leaving no agent, and never starts on eve",
+      "a Start on Codex whose ChatGPT sign-in refuses the launch is refused by name, leaving no agent, and never starts on the retired runtime",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(false, "signed_in");
-          const { eve, codex, native } = runtimes();
-          codex.answers.open = EVE_SEND_OUTCOME.FAILED;
+          const { agentSessions, codex, native } = runtimes();
+          codex.answers.open = SESSION_SEND_OUTCOME.FAILED;
           codex.answers.status = 403;
           codex.answers.planRefusal = PLAN_REFUSAL.SIGNED_OUT;
           const ask = startIn(workspaceId, "openai/gpt-5.5");
@@ -1980,7 +1984,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(Result.isFailure(refused) && "error" in refused.failure);
           assert.equal(refused.failure.error, HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT.error);
           assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-          assert.deepEqual([heard(codex), eve.calls], [["open"], []]);
+          assert.deepEqual([heard(codex), agentSessions.calls], [["open"], []]);
         }),
     );
 
@@ -2065,7 +2069,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               assert.equal(turned, true, each.name);
             }
             if (each.apiKey) yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-            const { eve, claudeCode, native } = runtimes();
+            const { agentSessions, claudeCode, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
@@ -2087,7 +2091,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const routing = Option.getOrThrow(yield* readAgentRouting(owner, started.agent.id));
             assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
             assert.equal(started.agent.model, each.model, each.name);
-            assert.deepEqual([heard(eve), heard(claudeCode)], [[], ["open"]], each.name);
+            assert.deepEqual([heard(agentSessions), heard(claudeCode)], [[], ["open"]], each.name);
           }
         }),
     );
@@ -2140,7 +2144,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               assert.equal(turned, true, each.name);
             }
             if (each.apiKey !== undefined) yield* saveApiKey(owner, each.apiKey);
-            const { eve, codex, native } = runtimes();
+            const { agentSessions, codex, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               CATALOG,
@@ -2163,7 +2167,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.deepEqual([routing.runtime, routing.payer], each.recorded, each.name);
             assert.equal(started.agent.model, each.model, each.name);
             assert.deepEqual(
-              [heard(eve), heard(codex)],
+              [heard(agentSessions), heard(codex)],
               each.recorded[0] === "codex" ? [[], ["open"]] : [["open"], []],
               each.name,
             );
@@ -2187,7 +2191,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               // API key selected is a key saved, which pays now that ours never does.
               yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
             }
-            const { eve, codex, native } = runtimes();
+            const { agentSessions, codex, native } = runtimes();
             const layers = Layer.mergeAll(
               githubReaching(INSTALLATIONS).layer,
               PLAN_CATALOG,
@@ -2215,43 +2219,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             assert.ok(Result.isSuccess(started), String(forAgents));
             assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");
-            assert.deepEqual(heard(eve), []);
+            assert.deepEqual(heard(agentSessions), []);
             assert.ok(heard(codex).length > 0, "Codex runs it");
           }
-        }),
-    );
-
-    it.effect(
-      "a Start whose harness's image is still being prepared is refused by name, leaving no agent, so the same Start later starts it",
-      () =>
-        Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(true);
-          const { eve, claudeCode, native } = runtimes();
-          claudeCode.answers.open = EVE_SEND_OUTCOME.FAILED;
-          claudeCode.answers.status = IMAGE_PREPARING_STATUS;
-          const layers = Layer.mergeAll(
-            githubReaching(INSTALLATIONS).layer,
-            CATALOG,
-            environment(),
-            native,
-          );
-          const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");
-
-          const preparing = yield* Effect.result(
-            startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
-          );
-          assert.ok(Result.isFailure(preparing) && "error" in preparing.failure);
-          assert.equal(preparing.failure.error, HOSTED_REFUSAL.AGENT_IMAGE_PREPARING.error);
-          assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-
-          yield* TestClock.adjust("1 minute");
-          claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
-            Effect.provide(layers),
-          );
-          assert.equal(started.created, true);
-          assert.deepEqual(heard(claudeCode), ["open", "open"]);
-          assert.deepEqual(eve.calls, []);
         }),
     );
   },

@@ -3,7 +3,8 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
-import { Effect, Exit, Layer, Path, Result, Scope } from "effect";
+import { entityPool, type FieldChange, fieldKind, type WriteDeclaration } from "@repo/sync";
+import { Effect, Exit, Layer, Path, Result, Schema, Scope } from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
@@ -60,6 +61,16 @@ const openedText = (directory: string) =>
     return testCipher().decrypt(Result.getOrThrow(Base64.decode(sealed)));
   });
 
+/** The sealed file's text once a save has written it. */
+const writtenText = (directory: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const file = yield* fileOf(directory);
+    // Note that the write is the disk's own, which no test clock moves, so the test waits on the file itself.
+    yield* Effect.repeat(fileSystem.exists(file), { until: (exists) => exists, times: 10_000 });
+    return yield* fileSystem.readFileString(file);
+  });
+
 /** The file kept again as a build of other row shapes would have kept it: every byte its own but the hash. */
 const keptAtOtherShapes = (directory: string) =>
   Effect.gen(function* () {
@@ -92,23 +103,62 @@ it.effect.each([
   }).pipe(Effect.provide(files)),
 );
 
-it.effect("what moved is written within two seconds, sealed, while the store stands", () =>
+it.effect(
+  "lists that moved are written within thirty seconds, sealed, while the store stands",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("entity-store-");
+      const { store, closed } = yield* opened(directory, DANA);
+      // Note that the store closes before its folder is removed, whatever the assertions find.
+      yield* Effect.addFinalizer(() => closed);
+      yield* store.keep(KEPT_READ.TASK_LIST, LIST);
+
+      yield* TestClock.adjust("30 seconds");
+      const sealed = yield* writtenText(directory);
+
+      assert.equal(sealed.includes("Teammate invitations"), false, "nothing is kept in the clear");
+      assert.deepEqual(JSON.parse(yield* openedText(directory)).reads, {
+        [KEPT_READ.TASK_LIST]: LIST,
+      });
+    }).pipe(Effect.provide(files)),
+);
+
+/** A plan's row as the waiting write below renames it. */
+interface Row {
+  readonly id: string;
+  readonly name: string;
+}
+
+it.effect("a write waiting for the service is written within half a second of its queuing", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("entity-store-");
-    const { store } = yield* opened(directory, DANA);
-    yield* store.keep(KEPT_READ.TASK_LIST, LIST);
+    const pool = yield* entityPool({ mintKey: () => "rename-1", replayRefused: Effect.void });
+    const rename: WriteDeclaration<Row, FieldChange<Row>, string, string> = {
+      kind: fieldKind((row: Row) => row.id),
+      keys: () => ["1"],
+      change: (name) => () => ({ name }),
+      send: () => Effect.succeed({ refused: "unreachable", unanswered: true as const }),
+      queue: { name: "plans.rename", input: Schema.String, queued: () => "waits" },
+    };
+    const scope = yield* Scope.make();
+    yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+    yield* Scope.provide(scope)(
+      openEntityStore({
+        directory,
+        cipher: testCipher(),
+        accountId: DANA,
+        queued: pool.queued,
+        queueMoves: pool.queueMoves,
+      }),
+    );
+    yield* pool.write(rename, "Invites");
 
-    yield* TestClock.adjust("2 seconds");
-    const fileSystem = yield* FileSystem.FileSystem;
-    const file = yield* fileOf(directory);
-    // Note that the write is the disk's own, which no test clock moves, so the test waits on the file itself.
-    yield* Effect.repeat(fileSystem.exists(file), { until: (exists) => exists, times: 10_000 });
-    const sealed = yield* fileSystem.readFileString(file);
+    yield* TestClock.adjust("500 millis");
+    yield* writtenText(directory);
 
-    assert.equal(sealed.includes("Teammate invitations"), false, "nothing is kept in the clear");
-    assert.deepEqual(JSON.parse(yield* openedText(directory)).reads, {
-      [KEPT_READ.TASK_LIST]: LIST,
-    });
+    assert.deepEqual(JSON.parse(yield* openedText(directory)).queue, [
+      { name: "plans.rename", key: "rename-1", input: "Invites" },
+    ]);
   }).pipe(Effect.provide(files)),
 );
 

@@ -9,6 +9,7 @@ import {
   ViewingAsBanner,
 } from "@repo/ui";
 import { UNREPORTED } from "@repo/ui/reported-failure";
+import { useMutation } from "@tanstack/react-query";
 import { authClient, stopImpersonating } from "../../auth-client";
 import { useSocialSignIn } from "../../sign-in-choices";
 
@@ -73,6 +74,8 @@ export function ForbiddenCard({
   onSignOut: () => void;
 }): React.JSX.Element {
   const session = authClient.useSession().data;
+  // Note that the stop answers the service's words where it refused, rather than throwing them.
+  const stopping = useMutation({ mutationFn: stopImpersonating });
   const card = (
     <Centered
       title="Not authorized"
@@ -90,7 +93,12 @@ export function ForbiddenCard({
     <>
       <ViewingAsBanner
         member={{ name: session.user.name, email: session.user.email }}
-        onStop={() => stopImpersonating(session.user.id)}
+        stop={{
+          run: () => stopping.mutate(session.user.id),
+          busy: stopping.isPending,
+          refusal: stopping.data,
+          failed: stopping.isError,
+        }}
       />
       {card}
     </>

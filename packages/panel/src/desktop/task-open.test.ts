@@ -8,6 +8,7 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import type { Task } from "@repo/features/task-wire";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -16,7 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
   agentsControl,
@@ -100,17 +101,7 @@ const ROW = {
   agents: {
     total: 1,
     working: 0,
-    agents: [
-      {
-        id: AGENT.id,
-        title: AGENT.title,
-        model: AGENT.model,
-        effort: AGENT.effort,
-        status: AGENT.status,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 
@@ -125,9 +116,9 @@ function opened(input: { read: boolean; listed: boolean }): TasksControl {
       : { kind: DOCUMENT_REGION.READING },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: input.listed ? [{ agent: AGENT.id }] : [],
+      tabs: input.listed ? [agentTab(AGENT.id)] : [],
       // The tab the task's row chose before its agents were read (`use-main-tabs.ts`).
-      tab: { agent: AGENT.id },
+      tab: agentTab(AGENT.id),
       openAgents: input.listed ? [AGENT.id] : undefined,
     },
     agents: agentsControl({
@@ -162,6 +153,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** What stands in the column's log as a reader sees it: a spinner, nothing, the placeholder's blocks by their shapes and widths, or the log's lines. */

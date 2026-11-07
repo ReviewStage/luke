@@ -2,19 +2,21 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { READ_MARK, type ReadMark, readsUnread } from "@repo/features/read-mark";
 import {
-  PLAN_ACTOR,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionSectionEdit,
   type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Atom } from "effect/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { pressAct, tellAct } from "../act.js";
-import { APP_SLICE } from "../use-app-state.js";
+import { actMutation, pressMutation } from "../act-mutations.js";
+import { appStateQuery, memoizedSelect } from "../use-app-state.js";
 
 /**
- * use-task-looks.ts -- what changed since the developer last looked at a task: the open plan's sections, and the sidebar's unread tasks and agents.
+ * use-task-looks.ts -- what changed since the developer last looked at a task: the open description's sections, and the sidebar's unread tasks and agents.
  *
  * A look is the plan opened, whichever of its column's tabs it opens on. Its
  * mark is kept on the account by the service (`@repo/features/read-mark`),
@@ -58,7 +60,7 @@ interface Visit {
   readonly changed: ReadonlySet<string>;
 }
 
-/** The open plan's sections changed since the last look, each by its heading, and the dismissal that clears them. */
+/** The open description's sections changed since the last look, each by its heading, and the dismissal that clears them. */
 export interface TaskLooks {
   readonly changed: ReadonlySet<string>;
   readonly dismiss: () => void;
@@ -72,34 +74,22 @@ export const NO_LOOKS: TaskLooks = { changed: NOTHING_CHANGED, dismiss: () => un
 /** The task the developer is looking at now: open, so every save that lands on it is seen. */
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
-/** The ids of the tasks and the agents with no task the reader marked unread by hand, as the list carries them. */
-const markedUnreadIdsAtom = Atom.map(
-  APP_SLICE.TASKS,
-  (tasks): ReadonlySet<string> =>
+/** No marks by hand, before the first document arrives. */
+const NONE_MARKED: ReadonlySet<string> = new Set();
+
+/** The ids of the tasks and the agents with no task the reader marked unread by hand, as the list carries them, made once per move of the lists for every reader. */
+const selectMarkedUnreadIds = memoizedSelect(
+  (state) => [state.tasks.tasks, state.tasks.tasklessAgents],
+  (tasks, tasklessAgents): ReadonlySet<string> =>
     new Set(
-      [...(tasks?.tasks ?? []), ...(tasks?.tasklessAgents ?? [])]
+      [...tasks, ...(tasklessAgents ?? [])]
         .filter((row) => row.markedUnread === true)
         .map((row) => row.id),
     ),
 );
 
-/** Whether one task or agent is marked unread by hand, so a row reading it draws again only as its own mark moves, never another's. */
-const markedUnreadAtom = Atom.family((id: string) =>
-  Atom.map(markedUnreadIdsAtom, (marked) => marked.has(id)),
-);
-
-/** The reader's read mark of a task moved, quiet whatever comes back, since no person pressed for it. */
-function lookAtTask(taskId: string, readMark: ReadMark): void {
-  tellAct(ACT_KIND.TASKS_MARK_READ, { taskId, readMark });
-}
-
-/** The reader's read mark of an agent with no task moved, as `lookAtTask` moves a task's. */
-function lookAtAgent(agentId: string, readMark: ReadMark): void {
-  tellAct(ACT_KIND.AGENTS_MARK_READ, { agentId, readMark });
-}
-
-/** The save that last changed each of the plan's sections, each by its heading. */
-function sectionSavesOf(task: Task): readonly PlanSectionEdit[] {
+/** The save that last changed each of the description's sections, each by its heading. */
+function sectionSavesOf(task: Task): readonly DescriptionSectionEdit[] {
   return task.sectionEdits ?? [];
 }
 
@@ -134,8 +124,8 @@ function newestChangeOf(task: Pick<TaskSummary, "updatedAt" | "agents">): number
  * developer's save did before saves named their member, because a save the
  * window cannot place is as likely the reader's as anyone's.
  */
-function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolean {
-  if (edit.actor !== PLAN_ACTOR.DEVELOPER) return false;
+function readersOwn(edit: DescriptionSectionEdit, readerId: string | undefined): boolean {
+  if (edit.actor !== DESCRIPTION_ACTOR.DEVELOPER) return false;
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 
@@ -179,7 +169,7 @@ function revisited(
 }
 
 /**
- * The drawn plan's sections changed since the developer last looked at it,
+ * The drawn description's sections changed since the developer last looked at it,
  * and the plan read: as it opens, which takes back a mark of it as unread,
  * as its agents' activity moves while it stays open, and as it is left,
  * neither of which does. Note that the visit reads the mark `row` carries as
@@ -202,6 +192,12 @@ export function useTaskLooks(
   }
   const taskId = task?.id;
   const activityAt = row?.agents?.activityAt;
+  // Note that a look is sent with `mutate` and no `onError`, quiet whatever comes back, since no person pressed for it.
+  const { mutate: markTaskRead } = useMutation(actMutation(ACT_KIND.TASKS_MARK_READ));
+  const lookAtTask = useCallback(
+    (taskId: string, readMark: ReadMark) => markTaskRead({ taskId, readMark }),
+    [markTaskRead],
+  );
 
   useEffect(() => {
     if (taskId === undefined) return;
@@ -211,7 +207,7 @@ export function useTaskLooks(
       watch(undefined);
       lookAtTask(taskId, READ_MARK.SEEN);
     };
-  }, [taskId, watch]);
+  }, [taskId, watch, lookAtTask]);
 
   // Note that the agents' activity the plan opened with is read by the look opening it, so only a move during the stay is a look of its own.
   const seenActivity = useRef<{ taskId: string; activityAt: number | undefined } | undefined>(
@@ -222,14 +218,14 @@ export function useTaskLooks(
     seenActivity.current = taskId === undefined ? undefined : { taskId, activityAt };
     if (taskId === undefined || seen?.taskId !== taskId || seen.activityAt === activityAt) return;
     lookAtTask(taskId, READ_MARK.SEEN);
-  }, [taskId, activityAt]);
+  }, [taskId, activityAt, lookAtTask]);
 
   const dismiss = useCallback(() => {
     setVisit((held) =>
       held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
     );
     if (taskId !== undefined) lookAtTask(taskId, READ_MARK.SEEN);
-  }, [taskId]);
+  }, [taskId, lookAtTask]);
   // The same looks across draws while neither moves, so the plan they are handed to is not drawn again for new ones.
   const { changed } = current;
   return useMemo(() => ({ changed, dismiss }), [changed, dismiss]);
@@ -244,11 +240,17 @@ export function useTaskLooks(
 export function useAgentLook(agent: Pick<TasklessAgent, "id" | "activityAt"> | undefined): void {
   const agentId = agent?.id;
   const activityAt = agent?.activityAt;
+  // Note that a look is quiet whatever comes back, as `useTaskLooks`' is.
+  const { mutate: markAgentRead } = useMutation(actMutation(ACT_KIND.AGENTS_MARK_READ));
+  const lookAtAgent = useCallback(
+    (agentId: string, readMark: ReadMark) => markAgentRead({ agentId, readMark }),
+    [markAgentRead],
+  );
   useEffect(() => {
     if (agentId === undefined) return;
     lookAtAgent(agentId, READ_MARK.READ);
     return () => lookAtAgent(agentId, READ_MARK.SEEN);
-  }, [agentId]);
+  }, [agentId, lookAtAgent]);
 
   const seenActivity = useRef<{ agentId: string; activityAt: number | undefined } | undefined>(
     undefined,
@@ -259,7 +261,7 @@ export function useAgentLook(agent: Pick<TasklessAgent, "id" | "activityAt"> | u
     if (agentId === undefined || seen?.agentId !== agentId || seen.activityAt === activityAt)
       return;
     lookAtAgent(agentId, READ_MARK.SEEN);
-  }, [agentId, activityAt]);
+  }, [agentId, activityAt, lookAtAgent]);
 }
 
 /**
@@ -292,24 +294,35 @@ export interface ReadMarks {
   readonly mark: (task: Pick<TaskSummary, "id">, unread: boolean) => void;
 }
 
-/** A mark a menu sets by hand: the plan unread until it next opens, or read through now. */
-function markTask(task: Pick<TaskSummary, "id">, unread: boolean): void {
-  void pressAct(ACT_KIND.TASKS_MARK_READ, {
-    taskId: task.id,
-    readMark: unread ? READ_MARK.UNREAD : READ_MARK.READ,
-  });
+/** The mark of a read: unread until the next look, or read through now. */
+function readMarkOf(unread: boolean): ReadMark {
+  return unread ? READ_MARK.UNREAD : READ_MARK.READ;
+}
+
+/** A mark a menu sets by hand: the plan unread until it next opens, or read through now, a failure said in a toast. */
+function useMarkTask(): ReadMarks["mark"] {
+  const { mutate: markTaskRead } = useMutation(pressMutation(ACT_KIND.TASKS_MARK_READ));
+  return useCallback(
+    (task, unread) => markTaskRead({ taskId: task.id, readMark: readMarkOf(unread) }),
+    [markTaskRead],
+  );
 }
 
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
 export function useReadMarks(): ReadMarks {
-  const marked = useAtomValue(markedUnreadIdsAtom);
+  const marked = useQuery({ ...appStateQuery, select: selectMarkedUnreadIds }).data ?? NONE_MARKED;
   const watched = useAtomValue(watchedAtom);
-  return { watched, markedUnread: (taskId) => marked.has(taskId), mark: markTask };
+  const mark = useMarkTask();
+  return { watched, markedUnread: (taskId) => marked.has(taskId), mark };
 }
 
-/** Whether the developer marked a plan unread by hand, as its row reads it (`markedUnreadAtom`). */
+/** Whether the developer marked a plan unread by hand, as its row reads it, so the row draws again only as its own mark moves, never another's. */
 export function useMarkedUnread(taskId: string): boolean {
-  return useAtomValue(markedUnreadAtom(taskId));
+  const select = useCallback(
+    (state: AppStateSnapshot) => selectMarkedUnreadIds(state).has(taskId),
+    [taskId],
+  );
+  return useQuery({ ...appStateQuery, select }).data === true;
 }
 
 /**
@@ -317,13 +330,14 @@ export function useMarkedUnread(taskId: string): boolean {
  * a menu that only writes one never draws again as any plan is marked.
  */
 export function useReadMark(): ReadMarks["mark"] {
-  return markTask;
+  return useMarkTask();
 }
 
 /** An agent with no task marked unread until its page next opens, or read through now, by hand from a menu. */
-export function markAgent(agentId: string, unread: boolean): void {
-  void pressAct(ACT_KIND.AGENTS_MARK_READ, {
-    agentId,
-    readMark: unread ? READ_MARK.UNREAD : READ_MARK.READ,
-  });
+export function useMarkAgent(): (agentId: string, unread: boolean) => void {
+  const { mutate: markAgentRead } = useMutation(pressMutation(ACT_KIND.AGENTS_MARK_READ));
+  return useCallback(
+    (agentId, unread) => markAgentRead({ agentId, readMark: readMarkOf(unread) }),
+    [markAgentRead],
+  );
 }

@@ -11,7 +11,7 @@ import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
  * page's, the agent's, the Inbox item's, the member's, the automation's.
  * Nothing is read for it but an automation's, whose chip reads its
  * workspace's automations, so a place the window holds no name for, an agent
- * past the few a task's row names say, is called by its kind until it does.
+ * the window does not hold, is called by its kind until it does.
  * A plan, a page, an agent, an Inbox item, an automation, or a person is
  * called by the name the window holds for it now even where its link was
  * labeled, since the

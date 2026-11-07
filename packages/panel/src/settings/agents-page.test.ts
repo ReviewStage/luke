@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
@@ -17,13 +18,13 @@ import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { type HostReadsHanded, handHostReads } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -145,10 +146,12 @@ afterEach(() => {
   motion.restore();
 });
 
+/** Waits until no write is out, each answered, so the next press meets the service as the test now stands it. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await vi.waitFor(() => assert.equal(testQueryClientNow().isMutating(), 0));
 }
 
 /** Where the page opened Settings, as the window's opener heard it. */
@@ -187,16 +190,25 @@ async function mount(): Promise<HTMLElement> {
       createElement(
         OpenSettingsProvider,
         { value: (link: SettingsLink) => opened.push(link) },
-        createElement(
-          Fragment,
-          null,
-          onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true })),
-          onRegistry(rendererRegistry, createElement(ToastHost)),
+        // Note that the toasts draw under the page's one client, since a second `withQueryClient` inside it is refused.
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(
+            Fragment,
+            null,
+            createElement(AgentsPage, { signedIn: true }),
+            createElement(
+              RegistryContext.Provider,
+              { value: rendererRegistry },
+              createElement(ToastHost),
+            ),
+          ),
         ),
       ),
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(placeholders(container).length, 0));
   return container;
 }
 
@@ -256,7 +268,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
     ["Reading your default", 3],
   ]);
   await settle();
-  assert.deepEqual(placeholders(page), []);
+  await vi.waitFor(() => assert.equal(placeholders(page).length, 0));
   assert.ok(fastSwitch(page));
 });
 
@@ -293,10 +305,17 @@ test("Effort and Context are each a radio group, the stored value checked and th
   pressKeyIn(effort, "ArrowLeft");
   await settle();
   assert.equal(focusedSegment(), "Medium");
+  // Note that each row draws its option once the default the host lays after its write reaches the preferences' query, so the next write starts from it.
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Medium"]),
+  );
   act(() => segment(context, "200K").click());
   await settle();
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Context")).checked, ["200K"]),
+  );
   // A press on the option already chosen asks nothing of the service.
-  act(() => segment(context, "200K").click());
+  act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
   assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Medium"]);
@@ -319,25 +338,28 @@ test("a refused Effort or Context says so under its own row until that row's nex
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
+  // Note that Low stands once the default the host lays after the save reaches the preferences' query, so High is a change again.
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Low"]),
+  );
 
   refuseWrite = true;
   act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
   await settle();
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
-  const refused = [effort(), context()];
+  const refusal = "The default could not be saved. Try again.";
+  assert.deepEqual(fastRefused, []);
+  // Note that each row's line moves once its write's answer, and the default the host lays after a save, reach their queries.
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[refusal], [refusal]]));
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "High").click());
   await settle();
-  const effortSaved = [effort(), context()];
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[], [refusal]]));
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
-  const refusal = "The default could not be saved. Try again.";
-  assert.deepEqual(fastRefused, []);
-  assert.deepEqual(refused, [[refusal], [refusal]]);
-  assert.deepEqual(effortSaved, [[], [refusal]]);
-  assert.deepEqual([effort(), context()], [[], []]);
+  await vi.waitFor(() => assert.deepEqual([effort(), context()], [[], []]));
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
 });
 
@@ -359,11 +381,14 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
 
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]);
+  // Note that each row ticks once the default the host lays after its write reaches the preferences' query.
+  await vi.waitFor(() => assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]));
 
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
-  assert.deepEqual(marks(), [[], ["Modified", "Saved"], ["Modified", "Saved"]]);
+  await vi.waitFor(() =>
+    assert.deepEqual(marks(), [[], ["Modified", "Saved"], ["Modified", "Saved"]]),
+  );
 
   act(() => motion.finish());
   act(() =>
@@ -379,7 +404,9 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
   );
   act(() => option?.click());
   await settle();
-  assert.deepEqual(marksIn(rowOf(page, "Default model")), ["Modified", "Saved"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(marksIn(rowOf(page, "Default model")), ["Modified", "Saved"]),
+  );
   assert.deepEqual(written().at(-1), { model: SONNET.id, effort: "low" });
 });
 
@@ -435,7 +462,7 @@ test("on Vespin's key the resting Fast row says the same and links nowhere, sinc
     note.textContent ?? "",
     /Fast isn't enabled for this key's Anthropic organization\./u,
   );
-  assert.equal(note.querySelector("a"), null);
+  assert.equal(note.querySelector("a") === null, true);
 });
 
 test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place, which stores the version chosen", async () => {
@@ -452,7 +479,7 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   ];
   stored = { model: sol.id, effort: "high" };
   const page = await mount();
-  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]') === null, true);
   const speed = segmentedGroup(page, "Speed");
   assert.deepEqual(readSegmented(speed), {
     options: ["Standard", "Fast", "Ultrafast"],
@@ -462,7 +489,9 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   act(() => segment(speed, "Ultrafast").click());
   await settle();
   assert.deepEqual(written(), [{ model: "openai/gpt-6.1-sol-ultrafast", effort: "high" }]);
-  assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(readSegmented(segmentedGroup(page, "Speed")).checked, ["Ultrafast"]),
+  );
 });
 
 test("replacing the account's own Anthropic key moves the models the host holds, so Fast follows the new key's organization", async () => {
@@ -485,8 +514,8 @@ test("replacing the account's own Anthropic key moves the models the host holds,
     ).click(),
   );
   const label =
-    [...document.querySelectorAll("label")].find((each) => each.textContent === "New key") ??
-    assert.fail("no New key field");
+    [...document.querySelectorAll("label")].find((each) => each.textContent === "Paste the key") ??
+    assert.fail("no key field");
   const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
@@ -498,20 +527,22 @@ test("replacing the account's own Anthropic key moves the models the host holds,
   act(() => field.form?.requestSubmit());
   await settle();
 
-  assert.equal(fastSwitch(page).disabled, false);
+  // Note that Fast turns once the models the host lays after the save reach their query.
+  await vi.waitFor(() => assert.equal(fastSwitch(page).disabled, false));
 });
 
 test("a catalog that could not be read says so in the Default model menu with Retry, and Retry reads it again", async () => {
   refuseModels = true;
   const page = await mount();
+  // Note that the Default model row stands once the failed read reaches its query.
+  const control = await vi.waitFor(
+    () =>
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
+      assert.fail("no Default model control"),
+  );
   assert.equal(placeholders(page).length, 0, "the page does not read for ever");
 
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
-      assert.fail()
-    ).click(),
-  );
+  act(() => control.click());
   const menu =
     document.querySelector('[role="dialog"][aria-label="Default model"]') ?? assert.fail();
   assert.equal(
@@ -531,7 +562,7 @@ test("a catalog that could not be read says so in the Default model menu with Re
   await settle();
 
   assert.equal(reads().length, before + 1, "Retry asks the service for the models again");
-  assert.equal(menu.querySelector('[role="alert"]'), null);
+  await vi.waitFor(() => assert.equal(menu.querySelector('[role="alert"]') === null, true));
   assert.ok(menu.querySelectorAll('[role="option"]').length > 0, "the models are listed");
 });
 

@@ -14,7 +14,7 @@ import type { WireBoundaryInput } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AdminView } from "../admin/routing.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -114,9 +114,10 @@ async function open(
       ),
     ),
   );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  // Note that the read lands after the act that drew it, as Query tells its observers on a timer of its own.
+  await vi.waitFor(() =>
+    expect(page.querySelector('[role="status"][aria-busy="true"]')).toBeNull(),
+  );
   return { page, opened, exits };
 }
 

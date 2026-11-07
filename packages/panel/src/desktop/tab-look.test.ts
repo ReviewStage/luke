@@ -10,19 +10,27 @@ import {
 import { pageFrameUrl } from "@repo/features/page-frame";
 import type { PageLine } from "@repo/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
-import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
+import {
+  agentTab,
+  changesTab,
+  draftTab,
+  pageTab,
+  TAB_WORDS,
+  terminalTab,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ChipCards } from "../tasks/chip-cards.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
+import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -34,8 +42,8 @@ import { taskCardOf } from "./task-card.js";
 
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
- * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the Plan tab is the task's own name and
+ * glyph and the name its tab wears in the side panel's strip are the ones its
+ * row in that strip's "+" menu wears, the Plan tab is the task's own name and
  * status, the task's own tab hangs the task's card, and a page's tab hangs a
  * card previewing the page.
  */
@@ -61,17 +69,7 @@ const SUMMARY: TaskSummary = {
   agents: {
     total: 1,
     working: 1,
-    agents: [
-      {
-        id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-        title: "Invite flow",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 
@@ -110,7 +108,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES);
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -126,11 +124,11 @@ async function settle(): Promise<void> {
 }
 
 /**
- * The task open on its own tab, a working agent's tab and a draft's beside
+ * The task open on its working agent's tab, or the tab given, a draft's beside
  * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
 async function mount(
-  shown: { body?: string; tab?: SidePanelTab; listed?: TaskSummary } = {},
+  shown: { body?: string; tab?: SidePanelTab; listed?: TaskSummary; main?: MainTab } = {},
 ): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -146,17 +144,17 @@ async function mount(
     },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: MAIN_TAB.OVERVIEW,
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(WORKING.id), draftTab(DRAFT)],
+      tab: shown.main ?? agentTab(WORKING.id),
       openAgents: [WORKING.id],
     },
     sidePanel: {
       ...base.sidePanel,
       open: true,
       tab: shown.tab ?? SIDE_PANEL_TAB.COMMENTS,
-      changes: [{ changes: DONE.id }],
-      terminals: [{ terminal: WORKING.id }],
-      pages: [{ page: FUNNEL.id }],
+      changes: [changesTab(DONE.id)],
+      terminals: [terminalTab(WORKING.id, "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", "Cloud 1")],
+      pages: [pageTab(FUNNEL.id)],
     },
     pages: [FUNNEL],
     agents: agentsControl({
@@ -190,7 +188,7 @@ async function mount(
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           ChipCards,
           { value: chipCards },
@@ -235,30 +233,6 @@ function rowLooks(column: Element): Map<string, Look> {
   return new Map(rows);
 }
 
-test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New agent", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  assert.ok(column, "the plan's column's strip");
-  const tabs = tabLooks(column);
-  const rows = rowLooks(column);
-  for (const name of [WORKING.title, TAB_WORDS.NEW_AGENT]) {
-    assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
-    assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
-  }
-  assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
-});
-
-test("the column's + offers New agent, then each agent, and no New voice chat, which a draft's Call starts", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const rows = [...rowLooks(column).keys()];
-  assert.equal(rows[0], TAB_WORDS.NEW_AGENT);
-  assert.ok(rows.indexOf(WORKING.title ?? "") > 0, "the agents stand after New agent");
-  assert.equal(
-    rows.some((row) => row?.includes("voice chat")),
-    false,
-  );
-});
-
 test("the side panel's + offers an agent's Pull request in the look its tab wears, named by its number and title rather than its agent's name", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
@@ -274,40 +248,33 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
   );
 });
 
-test("the column's strip leads with the task itself, named as the list names it now, and the side panel offers no Plan", async () => {
-  // Note that the list renamed the task before its document was read again, so the tab follows the list.
-  const container = await mount({ listed: { ...SUMMARY, name: "Expire invites after a week" } });
-  const column = container.querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const first = column.querySelector<HTMLElement>('[role="tab"] .ui-tab-label');
-  assert.equal(first?.textContent, "Expire invites after a week", "the task leads the strip");
+test("the task's topbar names the task, as the list names it now, over a strip of its agents alone, and the side panel offers no Plan", async () => {
+  // Note that the list renamed the task before its document was read again, so the topbar follows the list.
+  const container = await mount({
+    listed: { ...SUMMARY, name: "Expire invites after a week" },
+    main: agentTab(WORKING.id),
+  });
+  const topbar = container.querySelector(".task-topbar .ui-toolbar");
+  assert.ok(topbar, "the task's topbar");
+  assert.match(topbar.textContent ?? "", /Expire invites after a week/u);
+  const agents = container.querySelector(".desktop-task-main .main-tabs");
+  assert.ok(agents, "the agents' strip under it");
+  assert.deepEqual([...tabLooks(agents).keys()], [WORKING.title, TAB_WORDS.NEW_AGENT]);
   const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
-  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");
-  assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
-});
-
-test("the column's first tab hangs the task's card, as its sidebar row does", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.ok(tab, "the strip leads with the task's tab");
-  restOn(tab);
-  const card = document.querySelector(".ui-tooltip-card [data-task-card]");
-  assert.ok(card, "the task's card is hung");
-  assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, TASK.name);
-  assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
+  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Description"), "no Plan tab");
+  assert.ok(
+    !rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Description"),
+    "nor a Plan row",
+  );
 });
 
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
-  const container = await mount({
-    body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
-  });
-  const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
+  // Note that the task's details stand in the panel's place, so the tab is read beside an agent and the links on the details.
+  const beside = await mount();
+  const tab = [...beside.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === "#42 Expire invitations",
-  );
-  const [chip, files] = container.querySelectorAll<HTMLElement>(
-    'a[data-mention-ref][data-kind="link"]',
   );
   const cardOf = (control: HTMLElement | undefined) => {
     assert.ok(control, "the pull request is named");
@@ -327,18 +294,29 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
 
   const own = cardOf(tab);
   assert.deepEqual(own, { card: true, name: "Expire invitations", agent: DONE.title });
+  const container = await mount({
+    body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
+    main: MAIN_TAB.OVERVIEW,
+  });
+  const [chip, files] = container.querySelectorAll<HTMLElement>(
+    'a[data-mention-ref][data-kind="link"]',
+  );
   assert.deepEqual(cardOf(chip), own, "the chip hangs the tab's card");
   assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });
 
-test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
+test("a cloud terminal tab wears the still terminal glyph though its agent works, says its name with the agent's beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Terminal",
+    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Cloud 1",
   );
-  assert.ok(tab, "the strip has a Terminal tab");
+  assert.ok(tab, "the strip has a cloud terminal tab");
   assert.equal(tab.querySelector(".ui-tab-detail")?.textContent, WORKING.title);
-  assert.match(tab.querySelector(".ui-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  assert.doesNotMatch(
+    tab.querySelector(".ui-tab-icon")?.innerHTML ?? "",
+    /data-state=/u,
+    "no agent's working glyph",
+  );
   restOn(tab);
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");

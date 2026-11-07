@@ -4,8 +4,10 @@
     "apps/desktop/src/main/services/compose-desktop.ts",
     "apps/desktop/src/utility/task-code.ts",
     "packages/panel/src/renderer-runtime.ts",
+    "packages/ui/src/ui-runtime.ts",
     "apps/desktop/src/renderer/window-root.tsx",
     "apps/host/src/main.ts",
+    "apps/cli/src/main.ts",
     "apps/web/scripts/local-server.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
@@ -37,7 +39,6 @@
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/renderer-revival.ts",
     "packages/panel/src/feedback-images.ts",
-    "packages/ui/src/components/menu/touch-hold.ts",
-    "packages/panel/src/admin/use-admin-read.ts"
+    "packages/ui/src/components/menu/touch-hold.ts"
   ]
 }

@@ -1,9 +1,11 @@
 import type { AgentPullRequest, AgentSummary } from "@repo/features/agent-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
-import * as Atom from "effect/reactivity/Atom";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 import type { AgentsControl } from "./use-agents.js";
+import { listedAgentIn } from "./use-workspace-agents.js";
 
 /**
  * agents-elsewhere.ts -- the agents a side panel's Pull request and Terminal tabs name, read where the agent stands rather than through the place the panel stands beside.
@@ -13,15 +15,16 @@ import type { AgentsControl } from "./use-agents.js";
  * Terminal tab reads through acts keyed by its agent, which answer
  * anywhere, but it draws the agent's row, whether it ended and its task,
  * and the pull request it published from that control. A tab of an agent
- * the place does not list reads its row once by the agent's id
- * (`readAgent`), and its pull request from the window's own list of every
- * agent's (`agentPullRequests`), so it draws as it would beside its own
- * place. An agent the place lists is drawn through the place's control
- * unchanged.
+ * the place does not list takes its row from the window's own list of
+ * every agent (`listedAgentIn`), or, where that holds none, reads it once
+ * by the agent's id (`readAgent`), and its pull request from the window's
+ * own list of every agent's (`agentPullRequests`), so it draws as it would
+ * beside its own place. An agent the place lists is drawn through the
+ * place's control unchanged.
  */
 
 /** Every agent's pull request the window's task list carries, a task's or one on none. */
-const listedPullRequestsAtom = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.agentPullRequests);
+const selectListedPullRequests = (state: AppStateSnapshot) => state.tasks.agentPullRequests;
 
 /** Whether the place's control lists the agent, archived or not. */
 function listsAgent(agents: AgentsControl, agentId: string): boolean {
@@ -40,20 +43,24 @@ function listedPullRequestOf(
 
 /**
  * The control each of the tabs' agents is drawn through: the place's own
- * for an agent it lists, else the place's with the agent's row, once read,
- * and its listed pull request beside its own. `named` is the agents the
- * drawn tabs name.
+ * for an agent it lists, else the place's with the agent's row, as the
+ * window's list carries it or once read, and its listed pull request beside
+ * its own. `named` is the agents the drawn tabs name.
  */
 export function useAgentsElsewhere(
   agents: AgentsControl,
   named: readonly string[],
 ): (agentId: string) => AgentsControl {
-  const listed = useAppSlice(listedPullRequestsAtom);
+  const listed = useQuery({ ...appStateQuery, select: selectListedPullRequests }).data;
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   const [rows, setRows] = useState<ReadonlyMap<string, AgentSummary>>(() => new Map());
   // The agents asked for once, so a read that found none is not asked again on every draw.
   const asked = useRef(new Set<string>());
   const unread = named.filter(
-    (agentId) => !listsAgent(agents, agentId) && !asked.current.has(agentId),
+    (agentId) =>
+      !listsAgent(agents, agentId) &&
+      listedAgentIn(tasks, agentId) === undefined &&
+      !asked.current.has(agentId),
   );
   const { readAgent } = agents;
   useEffect(() => {
@@ -73,7 +80,7 @@ export function useAgentsElsewhere(
       if (listsAgent(agents, agentId)) return agents;
       const known = byAgent.get(agentId);
       if (known !== undefined) return known;
-      const row = rows.get(agentId);
+      const row = listedAgentIn(tasks, agentId) ?? rows.get(agentId);
       const pullRequest = listedPullRequestOf(listed, agentId);
       const control: AgentsControl = {
         ...agents,
@@ -87,5 +94,5 @@ export function useAgentsElsewhere(
       byAgent.set(agentId, control);
       return control;
     };
-  }, [agents, rows, listed]);
+  }, [agents, rows, listed, tasks]);
 }

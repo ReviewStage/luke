@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
 import { act, createElement, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -19,14 +19,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
 });
 
-const task = (taskId: string): PlanMention => ({ kind: MENTION_KIND.TASK, taskId });
+const task = (taskId: string): DescriptionMention => ({ kind: MENTION_KIND.TASK, taskId });
 
 /** The opener drawn behind a gate that `stand` moves, every task it opened kept; `arriving` is handed in the commit the gate moves in, before its effects run. */
 function opener() {
   const opened: string[] = [];
-  let handTo: ((mention: PlanMention) => void) | undefined;
-  function Probe({ gated, arriving }: { gated: boolean; arriving?: PlanMention }): null {
-    const open = useLinkOpener<PlanMention>(gated, (mention) => opened.push(mention.taskId));
+  let handTo: ((mention: DescriptionMention) => void) | undefined;
+  function Probe({ gated, arriving }: { gated: boolean; arriving?: DescriptionMention }): null {
+    const open = useLinkOpener<DescriptionMention>(gated, (mention) => opened.push(mention.taskId));
     handTo = open;
     useLayoutEffect(() => {
       if (arriving !== undefined) open(arriving);
@@ -35,11 +35,11 @@ function opener() {
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
-  const stand = (gated: boolean, arriving?: PlanMention) =>
+  const stand = (gated: boolean, arriving?: DescriptionMention) =>
     act(() =>
       root.render(createElement(Probe, arriving === undefined ? { gated } : { gated, arriving })),
     );
-  const hand = (mention: PlanMention) => act(() => handTo?.(mention));
+  const hand = (mention: DescriptionMention) => act(() => handTo?.(mention));
   return { opened, stand, hand };
 }
 

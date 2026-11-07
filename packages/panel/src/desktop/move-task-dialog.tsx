@@ -18,7 +18,9 @@ import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { strandedTaskHome, workspaceReaches } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useRef, useState } from "react";
+import { useConfirmAct } from "../confirm-act.js";
 import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { sharedWords } from "./workspace-ref.js";
@@ -310,34 +312,34 @@ interface MoveTaskDoor {
 
 /** One task's Move to workspace, held for whichever door offers its menu. */
 export function useMoveTaskDialog(
-  tasks: Pick<TasksControl, "shown" | "me" | "workspaces" | "onMoveTask">,
+  tasks: Pick<TasksControl, "shown" | "me" | "workspaces" | "moveTask">,
   task: TaskSummary | undefined,
 ): MoveTaskDoor {
   const others = task === undefined ? [] : otherWorkspaces(tasks, task);
   const offered = task !== undefined && others.length > 0 && ownsTask(tasks, task);
   const [picked, setPicked] = useState<string | undefined>(undefined);
+  const moving = useMutation(tasks.moveTask);
   const repository = task?.repository ?? null;
   const chosen =
     others.find((workspace) => workspace.id === picked && reaches(workspace, repository)) ??
     others.find((workspace) => reaches(workspace, repository));
-  const move = (): Promise<ActionResult> => {
-    if (task === undefined || chosen === undefined) {
-      return Promise.resolve({
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "Choose a workspace.",
-      });
-    }
-    return tasks
-      .onMoveTask(task.id, chosen.id, { quiet: true })
-      .then((moved) =>
-        moved
-          ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-          : { status: ACTION_RESULT_STATUS.REJECTED, reason: MOVE_REFUSED },
-      );
-  };
+  const moveAct = useConfirmAct(moving, {
+    send: () =>
+      task === undefined || chosen === undefined
+        ? Promise.resolve()
+        : moving.mutateAsync({ taskId: task.id, workspaceId: chosen.id, quiet: true }),
+    answered: (moved): ActionResult =>
+      moved
+        ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+        : { status: ACTION_RESULT_STATUS.REJECTED, reason: MOVE_REFUSED },
+    refusedFirst: () =>
+      task === undefined || chosen === undefined
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "Choose a workspace." }
+        : undefined,
+  });
   const confirm = useConfirmDialog(
     { subject: offered, surfaceOpen: tasks.shown },
-    move,
+    moveAct,
     confirmFailure(FAILURE_SURFACE.TASK_MOVE),
   );
   const open = confirm.standing && (confirmAsked(confirm.stage) || confirm.rejection !== undefined);

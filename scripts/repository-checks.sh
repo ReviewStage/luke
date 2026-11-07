@@ -134,6 +134,11 @@ node --input-type=module -e '
 # fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
 pnpm --dir "$APP_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
+# The docs' Keyboard shortcuts page is generated from @repo/settings' shortcut
+# table, as the Mac app's own Keyboard shortcuts page lists it; --check fails
+# if a shortcut changed without the page.
+pnpm --dir "$APP_REPO_ROOT/packages/settings" exec tsx scripts/shortcuts-docs.ts --check
+
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404. Every /api/ literal and path builder under
@@ -384,7 +389,7 @@ fi
 
 # The rules about the repository's state a lint rule cannot see: the agents'
 # pins against what is installed, the coding agent's tool files against its
-# registry and what eve can build of each, the probes' committed fixtures
+# registry, the probes' committed fixtures
 # against their own leak guards, the lint rules' baselines against the files
 # they name, the catalog against `@repo/ui`'s components, the panel's launch
 # bundle, and the site's page heads and Tailwind entries. Each was a test that

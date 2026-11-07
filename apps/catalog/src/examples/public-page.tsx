@@ -11,10 +11,13 @@ import {
   PublicPage,
   PublicSection,
   ScrollArea,
+  SiteFootLinks,
   Stack,
+  TEXT_LINK_CURRENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  type TextLinkCurrent,
 } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -35,9 +38,9 @@ const SECTIONS = [
     body: `Say what the feature is for. ${PRODUCT_NAME} asks what it needs to and reads the code while you talk.`,
   },
   {
-    id: "plan",
-    title: "Get a plan",
-    body: "The plan is written as you go, in steps an agent can follow, with the files each step touches.",
+    id: "description",
+    title: "Get a description",
+    body: "The description is written as you go, in steps an agent can follow, with the files each step touches.",
   },
   {
     id: "hand",
@@ -58,8 +61,20 @@ function Banner(): React.JSX.Element {
   );
 }
 
-function Footer(): React.JSX.Element {
-  return <span className="catalog-public-footer">Apache-2.0 · macOS 14+ · About · Privacy</span>;
+/** The site's foot, its About link marked where the reader is on About. */
+function Footer({ current }: { current?: TextLinkCurrent }): React.JSX.Element {
+  return (
+    <SiteFootLinks
+      facts={["Apache-2.0", "macOS 14+"]}
+      links={[
+        { label: "About", href: "#public-page-about", current },
+        { label: "Changelog", href: "#public-page-changelog" },
+        { label: "Privacy", href: "#public-page-privacy" },
+        { label: "Contact", href: "#public-page-contact" },
+      ]}
+      notice="© 2026 Acme Inc."
+    />
+  );
 }
 
 function Sections(): React.JSX.Element {
@@ -81,7 +96,7 @@ function Landing(): React.JSX.Element {
       footer={<Footer />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a plan you can paste into your coding agent.`}
+      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a description you can paste into your coding agent.`}
     >
       <PublicSection>
         <Inline gap={GAP.CONTROL}>
@@ -99,7 +114,11 @@ function Landing(): React.JSX.Element {
 
 function About(): React.JSX.Element {
   return (
-    <PublicPage banner={<Banner />} footer={<Footer />} title="About">
+    <PublicPage
+      banner={<Banner />}
+      footer={<Footer current={TEXT_LINK_CURRENT.PAGE} />}
+      title="About"
+    >
       <PublicSection title="Who we are">
         <Stack gap={GAP.FIELD}>
           <Text>

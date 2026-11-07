@@ -5,9 +5,10 @@
  * can spell these kinds in `ACT_KIND` without resolving the contract behind
  * them, and so the lint rule `anti-slop/no-follow-outside-host-read` can
  * load this file as it stands to read `PORT_ACT_USE`: that is why each
- * kind's use is declared here rather than on its procedure. A kind here is
- * the key of its procedure in `actContract`, so the panel's act door calls a
- * kind by its own name.
+ * kind's use is declared here rather than on its procedure, and why a
+ * declared act (`declared-act.ts`) reads its kind and use from here by its
+ * name rather than restating them. A kind here is the key of its procedure
+ * in `actContract`, so the panel's act door calls a kind by its own name.
  */
 
 /** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, the account deleted, and its grant of support access. */
@@ -41,14 +42,16 @@ export const ACCOUNT_ASK_ACT_KIND = {
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
-   * Settings › Coding agents › Codex: Sign in with ChatGPT for our hosted
-   * runtime, run by the host through the developer's browser, and the one
-   * waiting withdrawn. Nothing crosses from the renderer but the press, and
-   * the answer is the keys as the service then holds them: the sign-in's
-   * tokens go from the host to the service and never reach a window.
+   * Settings › Agents › Codex › Connect: Codex's device-code login, run by
+   * the service, begun, waited on while the host asks after it on its
+   * interval, and withdrawn. Nothing crosses from the renderer but the
+   * login's id and interval; the answers carry the code
+   * the developer enters at the verification page, and once connected the
+   * keys as the service then holds them, never a token.
    */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  CHATGPT_DEVICE_START: "chatGpt.device.start",
+  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
+  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * Settings › Integrations › GitHub: the member's own classic GitHub
    * personal access token held for the window while it holds the stream
@@ -119,7 +122,7 @@ export const AGENT_ACT_KIND = {
    * The models a coding agent may run on as the account is offered them,
    * and its devices, held for the window while it holds the stream open and
    * a while after among those let go lately, asked again as a window comes
-   * forward, as the provider keys move, and every `MODEL_CATALOG_TTL`: what
+   * forward and as the provider keys move: what
    * it holds reaches the panel on app state (`LIVE_READ.MODELS`), so the
    * stream carries nothing.
    */
@@ -128,6 +131,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
   /** The default drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
+  /** Whose API key chapters run on, drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
+  AGENTS_CHAPTERS_PROVIDER_WRITE: "agents.chaptersProviderWrite",
   /** The account's preferences row, which the host holds for the session and the panel reads on app state, read again at once, as Try again asks. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /**
@@ -152,6 +157,8 @@ export const AGENT_ACT_KIND = {
   /** The beats a window holds asked again now, as the window comes back online. */
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on or off, from This Mac's row in Settings › Hosts; only the desktop answers it. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
   HOSTS_PAIRING_DENY: "hosts.pairingDeny",
@@ -258,14 +265,16 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   AGENTS_INBOX_CLOSE: "agents.inboxClose",
+  /** A held close let go once its Undo can no longer be pressed, sent to the service, or taken back by its Undo. */
+  AGENTS_INBOX_CLOSE_RELEASE: "agents.inboxCloseRelease",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
   AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A new thread with one agent, its subject and first message, under the panel's own key. */
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, or its snooze ended; it marks the item read, and changes neither what it asks nor whether it waits. */
-  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
+  /** One item's reminder set for the account for an instant, or canceled; it changes neither whether the item is read, what it asks, nor whether it waits. */
+  AGENTS_INBOX_REMIND: "agents.inboxRemind",
   /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
@@ -289,14 +298,23 @@ export const CHAPTERS_ACT_KIND = {
   CHAPTERS_FOLLOW: "chapters.follow",
   CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
+} as const;
+
+/**
+ * The `vespin` command installed into this Mac's account, as Settings' MCP
+ * page's Install command-line tool asks: the install script the
+ * service serves, run in its `cli` mode. Main answers it itself
+ * (`cli.ts`).
+ */
+export const CLI_ACT_KIND = {
+  CLI_INSTALL: "cli.install",
 } as const;
 
 /**
  * Settings' Skills: the skills the account sees in a workspace held for the
  * window while it holds the stream open, a pasted GitHub source or skill
  * text previewed and installed for the account or its workspace, and one
- * toggled, updated, shared, or removed. The hold's stream carries nothing:
+ * removed. The hold's stream carries nothing:
  * what it holds reaches the panel on app state (`LIVE_READ.INSTALLED_SKILLS`),
  * and each write is drawn there as it is asked or answered.
  */
@@ -307,9 +325,6 @@ export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
-  INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
-  INSTALLED_SKILLS_UPDATE: "installedSkills.update",
-  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
 } as const;
 
@@ -378,7 +393,7 @@ export const SETTINGS_ACT_KIND = {
  * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block colored, its
- * plan's history, pages, pictures, and comments, and a task given its
+ * pages, its description's history, pictures, and comments, and a task given its
  * status and priority.
  */
 export const TASKS_ACT_KIND = {
@@ -461,11 +476,11 @@ export const TASKS_ACT_KIND = {
   TASKS_COLOR_CODE: "tasks.colourCode",
   /** The id of the task a link names by its workspace and its number, found on the service before the link opens; answered to the window, never on the document. */
   TASKS_FIND: "tasks.find",
-  /** A page of a plan's history, read from the service and answered to the view; an older page is laid on the task's held history too (`LIVE_READ.HISTORY`) where it is held. */
+  /** A page of a description's history, read from the service and answered to the view; an older page is laid on the task's held history too (`LIVE_READ.HISTORY`) where it is held. */
   TASKS_REVISIONS: "tasks.revisions",
-  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
+  /** A revision of the open description beside the one before it for its version history, read from the service; answered to the view, never on the document. */
   TASKS_REVISION: "tasks.revision",
-  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
+  /** A revision of a description restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and colored by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "tasks.pageSource",
@@ -479,16 +494,16 @@ export const TASKS_ACT_KIND = {
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
   /**
-   * One task's plan held followed while the window holds the stream open
+   * One task's description held followed while the window holds the stream open
    * for the task it has open, and a while after among those let go lately:
    * what it holds reaches the panel on app state
-   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`), so the stream carries nothing.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
-  /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
+  /** A held task's description, which the panel reads on app state, read again at once, as Try again asks. */
   TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
-   * One task's plan history held followed while the window holds the stream
+   * One task's description history held followed while the window holds the stream
    * open for its version history, and a while after among those let go
    * lately: its newest page as each save lands, and the older pages read
    * past it, reach the panel on app state (`LIVE_READ.HISTORY`), so the
@@ -497,15 +512,15 @@ export const TASKS_ACT_KIND = {
   TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
   /** A held task's history, which the panel reads on app state, read again at once, as Try again asks. */
   TASKS_HISTORY_RETRY: "tasks.historyRetry",
-  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  /** One picture of the open description as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "tasks.pictureRead",
-  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  /** A picture pasted, dropped, or chosen into the open description's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * A task's comment threads, its plan's own or one page's: held followed
+   * A task's comment threads, its description's own or one page's: held followed
    * while a window shows them, what they hold reaching the panel on app
-   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
-   * one started on words of the plan or on a page, and one thing done to
+   * state (`LIVE_READ.DESCRIPTION_COMMENTS`), and read again at once on Try again;
+   * one started on words of the description or on a page, and one thing done to
    * one thread, each answered with the thread as it stands.
    */
   TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
@@ -535,6 +550,20 @@ export const MAC_TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * A shell on this Mac (`mac-shells.ts`): the developer's login shell opened
+ * in a folder for the asking panel, attached, and closed, answered by the
+ * desktop's main, which holds it. What it prints travels on the port an
+ * attach posts to that panel, as a cloud shell's does, never on an act.
+ */
+export const MAC_SHELL_ACT_KIND = {
+  /** The folder a cloud agent's Local shells open in: its mirror on this Mac, made where none stands. */
+  MAC_SHELL_MIRROR: "macShell.mirror",
+  MAC_SHELL_OPEN: "macShell.open",
+  MAC_SHELL_ATTACH: "macShell.attach",
+  MAC_SHELL_CLOSE: "macShell.close",
+} as const;
+
+/**
  * A command an agent asked to run on this Mac (`../mac-command-ask.ts`),
  * answered by the developer from the prompt the panel draws over the window:
  * allowed once, allowed always, which also writes Settings › This Mac to
@@ -545,10 +574,22 @@ export const MAC_COMMAND_ACT_KIND = {
 } as const;
 
 /**
+ * A coding agent's cloud ports forwarded to this Mac's localhost
+ * (`@repo/features/port-forward-acts`), for one agent at a time: its
+ * forwarding turned on or off, how it stands kept in app state
+ * (`portForwarding`), answered by the platform shell, whose host listens on the Mac's loopback. What a forwarded
+ * connection carries never travels on an act.
+ */
+export const PORT_FORWARD_ACT_KIND = {
+  PORT_FORWARD_SET: "portForward.set",
+} as const;
+
+/**
  * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
  * started, named, and ended, its sandbox resumed on the developer's click,
- * and a shell attached and detached. What a shell prints travels on the port
- * an attach posts to the asking panel, never on an act.
+ * and a shell attached, detached as the panel closes the port. What a shell
+ * prints travels on the port an attach posts to the asking panel, never on
+ * an act.
  */
 export const TERMINAL_ACT_KIND = {
   TERMINAL_LIST: "terminal.list",
@@ -557,7 +598,6 @@ export const TERMINAL_ACT_KIND = {
   TERMINAL_KILL: "terminal.kill",
   TERMINAL_RESUME: "terminal.resume",
   TERMINAL_ATTACH: "terminal.attach",
-  TERMINAL_DETACH: "terminal.detach",
 } as const;
 
 /**
@@ -697,12 +737,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
    */
   WINDOW_UNSAVED_WORK: "window.unsavedWork",
   /**
-   * A development build's label, the branch it was cut from, drawn or hidden
-   * for a demo: the sidebar's branch row in every window and the Dock tile's
-   * band, as View > Developer > Show Build Label turns them.
-   */
-  WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
-  /**
    * The commands the asking panel offers now, as its controls offer them,
    * told whenever they change, so the menu bar dims an item whose command
    * nothing in the focused panel would run.
@@ -720,10 +754,13 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
+  ...CLI_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
@@ -738,7 +775,7 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * What an act kind does with what it answers, which the panel's lint rule
  * `anti-slop/no-follow-outside-host-read` reads: a READ answers data that
  * can change while a surface shows it, so a surface reads it only through
- * `useHostRead`, over what the host holds; a FETCH answers what cannot
+ * a live read's query, over what the host holds; a FETCH answers what cannot
  * change for what was asked, such as content read once, a lookup as a link
  * opens, or a report for the query asked; and a WRITE is everything else: a
  * change, a command, or a stream a port carries rather than app state.
@@ -780,8 +817,9 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_SAVE: ACT_USE.WRITE,
   PROVIDER_KEYS_REMOVE: ACT_USE.WRITE,
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
+  CHATGPT_DEVICE_START: ACT_USE.WRITE,
+  CHATGPT_DEVICE_WAIT: ACT_USE.WRITE,
+  CHATGPT_DEVICE_CANCEL: ACT_USE.WRITE,
   GITHUB_TOKEN_FOLLOW: ACT_USE.READ,
   GITHUB_TOKEN_RETRY: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
@@ -794,12 +832,14 @@ export const PORT_ACT_USE = {
   AGENTS_MODELS_FOLLOW: ACT_USE.READ,
   AGENTS_MODELS_RETRY: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
+  AGENTS_CHAPTERS_PROVIDER_WRITE: ACT_USE.WRITE,
   AGENTS_PREFERENCES_RETRY: ACT_USE.READ,
   HOSTS_FOLLOW: ACT_USE.READ,
   HOSTS_RETRY: ACT_USE.READ,
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
   HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
+  HOSTS_THIS_MAC_SET: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.FETCH,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
   HOSTS_PAIRING_DENY: ACT_USE.WRITE,
@@ -841,10 +881,11 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_ITEMS_RETRY: ACT_USE.READ,
   AGENTS_INBOX_ANSWER: ACT_USE.WRITE,
   AGENTS_INBOX_CLOSE: ACT_USE.WRITE,
+  AGENTS_INBOX_CLOSE_RELEASE: ACT_USE.WRITE,
   AGENTS_INBOX_MESSAGE: ACT_USE.WRITE,
   AGENTS_INBOX_START: ACT_USE.WRITE,
   AGENTS_INBOX_READ_STATE: ACT_USE.WRITE,
-  AGENTS_INBOX_SNOOZE: ACT_USE.WRITE,
+  AGENTS_INBOX_REMIND: ACT_USE.WRITE,
   AGENTS_INBOX_ITEM_HOME: ACT_USE.FETCH,
   AGENTS_INBOX_READ_ALL: ACT_USE.WRITE,
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
@@ -864,16 +905,14 @@ export const PORT_ACT_USE = {
   CHAPTERS_FOLLOW: ACT_USE.READ,
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
+
+  CLI_INSTALL: ACT_USE.WRITE,
 
   INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
   INSTALLED_SKILLS_RETRY: ACT_USE.READ,
   INSTALLED_SKILLS_READ: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW: ACT_USE.FETCH,
   INSTALLED_SKILLS_INSTALL: ACT_USE.WRITE,
-  INSTALLED_SKILLS_SET_ENABLED: ACT_USE.WRITE,
-  INSTALLED_SKILLS_UPDATE: ACT_USE.WRITE,
-  INSTALLED_SKILLS_SHARE: ACT_USE.WRITE,
   INSTALLED_SKILLS_REMOVE: ACT_USE.WRITE,
 
   INTEGRATIONS_FOLLOW: ACT_USE.READ,
@@ -890,7 +929,14 @@ export const PORT_ACT_USE = {
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
+  MAC_SHELL_MIRROR: ACT_USE.WRITE,
+  MAC_SHELL_OPEN: ACT_USE.WRITE,
+  MAC_SHELL_ATTACH: ACT_USE.WRITE,
+  MAC_SHELL_CLOSE: ACT_USE.WRITE,
+
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
+
+  PORT_FORWARD_SET: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,
   SETTINGS_RESET: ACT_USE.WRITE,
@@ -953,7 +999,6 @@ export const PORT_ACT_USE = {
   TERMINAL_KILL: ACT_USE.WRITE,
   TERMINAL_RESUME: ACT_USE.WRITE,
   TERMINAL_ATTACH: ACT_USE.WRITE,
-  TERMINAL_DETACH: ACT_USE.WRITE,
 
   UPDATE_CHECK: ACT_USE.WRITE,
   UPDATE_INSTALL: ACT_USE.WRITE,
@@ -972,7 +1017,6 @@ export const PORT_ACT_USE = {
   WINDOW_SAVE_FILE: ACT_USE.WRITE,
   WINDOW_CAPTURE: ACT_USE.FETCH,
   WINDOW_UNSAVED_WORK: ACT_USE.WRITE,
-  WINDOW_SHOW_BUILD_LABEL: ACT_USE.WRITE,
   WINDOW_MENU_OFFERS: ACT_USE.WRITE,
   FEEDBACK_SEND: ACT_USE.WRITE,
 
@@ -1015,7 +1059,10 @@ export const PORT_ACT_USE = {
  */
 export const PLATFORM_PORT_ACT_KIND = {
   ...BROWSER_LIVE_ACT_KIND,
+  ...CLI_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

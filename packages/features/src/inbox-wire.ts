@@ -72,7 +72,7 @@ import { WEBM_TYPE } from "./video-signature.js";
  * in its tab does.
  *
  * The agent posts, withdraws, and reads its items through the tools named
- * below, whose inputs are declared here so the model is shown, eve holds,
+ * below, whose inputs are declared here so the model is shown, our MCP server holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
@@ -525,7 +525,7 @@ export type InboxForm = Extract<InboxResponse, { type: typeof INBOX_RESPONSE.FOR
  * the blocks of context under it, an image among them by its path in the
  * sandbox, the response it asks for, and whether the agent needs to hear
  * back, which it does unless it says not. The model is shown this schema
- * and eve holds the call to it.
+ * and our MCP server holds the call to it.
  */
 export const inboxPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
@@ -673,7 +673,7 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * always hears, and the member its ask is addressed to by their mention
  * link, read by the service rather than held to a grammar here, so a link
  * that names nothing is refused in words the model can act on. The model
- * is shown this schema and eve holds the call to it. Note that a post from
+ * is shown this schema and our MCP server holds the call to it. Note that a post from
  * an agent still holding an earlier schema may name `waits` or `channel`,
  * which the service's read drops with any other key it does not name.
  */
@@ -881,11 +881,24 @@ export const inboxItemSchema = EffectSchema.Struct({
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
-   * Until when the member reading it snoozed the item, in epoch
-   * milliseconds, which snoozing marked it read for them: it stays out of
-   * their Inbox while it is read and this is ahead, and comes back unread
-   * once this passes. Absent where they did not snooze it, and from a
-   * service before snoozing.
+   * Whether the member reading it marked the item unread and has not read
+   * it since, which leaves it `unread` whatever else does: what brings a
+   * thread closed without an answer back to their Inbox's Open. Absent
+   * where they did not, and from a service before it.
+   */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * When the reminder the member reading it set on the item comes due, in
+   * epoch milliseconds: it stays out of their Inbox while this is ahead, and
+   * comes back once this passes, read or unread as it stands. Absent where
+   * they set none or a change ended it since, and from a service before
+   * reminders.
+   */
+  remindAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * `remindAt` under the key a desktop from before the rename reads, which
+   * the service still fills and no client reads: the key goes with the
+   * minimum supported desktop version.
    */
   snoozedUntil: EffectSchema.optionalKey(countedNumber),
 });
@@ -930,8 +943,7 @@ function inboxAsksOpen(item: InboxItem): boolean {
 
 /**
  * Whether a thread needs the reader: its ask stands open and waits on them.
- * The one reading of it, which a to-do count (`inbox-store.ts`'s
- * `askingReader`) must agree with and Needs you and the tint draw from.
+ * The one reading of it, which Needs you and the tint draw from.
  */
 export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
   return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
@@ -1019,7 +1031,7 @@ export const INBOX_CLOSE_LEAD = "Thread closed";
  */
 export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">, note = ""): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Resolved without an answer.`;
   return note.trim() === "" ? header : `${header}\n\n${note.trim()}`;
 }
 
@@ -1148,15 +1160,15 @@ export const inboxReadStateSchema = EffectSchema.Struct({
   ...writtenIn,
 });
 
-/** The latest instant a JavaScript date holds, in epoch milliseconds, past which a snooze names no moment. */
+/** The latest instant a JavaScript date holds, in epoch milliseconds, past which a reminder names no moment. */
 const LATEST_INSTANT = 8_640_000_000_000_000;
 
-/** Snoozing an item for the member until an instant, in epoch milliseconds, or ending its snooze where none is named. */
-export const inboxSnoozeRequestSchema = EffectSchema.Struct({
+/** Setting an item's reminder for the member for an instant, in epoch milliseconds, or canceling it where none is named. */
+export const inboxRemindRequestSchema = EffectSchema.Struct({
   until: EffectSchema.NullOr(countedNumber.check(EffectSchema.isLessThanOrEqualTo(LATEST_INSTANT))),
 });
 
-export type InboxSnoozeRequest = typeof inboxSnoozeRequestSchema.Type;
+export type InboxRemindRequest = typeof inboxRemindRequestSchema.Type;
 
 /**
  * Marking every item of the reader's Inbox read: every item it lists, in

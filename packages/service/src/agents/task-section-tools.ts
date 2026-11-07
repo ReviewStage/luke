@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { deleteTaskSectionIn, writeTaskSections } from "@repo/database/models/task-section-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -16,7 +17,6 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,
@@ -42,8 +42,8 @@ import { calledId } from "./called-id.js";
  * workspace is none of the caller's, even where the member is also in it. Every write is the one the sidebar's own drag or
  * menu makes (`PUT /api/task-sections`, `task-section-store.ts`), under the
  * same lock and bound, so the Mac reads the agent's change as it reads its
- * own. A section is made under an id drawn from eve's key for the call, so
- * a call eve runs again makes the one section; and deleting a section puts its tasks back
+ * own. A section is made under an id drawn from the call's key, so
+ * a call run again makes the one section; and deleting a section puts its tasks back
  * under Tasks and deletes none of them. Every answer is data the model
  * reads, never a credential.
  */
@@ -57,9 +57,6 @@ export const TASK_SECTION_TOOL_REFUSAL = {
   FULL:
     "Not made: the developer you work for already keeps the most sections an account may, " +
     `${TASK_SECTION_BOUNDS.MAX_SECTIONS}; delete one first.`,
-  NO_SECTION:
-    "Not run: the developer you work for keeps no section of this workspace under that id; " +
-    `${AGENT_TOOL.LIST_TASKS} names the sections.`,
   UNAVAILABLE: "Not run: the sections could not be written just now. The call may be made again.",
 } as const;
 
@@ -107,7 +104,8 @@ export const DELETE_SECTION_TOOL = {
     `its id as ${AGENT_TOOL.LIST_TASKS} answered it, as their Delete section would: the tasks ` +
     "in it go back under Tasks, and none of them is deleted. Delete one only when the developer " +
     "asks for it. Answers `accepted` with the section's id and title and how many tasks went " +
-    "back under Tasks, or `rejected` and why.",
+    "back under Tasks, with section null where no such section stands, as one already " +
+    "deleted, or `rejected` and why.",
   inputSchema: DELETE_SECTION_INPUT,
 } as const;
 
@@ -153,6 +151,13 @@ export function runCreateSection(
   );
 }
 
+/** What a delete answers where no such section stands: deleted as nothing, as one already deleted is. */
+export const NO_SECTION_DELETED = {
+  status: ACTION_RESULT_STATUS.ACCEPTED,
+  section: null,
+  tasksBackUnderTasks: 0,
+} as const;
+
 /** One call of `delete_section`: one of the member's sections of the caller's workspace deleted, its tasks back under Tasks. */
 export function runDeleteSection(
   call: AgentCall,
@@ -172,7 +177,8 @@ export function runDeleteSection(
       const userId = callerUserId(call.caller);
       // Note that the read, the count, and the delete are one write under the account's lock, so the answer is what this call took.
       const deleted = yield* deleteTaskSectionIn(userId, workspace.value, sectionId);
-      if (Option.isNone(deleted)) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.NO_SECTION);
+      // A section already gone, or none of this workspace, is deleted as nothing, as the sidebar's delete is.
+      if (Option.isNone(deleted)) return { ...NO_SECTION_DELETED };
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         section: sectionReading(deleted.value.section),

@@ -11,7 +11,7 @@
  * different keys never wait on each other. The agent's box
  * (`tasks/use-agent-composer.ts`) and the Inbox's thread box
  * (`tasks/use-task-inbox.ts`) send through it; what each draws of a send on
- * its way, or of one that did not go, is its own. A plan comment thread's
+ * its way, or of one that did not go, is its own. A description comment thread's
  * replies need none, since the host's sync engine sends a thread's writes
  * in the order asked.
  *

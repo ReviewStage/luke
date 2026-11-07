@@ -25,6 +25,7 @@ export const APP_SETTING_ID = {
   OPEN_AT_LOGIN: "open_at_login",
   AGENT_NOTIFICATIONS: "agent_notifications",
   MAC_COMMANDS: "mac_commands",
+  FORWARD_PORTS: "forward_ports",
   /** Offered by no build: Run agents on this Mac, removed since Runs on chooses where each agent runs. */
   LOCAL_AGENTS: "local_agents",
   /** Offered by no build: an earlier sandbox switch of This Mac's, which never drew a row. */
@@ -54,6 +55,7 @@ export const APP_SETTING_ID = {
   USAGE_DATA: "usage_data",
   OPEN_NEW_TASK: "open_new_task",
   SETUP_FINISHED: "setup_finished",
+  SETUP_PLACE: "setup_place",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

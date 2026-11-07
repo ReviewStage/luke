@@ -1,5 +1,5 @@
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskPriority,
@@ -504,8 +504,8 @@ test("a display kept before the completed window reads its Done and Canceled swi
 test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Vespin made on a call, a task from before origins as made by hand", () => {
   const tasks = [
     task("By hand"),
-    { ...task("By an agent"), origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-1" } },
-    { ...task("On a call"), origin: { actor: PLAN_ACTOR.NOTETAKER } },
+    { ...task("By an agent"), origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-1" } },
+    { ...task("On a call"), origin: { actor: DESCRIPTION_ACTOR.NOTETAKER } },
   ];
   const byAgents = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.MADE_BY, TASK_MAKER.AGENT);
   expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, byAgents)).toEqual([

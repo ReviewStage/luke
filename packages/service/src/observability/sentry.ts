@@ -1,5 +1,5 @@
 /**
- * sentry.ts -- the deployment's Sentry, as Sentry's Effect and eve guides set it up: the options every process starts it with, and the layers that send it errors, spans, logs, and metrics.
+ * sentry.ts -- the deployment's Sentry, as Sentry's Effect guide sets it up: the options every process starts it with, and the layers that send it errors, spans, logs, and metrics.
  *
  * Sentry's Effect guide (docs.sentry.io/platforms/javascript/guides/effect)
  * composes `Sentry.effectLayer`, which starts the SDK and registers its
@@ -11,11 +11,10 @@
  * functions take all of it, with the process's uncaught-exception and
  * unhandled-rejection handlers the Effect SDK leaves out, and send what they
  * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
- * an instance as soon as it has answered. An eve root's process is started by eve's own
- * instrumentation (`instrumentation/sentry.ts`, Sentry's eve guide), which
- * runs before the agent loads, so its runtime takes everything but the
- * start: a second `init` would replace the client eve's integration hangs
- * off.
+ * an instance as soon as it has answered. A process whose Sentry another
+ * start already set up takes everything but the start
+ * (`sentryReportingLayer`): a second `init` would replace the client that
+ * start made.
  *
  * One error is not sent: an agent's tool call refused and answered to the
  * model as the call's result, which the AI SDK integration would capture as
@@ -88,10 +87,10 @@ export type SentryOptions = Sentry.NodeOptions;
 
 /**
  * The span attributes that carry what a model was handed or answered, as
- * Sentry's AI integrations, the AI SDK's telemetry, and eve's own agent spans
+ * Sentry's AI integrations, the AI SDK's telemetry, and the retired runtime's agent spans
  * name them. Sentry's `dataCollection.genAI` keeps its own integrations from
- * writing them, but eve writes its agent spans by its own trace policy, which
- * records content for a public audience, onto whatever tracer Sentry
+ * writing them, but the retired runtime wrote its agent spans by its own trace policy,
+ * which recorded content for a public audience, onto whatever tracer Sentry
  * registered, so they are dropped again as a span leaves.
  */
 const MODEL_CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
@@ -196,7 +195,7 @@ const REFUSAL_CAUSE_DEPTH = 5;
 /**
  * Whether a failure is a refusal: a bare `Error`, carrying nothing but its
  * words and, where it explains another, a cause that is a refusal too. That is
- * how eve's own tools refused a call (`You must read file … before overwriting
+ * how the retired runtime's own tools refused a call (`You must read file … before overwriting
  * it`, a patch that does not apply, a file not found), and how a
  * connection's tool answers an error.
  *
@@ -282,10 +281,10 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
-    // Note that this outranks a model call's own telemetry asking to record, in an eve root,
+    // Note that this outranks a model call's own telemetry asking to record,
     // and is read by every AI integration Sentry ships (the AI SDK's, MCP's, OpenAI's, Anthropic's).
     // Note that no request body is kept either, because what is posted to an agent is a
-    // message it hands the model, and an eve root would attach it to an error's report.
+    // message it hands the model, and Sentry would attach it to an error's report.
     dataCollection: { genAI: { inputs: false, outputs: false }, httpBodies: [] },
     beforeSend: (event, hint) => {
       const kept = dropAnsweredToolRefusals(event, hint);
@@ -468,8 +467,8 @@ const sentryReporting = ErrorReporter.layer([sentryErrorReporter], { mergeWithEx
  *
  * Note that the two process handlers are added here rather than in
  * `sentryOptions`, because the Effect SDK's server `init` starts only its
- * context-lines and linked-errors integrations, while an eve root starts
- * `@sentry/node`'s full defaults from those same options, which already hold
+ * context-lines and linked-errors integrations, while a process that starts
+ * `@sentry/node`'s full defaults from those same options already holds
  * both handlers.
  */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
@@ -520,9 +519,9 @@ export function sentryReportedFetch(
 }
 
 /**
- * The same reporting for a process eve's instrumentation already started
- * Sentry in, without a second start: a second `init` would replace the
- * client eve's integration hangs off.
+ * The same reporting for a process whose Sentry another start already set
+ * up, without a second start: a second `init` would replace the client
+ * that start made.
  */
 export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
   sentryReporting,

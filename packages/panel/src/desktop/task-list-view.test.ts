@@ -14,7 +14,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -217,6 +217,7 @@ function mountSidebar(
         tasksPageOpened += 1;
       },
       onClose: () => undefined,
+      onPreload: () => undefined,
     },
   });
   act(() =>
@@ -235,15 +236,21 @@ function mountSidebar(
   return container;
 }
 
-/** The words each standing menu item says, its glyph left out. */
+/** The words each standing menu item or searched row says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".ui-menu-item-label") ?? item).textContent?.trim() ?? "";
+  return (
+    (
+      item.querySelector(".ui-menu-item-label, .ui-combobox-option-label") ?? item
+    ).textContent?.trim() ?? ""
+  );
 }
 
-/** The menu item that says `label`, in whichever menu stands. */
+/** The menu item, or the searched panel's row, that says `label`, in whichever menu stands. */
 function menuItem(label: string): HTMLElement {
   const items = [
-    ...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'),
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menuitem"], [role="menuitemcheckbox"], [role="option"]',
+    ),
   ];
   const found = items.find((item) => itemLabel(item) === label);
   assert.ok(found, `a menu item named ${label} stands among ${items.map(itemLabel).join(", ")}`);
@@ -265,12 +272,14 @@ function listUngrouped(sidebar: HTMLElement): void {
 }
 
 /** Chooses `choice` under `submenu` in the Tasks head's View options. */
-function choose(sidebar: HTMLElement, submenu: string, choice: string): void {
+async function choose(sidebar: HTMLElement, submenu: string, choice: string): Promise<void> {
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
   act(() => menuItem(submenu).click());
-  act(() => menuItem(choice).click());
+  // Note that a member is offered once the workspace's members reach their query.
+  const item = await vi.waitFor(() => menuItem(choice));
+  act(() => item.click());
 }
 
 /** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
@@ -363,19 +372,20 @@ test("View options offers Group by repository, on at first, and Assigned to: Me,
   assert.deepEqual(lastMenuItems(), ["Group by repository", "Assigned to"]);
   assert.equal(menuItem("Group by repository").getAttribute("aria-checked"), "true");
   act(() => menuItem("Assigned to").click());
-  const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
-  assert.deepEqual(
-    [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])].map((item) => [
-      itemLabel(item),
-      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-      item.getAttribute("aria-checked"),
-    ]),
-    [
-      ["Me", null, "true"],
-      ["Anyone", null, "false"],
-      ["Charles Pan", "charles@acme.dev", "false"],
-      ["Maya Okafor", "maya@acme.dev", "false"],
-    ],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => [
+        itemLabel(row),
+        row.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
+        row.getAttribute("aria-current") === "true",
+      ]),
+      [
+        ["Me", null, true],
+        ["Anyone", null, false],
+        ["Charles Pan", "charles@acme.dev", false],
+        ["Maya Okafor", "maya@acme.dev", false],
+      ],
+    ),
   );
   restOn(menuItem("Charles Pan"));
   assert.equal(cardName(), "Charles Pan");
@@ -384,7 +394,7 @@ test("View options offers Group by repository, on at first, and Assigned to: Me,
 test("the Tasks head says My tasks, then Everyone's tasks once Assigned to › Anyone lists everyone's, kept across launches, with a dot and no chip", async () => {
   const mine = await mountRead(ACME, ASSIGNED);
   assert.equal(headWords(mine), "My tasks");
-  choose(mine, "Assigned to", "Anyone");
+  await choose(mine, "Assigned to", "Anyone");
   unmountAll();
 
   const sidebar = await mountRead(ACME, ASSIGNED);
@@ -462,7 +472,7 @@ test("a list of your own that holds nothing says so, and Show all lists everyone
 test("with every task pinned, a filter still says it leaves nothing under Tasks, with Show all", async () => {
   const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
   const sidebar = await mountRead(ACME, pinnedAll);
-  choose(sidebar, "Assigned to", "Charles Pan");
+  await choose(sidebar, "Assigned to", "Charles Pan");
   const notes = [...sidebar.querySelectorAll(".ui-note-line")].map((note) => note.textContent);
   assert.ok(
     notes.some((note) => note?.startsWith("No tasks match this view.")),
@@ -473,11 +483,13 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
 test("a workspace whose list names no member count still filters by person once its members are read", async () => {
   const { memberCount: _, ...uncounted } = ACME;
   const sidebar = await mountRead(uncounted);
-  assert.deepEqual(
-    taskRows(sidebar).map((row) => row.name),
-    ["Retry webhooks"],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      taskRows(sidebar).map((row) => row.name),
+      ["Retry webhooks"],
+    ),
   );
-  choose(sidebar, "Assigned to", "Anyone");
+  await choose(sidebar, "Assigned to", "Anyone");
   assert.equal(taskRows(sidebar).length, 3);
 });
 
@@ -823,7 +835,7 @@ test("a row wears its assignee's face where someone else is on it, none where yo
 
 test("Assigned to a teammate, with nothing of theirs, says so, and Show all lists everyone's again", async () => {
   const sidebar = await mountRead(ACME, TASKS);
-  choose(sidebar, "Assigned to", "Charles Pan");
+  await choose(sidebar, "Assigned to", "Charles Pan");
 
   assert.equal(headWords(sidebar), "Charles Pan's tasks");
   assert.equal(taskRows(sidebar).length, 0);
@@ -837,7 +849,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.equal(headWords(sidebar), "Everyone's tasks");
 });
 
-test("Assigned to says the members could not be read, with Retry, after Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {
+test("Assigned to says the members could not be read, with Retry, under Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {
   const reads = handHostReads({ members: { [ACME.id]: { failed: true } } });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
@@ -850,21 +862,21 @@ test("Assigned to says the members could not be read, with Retry, after Me and A
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
   act(() => menuItem("Assigned to").click());
-  const offered = () => {
-    const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
-    return [
-      ...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]') ??
-        []),
-    ].map((item) => [
-      itemLabel(item),
-      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-    ]);
-  };
+  const offered = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(itemLabel);
+  const retry = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (each) => each.textContent === "Retry",
+    );
 
+  // Note that the refusal is said once it reaches the members' query.
+  const offeredRetry = await vi.waitFor(() => retry() ?? assert.fail("the panel offers Retry"));
   const failed = offered();
-  await act(async () => menuItem("Members could not be read.").click());
+  const said = document.body.textContent ?? "";
+  await act(async () => offeredRetry.click());
 
-  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
-  assert.ok(offered().some(([label]) => label === "Charles Pan"));
-  assert.ok(offered().every(([label]) => label !== "Members could not be read."));
+  assert.deepEqual(failed, ["Me", "Anyone"]);
+  assert.match(said, /Members could not be read\./u);
+  await vi.waitFor(() => assert.equal(offered().includes("Charles Pan"), true));
+  assert.equal(retry(), undefined);
 });

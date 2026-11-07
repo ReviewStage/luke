@@ -18,6 +18,7 @@ import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { PULL_REQUEST_MOMENT } from "./tasks/use-link-standing.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "./testing/frames.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
@@ -94,7 +95,7 @@ function drawn(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 
@@ -296,16 +297,14 @@ test("a pull request's corner says the age of the moment its state names, and no
   assert.equal(card(PULL_REQUEST_STATE.MERGED), undefined);
 });
 
-test("a plan's card says under its name when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
+test("a plan's card says under its name when the task last saw activity, its agent's later turn over its description's save, as its row does", () => {
   const worked: TaskSummary = {
     ...SUMMARY,
     agents: {
       total: 1,
       working: 0,
       activityAt: STARTED_AT + 2 * 3_600_000,
-      agents: [],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   const card = drawn(

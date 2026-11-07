@@ -5,9 +5,10 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   createElement,
@@ -214,7 +215,7 @@ export function openPullRequestsHere(
 }
 
 /** The place a mention of a plan, or of one of its sections, names. */
-export function placeOfMention(mention: PlanMention): LinkPlace {
+export function placeOfMention(mention: DescriptionMention): LinkPlace {
   return mention.kind === MENTION_KIND.TASK
     ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
     : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
@@ -227,12 +228,14 @@ export function placeOfMention(mention: PlanMention): LinkPlace {
  * the window lists no task for stays a number, which only the window opens,
  * finding the task on the service (`use-tasks-tab.ts`'s `openLink`).
  */
-function byListedTaskId(address: Address): Address {
+function byListedTaskId(address: Address, client: QueryClient): Address {
   if (address.kind !== ADDRESS.PLACE) return address;
   const { link } = address;
   const number = taskNumberOf(link.place);
   const taskId =
-    number === undefined ? undefined : numberedTaskIdNow({ workspace: link.workspace, number });
+    number === undefined
+      ? undefined
+      : numberedTaskIdNow(client)({ workspace: link.workspace, number });
   return taskId === undefined
     ? address
     : { ...address, link: { ...link, place: withTaskId(link.place, taskId) } };
@@ -266,11 +269,13 @@ function openAddress(
 }
 
 /** The opener for a plan, or one of its sections, as a mention's chip names it: where the place it is pressed on opens it, else in the window; nothing outside the window. */
-export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
+export function useOpenTask(): ((mention: DescriptionMention) => void) | undefined {
   const open = useOpenPlace();
   return useMemo(
     () =>
-      open === undefined ? undefined : (mention: PlanMention) => open(placeOfMention(mention)),
+      open === undefined
+        ? undefined
+        : (mention: DescriptionMention) => open(placeOfMention(mention)),
     [open],
   );
 }
@@ -306,9 +311,11 @@ export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
   const listed = useContext(ListedTasksContext);
+  const queryClient = useQueryClient();
   return useCallback(
-    (href: string) => openAddress(byListedTaskId(addressOf(href)), { openPlace, openHere, listed }),
-    [openPlace, openHere, listed],
+    (href: string) =>
+      openAddress(byListedTaskId(addressOf(href), queryClient), { openPlace, openHere, listed }),
+    [openPlace, openHere, listed, queryClient],
   );
 }
 

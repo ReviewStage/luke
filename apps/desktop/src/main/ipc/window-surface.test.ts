@@ -97,10 +97,6 @@ function fixture() {
       },
       tellUnsavedWork: (sender, holding) =>
         heard.push(`unsaved:${sender === panelContents ? "panel" : "other"}:${holding}`),
-      showBuildLabel: (shown) => {
-        heard.push(`build label:${shown}`);
-        return true;
-      },
       tellMenuOffers: (_sender, commands) => heard.push(`offers:${commands.join()}`),
     }),
   );
@@ -173,18 +169,6 @@ it("a panel's unsaved work is kept as it tells it, and refused from any other wi
   assert.deepEqual(heard, ["unsaved:panel:true", "unsaved:panel:false"]);
 });
 
-it("a panel hides the build's label, and any other window is refused", async () => {
-  const { port, panel, other, heard } = fixture();
-
-  assert.deepEqual(await port.call(panel, KIND.WINDOW_SHOW_BUILD_LABEL, { shown: false }), {
-    answer: undefined,
-  });
-  assert.deepEqual(await port.call(other, KIND.WINDOW_SHOW_BUILD_LABEL, { shown: true }), {
-    refused: "Could not show or hide this build's label.",
-  });
-  assert.deepEqual(heard, ["build label:false"]);
-});
-
 it("words are copied, a mail and the settings opened, and feedback carried", async () => {
   const { port, panel, heard } = fixture();
 
@@ -198,7 +182,7 @@ it("words are copied, a mail and the settings opened, and feedback carried", asy
   });
   assert.deepEqual(heard, [
     "copy:",
-    "open:mailto:founders@stagereview.app",
+    "open:mailto:founders@vespin.dev",
     "open:x-apple.systempreferences:com.apple.Notifications-Settings.extension",
     "feedback:The panel is lovely.",
   ]);

@@ -8,17 +8,9 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/cr
 import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT, PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { SIGN_IN_FAILURE } from "@repo/features/words";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_ERROR,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-  type GatewayMethod,
-  gatewayHost,
-} from "@repo/gateway";
+import { GATEWAY_EVENT, type GatewayEventKind, RefusedRefusal } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
-import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
+import { isRecord, type WireValue } from "@repo/wire";
 import { jsonResponse } from "@repo/wire/testing";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -42,7 +34,6 @@ import { recordingReporter } from "./testing/recording-reporter.js";
 const ACCOUNT_BASE_URL = "https://account.example.test/api/auth";
 /** The hosted service's origin, which the kernel derives from the account's address. */
 const SERVICE_BASE_URL = "https://account.example.test";
-const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 /** A consent the developer grants at once: the trip is the exchange itself. */
 const grantingConsent: OpenConsent = (options) => ({
@@ -238,11 +229,6 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
         platform: PRODUCT_PLATFORM.DESKTOP,
       }),
     });
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = account.methods[method];
-      assert.ok(handler, method);
-      return Effect.orDie(handler(params, CONTEXT));
-    };
     assert.deepEqual(yield* account.sessionReplayState, {
       permitted: true,
       accountId: "user-1",
@@ -250,13 +236,13 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     });
 
     // The deletion lands: recording is stood down, signed out, for the rest of the run so far.
-    yield* call(GATEWAY_METHOD.ACCOUNT_DELETE);
+    yield* Effect.orDie(account.acts.ACCOUNT_DELETE(undefined));
     yield* until(() => lastPermitted() === false);
     assert.deepEqual(lastReplay(), { permitted: false });
     assert.deepEqual(yield* account.sessionReplayState, { permitted: false });
 
     // A later sign-in in the same run starts it again, filed under the account that signed in.
-    yield* call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB });
+    yield* Effect.orDie(account.acts.ACCOUNT_BEGIN_SIGN_IN({ provider: ACCOUNT_PROVIDER.GITHUB }));
     assert.equal(account.signedIn(), true);
     yield* until(() => lastPermitted() === true);
     assert.deepEqual(lastReplay(), {
@@ -309,9 +295,9 @@ it.effect(
           }),
           signedIn: false,
         });
-        const handler = account.methods[GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN];
-        assert.ok(handler);
-        const answer = yield* Effect.orDie(handler({ provider: ACCOUNT_PROVIDER.GOOGLE }, CONTEXT));
+        const answer = yield* Effect.orDie(
+          account.acts.ACCOUNT_BEGIN_SIGN_IN({ provider: ACCOUNT_PROVIDER.GOOGLE }),
+        );
 
         assert.deepEqual(answer, { failure }, failure);
         assert.equal(account.signedIn(), false, failure);
@@ -364,9 +350,7 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
     assert.deepEqual(lastAccess(), { admin: true });
     assert.deepEqual(yield* account.accessState, { admin: true });
 
-    const handler = account.methods[GATEWAY_METHOD.ACCOUNT_SIGN_OUT];
-    assert.ok(handler);
-    yield* Effect.orDie(handler({}, CONTEXT));
+    yield* Effect.orDie(account.acts.ACCOUNT_SIGN_OUT(undefined));
     yield* until(() => lastAdmin() === false);
     assert.deepEqual(lastAccess(), { admin: false, pending: true });
     assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
@@ -384,7 +368,6 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
 
 /** The browser tab's service, on the tab's own origin, as Better Auth and our routes answer it. */
 const TAB_ORIGIN = "https://app.example.test";
-const BROWSER_CONTEXT = { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR };
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 const SESSION_USER = {
   id: "user-1",
@@ -504,8 +487,7 @@ const browserAccount = (service: TabService) =>
     yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
     const launched = yield* Effect.forkScoped(account.lifetime);
     yield* settings.lifetime;
-    const gateway = gatewayHost({ methods: account.methods, client: BROWSER_CONTEXT });
-    return { account, settings, gateway, events, departures, launched };
+    return { account, settings, events, departures, launched };
   });
 
 /** `body` over a tab whose every request, the settings' own counts among them, reaches `service`. */
@@ -534,21 +516,24 @@ it.effect(
     const sentry = recordingReporter();
     const service = tabService({ signedIn: true, stepsDown: true });
     return Effect.gen(function* () {
-      const { account, gateway, launched } = yield* browserAccount(service);
+      const { account, launched } = yield* browserAccount(service);
       yield* Fiber.join(launched);
       const standing = account.snapshot();
       assert.equal(signedInEmail(standing), SESSION_USER.email);
 
-      for (const [method, params] of [
-        [GATEWAY_METHOD.ACCOUNT_SIGN_OUT, {}],
-        [GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider: ACCOUNT_PROVIDER.GITHUB }],
-        [GATEWAY_METHOD.ACCOUNT_DELETE, {}],
-      ] as const) {
-        const answer = yield* gateway.call(method, params);
-        assert.equal(answer.ok, false, method);
-        assert.equal(!answer.ok && answer.error.code, GATEWAY_ERROR.REFUSED, method);
-        assert.ok(!answer.ok && !answer.error.message.includes("upstream"), method);
-        assert.deepEqual(account.snapshot(), standing, method);
+      const steps: readonly (readonly [string, Effect.Effect<unknown, unknown>])[] = [
+        ["sign-out", account.acts.ACCOUNT_SIGN_OUT(undefined)],
+        [
+          "sign-in again",
+          account.acts.ACCOUNT_SIGN_IN_AGAIN({ provider: ACCOUNT_PROVIDER.GITHUB }),
+        ],
+        ["deletion", account.acts.ACCOUNT_DELETE(undefined)],
+      ];
+      for (const [step, asked] of steps) {
+        const answer = yield* Effect.flip(asked);
+        assert.ok(answer instanceof RefusedRefusal, step);
+        assert.ok(!answer.message.includes("upstream"), step);
+        assert.deepEqual(account.snapshot(), standing, step);
       }
       assert.deepEqual(sentry.reported, []);
     }).pipe(Effect.provide(sentry.layer), (body) => inTab(service, body));
@@ -561,19 +546,19 @@ it.effect(
     const sentry = recordingReporter();
     const service = tabService({ signedIn: false, stepsDown: true });
     return Effect.gen(function* () {
-      const { account, gateway, launched, departures } = yield* browserAccount(service);
+      const { account, launched, departures } = yield* browserAccount(service);
       yield* Fiber.join(launched);
 
       // A sign-in answers that it did not finish, in the key the gate says it in.
-      const begun = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, {
+      const begun = yield* account.acts.ACCOUNT_BEGIN_SIGN_IN({
         provider: ACCOUNT_PROVIDER.GITHUB,
       });
-      assert.deepEqual(begun.ok && begun.result, { failure: SIGN_IN_FAILURE.UNFINISHED });
+      assert.deepEqual(begun, { failure: SIGN_IN_FAILURE.UNFINISHED });
       assert.deepEqual(account.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-      const again = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, {
-        provider: ACCOUNT_PROVIDER.GITHUB,
-      });
-      assert.equal(!again.ok && again.error.code, GATEWAY_ERROR.REFUSED);
+      const again = yield* Effect.flip(
+        account.acts.ACCOUNT_SIGN_IN_AGAIN({ provider: ACCOUNT_PROVIDER.GITHUB }),
+      );
+      assert.ok(again instanceof RefusedRefusal);
       assert.deepEqual(account.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.deepEqual(departures, []);
       assert.deepEqual(sentry.reported, []);
@@ -622,14 +607,13 @@ it.effect(
   () => {
     const service = tabService({ signedIn: true });
     return Effect.gen(function* () {
-      const { gateway, launched, departures } = yield* browserAccount(service);
+      const { account, launched, departures } = yield* browserAccount(service);
       yield* Fiber.join(launched);
 
-      const answer = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, {
-        provider: ACCOUNT_PROVIDER.GITHUB,
-      });
+      yield* Effect.orDie(
+        account.acts.ACCOUNT_SIGN_IN_AGAIN({ provider: ACCOUNT_PROVIDER.GITHUB }),
+      );
 
-      assert.equal(answer.ok, true);
       const [departure] = departures;
       assert.equal(departure?.url, PROVIDER_CONSENT);
       assert.ok(
@@ -661,8 +645,8 @@ it.effect(
         }),
       );
     return Effect.gen(function* () {
-      yield* page(({ gateway }) =>
-        gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB }),
+      yield* page(({ account }) =>
+        Effect.orDie(account.acts.ACCOUNT_BEGIN_SIGN_IN({ provider: ACCOUNT_PROVIDER.GITHUB })),
       );
       // The provider signs the person in and sends the tab back to a page of its own, which a reload follows.
       service.signedIn = true;

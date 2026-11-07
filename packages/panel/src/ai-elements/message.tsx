@@ -102,6 +102,27 @@ export function MessageContent({ children, className, ...props }: MessageContent
   );
 }
 
+/**
+ * The developer's bubble with a mark at its side, toward the column's middle,
+ * as a chat app stands its red alert beside a message that did not go
+ * (`undelivered-mark.tsx`); the mark keeps its full ink while the bubble
+ * fades (`tasks.css`).
+ */
+export function MessageBeside({
+  mark,
+  children,
+}: {
+  mark: ReactNode;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <div className="message-beside flex min-w-0 max-w-full items-center justify-end gap-tight-gap">
+      {children}
+      {mark}
+    </div>
+  );
+}
+
 export type MessageActionProps = {
   /** What the action does, which is its accessible name and, when `tooltip` is set, the hint it shows. */
   label: string;

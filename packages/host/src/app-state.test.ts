@@ -15,10 +15,10 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { WireValue } from "@repo/wire";
 import { describe, test } from "vitest";
 import {
+  type AppDescriptionDocuments,
   type AppHolderInboxes,
   type AppInboxItems,
   type AppPages,
-  type AppPlanDocuments,
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTranscript,
@@ -173,23 +173,23 @@ describe("a delivery that crosses the wire", () => {
   const [invites, billing] = [
     {
       ...summary("invites", "Teammate invitations"),
-      agents: { total: 0, working: 0, agents: [], pullRequestTotal: 0, pullRequests: [] },
+      agents: { total: 0, working: 0, pullRequestTotal: 0 },
     },
     summary("billing", "Billing usage alerts"),
   ];
-  const openPlan: Task = {
+  const openDescription: Task = {
     ...invites,
     document: { body: "# Billing alerts fire at ninety percent", assumptions: [] },
   };
   const taskList = (tasks: readonly TaskSummary[]): AppStateSnapshot => ({
     ...document,
-    tasks: { ...document.tasks, tasks, activeTaskId: openPlan.id },
+    tasks: { ...document.tasks, tasks, activeTaskId: openDescription.id },
   });
-  const plans = (held: AppPlanDocuments): AppStateSnapshot => ({
+  const descriptions = (held: AppDescriptionDocuments): AppStateSnapshot => ({
     ...document,
-    [LIVE_READ.PLAN_DOCUMENT]: held,
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: held,
   });
-  const quietPlan = { rows: { task: openPlan } };
+  const quietDescription = { rows: { task: openDescription } };
   /** One of an agent's messages, saying `text`. */
   const line = (id: string, text: string): AgentTranscriptMessage => ({
     id,
@@ -212,7 +212,7 @@ describe("a delivery that crosses the wire", () => {
     [LIVE_READ.TRANSCRIPT]: { "agent-1": { [OWN_TRANSCRIPT]: { rows: own } } },
   });
   const quietLine = line("m-1", "Read the invites.");
-  /** A plan's document holding `body` alone. */
+  /** A task's description holding `body` alone. */
   const draft = (body: string): Task["document"] => ({ body, assumptions: [] });
   const quietList = [quietItem];
   const quietInbox = { rows: quietList };
@@ -279,18 +279,18 @@ describe("a delivery that crosses the wire", () => {
       quiet: [billing.name],
     },
     {
-      name: "the held plans, a task's saved, one let go, and one kept",
-      sent: plans({
-        quiet: quietPlan,
+      name: "the held descriptions, a task's saved, one let go, and one kept",
+      sent: descriptions({
+        quiet: quietDescription,
         moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Draft") } } },
         gone: { failed: true },
       }),
-      next: plans({
-        quiet: quietPlan,
+      next: descriptions({
+        quiet: quietDescription,
         moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Final") } } },
       }),
-      kept: (state: AppStateSnapshot) => [state[LIVE_READ.PLAN_DOCUMENT].quiet],
-      quiet: [openPlan.document.body],
+      kept: (state: AppStateSnapshot) => [state[LIVE_READ.DESCRIPTION_DOCUMENT].quiet],
+      quiet: [openDescription.document.body],
     },
     {
       name: "a held transcript, its journal grown, a message come, and its word moved with them",

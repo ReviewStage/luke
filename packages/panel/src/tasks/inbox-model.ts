@@ -62,14 +62,14 @@ import { plainWords } from "./tool-call-model.js";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person it waits on, or in one
- * run with no groups, the items its tab takes: what needs the reader, what
- * is unread, every open item, or everything, each tab counting its own.
+ * first, in one run with no groups, the items its tab takes: what needs the reader, what
+ * they are not done with, everything, or what they set a reminder on, each tab
+ * counting its own.
  * An item is the reader's where it waits on them: they are its task's
  * assignee, or, on a task nobody is assigned or an agent's with no task,
  * they started the agent that asks it; or where the service does not say, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through any tab keep the
+ * them: Questions lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. An item is its title and its thread, each answer a member's
  * message under the ask it answers, and a settled one says how it ended.
@@ -102,8 +102,6 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going with the close as its note. */
-  readonly resolving?: true | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
@@ -155,16 +153,13 @@ type InboxFile = NonNullable<InboxMessage["files"]>[number];
  */
 export function inboxFileChips(
   files: readonly InboxFile[],
-  urls: ReadonlyMap<string, { readonly url: string } | { readonly failed: true }>,
+  urls: ReadonlyMap<string, string>,
 ): FileChip[] {
-  return files.map((file) => {
-    const read = urls.get(file.attachmentId);
-    return {
-      name: file.name,
-      mediaType: file.mediaType,
-      url: read !== undefined && "url" in read ? read.url : "",
-    };
-  });
+  return files.map((file) => ({
+    name: file.name,
+    mediaType: file.mediaType,
+    url: urls.get(file.attachmentId) ?? "",
+  }));
 }
 
 /** A comment's files as they are drawn after its words: its pictures, and every other file. */
@@ -205,22 +200,23 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
-  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  /** The open items that wait on the reader at `now` (`waitsOnReaderNow`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate and one the reader set a reminder on waits on nobody until it comes due. */
   readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` and `now` say which of what waits waits on the reader. */
 export function inboxBoard(
   items: readonly InboxItem[],
   readerId: string | undefined,
+  now: number,
 ): InboxBoardView {
   const open = items
     .filter((item) => item.status === INBOX_STATUS.OPEN)
     .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
     open,
-    waiting: open.filter((item) => readersItem(item, readerId)),
+    waiting: open.filter((item) => waitsOnReaderNow(item, readerId, now)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -914,41 +910,25 @@ export function inboxPreviewHeard(
   return previewOf(line, nameOf, ticked, line.heard);
 }
 
-/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
+/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, a member's resolve, or words alone. */
 export const INBOX_LINE = {
   DECIDE: "decide",
   DO: "do",
   ANSWER: "answer",
   SETTLED: "settled",
+  RESOLVED: "resolved",
   SAID: "said",
 } as const;
 
 export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
 
-/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
+/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, Resolve's where a member resolved it, or none. */
 export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
 
-/** What an item's hover card reads of its thread: the ask that waits, where one does, and the agent's latest words, plain. */
-export interface InboxCardThread {
-  readonly ask: InboxKnownAsk | undefined;
-  readonly words: string;
-}
-
-/** An item's thread as its hover card reads it (`InboxCardThread`). */
-export function inboxCardThread(item: InboxItem): InboxCardThread {
-  const thread = item.thread ?? [];
-  const asking = openAskOf(thread);
-  const said = thread.findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
-  return {
-    ask: asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined,
-    words: said === undefined ? "" : plainWords(said.text),
-  };
-}
-
 /**
- * The steps of an item's open to-do its row and card show ticked, as its box
+ * The steps of an item's open to-do its row shows ticked, as its box
  * shows them (`shownTicks`): every one while Mark done is pressed in its
  * draft, else those ticked by hand; none where no draft stands.
  */
@@ -1097,8 +1077,20 @@ function itemLine(item: InboxItem): ItemLine {
   const thread = item.thread ?? [];
   const asking = openAskOf(thread);
   const last = thread.at(-1);
-  const line =
-    asking !== undefined && knownAsk(asking.ask)
+  // Note that a member's resolve says so in its own word, rather than the agent's last words, which would read as still waiting.
+  const resolved =
+    item.status === INBOX_STATUS.CLOSED &&
+    inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
+  const line: ItemLine = resolved
+    ? {
+        kind: INBOX_LINE.RESOLVED,
+        ask: undefined,
+        words: INBOX_SETTLED_STANDING.RESOLVED,
+        heard: INBOX_SETTLED_STANDING.RESOLVED,
+        byAgent: true,
+        member: undefined,
+      }
+    : asking !== undefined && knownAsk(asking.ask)
       ? {
           kind: ASK_LINE[asking.ask.type],
           ask: asking.ask,
@@ -1185,6 +1177,11 @@ export function threadsWaitingWords(waiting: number): string {
   return waiting === 1
     ? `1 thread ${NEEDS_YOU.COUNT.one}`
     : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
+}
+
+/** What a line of threads none of which waits on the developer says: "1 thread", "4 threads". */
+export function threadsWords(count: number): string {
+  return count === 1 ? "1 thread" : `${count} threads`;
 }
 
 /** The items given that wait on the developer, by the agent that posted each, in their order. */
@@ -1401,12 +1398,13 @@ export function agentGroups(
 }
 
 /**
- * Which items an Inbox lists, as its view's menu chooses: Needs you, the
+ * Which items an Inbox lists, as its view's menu chooses: Questions, the
  * questions whose ask waits on the reader's answer (`threadNeedsReader`),
  * which Addressed to never narrows; Open, every
- * thread still open, a question not yet answered or a notice nobody has
- * opened yet, which Addressed to then narrows; All, every item, open and
- * settled; or Snoozed, the items the reader snoozed, which the other three
+ * thread the reader is not done with, a question not yet answered, a notice
+ * not yet opened, or a thread they have not read since it changed or marked
+ * unread, bar a withdrawn ask they left alone, which Addressed to then narrows; All, every item, open and
+ * settled; or Reminders, the items the reader set a reminder on, which the other three
  * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
  * kept before it reads as Open. Note too that no scope asks where the
  * item's task stands: an item of a task done or canceled is listed and
@@ -1416,7 +1414,7 @@ export const INBOX_SHOW = {
   NEEDS_ME: "needs-me",
   OPEN: "to-do",
   ALL: "all",
-  SNOOZED: "snoozed",
+  REMINDERS: "reminders",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
@@ -1444,7 +1442,7 @@ export interface InboxCounts {
   readonly [INBOX_SHOW.NEEDS_ME]: number;
   readonly [INBOX_SHOW.OPEN]: number;
   readonly [INBOX_SHOW.ALL]: number;
-  readonly [INBOX_SHOW.SNOOZED]: number;
+  readonly [INBOX_SHOW.REMINDERS]: number;
 }
 
 /** One holder, a task or an agent, and every item it holds, as the list is handed them. */
@@ -1532,8 +1530,8 @@ export function waitsOnReader(
 
 /**
  * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
+ * notice. One from a service before it, which says nothing, counts as
+ * asking, as every item did.
  */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
@@ -1542,6 +1540,20 @@ export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/**
+ * Whether an item waits on the reader at `now`: it needs them (`needsReader`)
+ * and holds no reminder still ahead (`remindsLater`), what Open lists for them
+ * and every count of what needs them counts, the sidebar's Inbox row's among
+ * them (`places-waiting.ts`'s `waitingThreads`).
+ */
+export function waitsOnReaderNow(
+  item: InboxItem,
+  readerId: string | undefined,
+  now: number,
+): boolean {
+  return needsReader(item, readerId) && !remindsLater(item, now);
 }
 
 /**
@@ -1614,7 +1626,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
-/** Whether Addressed to narrows a scope: every scope but Needs you, which names the reader already. */
+/** Whether Addressed to narrows a scope: every scope but Questions, which names the reader already. */
 export function narrowedByWhose(show: InboxShow): boolean {
   return show !== INBOX_SHOW.NEEDS_ME;
 }
@@ -1695,25 +1707,28 @@ export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
-/** Whether the reader snoozed the item and it has not come back, as `inboxAtNow` leaves its snooze on it. */
-export function isSnoozed(item: InboxItem): boolean {
-  return item.snoozedUntil !== undefined;
+/** Whether the reader set a reminder on the item and it has not come back, as `inboxAtNow` leaves its reminder on it. */
+export function hasReminder(item: InboxItem): boolean {
+  return item.remindAt !== undefined;
+}
+
+/** Whether the reader's reminder on the item is still ahead at `now`, which leaves it out of every count until it comes due. */
+function remindsLater(item: Pick<InboxItem, "remindAt">, now: number): boolean {
+  return item.remindAt !== undefined && item.remindAt > now;
 }
 
 /**
- * An item as it stands for the reader at `now`: snoozed while it is read
- * and its snooze is ahead; back where its snooze has passed, unread and as
- * changed then, so it lists at the top; and no longer snoozed where a
- * change made it unread, which ends a snooze early. Only a snoozed item
- * keeps `snoozedUntil` (`isSnoozed`), and an item it leaves as it was is the
- * very one handed in.
+ * An item as it stands for the reader at `now`: put away while its reminder is
+ * ahead, read or unread alike; and back where it has passed, as changed
+ * then, so it lists at the top, read or unread as it was. A change ends a
+ * reminder early by the service answering none. Only an item with a reminder keeps
+ * `remindAt` (`hasReminder`), and an item it leaves as it was is the very
+ * one handed in.
  */
 function itemAtNow(item: InboxItem, now: number): InboxItem {
-  const { snoozedUntil, ...rest } = item;
-  if (snoozedUntil === undefined) return item;
-  if (isUnread(item)) return rest;
-  if (snoozedUntil > now) return item;
-  return { ...rest, unread: true, updatedAt: Math.max(item.updatedAt, snoozedUntil) };
+  const { remindAt, ...rest } = item;
+  if (remindAt === undefined || remindAt > now) return item;
+  return { ...rest, updatedAt: Math.max(item.updatedAt, remindAt) };
 }
 
 /** Every holder's items as they stand for the reader at `now` (`itemAtNow`), each group handed in kept where none of its items moved. */
@@ -1724,32 +1739,52 @@ export function inboxAtNow(groups: readonly InboxGroup[], now: number): readonly
   });
 }
 
-/** Whether the reader is done with an item, as its row is drawn gray: settled, answered or closed, and read since. */
-export function isDone(item: InboxItem): boolean {
-  return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
+/**
+ * Whether a thread closed without an answer, its ask withdrawn by its agent,
+ * a member, or its task's or agent's settle, says nothing new to the
+ * reader: they neither marked it unread nor missed a message written on it
+ * since it closed. Note that an item from a service before `settledAt` was
+ * kept reads its last change as its close, as the service does.
+ */
+function closedQuietly(item: InboxItem): boolean {
+  if (item.status !== INBOX_STATUS.CLOSED || item.markedUnread === true) return false;
+  return item.updatedAt <= (item.settledAt ?? item.updatedAt);
 }
 
 /**
+ * Whether the reader is done with an item, as its row is drawn gray:
+ * settled, answered or closed, and read since, or closed without an answer
+ * and saying nothing new (`closedQuietly`), since a withdrawn ask asks
+ * nothing of them however unread it stands.
+ */
+export function isDone(item: InboxItem): boolean {
+  return item.status !== INBOX_STATUS.OPEN && (!isUnread(item) || closedQuietly(item));
+}
+
 /**
- * Whether a scope lists the item: Needs you every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those snoozed, a notice never; Open every open thread, a question or an
- * update not yet opened, which narrowed to the reader's own (`needsYou`)
- * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
- * all of them, each leaving out what the reader snoozed (`isSnoozed`),
- * which Snoozed alone lists. Note that a thread of theirs settled and unread is left to
- * All, because main counts no settled item.
+ * Whether a scope lists the item: Questions every question whose ask waits
+ * on the reader (`threadNeedsReader`) but for those with a reminder, a
+ * notice never; Open every
+ * thread the reader is not done with (`isDone`), one still open, one
+ * answered since they last read it, or one closed without an answer that
+ * they marked unread or that was written on since it closed, as a mail
+ * app's inbox keeps what is unread; and All all of them, each leaving out what the
+ * reader set a reminder on (`hasReminder`), which Reminders alone lists. Note that Open
+ * reads the reader's own read state rather than the thread's status alone,
+ * because a notice settles as it is opened (`acknowledgedOnOpen`), so a
+ * thread marked unread comes back to Open whatever settled it, and a row
+ * drawn gray is one Open has let go.
  */
 function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.NEEDS_ME:
-      return threadNeedsReader(item, readerId) && !isSnoozed(item);
+      return threadNeedsReader(item, readerId) && !hasReminder(item);
     case INBOX_SHOW.OPEN:
-      return item.status === INBOX_STATUS.OPEN && !isSnoozed(item);
+      return !isDone(item) && !hasReminder(item);
     case INBOX_SHOW.ALL:
-      return !isSnoozed(item);
-    case INBOX_SHOW.SNOOZED:
-      return isSnoozed(item);
+      return !hasReminder(item);
+    case INBOX_SHOW.REMINDERS:
+      return hasReminder(item);
   }
 }
 
@@ -1768,7 +1803,7 @@ export function inboxCounts(
     [INBOX_SHOW.NEEDS_ME]: count(INBOX_SHOW.NEEDS_ME),
     [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
-    [INBOX_SHOW.SNOOZED]: count(INBOX_SHOW.SNOOZED),
+    [INBOX_SHOW.REMINDERS]: count(INBOX_SHOW.REMINDERS),
   };
 }
 

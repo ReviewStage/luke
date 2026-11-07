@@ -52,7 +52,7 @@ test("a picture's address opens its item, as the item's own link does", () => {
   );
 });
 
-test("an item's link, a plan's picture, another host's, or a malformed id names no item's picture", () => {
+test("an item's link, a description's picture, another host's, or a malformed id names no item's picture", () => {
   for (const address of [
     `https://vespin.dev/acme/plan/${TASK_ID}/inbox/${ITEM_ID}`,
     `https://vespin.dev/acme/plan/${TASK_ID}/files/${PICTURE}`,

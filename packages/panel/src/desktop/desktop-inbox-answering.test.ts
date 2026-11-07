@@ -21,10 +21,10 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect, Schema } from "effect";
 import { act } from "react";
-import { beforeAll, test } from "vitest";
+import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { sideBundles } from "../bundle-loader.js";
-import { planEditor } from "../plan-editor/index.js";
+import { descriptionEditor } from "../description-editor/index.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -53,7 +53,6 @@ import {
   BILLING,
   boxParts,
   checkedOptions,
-  confirmClose,
   draftReply,
   EXPIRY,
   EXPIRY_ASK,
@@ -61,11 +60,11 @@ import {
   footWords,
   gatedAnswers,
   heldMessages,
-  hoveredCard,
   INVITES,
   item,
   itemPane,
   keyOn,
+  letResolvesGo,
   listed,
   menuItem,
   menuWords,
@@ -82,7 +81,6 @@ import {
   RETRY,
   readTitle,
   repliedOn,
-  rowDrafted,
   rowLines,
   rowMenu,
   rowNamed,
@@ -152,7 +150,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Snooze, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar offers Resolve, naming E, beside Mark as read or unread, Remind me, and Copy link, which settles it at once at the revision drawn, the thread saying who resolved it, and reaches the service once its Undo is gone; a settled item's menu offers the same less Resolve", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -163,219 +161,75 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
-  assert.deepEqual(menuWords(), [
-    "Copy link",
-    "—",
-    "Mark as unreadU",
-    "SnoozeH",
-    "—",
-    "Resolve without answering",
-  ]);
+  assert.deepEqual(menuWords(), ["Copy link", "—", "Mark as unreadU", "Remind meH", "ResolveE"]);
   act(() => menuItem("Mark as unread").click());
   await settle();
   assert.ok(world.readMarks.includes(`unread:${THRESHOLD.id}`), "the menu marks the item unread");
   act(() => ellipsis().click());
-  act(() => menuItem("Resolve without answering").click());
+  act(() => menuItem("Resolve").click());
   await settle();
-  assert.deepEqual(sent, [], "Close asks first");
-  await confirmClose();
-
-  assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "Resolve asks nothing");
   assert.equal(
     wordsOf(itemPane(page).querySelector('[data-inbox-comment="closed"] .ui-comment-name')),
     "You resolved this without an answer",
     "the thread says the reader resolved it, in a line of its own",
   );
+  assert.deepEqual(sent, [], "nothing reaches the service while Undo stands");
+
+  await letResolvesGo();
+  assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Copy link", "—", "Mark as unreadU"],
-    "a settled item offers no Close",
+    ["Copy link", "—", "Mark as unreadU", "Remind meH"],
+    "a settled item offers Remind me but no Resolve",
   );
 });
 
-test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send sends the words with the close as its note, in one send", async () => {
+test("an open question's card offers its × named Resolve, which resolves the item at once, asking nothing and sending no reply beside it, and Send only ever sends an answer", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const closes = takenCloses();
   const sent = heldMessages(writtenOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000093"));
   const pane = itemPane(page);
-  const cross = () =>
-    pane.querySelector<HTMLButtonElement>(
-      '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
-    ) ?? assert.fail("the open question's card offers its ×");
+  const resolve =
+    pane.querySelector<HTMLButtonElement>('[data-inbox-draft-ask] button[aria-label="Resolve"]') ??
+    assert.fail("the open question's card offers its × named Resolve");
 
-  act(() => (openOptions(pane)[1] ?? assert.fail("no second option")).click());
-  act(() => cross().click());
-  await settle();
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the × asks nothing");
-  assert.deepEqual(closes, [], "and resolves nothing until Send");
-  assert.equal(document.activeElement?.textContent, "Undo", "Undo takes the ×'s focus");
-  const undo =
-    [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
-      (button) => button.textContent === "Undo",
-    ) ?? assert.fail("the strip offers Undo");
-  act(() => undo.click());
-  assert.deepEqual(
-    checkedOptions(pane),
-    ["Retry once"],
-    "Undo brings the question back, picks and all",
-  );
-  assert.equal(document.activeElement, cross(), "and the × takes Undo's focus back");
-
-  act(() => cross().click());
   typeInComposer(pane, "Hold off until the backfill lands");
   await settle();
-  await act(async () => answerSend(pane).click());
+  act(() => resolve.click());
   await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "Resolve asks nothing");
+  await letResolvesGo();
 
-  assert.deepEqual(sent, [], "no reply goes beside the close");
-  assert.deepEqual(closes, [
-    {
-      itemId: THRESHOLD.id,
-      revision: THRESHOLD.revision,
-      text: "Hold off until the backfill lands",
-    },
-  ]);
-});
-
-test("a staged resolve outlasts a reload of the window while its ask stands, and lapses once the agent changes the item", async () => {
-  const before = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  act(() =>
-    (
-      itemPane(before.page).querySelector<HTMLButtonElement>(
-        '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
-      ) ?? assert.fail("the open question's card offers its ×")
-    ).click(),
-  );
-  await settle();
-  const reload = async () => {
-    act(() => world.root?.unmount());
-    world.root = undefined;
-    const { page } = mount([], { chosen: ON_THRESHOLD });
-    await settle();
-    return itemPane(page);
-  };
-
-  const reloaded = await reload();
-  assert.ok(
-    [...reloaded.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].some(
-      (button) => button.textContent === "Undo",
-    ),
-    "the reloaded box still stages the resolve",
-  );
-  world.inboxes.set(
-    BILLING.id,
-    (world.inboxes.get(BILLING.id) ?? []).map((each) =>
-      each.id === THRESHOLD.id ? { ...each, revision: THRESHOLD.revision + 1 } : each,
-    ),
-  );
-  const changed = await reload();
-  assert.ok(
-    changed.querySelector('[data-inbox-draft-ask] button[aria-label="Resolve without answering"]'),
-    "the question stands again over the changed item",
-  );
-});
-
-test("a resolve the service did not take stands staged again with its words back in the box, so it can be sent again or undone", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const bridge = appBridge();
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...bridge,
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.AGENTS_INBOX_CLOSE
-        ? Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
-          })
-        : previous(request),
-  });
-  const pane = itemPane(page);
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>(
-        '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
-      ) ?? assert.fail("the open question's card offers its ×")
-    ).click(),
-  );
-  typeInComposer(pane, "Hold off until the backfill lands");
-  await settle();
-  await act(async () => answerSend(pane).click());
-  await settle();
-
-  assert.ok(
-    [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].some(
-      (button) => button.textContent === "Undo",
-    ),
-    "the resolve stands staged again",
-  );
+  assert.deepEqual(closes, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
+  assert.deepEqual(sent, [], "no reply goes beside the resolve");
   assert.equal(
     composerEditor(pane).textContent,
     "Hold off until the backfill lands",
-    "its words are back in the box",
+    "the box's words stay a reply to send",
   );
 });
 
-test("an open item's row offers Resolve without answering last in its menu, asking first; a settled item's row offers none", async () => {
+test("an open item's row offers Resolve among its triage acts, at once; a settled item's row offers none", async () => {
   const { page } = mount();
   await settle();
   const sent = takenCloses();
   const threshold = "Alert at 80%?";
   const retry = "How is a failed email retried?";
-  assert.ok(
-    !rowMenu(page, retry).includes("Resolve without answering"),
-    "a settled row offers no Close",
-  );
+  assert.ok(!rowMenu(page, retry).includes("Resolve"), "a settled row offers no Resolve");
   act(() =>
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
 
-  assert.deepEqual(rowMenu(page, threshold).slice(-2), ["—", "Resolve without answering"]);
-  act(() => menuItem("Resolve without answering").click());
+  assert.deepEqual(rowMenu(page, threshold).slice(-3), ["Mark as unread", "Remind me", "Resolve"]);
+  act(() => menuItem("Resolve").click());
   await settle();
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
-  const cancel = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Cancel",
-  );
-  act(() => cancel?.click());
-  await settle();
-  assert.deepEqual(sent, [], "Cancel closes nothing");
-
-  rowMenu(page, threshold);
-  act(() => menuItem("Resolve without answering").click());
-  await settle();
-  await confirmClose();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "Resolve asks nothing");
+  await letResolvesGo();
   assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
-  assert.ok(
-    !rowMenu(page, threshold).includes("Resolve without answering"),
-    "the closed row offers Close no longer",
-  );
-});
-
-test("a close taken lets go of the item's draft, though another item is chosen", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  typeInComposer(itemPane(page), "Use 90% instead");
-  await settle();
-  act(() => rowNamed(page, "Expire after 7 days?").click());
-  await settle();
-  assert.equal(rowDrafted(page, "Alert at 80%?"), true);
-  takenCloses();
-
-  act(() =>
-    rowNamed(page, "Alert at 80%?").dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
-    ),
-  );
-  act(() => menuItem("Resolve without answering").click());
-  await settle();
-  await confirmClose();
-
-  assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
+  assert.ok(!rowMenu(page, threshold).includes("Resolve"), "the resolved row offers it no longer");
 });
 
 test("an item gone from under its open box, as a teammate's delete takes it, lets go of its draft", async () => {
@@ -387,20 +241,29 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
   world.inboxes.set(BILLING.id, [RETRY]);
   act(() => pushAgain());
   await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+      false,
+      "the item is gone",
+    ),
+  );
   // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
   world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
   act(() => pushAgain());
   await settle();
 
-  assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go"),
+  );
 });
 
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
   const bundles = sideBundles({
-    planEditor: () => {
-      if (failed) return Promise.resolve(planEditor);
+    descriptionEditor: () => {
+      if (failed) return Promise.resolve(descriptionEditor);
       failed = true;
       return Promise.reject(new Error("The chunk could not be loaded."));
     },
@@ -593,6 +456,12 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   assert.equal(footWords(pane), "", "a field filled lets the line go");
+  // Note that the repository's paths land through a query, so Enter is pressed once the @ list holds them.
+  const listed = () =>
+    [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (name) => name.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(listed(), ["rollout-store.ts"]));
   pressInComposer(field("Reason"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
@@ -834,10 +703,12 @@ test("an answer leaves Needs you the moment it is sent, its row staying where it
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(
-    listed(page),
-    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
-    "the answered row stays where it stood",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      listed(page),
+      ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
+      "the answered row stays where it stood",
+    ),
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
 });
@@ -853,7 +724,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
-  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   assert.equal(rowMuted(page, "Expire after 7 days?"), false);
 
   answerWithNote(page, "Keep 7 days");
@@ -869,7 +740,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   await settle();
   assert.deepEqual(
     listed(page),
-    ["▸ Expire after 7 days?", "Alert at 80%?"],
+    ["▸ Expire after 7 days?", "*Alert at 80%?"],
     "the answered row stays where it stood",
   );
   assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
@@ -877,7 +748,11 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
 
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.deepEqual(listed(page), ["▸ Alert at 80%?"], "the gray row clears once another is chosen");
+  assert.deepEqual(
+    listed(page),
+    ["▸ *Alert at 80%?"],
+    "the gray row clears once another is chosen",
+  );
 });
 
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
@@ -885,7 +760,7 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
 
   act(() => world.setInboxOpen(false));
   await settle();
@@ -896,11 +771,13 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   // The invites plan's change is pushed, as an answer from another Mac would be.
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
+  // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
+  await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
   act(() => world.setInboxOpen(true));
   await settle();
   assert.deepEqual(
     listed(page),
-    ["Alert at 80%?"],
+    ["*Alert at 80%?"],
     "the item answered while the Inbox was hidden no longer needs you, so it has no row",
   );
 });
@@ -924,9 +801,9 @@ test("on To do, an answered item a link or Back chooses stands its row, gray, un
   act(() => world.chooseFromOutside(onRetry));
   await settle();
 
-  assert.deepEqual(linked, ["▸ How is a failed email retried?", "Expire after 7 days?"]);
-  assert.deepEqual(left, ["▸ Expire after 7 days?"], "its row goes once another is chosen");
-  assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "Expire after 7 days?"]);
+  assert.deepEqual(linked, ["▸ How is a failed email retried?", "*Expire after 7 days?"]);
+  assert.deepEqual(left, ["▸ *Expire after 7 days?"], "its row goes once another is chosen");
+  assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "*Expire after 7 days?"]);
   assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
 });
 
@@ -963,7 +840,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
@@ -1000,7 +877,9 @@ test("an answer no reply came back for is taken as sent once its thread holds a 
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [landed, RETRY] });
   await settle();
   const pane = itemPane(page);
-  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go"),
+  );
   assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
 });
 
@@ -1057,8 +936,7 @@ test("an item its agent posts again after it was answered needs you again once a
       { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
     ]),
   );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
 });
 
 test("a message the service took stays the last word on its item's row once another plan's item is chosen, though the list's read of its plan is older than the message", async () => {
@@ -1553,9 +1431,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     "Charles Pan resolved this without an answer",
     "and the close names who resolved it",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("an ask replaced by a message that asks nothing names no newer question, and one a follow-up left open has its line stand before the question that replaced it", async () => {
   const noticed = await mountThread(
     threadItem([
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -1587,9 +1465,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     ],
     "a follow-up that asks nothing leaves the ask open, so the line stands before the question that replaced it",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("a member's close of the item keeps an earlier close's line where it stood, and its note stands under the line saying who resolved it", async () => {
   const closedTwice = await mountThread(
     threadItem(
       [
@@ -1650,9 +1528,9 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     ],
     "a close's note stands under the line saying who resolved it, never as a message of its own, and names the closer of a close no longer standing",
   );
+});
 
-  act(() => world.root?.unmount());
-  world.root = undefined;
+test("a settled ask keeps the controls its type offered: a to-do its steps, none ticked, and neither a to-do naming no steps nor an ask of words alone any, the withdrawn line still saying why", async () => {
   const toDo = await mountThread(
     threadItem([
       askingMessage(
@@ -2055,22 +1933,4 @@ test("a teammate's open ask says on its marker that it waits on them, rather tha
   assert.equal(askMarker(pane), "Waiting on Charles Pan");
   act(() => openOptions(pane)[0]?.click());
   assert.equal(footWords(pane), "", "the box says nothing of what is sent");
-});
-
-test("an item's card shows a to-do naming no steps of its own its title as its one step, as its box does", async () => {
-  const ROTATE = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })], {
-    title: "Rotate the deployment key",
-  });
-  world.inboxes = new Map([[BILLING.id, [ROTATE]]]);
-  const { page } = mount();
-  await settle();
-  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-item-card]");
-  assert.deepEqual(
-    [
-      ...document.querySelectorAll(
-        '.ui-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
-      ),
-    ].map((step) => step.textContent),
-    ["Rotate the deployment key"],
-  );
 });

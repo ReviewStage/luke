@@ -610,6 +610,42 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
+test("a plain click on any row, with tasks chosen and no bar to let them go, opens it and chooses none", async () => {
+  const opened: string[] = [];
+  const sidebar = await mountSidebar([], SECTIONS, { onResume: (taskId) => opened.push(taskId) });
+  const rowOf = (name: string) =>
+    [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find((each) =>
+      each.textContent?.includes(name),
+    ) ?? assert.fail(`no ${name} row`);
+  const click = (name: string, keys: MouseEventInit = {}) =>
+    act(() => {
+      rowOf(name).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, ...keys }),
+      );
+    });
+  const chooseBoth = () => {
+    click(INVITES.name, { metaKey: true });
+    click(RETRIES.name, { metaKey: true });
+    assert.equal(rowOf(INVITES.name).getAttribute("aria-description"), "Selected");
+    assert.equal(rowOf(RETRIES.name).getAttribute("aria-description"), "Selected");
+  };
+  const noneChosen = () =>
+    assert.ok(!sidebar.querySelector('[aria-description="Selected"]'), "no row is still chosen");
+  chooseBoth();
+  click(INVITES.name);
+  assert.deepEqual(opened, [INVITES.id]);
+  noneChosen();
+
+  // A place, a row that cannot be chosen, lets them go too.
+  chooseBoth();
+  const home =
+    [...sidebar.querySelectorAll<HTMLElement>("button")].find((each) =>
+      each.textContent?.trim().startsWith("Home"),
+    ) ?? assert.fail("no Home row");
+  act(() => home.click());
+  noneChosen();
+});
+
 test("a section's Mark all as read stands while a task in it is unread, and asks the service to mark every unread one read", async () => {
   const marks: string[] = [];
   fakeActPort({

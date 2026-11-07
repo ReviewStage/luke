@@ -28,7 +28,7 @@ import type { TurnTrigger } from "./turn.js";
  * and its end with the status, the usage split four ways, and the response
  * ids. Every event carries the conversation's key, the turn's id, and its
  * place in the turn's sequence, numbered from one by the turn's one teller,
- * the eve host's relay, which fires them in order, so a consumer can
+ * the native harness's projection, which fires them in order, so a consumer can
  * verify it heard the turn whole. A listener that throws ends no turn.
  */
 

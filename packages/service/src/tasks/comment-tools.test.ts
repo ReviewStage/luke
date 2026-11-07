@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { startPlanCommentThread } from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
-import { createTask, savePlanText } from "@repo/database/models/task-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
+import { writePage } from "@repo/database/models/task-pages";
+import { createTask, saveDescriptionText } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { unparsedWire } from "@repo/wire";
 import { Effect, Option } from "effect";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import {
   COMMENT_TOOL_REFUSAL,
@@ -35,7 +35,7 @@ import {
  * plans.
  */
 
-const PLAN_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
+const DESCRIPTION_TEXT = "## Approach\n\nAdmins can withdraw an invite from the members page.\n";
 const WORDS = "withdraw an invite";
 
 const openAccount = (name: string) =>
@@ -53,17 +53,17 @@ const openThreadedTask = Effect.gen(function* () {
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
   const { id: taskId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
-  yield* savePlanText(owner, taskId, PLAN_TEXT);
-  const from = PLAN_TEXT.indexOf(WORDS);
-  const started = yield* startPlanCommentThread(
-    { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: teammate },
+  yield* saveDescriptionText(owner, taskId, DESCRIPTION_TEXT);
+  const from = DESCRIPTION_TEXT.indexOf(WORDS);
+  const started = yield* startDescriptionCommentThread(
+    { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: teammate },
     taskId,
     {
       clientKey: randomUUID(),
-      scope: PLAN_COMMENT_SCOPE.WORDS,
+      scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
       quote: WORDS,
       anchor: { from, to: from + WORDS.length },
-      text: PLAN_TEXT,
+      text: DESCRIPTION_TEXT,
       words: "Is this in v1?",
     },
   );
@@ -71,10 +71,11 @@ const openThreadedTask = Effect.gen(function* () {
   return { owner, taskId, thread: started.answer.thread };
 });
 
-/** A call made as the owner. */
-const asOwner = (owner: string, taskId: string) => ({
+/** A call made as the owner, with Plans on unless said. */
+const asOwner = (owner: string, taskId: string, descriptionsOn = true) => ({
   taskId,
-  writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner } as const,
+  writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: owner } as const,
+  descriptionsOn,
 });
 
 it.layer(getTestDB())("the comment tools", (it) => {
@@ -112,7 +113,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
         const resolved = yield* runCommentTool(
           AGENT_TOOL.READ_COMMENTS,
           writer,
-          unparsedWire({ taskId, status: PLAN_COMMENT_STATUS.RESOLVED }),
+          unparsedWire({ taskId, status: DESCRIPTION_COMMENT_STATUS.RESOLVED }),
         );
 
         assert.equal(replied.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -121,7 +122,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
           threads: [
             {
               thread: thread.id,
-              state: PLAN_COMMENT_STATUS.OPEN,
+              state: DESCRIPTION_COMMENT_STATUS.OPEN,
               section: "Approach",
               on: WORDS,
               comments: [
@@ -143,7 +144,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
   );
 
   it.effect(
-    "a page's threads are read by naming the page, each with its version and element, and a resolved one takes no reply",
+    "a page's threads are read by naming the page, each with its version and element, and a resolved one takes no reply; with Plans off the page's alone are reached",
     () =>
       Effect.gen(function* () {
         const { owner, taskId, thread } = yield* openThreadedTask;
@@ -156,7 +157,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
             { kind: PAGE_SHOWER.APP },
           ),
         );
-        const started = yield* startPlanCommentThread(writer.writer, taskId, {
+        const started = yield* startDescriptionCommentThread(writer.writer, taskId, {
           clientKey: randomUUID(),
           page: { id: page.id, version: 1 },
           element: { path: "body > p", quote: "12 sent", section: "" },
@@ -188,12 +189,51 @@ it.layer(getTestDB())("the comment tools", (it) => {
           [thread.id],
         );
 
+        const descriptionsOff = asOwner(owner, taskId, false);
+        const offRefused = {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF,
+        };
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.READ_COMMENTS,
+            descriptionsOff,
+            unparsedWire({ taskId }),
+          ),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.REPLY_TO_COMMENT,
+            descriptionsOff,
+            unparsedWire({ taskId, thread: thread.id, words: "Not in v1." }),
+          ),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.UPDATE_COMMENT,
+            descriptionsOff,
+            unparsedWire({ taskId, thread: thread.id, resolved: true }),
+          ),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.READ_COMMENTS,
+            descriptionsOff,
+            unparsedWire({ taskId, page: page.id }),
+          ),
+          onPage,
+        );
+
         const onThread = { taskId, thread: started.answer.thread.id };
-        yield* runCommentTool(
+        const resolvedOff = yield* runCommentTool(
           AGENT_TOOL.UPDATE_COMMENT,
-          writer,
+          descriptionsOff,
           unparsedWire({ ...onThread, resolved: true }),
         );
+        assert.equal(resolvedOff.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(
           yield* runCommentTool(
             AGENT_TOOL.REPLY_TO_COMMENT,
@@ -247,12 +287,12 @@ it.layer(getTestDB())("the comment tools", (it) => {
 });
 
 it("the open threads are handed to an agent as one line each behind their marker, and nothing where none is open", () => {
-  const thread: PlanCommentThread = {
+  const thread: DescriptionCommentThread = {
     id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: WORDS,
     section: "Approach",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [],
     createdAt: 1,
     updatedAt: 1,
@@ -261,17 +301,20 @@ it("the open threads are handed to an agent as one line each behind their marker
 
   const [marker, line] = openThreadsText([
     thread,
-    { ...thread, id: "x", status: PLAN_COMMENT_STATUS.RESOLVED },
+    { ...thread, id: "x", status: DESCRIPTION_COMMENT_STATUS.RESOLVED },
   ]);
 
   assert.equal(marker, OPEN_THREADS_MARKER);
   assert.deepEqual(JSON.parse(line ?? ""), {
     thread: thread.id,
-    state: PLAN_COMMENT_STATUS.OPEN,
+    state: DESCRIPTION_COMMENT_STATUS.OPEN,
     section: "Approach",
     on: WORDS,
     onWordsDeleted: true,
     comments: [],
   });
-  assert.deepEqual(openThreadsText([{ ...thread, status: PLAN_COMMENT_STATUS.RESOLVED }]), []);
+  assert.deepEqual(
+    openThreadsText([{ ...thread, status: DESCRIPTION_COMMENT_STATUS.RESOLVED }]),
+    [],
+  );
 });

@@ -79,12 +79,12 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(memory, "Memory has a switch");
   assert.equal(memory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Several repositories"));
+  assert.ok(page.textContent?.startsWith("Task descriptions"));
   assert.deepEqual(
     [...page.querySelectorAll('[role="switch"]')]
       .slice(0, 2)
       .map((each) => each.getAttribute("aria-label")),
-    ["Several repositories", "Bring your own host"],
+    ["Task descriptions", "Bring your own host"],
     "Bring your own host stands second, after the newest",
   );
 
@@ -102,7 +102,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
-    EXPERIMENT.SEVERAL_REPOSITORIES,
+    EXPERIMENT.DESCRIPTIONS,
     EXPERIMENT.BRING_YOUR_OWN_HOST,
     EXPERIMENT.SKILLS,
     EXPERIMENT.PILOT,

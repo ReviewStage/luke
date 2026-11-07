@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { STATUS_TONE } from "../../status-tone.js";
 import { AttentionMark } from "../attention-mark/attention-mark.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
@@ -12,7 +11,8 @@ import { BANNER_LOOK, Banner } from "./banner.js";
  * name and email, so a maintainer never mistakes the member's account for
  * their own. Stop is the one press, busy while the sign-in ends; a stop that
  * lands leaves the page, so only a refusal comes back, said after the words
- * in the service's own words. Where it stands is its page's.
+ * in the service's own words. The stop is its caller's mutation, whose state
+ * the strip draws (`StopWrite`). Where it stands is its page's.
  */
 
 /** The member a maintainer is signed in as: their name, where they have one, and their email. */
@@ -21,30 +21,31 @@ interface ViewedMember {
   readonly email: string;
 }
 
+/**
+ * Stop as its caller's mutation stands (`useMutation`): how it is pressed,
+ * whether it is out, the service's words where it refused, which its stop
+ * answers rather than throws, and whether it failed with none.
+ */
+export interface StopWrite {
+  readonly run: () => void;
+  readonly busy: boolean;
+  readonly refusal: string | undefined;
+  readonly failed: boolean;
+}
+
 /** What the strip says where Stop failed with no words of the service's. */
 const STOP_FAILED = "The sign-in could not be stopped. Try again.";
 
 /** The strip: whom it views as, and Stop. */
 export function ViewingAsBanner({
   member,
-  onStop,
+  stop,
 }: {
   member: ViewedMember;
-  /** Ends the sign-in and leaves the page; answers why not, where it was refused. */
-  onStop: () => Promise<string | undefined>;
+  /** Ends the sign-in and leaves the page, as its caller's mutation stands. */
+  stop: StopWrite;
 }): React.JSX.Element {
-  const [stopping, setStopping] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
-  const stop = () => {
-    setStopping(true);
-    setRefusal(undefined);
-    void onStop()
-      .catch(() => STOP_FAILED)
-      .then((refused) => {
-        setStopping(false);
-        setRefusal(refused);
-      });
-  };
+  const refusal = stop.busy ? undefined : (stop.refusal ?? (stop.failed ? STOP_FAILED : undefined));
   const who = member.name ? `${member.name} (${member.email})` : member.email;
   return (
     <Banner
@@ -54,16 +55,17 @@ export function ViewingAsBanner({
       actions={
         <Button
           variant={BUTTON_VARIANT.OUTLINE}
-          busy={stopping}
+          busy={stop.busy}
           busyLabel="Stopping"
-          onClick={stop}
+          onClick={stop.run}
         >
           Stop
         </Button>
       }
     >
       Viewing as {who}
-      {refusal === undefined ? null : ` · ${refusal}`}
+      {/* A refusal is said as it arrives, since the press that asked stays where it was. */}
+      {refusal === undefined ? null : <span role="alert">{` · ${refusal}`}</span>}
     </Banner>
   );
 }

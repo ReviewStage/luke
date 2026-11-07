@@ -13,7 +13,6 @@ const TOKENS: Record<string, string> = {
   "--terminal-ground": "rgb(0, 0, 0)",
   "--terminal-text": "rgb(200, 100, 50)",
   "--terminal-red": "rgb(100, 0, 200)",
-  "--terminal-note": "rgb(150, 160, 170)",
 };
 
 beforeEach(() => {
@@ -30,7 +29,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a dimmed screen takes its output's colors 42% of the way back to the ground and leaves the note's color whole", () => {
+test("a dimmed screen takes its output's colors 42% of the way back to the ground", () => {
   const host = document.createElement("div");
   const bright = terminalTheme(host, false);
   const dimmed = terminalTheme(host, true);
@@ -38,5 +37,4 @@ test("a dimmed screen takes its output's colors 42% of the way back to the groun
   assert.equal(dimmed.foreground, "rgb(84, 42, 21)");
   assert.equal(dimmed.red, "rgb(42, 0, 84)");
   assert.equal(dimmed.background, "rgb(0, 0, 0)");
-  assert.equal(dimmed.extendedAnsi?.[245 - 16], "rgb(150, 160, 170)");
 });

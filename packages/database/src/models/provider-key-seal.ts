@@ -38,14 +38,23 @@ import { Redacted, Result, Schema } from "effect";
  * bound beside them, so the seal opens for no other agent's line. The
  * rewrap does not visit those rows, which the Mac's claim clears.
  *
- * What stands at a cloud agent's sandbox firewall, every credential its
- * session set there, is sealed the same way for as long as the session
- * runs (`sandbox_firewall`), with purposes of their own
+ * The swaps a cloud agent's runner launch holds at its sandbox firewall,
+ * each credential behind the placeholder its runner was handed, are sealed
+ * the same way for as long as the launch runs (`sandbox_firewall`), with
+ * purposes of their own
  * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
  * beside them, so the seal opens for no other session's row. The rewrap
  * does not visit those rows either: the sweep drops each a day and an hour
  * after it was last written, so a version stays in the ring that long past
  * the rewrap that moved every other row off it.
+ *
+ * A pending ChatGPT device-code login's codes, which together claim the
+ * sign-in at OpenAI, are sealed the same way for the fifteen minutes the
+ * login may stand (`account_chatgpt_device_login`), with purposes of their
+ * own (`luke/chatgpt-device-login/*`) and the account and the login bound
+ * beside them, so the seal opens for no other login. The rewrap does not
+ * visit those rows either, which a login's settling clears and the
+ * account's next start replaces.
  *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
@@ -79,6 +88,10 @@ const SEAL_PURPOSE = {
   SANDBOX_FIREWALL: {
     DATA_KEY: "luke/sandbox-firewall/data-key",
     SECRET: "luke/sandbox-firewall/entries",
+  },
+  CHATGPT_DEVICE_LOGIN: {
+    DATA_KEY: "luke/chatgpt-device-login/data-key",
+    SECRET: "luke/chatgpt-device-login/codes",
   },
 } as const;
 
@@ -121,7 +134,7 @@ export interface SealedGitHubToken {
   readonly sealedToken: string;
 }
 
-/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's entries are: the version, the wrapped data key, and the seal. */
+/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's launch swaps are: the version, the wrapped data key, and the seal. */
 const SealedColumnSchema = Schema.Struct({
   keyVersion: Schema.Number,
   sealedDataKey: Schema.String,
@@ -142,6 +155,12 @@ export interface MacLaunchOwner {
 export interface FirewallOwner {
   readonly userId: string;
   readonly sandboxSessionId: string;
+}
+
+/** Whose pending device-code login a seal is: the account and the login, which its seal binds. */
+export interface DeviceLoginOwner {
+  readonly userId: string;
+  readonly loginId: string;
 }
 
 /** Whose key a seal is, and what kind of credential, which both seals bind. */
@@ -410,7 +429,7 @@ export function openMacLaunchSecrets(
   return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
 }
 
-/** A sandbox session's standing firewall entries sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
+/** The swaps a launch holds at a sandbox session's firewall sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
 export function sealFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,
@@ -420,7 +439,7 @@ export function sealFirewallEntries(
   return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.SANDBOX_FIREWALL, names, entries));
 }
 
-/** The entries a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+/** The swaps a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
 export function openFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,
@@ -436,4 +455,32 @@ export function openFirewallEntries(
     read.success.sealed,
   );
   return entries === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(entries);
+}
+
+/** A pending device-code login's codes sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
+export function sealChatGptDeviceCodes(
+  ring: KeyRing,
+  owner: DeviceLoginOwner,
+  codes: Redacted.Redacted<string>,
+): string {
+  const names = [owner.userId, owner.loginId];
+  return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.CHATGPT_DEVICE_LOGIN, names, codes));
+}
+
+/** The codes a pending device-code login's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+export function openChatGptDeviceCodes(
+  ring: KeyRing,
+  owner: DeviceLoginOwner,
+  column: string,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const read = decodeSealedColumn(column);
+  if (Result.isFailure(read)) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const codes = openSecret(
+    ring,
+    SEAL_PURPOSE.CHATGPT_DEVICE_LOGIN,
+    [owner.userId, owner.loginId],
+    read.success,
+    read.success.sealed,
+  );
+  return codes === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(codes);
 }

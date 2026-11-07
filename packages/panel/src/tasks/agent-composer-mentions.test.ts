@@ -32,15 +32,16 @@ import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, Fragment, type ReactNode } from "react";
+import { act, createElement, Fragment, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import {
   type AnyAct,
@@ -56,6 +57,7 @@ import {
   holdIntegrations,
   holdIntegrationTools,
   holdMembers,
+  registryWith,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -66,9 +68,10 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -86,17 +89,17 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
- * plan's sections and the repository's files, the row chosen is written
+ * description's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
  * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
- * Synthetic plan and repository.
+ * Synthetic description and repository.
  */
 
 const TASK_ID = "pl_1";
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
@@ -313,7 +316,8 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActs({
     act: answer,
-    requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
+    requestAppState: () =>
+      Promise.resolve(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() })),
   });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
@@ -329,10 +333,22 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  const ticks = () =>
+    act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+  await ticks();
+  await settleQueries(ticks);
+}
+
+/** Settles, then waits for an open @ list to stop reading, since it draws the repository's files only once their read lands. */
+async function listSettled(): Promise<void> {
+  await settle();
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.mention-menu [role="status"]') === null, true),
+  );
 }
 
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
@@ -342,7 +358,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
-    text: () => PLAN_TEXT,
+    text: () => DESCRIPTION_TEXT,
     doors: {
       holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
@@ -394,7 +410,7 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 function drawing(
   node: ReactNode,
   page: TaskMentionsValue | undefined,
-  registry = AtomRegistry.make(),
+  registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -469,17 +485,24 @@ function listed(container: HTMLElement): string[] {
   );
 }
 
-test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
+/** How many rows the menu's one group lists, as a reader hears it, drawn near the view or not. */
+function listedCount(container: HTMLElement): number {
+  return Number(
+    container.querySelector(".mention-menu [role=option]")?.getAttribute("aria-setsize"),
+  );
+}
+
+test("an @ typed in the box on a plan's page offers the description's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const offered = listed(container);
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(offered, ["Rollout", "rollout-store.ts"]);
   assert.deepEqual(chips.map(chipName), ["Rollout"]);
@@ -492,12 +515,12 @@ test("a word that finds an agent and a file leads the @ list with the agent, whi
   const { container } = await box({ ...planPage([]), agents: [SELF_AGENT, agent] });
 
   typeInComposer(container, "Ask @roll");
-  await settle();
+  await listSettled();
   const offered = groupsListed(container).map(([group]) => group);
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
-  assert.deepEqual(offered, ["Agents", "Plan", "Files and folders"]);
+  assert.deepEqual(offered, ["Agents", "Description", "Files and folders"]);
   assert.deepEqual(
     [...composerEditor(container).querySelectorAll("[data-mention-ref]")].map(chipName),
     [name],
@@ -539,13 +562,13 @@ test("the @ list closes on a press outside it and the box, stays open for a pres
     });
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   press(composerEditor(container));
   const keptByTheBox = listed(container);
   press(document.body);
   const afterAway = container.querySelector(".mention-menu") !== null;
   typeInComposer(container, "o");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(keptByTheBox, ["Rollout", "rollout-store.ts"]);
   assert.equal(afterAway, false, "a press outside closes it");
@@ -556,7 +579,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   const { container } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const field = composerEditor(container);
   const list = container.querySelector('.mention-menu [role="listbox"]');
   const highlighted = () => list?.querySelector('[role="option"][aria-selected="true"]')?.id;
@@ -582,7 +605,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   assert.equal(field.getAttribute("aria-activedescendant"), null);
 });
 
-test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no description's sections", async () => {
   const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
@@ -590,7 +613,7 @@ test("on the page of an agent no plan holds an @ offers its repository's files, 
   const { container } = await box(page);
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(listed(container), ["rollout-store.ts"]);
   assert.deepEqual(
@@ -657,12 +680,12 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
 test("once the plan's repository changes, the box offers the new repository's files", async () => {
   const { container, redraw } = await box(planPage([]));
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const before = listed(container);
 
   standing = "acme/next";
   redraw(planPage([], "acme/next"));
-  await settle();
+  await listSettled();
 
   assert.deepEqual(before, ["Rollout", "rollout-store.ts"]);
   assert.deepEqual(listed(container), ["Rollout", "rollout-next.ts"]);
@@ -687,12 +710,12 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("an @ in the box offers the account's connected integrations, and once a word is typed their tools, a pick sent as its link", async () => {
+test("an @ in the box offers the account's connected MCP servers, and once a word is typed their tools, a pick sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Use @");
   await settle();
-  const servers = groupsListed(container).find(([group]) => group === "Integrations");
+  const servers = groupsListed(container).find(([group]) => group === "MCP servers");
   typeInComposer(container, "list");
   await settle();
   const tools = listed(container);
@@ -701,7 +724,7 @@ test("an @ in the box offers the account's connected integrations, and once a wo
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(servers, ["Integrations", ["Linear"]]);
+  assert.deepEqual(servers, ["MCP servers", ["Linear"]]);
   assert.deepEqual(tools, ["Linear · list_issues"]);
   assert.deepEqual(sent, [
     `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
@@ -793,7 +816,7 @@ test("an @ whose read of the skills came back unread says they could not be read
   const { container } = await box(planPage([]), flaky);
 
   typeInComposer(container, "Run @releas");
-  await settle();
+  await listSettled();
 
   const failed = listNote(container);
   assert.match(failed.words, /Skills could not be read\./u);
@@ -802,7 +825,7 @@ test("an @ whose read of the skills came back unread says they could not be read
 
   reachable = true;
   act(() => (failed.retry ?? assert.fail("no Retry")).click());
-  await settle();
+  await listSettled();
 
   assert.equal(listNote(container).words, "");
   assert.deepEqual(
@@ -888,10 +911,10 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
 
   assert.deepEqual(groupsListed(container), [
     ["Agents", ["Wire the desktop"]],
-    ["Plan", ["Goal", "Rollout", "Invitations"]],
+    ["Description", ["Goal", "Rollout", "Invitations"]],
     ["Pages", ["Invites by week"]],
-    ["Integrations", ["Linear"]],
-    ["Mention from", ["Agents", "Plan", "Pages", "Files and folders", "Dates", "Linear"]],
+    ["MCP servers", ["Linear"]],
+    ["Mention from", ["Agents", "Description", "Pages", "Files and folders", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
 });
@@ -1014,10 +1037,13 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
     sent.push(text);
     return new Promise<AgentAgentAnswer>(ignore);
   };
+  const on = registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  // Note that the test's Query client is handed the bridge's document before the first frame, so the agents' list reads the task list from it rather than racing its read.
+  writeAppState(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() }));
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
     undefined,
-    registry,
+    on,
   );
   await settle();
   return { container, sent };
@@ -1095,7 +1121,7 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
   const { container } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
 
   const failed = listNote(container);
   assert.match(failed.words, /The repository's files could not be read\./u);
@@ -1105,10 +1131,9 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
 
   refusing.clear();
   act(() => (failed.retry ?? assert.fail("no Retry")).click());
-  await settle();
+  await vi.waitFor(() => assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]));
 
   assert.equal(listNote(container).words, "");
-  assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]);
 });
 
 it.effect(
@@ -1243,7 +1268,7 @@ async function workspaceMemberBox() {
     ),
     undefined,
   );
-  await settle();
+  await listSettled();
   return container;
 }
 
@@ -1306,7 +1331,7 @@ it.effect(
 async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
   const { container } = await box(page);
   typeInComposer(container, typed);
-  await settle();
+  await listSettled();
   const option =
     container.querySelector<HTMLElement>(
       `.mention-menu [aria-label="${section}"] [role="option"]`,
@@ -1505,11 +1530,11 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
 
   assert.deepEqual(kinds, [
     ["Agents", "acme"],
-    ["Plan", "2 sections"],
+    ["Description", "2 sections"],
     ["Pages", "1 page"],
     ["Files and folders", "acme/relay"],
     ["Dates", ""],
-    ["Linear", "Integration"],
+    ["Linear", "MCP server"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
   assert.equal(crumb(container), "Pages");
@@ -1606,15 +1631,16 @@ test("files found by a word typed on are those the longer word finds, and the wo
   const { container } = await wideBox();
 
   typeInComposer(container, "See @files:invite-");
-  await settle();
+  await listSettled();
   const typed = listed(container);
+  const typedCount = listedCount(container);
   typeInComposer(container, "5");
-  await settle();
+  await listSettled();
   const typedOn = listed(container);
   eraseInComposer(container, 1);
-  await settle();
+  await listSettled();
 
-  assert.equal(typed.length, 50);
+  assert.equal(typedCount, 50);
   assert.deepEqual(
     [...typedOn].sort(),
     ["05", "15", "25", "35", "45", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59"].map(
@@ -1628,14 +1654,14 @@ test("typing @files: narrows the list to the repository's paths, listing up to f
   const { container } = await wideBox();
 
   typeInComposer(container, "See @invite");
-  await settle();
+  await listSettled();
   const wide = groupsListed(container).find(([group]) => group === "Files and folders");
   typeInComposer(container, " and @files:invite");
-  await settle();
+  await listSettled();
 
   assert.equal(wide?.[1].length, 4);
   assert.equal(crumb(container), "Files and folders");
-  assert.equal(listed(container).length, 50);
+  assert.equal(listedCount(container), 50);
   assert.ok(listed(container).every((name) => name.startsWith("invite-")));
 });
 
@@ -1643,17 +1669,17 @@ test("→ on a folder walks into it, its first row the folder and the rest what 
   const { container } = await wideBox();
 
   typeInComposer(container, "See @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   const inApps = [crumb(container), listed(container)];
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
-  await settle();
-  const inWeb = [crumb(container), listed(container).slice(0, 3), listed(container).length];
+  await listSettled();
+  const inWeb = [crumb(container), listed(container).slice(0, 3), listedCount(container)];
   const keys = footKeys(container);
   pressInComposer(container, "Backspace");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(inApps, ["apps", ["apps/", "web/"]]);
   assert.deepEqual(inWeb, ["apps/web", ["web/", "invite-01.ts", "invite-02.ts"], 50]);
@@ -1666,28 +1692,28 @@ test("a file or a folder picked from a narrowed list is sent as the same link th
   const { container, sent } = await wideBox();
 
   typeInComposer(container, "Ship @invite-07");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   typeInComposer(container, "and @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   typeInComposer(container, "invite-07");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   typeInComposer(container, "in @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
   const file = mentionMarkdown(
     { kind: MENTION_KIND.FILE, path: "apps/web/invite-07.ts" },
@@ -1816,12 +1842,11 @@ test("the task's pull requests are a kind of their own, narrowed to by their row
 });
 
 /** The node drawn on a plan's page in a workspace whose members the window reads. */
-function amongMembers(node: ReactNode): ReactNode {
-  return createElement(MemberDirectory, {
-    workspace: { id: "workspace-1", memberCount: MEMBERS.length },
-    readerId: READER_ID,
-    children: node,
-  });
+function amongMembers(node: ReactElement): ReactElement {
+  return withPeopleRead(
+    { workspace: { id: "workspace-1", memberCount: MEMBERS.length }, readerId: READER_ID },
+    node,
+  );
 }
 
 /** The box drawn on a plan's page among the workspace's members, every message it sends written down. */
@@ -1836,6 +1861,7 @@ async function memberBox() {
     taskPage(),
   );
   await settle();
+  await peopleRead();
   return { container, sent };
 }
 
@@ -1909,6 +1935,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
     taskPage(),
   );
   await settle();
+  await peopleRead();
 
   const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip);

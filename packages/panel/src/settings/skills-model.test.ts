@@ -9,8 +9,6 @@ import {
   fencedSkillFile,
   installScopes,
   SKILL_ACTION,
-  shareFailureLine,
-  shareQuestion,
   skillActions,
   skillGroups,
 } from "./skills-model.js";
@@ -19,8 +17,8 @@ import {
  * Settings › Skills judged without drawing: the workspace's skills before
  * the account's own, each saying where its files came from and who
  * installed it; the scopes the dialog offers by role and workspace; every
- * refusal said in words that name the skill; what each row's ⋯ holds and
- * what Share asks; and how View fences a skill's text. Synthetic names and
+ * refusal said in words that name the skill; what each row's ⋯ holds;
+ * and how View fences a skill's text. Synthetic names and
  * ids.
  */
 
@@ -90,10 +88,10 @@ test("the workspace's skills come before the account's own, by name, each with i
     ],
   );
   assert.deepEqual(
-    groups.personal.map((row) => [row.skill.name, row.source, row.line, row.fromGitHub]),
+    groups.personal.map((row) => [row.skill.name, row.source, row.line]),
     [
-      ["alpha", "personal", "acme/agent-skills @ 3f9c2e1", true],
-      ["zeta", "personal", "Pasted", false],
+      ["alpha", "personal", "acme/agent-skills @ 3f9c2e1"],
+      ["zeta", "personal", "Pasted"],
     ],
   );
 });
@@ -149,51 +147,13 @@ function rowOf(one: InstalledSkillSummary) {
   return [...groups.workspace, ...groups.personal][0] ?? assert.fail("no row");
 }
 
-test("a row's ⋯ holds View, Share for the account's own skill, and Update for a GitHub one, then Remove", () => {
-  const own = rowOf(skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL, { source: GITHUB }));
-  const pasted = rowOf(skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL));
-  assert.deepEqual(skillActions(own, workspace()), [
-    [SKILL_ACTION.VIEW, SKILL_ACTION.SHARE, SKILL_ACTION.UPDATE],
-    [SKILL_ACTION.REMOVE],
-  ]);
-  assert.deepEqual(skillActions(pasted, workspace()), [
-    [SKILL_ACTION.VIEW, SKILL_ACTION.SHARE],
-    [SKILL_ACTION.REMOVE],
-  ]);
-});
-
-test("Share is never offered for a workspace's skill or in a personal workspace", () => {
-  const shared = rowOf(skill("release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE));
+test("a row's ⋯ holds View, then Remove, and View alone for a skill the account may not remove", () => {
   const own = rowOf(skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL));
-  assert.deepEqual(skillActions(shared, workspace()), [[SKILL_ACTION.VIEW], [SKILL_ACTION.REMOVE]]);
-  assert.deepEqual(skillActions(own, workspace({ personal: true })), [
-    [SKILL_ACTION.VIEW],
-    [SKILL_ACTION.REMOVE],
-  ]);
-});
-
-test("a skill the account may not change offers View alone, even from GitHub", () => {
   const locked = rowOf(
-    skill("release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE, { manageable: false, source: GITHUB }),
+    skill("release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE, { manageable: false }),
   );
-  assert.deepEqual(skillActions(locked, workspace()), [[SKILL_ACTION.VIEW]]);
-});
-
-test("Share asks in plain words who gets the skill and that it leaves the account's own, and a taken name is said for the workspace", () => {
-  assert.deepEqual(shareQuestion("grill-me", workspace()), {
-    title: "Share grill-me with Stage?",
-    body: "Everyone in Stage will get grill-me. It leaves your personal skills.",
-    verb: "Share with workspace",
-    running: "Sharing",
-  });
-  assert.equal(
-    shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN }, "grill-me", workspace()),
-    "Stage already has a skill named grill-me. Remove one of them first.",
-  );
-  assert.equal(
-    shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }, "grill-me", workspace()),
-    "The service could not be reached. Try again.",
-  );
+  assert.deepEqual(skillActions(own), [[SKILL_ACTION.VIEW], [SKILL_ACTION.REMOVE]]);
+  assert.deepEqual(skillActions(locked), [[SKILL_ACTION.VIEW]]);
 });
 
 test("View draws a skill's text in one fence nothing inside it can close, ending on its last line", () => {

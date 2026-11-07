@@ -309,7 +309,7 @@ test("a link to any place in Vespin, a workspace's Home and Board, a plan's, a s
   }
   // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
   for (const path of [
-    "/api/plans/x/revisions",
+    "/api/plans/x/description/revisions",
     "/api/inbox/i1",
     "/api/automations/x1/runs",
     "/api/agents/a1",
@@ -407,7 +407,7 @@ const APP_PATHS = [
   "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   "/connect/BCDF-GHJK",
   "/api/auth/get-session",
-  "/api/plans/x/revisions",
+  "/api/plans/x/description/revisions",
   "/api/pages/sandbox",
   "/api/default.js",
   "/sign-in.html",
@@ -521,7 +521,7 @@ test("every path the web app is served at sends its own Content Security Policy 
   }
   // An API answer's headers are its handler's own; no page's route reaches it.
   for (const path of [
-    "/api/plans/x/revisions",
+    "/api/plans/x/description/revisions",
     "/api/workspaces/w1/photo",
     "/api/auth/get-session",
   ]) {

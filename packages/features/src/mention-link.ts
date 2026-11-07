@@ -37,12 +37,12 @@ import { isLinkHome } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PRODUCT_NAME } from "./product-name.js";
-import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
+import { DESCRIPTION_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
  * mention-link.ts -- a mention as what it names, and the link it is written into words as: the one module that knows the link's form.
  *
- * A mention is written into a message's or a plan's markdown as a link
+ * A mention is written into a message's or a description's markdown as a link
  * whose label starts with `@` (`[@Rollout](<target>)`), so the words stay
  * one string that reads as plain markdown anywhere chips are not drawn,
  * and the `@` is what marks the link as a mention rather than a link.
@@ -86,7 +86,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   so a mention of someone who renames themselves still names them.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
- *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
+ *   hyphen, and `-1`, `-2` after a heading the description already held, so the
  *   anchor names one section, and one of a heading since renamed or
  *   deleted names nothing, which its reader says.
  * - A file or a folder of the task's repository is its GitHub page on the
@@ -103,7 +103,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *
  * The forms written before the link was settled, `luke://plan/<id>`
  * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
- * and `luke://folder/<path>/`, stand in plans and messages already, so
+ * and `luke://folder/<path>/`, stand in descriptions and messages already, so
  * they are read forever, as the same mention the settled form names; so
  * does every `luke://` form below, written before it took the `mention:`
  * scheme, which reads the same under either. A thing with no page of its
@@ -153,7 +153,7 @@ const MENTION_BOUNDS = {
   /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the task's id. */
   MAX_TARGET_CHARS: 24_000,
   /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
-  MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
+  MAX_ANCHOR_CHARS: DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
   /** The most characters a task's id may spell; the service mints them far shorter. */
   MAX_TASK_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
@@ -366,12 +366,12 @@ const mentionSchema = EffectSchema.Union([
 export type Mention = typeof mentionSchema.Type;
 
 /** A mention of the task or one of its sections. */
-export type PlanMention = Extract<
+export type DescriptionMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.TASK | typeof MENTION_KIND.SECTION }
 >;
 
-/** A mention of something the workspace holds beside a plan's words: a page an agent showed on a plan, or a coding agent, on a task or on none. */
+/** A mention of something the workspace holds beside a description's words: a page an agent showed on a task, or a coding agent, on a task or on none. */
 export type TaskMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.PAGE | typeof MENTION_KIND.AGENT }
@@ -887,7 +887,7 @@ const OWN_KINDS: ReadonlySet<Mention["kind"]> = new Set([
 
 /** What a bare link's chip names a plan, a page, an agent, and a person by, since its address holds no name of theirs. */
 const BARE_NAME = {
-  TASK: "Plan",
+  TASK: "Description",
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
@@ -1059,7 +1059,7 @@ export function mentionLinksIn(text: string): readonly MentionLink[] {
  * file or a folder of `repository`, standing outside code. A link of
  * another kind, or one whose target names nothing, is words. At most
  * `limit` are read, a message's `MAX_MENTIONS` unless the caller reads a
- * whole plan; any past them stay words.
+ * whole description; any past them stay words.
  */
 export function mentionsIn(
   text: string,
@@ -1076,7 +1076,7 @@ export function mentionsIn(
 }
 
 /**
- * The coding agents a comment on the task's plan asks: those its words
+ * The coding agents a comment on the task's description asks: those its words
  * mention, each once, in the order written. A mention is a link the writer
  * placed with `@`; a bare link to an agent asks no one, and neither does a
  * mention of the app on a task, which no task has any more.

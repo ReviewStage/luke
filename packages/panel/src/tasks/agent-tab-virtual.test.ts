@@ -24,7 +24,7 @@ import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -38,8 +38,9 @@ import type { AgentsControl } from "./use-agents.js";
  * the reader where they were.
  *
  * jsdom lays nothing out, so a row is as tall as the log takes one to be
- * before it is measured, the window stands in for the log's view, and the
- * log's scroll position is a value each scroll writes and is heard from.
+ * before it is measured, every log box is laid out as a long scroller from
+ * before it is drawn, and its scroll position is a value each scroll writes
+ * and is heard from.
  */
 
 declare global {
@@ -60,6 +61,7 @@ beforeEach(() => {
   vi.stubGlobal("CSS", { highlights: new Map(), escape: (words: string) => words });
   vi.stubGlobal("Highlight", Set);
   Range.prototype.getBoundingClientRect = () => new DOMRect();
+  layLogsOut();
 });
 
 afterEach(() => {
@@ -69,6 +71,7 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
 });
 
 const AGENT_ID = "4b0f6d3e-2c1a-4f5e-9d8c-7a6b5c4d3e2f";
@@ -135,28 +138,57 @@ function following(first: AgentMessagesAnswerView) {
 
 async function settled(): Promise<void> {
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  await settleQueries();
 }
 
-/** The log's box as the window would lay it out: the room it shows, and every scroll written to it heard as the browser hears one. */
-function layOut(box: HTMLElement): { readonly writes: number[] } {
-  let top = 0;
-  const writes: number[] = [];
-  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 600 });
-  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 1_000_000 });
+/** The scroll each log box stands at, and the writes heard on each box a test listens to (`layOut`). */
+const logTops = new WeakMap<Element, number>();
+const logWrites = new WeakMap<Element, number[]>();
+
+/**
+ * Lays out every log box drawn from now on as the window would: the room it
+ * shows over a long length, and every scroll written to it heard as the
+ * browser hears one, from before the log is first drawn, where it opens.
+ */
+function layLogsOut(): void {
+  const isLog = (element: Element) => element.getAttribute("role") === "log";
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isLog(this) ? 600 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isLog(this) ? 1_000_000 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return logTops.get(this) ?? 0;
+  });
   // Note that a write that moves the box is heard as a scroll, as the browser hears one, whoever wrote it.
-  Object.defineProperty(box, "scrollTop", {
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    to: number,
+  ) {
+    if (!isLog(this)) return;
+    logWrites.get(this)?.push(to);
+    if (to === (logTops.get(this) ?? 0)) return;
+    logTops.set(this, to);
+    this.dispatchEvent(new Event("scroll"));
+  });
+  // jsdom has no `scrollTo` on an element, which the virtualizer writes through.
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
-    get: () => top,
-    set: (to: number) => {
-      writes.push(to);
-      if (to === top) return;
-      top = to;
-      box.dispatchEvent(new Event("scroll"));
+    value(this: HTMLElement, options?: ScrollToOptions) {
+      if (options?.top !== undefined) this.scrollTop = options.top;
     },
   });
-  box.scrollTo = ((options: ScrollToOptions) => {
-    box.scrollTop = options.top ?? top;
-  }) as typeof box.scrollTo;
+}
+
+/** Every scroll written to the log's box from now on. */
+function layOut(box: HTMLElement): { readonly writes: number[] } {
+  const writes: number[] = [];
+  logWrites.set(box, writes);
   return { writes };
 }
 
@@ -596,5 +628,11 @@ test("the log draws while the agent's pull request is still read, and its dock l
       changedFiles: 1,
     },
   });
-  assert.ok(container.querySelector(".agent-published-dock"), "the dock lands over the box");
+  await vi.waitFor(() =>
+    assert.equal(
+      container.querySelector(".agent-published-dock") !== null,
+      true,
+      "the dock lands over the box",
+    ),
+  );
 });

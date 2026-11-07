@@ -17,10 +17,11 @@ importing a package for one string constant resolves its whole export graph,
 ## One state channel in, one act channel out
 
 State arrives on `app:state` alone, read through `use-app-state.ts` and never
-subscribed to twice. Read it with `useAppSlice` and the narrowest slice a surface
-draws from (`APP_SLICE`, or an atom over one), so a patch to one slice draws only
-its readers; `useAppState` only where the whole document is handed on; or
-`appStateNow` for a callback that cannot wait a render — never the registry
+subscribed to twice. Read it with `useQuery({ ...appStateQuery, select })` and the narrowest slice a surface
+draws from (a `select…` of `use-app-state.ts`, or a `memoizedSelect` over several), so a patch to one slice draws only
+its readers; `appStateQuery` with no `select` only where the whole document is handed on; or
+`appStateIn(client)` for a callback that cannot wait a render, on the client its
+caller holds (`useQueryClient`'s, a root's, or a test's) — never the registry
 directly, so a hook and a callback cannot disagree. The channels beside it carry
 events rather than state: a one-shot to a named receiver a late subscriber must
 not receive, or a reading that expires before the next version could carry it.
@@ -32,8 +33,8 @@ a fiber of its own runs under the services it was built over, read through
 Effects leave on the window's act port alone, one oRPC call per kind from
 `ACT_KIND`, its payload and answer checked against `@repo/host/contract`, a
 refusal crossing back as the declared `REFUSED` error so nothing an exception
-happened to carry ever crosses back. `act.ts` is the only caller — `act` when a
-row reads the answer, `tell` when nothing does. **A new command is a new
+happened to carry ever crosses back. `act.ts` is the only caller — `askAct` when a
+row reads the answer, `tellAct` when nothing does. **A new command is a new
 `ACT_KIND` entry with its contract procedure and its one act-port procedure.
 There is no second write path to add one on.**
 

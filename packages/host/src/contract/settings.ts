@@ -7,17 +7,15 @@ import {
   SETTINGS_RESET_SCOPE,
 } from "@repo/settings";
 import { settingsUpdateResultSchema } from "@repo/settings/wire";
+import { ACT } from "@repo/sync";
 import { WireValueSchema } from "@repo/wire";
 import { Effect, Schema as EffectSchema, SchemaGetter, SchemaIssue } from "effect";
-import { actProcedure, exactInput } from "./base.js";
-import { SETTINGS_ACT_KIND } from "./kinds.js";
+import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 
 /**
- * settings.ts -- the settings writes a window asks of the host, as procedures.
+ * settings.ts -- the settings writes a window asks of the host, declared.
  *
- * Each answers the settings as they then stand, its schema flipped, so oRPC's
- * output check encodes the row's value into what crosses the port, the
- * convention every act contract keeps (`agents.ts`).
+ * Each answers the settings as they then stand.
  */
 
 /** A setting and a value already parsed for it, which is the pair its field types. */
@@ -56,31 +54,39 @@ const settingUpdatePayloadSchema = EffectSchema.Struct({
   }),
 );
 
-export const settingsActsContract = {
-  [SETTINGS_ACT_KIND.SETTING_UPDATE]: actProcedure("Could not save that setting on this system.")
-    .input(exactInput(settingUpdatePayloadSchema))
-    .output(EffectSchema.flip(settingsUpdateResultSchema)),
-  [SETTINGS_ACT_KIND.SETTINGS_RESET]: actProcedure("Could not reset those settings on this system.")
-    .input(
-      exactInput(
-        EffectSchema.Struct({
-          scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
-          /** The group's fields the asking page does not draw, which the reset leaves as they stand. */
-          kept: EffectSchema.Array(EffectSchema.Literals(APP_SETTING_FIELDS)),
-        }),
-      ),
-    )
-    .output(EffectSchema.flip(settingsUpdateResultSchema)),
-  [SETTINGS_ACT_KIND.EXPERIMENT_SET]: actProcedure(
-    "Could not change that experiment on this system.",
-  )
-    .input(
-      exactInput(
-        EffectSchema.Struct({
-          experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
-          on: EffectSchema.Boolean,
-        }),
-      ),
-    )
-    .output(EffectSchema.flip(settingsUpdateResultSchema)),
-};
+/** The settings writes, each answered by the settings' composer and by hand at the port (`act-port/settings-procedures.ts`), which names the asking window and applies the client's own side effects. */
+export const SETTINGS_ACTS = declaredActs({
+  SETTING_UPDATE: hostAct({
+    input: settingUpdatePayloadSchema,
+    output: settingsUpdateResultSchema,
+    refusal: "Could not save that setting on this system.",
+    panelOnly: false,
+    door: ACT.LOCAL_WRITE,
+    byHand: true,
+  }),
+  SETTINGS_RESET: hostAct({
+    input: EffectSchema.Struct({
+      scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
+      /** The group's fields the asking page does not draw, which the reset leaves as they stand. */
+      kept: EffectSchema.Array(EffectSchema.Literals(APP_SETTING_FIELDS)),
+    }),
+    output: settingsUpdateResultSchema,
+    refusal: "Could not reset those settings on this system.",
+    panelOnly: false,
+    door: ACT.LOCAL_WRITE,
+    byHand: true,
+  }),
+  EXPERIMENT_SET: hostAct({
+    input: EffectSchema.Struct({
+      experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
+      on: EffectSchema.Boolean,
+    }),
+    output: settingsUpdateResultSchema,
+    refusal: "Could not change that experiment on this system.",
+    panelOnly: false,
+    door: ACT.REMOTE_WORK,
+    byHand: true,
+  }),
+});
+
+export const settingsActsContract = contractOf(SETTINGS_ACTS);

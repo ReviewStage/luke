@@ -3,15 +3,30 @@
  *
  * The terminal relay pipes a developer's shell over it, and the agent's
  * browser carries its DevTools protocol over it (`browser/agent-browser.ts`),
- * so the sandbox exposes no port of its own for either. The token is set on
+ * as a tunnel carries its bridge's channels (`tunnel/relay.ts`), so the
+ * sandbox exposes no port of its own for any of them. The token is set on
  * the address at the moment of the open and goes nowhere else.
  */
 
-import { Context, Duration, Effect, Layer, Redacted, Schedule, type Scope } from "effect";
+import { readEither } from "@repo/wire/effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Layer,
+  Redacted,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
+import { EXCESS_KEYS } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 import { voiceSocket } from "../http/socket.js";
-import type { RelaySocket } from "../terminal/relay.js";
+import type { RelayFrame, RelaySocket } from "../terminal/relay.js";
 import { type InteractiveShell, SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 const PTY_CONNECT = {
@@ -21,6 +36,25 @@ const PTY_CONNECT = {
   HEALTH_RETRIES: 5,
   HEALTH_SPACING: Duration.millis(100),
 } as const;
+
+/** The PTY server's exit frame: what it ran ended. */
+const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema.Int });
+
+const readPtyExit = readEither(PtyExitSchema, { excess: EXCESS_KEYS.DROP });
+
+/** The PTY's output as the lines what it runs wrote, ending where that exits; a text frame that is not its exit is output sent as text. */
+export function ptyLinesOf(frames: Stream.Stream<RelayFrame>): Stream.Stream<string> {
+  const decoder = new TextDecoder();
+  return frames.pipe(
+    Stream.takeWhile(
+      (frame) => "bytes" in frame || Result.isFailure(readPtyExit(jsonOf(frame.text))),
+    ),
+    Stream.map((frame) =>
+      "bytes" in frame ? decoder.decode(frame.bytes, { stream: true }) : frame.text,
+    ),
+    Stream.splitLines,
+  );
+}
 
 /** The PTY's socket opened under its minted token, once its server answers healthy, for the scope it is opened in. */
 export function connectPty(

@@ -47,7 +47,7 @@
     },
     "archived": {
       "type": "boolean",
-      "description": "true to archive it, as the member's Archive agent would: it leaves the sidebar, its task's tabs, and every list but the archived ones, takes no message, and is not woken, its transcript, branch, and pull request kept; only an idle agent is archived. false to bring an archived one back."
+      "description": "true to archive it, as the member's Archive agent would: it leaves the sidebar, its task's tabs, and every list but the archived ones, takes no message, and is not woken, its transcript, branch, and pull request kept; a turn still running is stopped first. false to bring an archived one back."
     },
     "reason": {
       "type": "string",
@@ -74,7 +74,7 @@
         "repository"
       ],
       "additionalProperties": false,
-      "description": "A repository the agent works in beside its own from now on, added after the others and checked out in a folder of its own, which its token then reaches and it is told of; named alone, with no other change. Only for an agent the member started, in the cloud, in a repository of its own, its repositories all reached through one GitHub App installation, and the member with the Several repositories experiment on. Nothing removes one."
+      "description": "A repository the agent works in beside its own from now on, added after the others and checked out in a folder of its own, which its token then reaches and it is told of; named alone, with no other change. Only for an agent the member started, in the cloud, in a repository of its own, its repositories all reached through one GitHub App installation. Nothing removes one."
     }
   },
   "required": [

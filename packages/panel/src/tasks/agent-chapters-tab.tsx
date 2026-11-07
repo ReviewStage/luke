@@ -1,5 +1,5 @@
 import type { AgentChangedFile } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL_LABEL, CHAPTERS_MODEL_LIST } from "@repo/features/chapters-model-choice";
+import { chaptersProviderOf } from "@repo/features/chapters-model-choice";
 import { formatCount } from "@repo/features/number-format";
 import {
   type Chapter,
@@ -9,19 +9,24 @@ import {
   type LineRef,
   threadInChapter,
 } from "@repo/features/pull-request-chapters";
-import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@repo/features/pull-request-chapters-wire";
+import {
+  type ChaptersRunsOn,
+  PULL_REQUEST_CHAPTERS_FAILURE_KIND,
+} from "@repo/features/pull-request-chapters-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@repo/settings/shortcuts";
 import {
   BUTTON_VARIANT,
-  type ButtonVariant,
+  Button,
   CHIP_LOOK,
   CHIP_SIZE,
   Checkbox,
   Chip,
   type CountPart,
   CountParts,
+  EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -77,11 +82,16 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { CheckIcon, GLYPH } from "@repo/ui/icons";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
+import { useAccountPreferences } from "../account-choices.js";
+import { actMutation } from "../act-mutations.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
+import { HarnessMark } from "../harness-marks.js";
 import { SettingsPageLink } from "../open-settings.js";
+import { refusalToast } from "../settings/row-write.js";
 import {
   AgentChangesTab,
   type ChangesBarHost,
@@ -90,6 +100,7 @@ import {
   type FileReveal,
   type LineComments,
 } from "./agent-changes-tab.js";
+import { API_KEY_WORDS } from "./agent-model.js";
 import { Section } from "./agent-pull-request-tab.js";
 import { typingInto } from "./changes-list.js";
 import { CHANGES_WORDS } from "./changes-model.js";
@@ -106,9 +117,9 @@ import {
   firstLineRef,
   lineRefLabel,
   lineRefLines,
+  pickedRunsOn,
   steppedChapter,
 } from "./chapters-model.js";
-import { type ChaptersModelPick, useChaptersModelPick } from "./chapters-model-pick.js";
 import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import { FileCard } from "./file-ref.js";
@@ -127,11 +138,14 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * or failure draws here within a moment, never on a clock. The view is a
  * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
  * Generate chapters, which answers once the generation lands, minutes later
- * at most; until then the view stands as a ring timed from the press, or,
- * where a model was picked just before, from that pick's write landing,
- * which the Generate waits on. Its chevron, and Regenerate's, drop Claude's
- * models, the account's choice checked, which a pick keeps for every
- * Generate after it (`chapters-model-pick.ts`).
+ * at most; until then the view stands as a ring timed from the press.
+ * Every Generate runs on Haiku's tier, on the member's own API key: the
+ * button names the model the read says it would run on, Haiku 5.5 or
+ * OpenAI's model of its tier, and the line over it the key it spends. A
+ * member who saved keys of both providers is offered a split button whose
+ * chevron picks the model, each under its provider's mark as the model
+ * picker draws it, kept as their preference so every later Generate runs
+ * on the one they last picked (`NoChaptersYet`).
  * Chapters someone else is making stand the same way, until their
  * generation lands. A generation that failed says why with a
  * Retry; a member who saved no API key, which chapters run on, is told to
@@ -167,8 +181,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * mixed while only some are, and marks or unmarks every file in it; its
  * place, "1 of 8", and the arrows to the chapters either side (`Pager`), as
  * ← and → step; its list's diff settings, Collapse all, and tree toggle
- * (`ChangesBarHost`); and its ⋯, which offers Regenerate on each model where
- * chapters can be made, the tab's head holding the one Refresh and the list's bar
+ * (`ChangesBarHost`); and its ⋯, which offers Regenerate where chapters can
+ * be made, the tab's head holding the one Refresh and the list's bar
  * nothing that acts on the whole pull request inside a chapter. The model
  * that told the chapters is named at the rail's foot. Under the bar its summary in Markdown as the
  * transcript draws words; then What to review, each change a reviewer
@@ -191,17 +205,27 @@ const CHAPTERS_WORDS = {
   READING: "Reading chapters",
   FAILED: "The chapters could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  NONE: "No chapters yet.",
-  GENERATE: "Generate chapters",
+  /** That no chapters stand yet, and whose key a Generate would spend where the read says. */
+  none: (runsOn: ChaptersRunsOn | undefined) =>
+    runsOn === undefined
+      ? "No chapters yet."
+      : `No chapters yet. Generating them runs on your ${API_KEY_WORDS[runsOn.provider]}.`,
+  /** What the Generate's chevron is named by, which opens the models to pick from. */
+  PICK_MODEL: "Choose a model for chapters",
+  /** What the Generate says while a pick is on its way, its press waiting on it. */
+  PICKING: "Switching model",
+  /** What a toast says where a pick was not kept, the press naming the model it runs on again. */
+  PICK_FAILED: "The model could not be switched. Try again.",
+  /** The Generate, naming the model it would run on where the read says, short enough that an empty state's width holds it whole. */
+  generate: (runsOn: ChaptersRunsOn | undefined) =>
+    runsOn === undefined
+      ? "Generate chapters"
+      : `Generate with ${chaptersModelLabel(runsOn.model)}`,
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
   REGENERATE: "Regenerate",
   REGENERATE_CHAPTERS: "Regenerate chapters",
-  /** The chevron joined to Generate and Regenerate, and the menu of models it drops. */
-  CHOOSE_MODEL: "Choose the model chapters are generated on",
-  /** What the hint over Generate and Regenerate says they run on. */
-  on: (model: string) => `On ${model}`,
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF: "Regenerate the chapters to see this chapter's changes.",
@@ -355,54 +379,6 @@ function ChapterReading({
 }
 
 /**
- * Generate or Regenerate, and joined to it the chevron that drops Claude's
- * models, the account's choice checked, whose pick is kept for the press
- * and every Generate after it (`chapters-model-pick.ts`).
- */
-function GenerateButton({
-  pick,
-  variant,
-  icon,
-  children,
-}: {
-  pick: ChaptersModelPick;
-  variant: ButtonVariant;
-  icon?: ReactNode;
-  children: string;
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  return (
-    <>
-      <SplitButton
-        variant={variant}
-        icon={icon}
-        hintLabel={
-          pick.model === undefined ? undefined : CHAPTERS_WORDS.on(CHAPTERS_MODEL_LABEL[pick.model])
-        }
-        onClick={pick.generate}
-        menu={{ label: CHAPTERS_WORDS.CHOOSE_MODEL, ...menu.trigger() }}
-      >
-        {children}
-      </SplitButton>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={CHAPTERS_WORDS.CHOOSE_MODEL}
-          menu={menu.drawn}
-          groups={[
-            CHAPTERS_MODEL_LIST.map((model) => ({
-              label: CHAPTERS_MODEL_LABEL[model],
-              checked: model === pick.model,
-              onSelect: () => pick.choose(model),
-            })),
-          ]}
-          onClose={menu.close}
-        />
-      )}
-    </>
-  );
-}
-
-/**
  * Chapters being made, by this window's Generate or another's: a ring over
  * what is happening and how long it has been, counted only while the view
  * is shown, since the view stays mounted behind `hidden`.
@@ -415,6 +391,90 @@ function Generating({ startedAt, live }: { startedAt: number; live: boolean }): 
     >
       {live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : undefined}
     </EmptyState>
+  );
+}
+
+/**
+ * No chapters yet, with Generate on the model it runs on. Where the member
+ * saved keys of two providers it is a split button: its press generates on
+ * the model they last picked, its mark and name as the model picker draws
+ * them, and its chevron offers each model to pick, which is kept as their
+ * preference so the next Generate, here or anywhere, runs on it too. Note
+ * that the press waits, busy, while a pick is on its way to the service,
+ * because the Generate runs on the preference the service holds, not the
+ * one drawn here; a pick the service refuses is taken back off the row,
+ * and the press names what it will run on again, a toast saying so.
+ */
+function NoChaptersYet({
+  runsOn,
+  choices,
+  onGenerate,
+}: {
+  runsOn: ChaptersRunsOn | undefined;
+  choices: readonly ChaptersRunsOn[] | undefined;
+  onGenerate: () => void;
+}): React.JSX.Element {
+  const preferences = useAccountPreferences().data;
+  const picked =
+    preferences === undefined ? undefined : chaptersProviderOf(preferences.chaptersModel);
+  const { mutate: pick, isPending: picking } = useMutation({
+    ...actMutation(ACT_KIND.AGENTS_CHAPTERS_PROVIDER_WRITE),
+    onSettled: refusalToast((answer: object) =>
+      "failure" in answer ? CHAPTERS_WORDS.PICK_FAILED : undefined,
+    ),
+  });
+  const offered = choices !== undefined && choices.length > 1 ? choices : undefined;
+  const menu = useMenu(offered !== undefined);
+  const shown = pickedRunsOn(runsOn, offered, picked);
+  if (offered === undefined || shown === undefined) {
+    return (
+      <EmptyState
+        icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
+        action={{
+          label: CHAPTERS_WORDS.generate(shown),
+          look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
+          onClick: onGenerate,
+        }}
+      >
+        {CHAPTERS_WORDS.none(shown)}
+      </EmptyState>
+    );
+  }
+  return (
+    <>
+      <EmptyState
+        icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
+        beside={
+          <SplitButton
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<HarnessMark provider={shown.provider} />}
+            onClick={onGenerate}
+            {...(picking ? { busy: true, busyLabel: CHAPTERS_WORDS.PICKING } : {})}
+            menu={{ label: CHAPTERS_WORDS.PICK_MODEL, ...menu.trigger() }}
+          >
+            {CHAPTERS_WORDS.generate(shown)}
+          </SplitButton>
+        }
+      >
+        {CHAPTERS_WORDS.none(shown)}
+      </EmptyState>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          replayUnmasked
+          label={CHAPTERS_WORDS.PICK_MODEL}
+          menu={menu.drawn}
+          groups={[
+            offered.map((choice) => ({
+              label: chaptersModelLabel(choice.model),
+              icon: <HarnessMark provider={choice.provider} />,
+              checked: choice.provider === shown.provider,
+              onSelect: () => pick({ provider: choice.provider }),
+            })),
+          ]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -708,7 +768,7 @@ function ChaptersReading({
   model,
   stale,
   generatable,
-  pick,
+  read,
   changes,
   files,
   threads,
@@ -724,7 +784,7 @@ function ChaptersReading({
   model: string;
   stale: boolean;
   generatable: boolean;
-  pick: ChaptersModelPick;
+  read: ChaptersRead;
   changes: ChangesReads;
   /** Every file the pull request changes, as the read of its files answered. */
   files: readonly AgentChangedFile[];
@@ -844,13 +904,9 @@ function ChaptersReading({
         <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
-            <GenerateButton
-              pick={pick}
-              variant={BUTTON_VARIANT.QUIET}
-              icon={<GLYPH.RETRY aria-hidden="true" />}
-            >
+            <Button icon={<GLYPH.RETRY aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
-            </GenerateButton>
+            </Button>
           ) : null}
         </TabNotice>
       ) : null}
@@ -934,15 +990,7 @@ function ChaptersReading({
                         {
                           label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
                           icon: <GLYPH.RETRY aria-hidden="true" />,
-                          // Note that each model regenerates on itself and is kept, as a pick on Regenerate's chevron then its press would.
-                          items: CHAPTERS_MODEL_LIST.map((model) => ({
-                            label: CHAPTERS_MODEL_LABEL[model],
-                            checked: model === pick.model,
-                            onSelect: () => {
-                              pick.choose(model);
-                              pick.generate();
-                            },
-                          })),
+                          onSelect: read.generate,
                         },
                       ],
                     ],
@@ -1038,7 +1086,6 @@ function ChaptersReading({
 function chaptersState(
   state: Exclude<ChaptersShown, { kind: typeof CHAPTERS_SHOWN.READY }>,
   read: ChaptersRead,
-  pick: ChaptersModelPick,
   live: boolean,
 ): ReactNode {
   switch (state.kind) {
@@ -1062,16 +1109,11 @@ function chaptersState(
       );
     case CHAPTERS_SHOWN.NONE:
       return state.generatable ? (
-        <EmptyState
-          icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
-          beside={
-            <GenerateButton pick={pick} variant={BUTTON_VARIANT.PRIMARY}>
-              {CHAPTERS_WORDS.GENERATE}
-            </GenerateButton>
-          }
-        >
-          {CHAPTERS_WORDS.NONE}
-        </EmptyState>
+        <NoChaptersYet
+          runsOn={state.runsOn}
+          choices={state.runsOnChoices}
+          onGenerate={read.generate}
+        />
       ) : (
         <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
           {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.AGENTS} />)}
@@ -1086,7 +1128,7 @@ function chaptersState(
             surface: FAILURE_SURFACE.AGENT_CHAPTERS_GENERATE,
             cause: state.failureKind,
           })}
-          onRetry={state.generatable ? pick.generate : undefined}
+          onRetry={state.generatable ? read.generate : undefined}
           placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {FAILURE_WORDS[state.failureKind]}
@@ -1126,13 +1168,11 @@ export function AgentChaptersTab({
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
   // Note that the files' head counts as well as the pull request's, because a chapter's hunks are found in the files drawn.
-  const pick = useChaptersModelPick(chapters.generate);
   const state = chaptersShown(chapters.answer, chapters.generating, {
     pullRequest: chapters.head,
     files: changes.pullRequest?.headSha,
   });
-  if (state.kind !== CHAPTERS_SHOWN.READY)
-    return <>{chaptersState(state, chapters, pick, shown)}</>;
+  if (state.kind !== CHAPTERS_SHOWN.READY) return <>{chaptersState(state, chapters, shown)}</>;
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
@@ -1167,7 +1207,7 @@ export function AgentChaptersTab({
       model={state.model}
       stale={state.stale}
       generatable={state.generatable}
-      pick={pick}
+      read={chapters}
       changes={changes}
       files={pullRequest.files}
       threads={threads}

@@ -5,6 +5,7 @@ import { AGENT_MACHINE, AGENT_STATUS, type AgentSummary } from "@repo/features/a
 import type { Task, TaskSummary } from "@repo/features/task-wire";
 import { BROWSER_TAB_OPEN_FAILURE } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { agentTab, cloudBrowserTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -13,7 +14,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, handState, holdBrowserTabs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -87,6 +88,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */
@@ -108,8 +110,8 @@ async function mount(
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: viewed === undefined ? [] : [{ agent: viewed }],
-      tab: viewed === undefined ? undefined : { agent: viewed },
+      tabs: viewed === undefined ? [] : [agentTab(viewed)],
+      tab: viewed === undefined ? undefined : agentTab(viewed),
     },
     sidePanel: {
       ...base.sidePanel,
@@ -244,13 +246,13 @@ test("a tab an agent's cloud browser holds is offered under the panel's + Browse
   assert.deepEqual(rowWords(rows), ["Sign in", "New browser tab"]);
   await act(async () => rows[0]?.click());
   await settle();
-  assert.deepEqual(task.chosen, [{ cloudBrowser: SIGN_IN.id }]);
+  assert.deepEqual(task.chosen, [cloudBrowserTab(SIGN_IN.id)]);
 });
 
 test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
   listSignIn();
   const tab = SIGN_IN;
-  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.COMMENTS, { cloudBrowser: tab.id }]);
+  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.COMMENTS, cloudBrowserTab(tab.id)]);
 
   const drawn = [...document.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.textContent?.includes("Sign in"),

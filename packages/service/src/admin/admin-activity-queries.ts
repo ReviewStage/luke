@@ -10,10 +10,10 @@
 
 import { queryBuilder } from "@repo/database/core/query";
 import { agentTable } from "@repo/database/schemas/agent";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import { MEANINGFUL_ACTION, type MeaningfulAction } from "@repo/features/admin-overview-vocabulary";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { type AnyColumn, and, eq, gte, isNotNull, lt, type SQL, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 
@@ -50,7 +50,7 @@ export function within(column: AnyColumn, since: Date, until: Date | undefined) 
  * took it, when, and what it was. This is the one definition of "active" on the admin
  * dashboard: the Overview's active-developer tiles, feature reach's base, the
  * most active accounts, and the meaningful retention grid, and the roster's
- * active days and ranking, all count through it. A plan revision counts only
+ * active days and ranking, all count through it. A description revision counts only
  * as the developer's own, under their user id; the app's notes are the app's,
  * and an agent's revisions are the agent. `until`, where given, ends the
  * span, as the Day page's one UTC day does.
@@ -67,16 +67,16 @@ export function meaningfulActions(since: Date, until?: Date) {
       .where(within(task.createdAt, since, until)),
     queryBuilder
       .select({
-        userId: userIdOf(planRevision.userId),
-        at: atOf(planRevision.at),
-        kind: kindOf(MEANINGFUL_ACTION.PLAN_REVISIONS),
+        userId: userIdOf(descriptionRevision.userId),
+        at: atOf(descriptionRevision.at),
+        kind: kindOf(MEANINGFUL_ACTION.DESCRIPTION_REVISIONS),
       })
-      .from(planRevision)
+      .from(descriptionRevision)
       .where(
         and(
-          eq(planRevision.actor, PLAN_ACTOR.DEVELOPER),
-          isNotNull(planRevision.userId),
-          within(planRevision.at, since, until),
+          eq(descriptionRevision.actor, DESCRIPTION_ACTOR.DEVELOPER),
+          isNotNull(descriptionRevision.userId),
+          within(descriptionRevision.at, since, until),
         ),
       ),
     queryBuilder

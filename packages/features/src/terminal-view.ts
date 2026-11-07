@@ -1,9 +1,7 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  sandboxResumedAnswerSchema,
-  terminalCreatedAnswerSchema,
-  terminalsAnswerSchema,
-} from "./terminal-wire.js";
+import { agentsContract } from "./contract/agents.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * terminal-view.ts -- a coding agent's terminals as the host answers the desktop for them: what each call takes and answers, why one could not be done, and the events an attached shell's connection is heard through.
@@ -13,23 +11,38 @@ import {
  * calls carry ids, sizes, and names; what a shell printed is heard as the
  * connection's own events, named by a connection id the desktop minted for
  * the one panel it posted a port to, so the bytes reach that panel and no
- * other place. A refusal the tab acts on is an answer; an outage is the
- * call's own failure.
+ * other place. A refusal the tab acts on is an answer, spelled as its
+ * procedure declares it (`hosted-failure.ts`); an outage is the call's own
+ * failure.
  */
 
-/** Why a terminal call could not be done, where the tab has something to say of it. */
-export const TERMINAL_REFUSAL = {
-  /** The sandbox is stopped, so no shell starts until the developer resumes it. */
-  SANDBOX_STOPPED: "sandbox-stopped",
-  /** The agent has not opened its sandbox yet. */
-  AGENT_NOT_READY: "agent-not-ready",
-  /** No such agent or shell, or another workspace's. */
-  NOT_FOUND: "not-found",
-  /** The service answered, and the agent's sandbox did not, Vercel Sandbox's API or tmux in it; asking again may be answered. */
-  SANDBOX_UNANSWERED: "sandbox-unanswered",
-  /** The agent was archived. */
-  GONE: "gone",
+/**
+ * The terminal calls' refusals the tab spells as it shipped them: an archived
+ * agent is gone, the agent's sandbox not answering (Vercel Sandbox's API or
+ * tmux in it, the routes' one upstream) is the sandbox unanswered, and an
+ * agent not the caller's to reach is not found, as another workspace's is.
+ */
+export const TERMINAL_RENAMES = {
+  [HOSTED_API_ERROR.AGENT_RETIRED]: "gone",
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: "sandbox-unanswered",
+  [HOSTED_API_ERROR.NOT_PERMITTED]: "not-found",
 } as const;
+
+/** The procedures the tab's calls ask. */
+const terminalContract = {
+  terminals: agentsContract.terminals,
+  openTerminal: agentsContract.openTerminal,
+  renameTerminal: agentsContract.renameTerminal,
+  endTerminal: agentsContract.endTerminal,
+  sandboxResume: agentsContract.sandboxResume,
+};
+
+/**
+ * Why a terminal call could not be done: the sandbox stopped or not yet
+ * opened, no such agent or shell, the sandbox unanswered, its snapshot gone,
+ * the agent archived, or no answer at all.
+ */
+export const TERMINAL_REFUSAL = failureSetOf(terminalContract, { as: TERMINAL_RENAMES });
 
 export type TerminalRefusal = (typeof TERMINAL_REFUSAL)[keyof typeof TERMINAL_REFUSAL];
 
@@ -41,7 +54,7 @@ export const TERMINAL_CONNECTION = {
   ATTACHED: "attached",
   /** The socket dropped — a sleep, a network change, the relay's bound — and the host is reconnecting on its own. */
   RECONNECTING: "reconnecting",
-  /** Closed after five minutes without typing; the host does not reconnect until the tab attaches again. */
+  /** Ended by the host after ten minutes with nothing typed, printed, or shown, or as a sign-out ends it; the host does not reconnect until the tab attaches again. */
   IDLE: "idle",
   /** The sandbox is stopped; only the developer's resume brings it back. */
   STOPPED: "stopped",
@@ -129,25 +142,20 @@ export const terminalAckParamsSchema = EffectSchema.Struct({
   bytes: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
 });
 
-/** A refusal the tab reads, in place of the answer. */
-const refusedSchema = EffectSchema.Struct({
-  refused: EffectSchema.Literals(Object.values(TERMINAL_REFUSAL)),
+/** The agent's shells and where its sandbox stands, or why not; a shell renamed or ended answers the same. */
+export const terminalsActAnswerSchema = answerView(agentsContract.renameTerminal, {
+  as: TERMINAL_RENAMES,
 });
 
-/** The agent's shells and where its sandbox stands, or why not. */
-export const terminalsActAnswerSchema = EffectSchema.Union([terminalsAnswerSchema, refusedSchema]);
-
 /** The shell started, or why not. */
-export const terminalCreatedActAnswerSchema = EffectSchema.Union([
-  terminalCreatedAnswerSchema,
-  refusedSchema,
-]);
+export const terminalCreatedActAnswerSchema = answerView(agentsContract.openTerminal, {
+  as: TERMINAL_RENAMES,
+});
 
 /** Where the sandbox stands after a resume, or why not. */
-export const terminalResumedActAnswerSchema = EffectSchema.Union([
-  sandboxResumedAnswerSchema,
-  refusedSchema,
-]);
+export const terminalResumedActAnswerSchema = answerView(agentsContract.sandboxResume, {
+  as: TERMINAL_RENAMES,
+});
 
 export type TerminalsActAnswer = typeof terminalsActAnswerSchema.Type;
 export type TerminalCreatedActAnswer = typeof terminalCreatedActAnswerSchema.Type;

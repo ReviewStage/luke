@@ -20,21 +20,21 @@ import {
   openTokenMember,
 } from "../testing/github-app-fake.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
-import { startFromOf } from "./coder-host/replay.js";
 import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { steerAgent } from "./coder-host/steer.js";
+import { startFromOf } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
+import type { TypedTurn } from "./sessions/agent-sessions.js";
 
 /**
  * Who controls a coding agent that runs on its starter's own GitHub token,
  * over a real dialect: a teammate whose own verified token reads its
  * repository reaches it, but its messages and a start from it, continued or
- * forked, are refused before eve, GitHub, or its sandbox is asked; a
+ * forked, are refused before its harness, GitHub, or its sandbox is asked; a
  * teammate who keeps no token reaches nothing. And an agent the App reaches,
  * on a task on its owner's token, takes no message from a teammate who
  * reaches the agent but not the task, nor reads its pull requests. Synthetic accounts, tasks, and words
- * throughout; eve and GitHub answer nothing.
+ * throughout; the harness and GitHub answer nothing.
  */
 
 /** An agent on its starter's own token, with a teammate whose token reads its repository and one who keeps none. */
@@ -58,7 +58,7 @@ const openTokenAgent = Effect.gen(function* () {
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Side\n",
+    descriptionSnapshot: "# Side\n",
     prompt: null,
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
@@ -73,9 +73,9 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
     () =>
       Effect.gen(function* () {
         const { reader, tokenless, task, agent } = yield* openTokenAgent;
-        const eve = yield* routedSessions<EveTypedTurn>(reader);
+        const agentSessions = yield* routedSessions<TypedTurn>(reader);
         const steer = (userId: string) =>
-          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
+          steerAgent(agentSessions, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -113,18 +113,18 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          planSnapshot: "# Side\n",
+          descriptionSnapshot: "# Side\n",
           prompt: null,
           repository,
           githubAccess: GITHUB_ACCESS.APP,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const agent = Option.getOrThrow(started).agent;
-        const eve = yield* routedSessions<EveTypedTurn>(tokenless);
+        const agentSessions = yield* routedSessions<TypedTurn>(tokenless);
 
         assert.ok(Option.isSome(yield* readAgent(tokenless, agent.id)));
         const refused = yield* Effect.flip(
-          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
+          steerAgent(agentSessions, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: tokenless },

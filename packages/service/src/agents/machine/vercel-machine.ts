@@ -1,110 +1,156 @@
 /**
- * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox opened from the coding agent's image, the runner launched in it as a detached command, and our doors read through it with every capability dropped.
+ * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox booted from the agents' image, the runner started in it as the SDK's own user for the agent, and our doors read through it.
  *
- * `open` opens a sandbox from the coding agent's image
- * (`../agent-sandbox-image.ts`), waiting while the image is prepared where
- * the caller asks, and checks the agent's repository out into it on eve's
- * terms (`../coder-host/checkout.ts`, the same token at the firewall, but
- * cloned whole, since the history is deepened before the runner starts
- * anyway), or opens it from its workspace's repository snapshot of the same
- * image and fetches only what landed since (`../repository-snapshot.ts`),
- * building that snapshot past the answer where none was ready. The deepen
- * is left to the launch (`finishCheckout`), which runs it beside its own
- * uploads. A sandbox whose use failed is deleted again.
+ * `open` opens the session's sandbox from the agents' image
+ * (`../coder-host/agent-image.ts`), which carries the runner and every tool
+ * the harnesses run, with its session's drive mounted at the workspace
+ * (`../agent-drive.ts`), through `Sandbox.getOrCreate` under a name of the
+ * session's own (`../agent-sandbox-open.ts`), as Vercel's persistent sandboxes are
+ * opened: the one standing under it is resumed, one is created where none
+ * stands, and one whose snapshot is gone is deleted and created again under
+ * the same name, on the same drive. A sandbox the call created is set up in
+ * its `onCreate`, as Vercel's examples set one up: the `agent` user made in
+ * it as the SDK does, and the checkout made. The checkout stands on the drive:
+ * kept as the agent left it where an earlier sandbox of the session made it;
+ * as the source left it on a fork of the drive of the agent it was continued
+ * or forked from (`../agent-drive.ts`); on a fork of its workspace's repository's base drive, fetched up to the
+ * default branch and installed again, which fills in only what landed since;
+ * or cloned whole onto an empty drive (`../coder-host/checkout.ts`, the
+ * token at the firewall for the clone alone), the base drive filled past the
+ * answer where none was. Every write the checkout makes is the group's
+ * (`../repository-shell.ts`'s `GROUP_WRITES`), so the `agent` user writes
+ * it too. A create Vercel answers `image_not_ready` is asked again once the
+ * registry has had time to prepare the image, as Vercel's docs say. The
+ * write token and the commit identity are left to the launch
+ * (`finishCheckout`), which sets them beside its own steps. Nothing is deleted where the setup or the
+ * caller's use fails: the sandbox stands under the session's name, where the
+ * next message finds it.
  *
- * `launchRunner` uploads the runner's bundle (`../coder-host/runner-bundle.ts`)
- * and starts it as a detached command of the sandbox's API as root, which
- * installs the bundle where only root writes, checks its digest, shares the
- * checkout with the `agent` user, and drops to that user with every
- * capability gone (`../sandbox-capabilities.ts`). The harness's credential
- * and the placeholder the firewall swaps for the runner's bearer
- * (`../coder-host/runner-sessions.ts`) are in that command's environment
- * and nowhere else: never in its argv, its config line, a file, or a tag. Its config line is
- * written to its stdin, which carries nothing more: the runner reads every
+ * `launchRunner` readies the sandbox as root, sharing each checkout with the
+ * `agent` user, and then starts the image's runner as that user through the
+ * SDK (`asUser(...).runCommand`), as a detached command whose stdin stays
+ * open. The harness's credential and the placeholder the firewall swaps for
+ * the runner's bearer (`../coder-host/runner-sessions.ts`) are in that
+ * command's environment, which the SDK writes on `sudo`'s command line, so
+ * any process in the sandbox may read them there while the runner runs; in
+ * a sandbox each is a placeholder the firewall swaps, worth nothing outside
+ * it. Neither is ever in its config line, a file, or a tag. Its config line
+ * is written to its stdin, which carries nothing more: the runner reads every
  * later line from the service (`../coder-host/runner-sessions.ts`), so this machine
  * writes no line to it.
  *
  * The doors read the sandbox carrying the agent's session id as its tag, as
  * every agent's sandbox does, and only its running session: nothing is
  * resumed, since the agent calling the tool runs in that sandbox, so a
- * sandbox not up has nothing to read from. A file is read by a command run
- * with every capability dropped, as a Terminal's shell runs, never through
- * Vercel's own file read, which reads as root: the agent names any path,
- * and a model talked into naming `/proc/<runner pid>/environ`, a file under
- * `agent`'s private home, or a link to either in the checkout would
- * otherwise hand its harness's token to a page, a picture, or the inbox.
- * Under the drop such a path reads as no file. A repository's command is
+ * sandbox not up has nothing to read from. A file is read by a command the
+ * sandbox's default user runs. A repository's command is
  * run in the running session and waited on, its environment named by `env`
  * on the command line rather than by the API, as our other commands are
  * run (`../vercel-sandbox-api.ts`).
  *
- * A place is found again by the session's tag, and its runner by the tags a
- * launch writes beside it: the command, the sandbox session it runs in, and
- * the launch's first event number and fingerprint (`RUNNER_TAG`). The
- * firewall is the sandbox session's network policy, composed whole from
- * what stands at it (`../sandbox-firewall.ts`), a stop is the session's, and a
- * resume opens the sandbox's last snapshot, its timeout lowered first, so
- * the session it opens lives a launch's timeout and not an old sandbox's
- * day; a snapshot expired is a place gone for good.
+ * A place is found again by the session's tag, and its runner by the record
+ * a launch writes in our store under the agent's runner lease
+ * (`@repo/database/models/agent-runner-record`): the command, the sandbox
+ * session it runs in, and the launch's first event number and fingerprint.
+ * Note that none of it rides in a tag, because Vercel's tags are labels,
+ * each write replacing a sandbox's whole set, so the tags name only the
+ * session and its agent, as the sandbox is created. The
+ * firewall is the sandbox session's network policy, composed whole at each
+ * write from its sources and the swaps its launch keeps
+ * (`../sandbox-firewall.ts`), and a stop is the session's. A resume of a
+ * sandbox under its session's name is the same `getOrCreate`, which makes
+ * it anew on the session's drive where its snapshot expired, set up as a new
+ * one is, and says so, since the harness's own session went with the old
+ * disk. A sandbox opened before `getOrCreate`, under a UUID, resumes from its
+ * last snapshot and is a place gone once that expired; the one opened in
+ * its place is the session's own.
  */
 
-import { createHash, randomUUID } from "node:crypto";
 import {
   AGENT_USER,
+  CODEX_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
   SHARED_FILES_DIRECTORY,
 } from "@repo/agent-runner/pins";
 import type { DatabaseServices } from "@repo/database/core/query";
-import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
+import {
+  type AgentRunnerRecord,
+  forgetAgentRunnerRecord,
+  readAgentRunnerRecord,
+  writeAgentRunnerRecord,
+} from "@repo/database/models/agent-runner-record";
+import {
+  type Agent,
+  hasRepository,
+  readAgent,
+  type WithRepository,
+} from "@repo/database/models/agent-store";
+import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Result } from "effect";
+import { Brand, type Context, Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
-  AgentSandboxImage,
-  type AgentSandboxImageService,
-  ImagePreparing,
-} from "../agent-sandbox-image.js";
+  AGENT_DRIVE_FROM,
+  type AgentDrive,
+  type AgentDriveFrom,
+  agentDrive,
+  agentDriveName,
+} from "../agent-drive.js";
+import {
+  AGENT_TAG,
+  agentSandboxName,
+  agentSandboxTags,
+  openAgentSandbox,
+  SANDBOX_ENV,
+} from "../agent-sandbox-open.js";
+import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
+import { AgentImage } from "../coder-host/agent-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
   type AgentExtraRead,
   type AgentRepositoryRead,
-  agentDeepenPlan,
+  agentCheckoutPlan,
   agentExtraReads,
+  agentFirewallSources,
   agentRepositoryRead,
-  CHECKOUT_DEPTH,
   CheckoutRefused,
+  type CheckoutServices,
   cloneAgentExtras,
   cloneAgentRepository,
-  deepenCheckoutWith,
+  finishCheckoutWith,
+  firewallSourcesOfAgent,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
-import { RunnerBundle } from "../coder-host/runner-bundle.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
-  buildRepositorySnapshot,
-  forgetRepositorySnapshot,
-  REPOSITORY_SNAPSHOT_STATE,
-  type RepositorySnapshotOf,
-  readRepositorySnapshot,
-} from "../repository-snapshot.js";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
-import { type FirewallSession, sandboxFirewall } from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
+  type FirewallEntry,
+  type FirewallSession,
+  type FirewallSources,
+  type LaunchSwapKind,
+  newPlaceholder,
+  placeholderSwap,
+  renewedSwap,
+  type SandboxFirewall,
+  sandboxFirewall,
+} from "../sandbox-firewall.js";
 import {
   type ListedSandbox,
-  NOT_FOUND_STATUS,
   type OidcTokenRead,
+  type OpenedSandbox,
   SANDBOX_STATUS,
+  type SandboxSessionApi,
   SandboxUnavailable,
-  SESSION_TAG,
-  SNAPSHOT_GONE_STATUS,
+  type SessionRef,
+  sessionOnFirstUse,
+  snapshotGone,
   UP_STATUSES,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -112,9 +158,8 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
-  describeFailure,
+  type DeliveredCredentials,
   type FoundPlace,
-  LaunchRefused,
   type MachineKept,
   type MachineLayout,
   type MachineLifecycle,
@@ -122,62 +167,30 @@ import {
   type MachinePlace,
   type MachineRunning,
   PLACE_RESUME,
+  type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
+  SWAP_RENEWAL,
+  type SwapRenewal,
+  type SwapRenewalAsk,
 } from "./agent-machine.js";
 
 /**
- * The tags a sandbox we open carries beside its session's: its agent, and
- * the runner it runs, so a later call finds both. Note that Vercel refuses a
- * sandbox more than five tags, the session's among them, so a launch's
- * fingerprint rides in its launch tag rather than a tag of its own.
+ * The agent tag's name before the product's rename, read after `AGENT_TAG`'s
+ * and never written. Note that a sandbox's tags are written only as it is
+ * created, so one made before carries the old name for as long as it lives;
+ * it can go once Vercel lists no sandbox named `SANDBOX_NAME_BEFORE_RENAME`,
+ * since only such a sandbox can carry it.
  */
-export const RUNNER_TAG = {
-  AGENT: "agentId",
-  SANDBOX_SESSION: "agentRunnerSession",
-  COMMAND: "agentRunnerCommand",
-  /**
-   * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
-   * the launch was started with that a warm runner cannot take up later
-   * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
-   * every launch reads its lines from the service. Note that the read mark is
-   * written for a deployment from before this one, which reads a launch
-   * without it as one whose stdin it writes, and is read here by no one:
-   * no launch from before the read still ran as this deployment went out.
-   */
-  LAUNCH: "agentRunnerLaunch",
-} as const;
+const AGENT_TAG_BEFORE_RENAME = "lukeAgent";
 
-/**
- * The tags' names before the product's rename, read after `RUNNER_TAG`'s and
- * never written. Note that each write replaces a sandbox's whole set of
- * tags, so a sandbox carries one name of a tag or the other, and one made
- * before carries the old names until its next launch or halt writes the
- * new; they can go once Vercel lists no sandbox named
- * `SANDBOX_NAME_BEFORE_RENAME`, since only such a sandbox can carry them.
- */
-const RUNNER_TAG_BEFORE_RENAME = {
-  AGENT: "lukeAgent",
-  SANDBOX_SESSION: "lukeRunnerSession",
-  COMMAND: "lukeRunnerCommand",
-  LAUNCH: "lukeRunnerLaunch",
-} as const satisfies Record<keyof typeof RUNNER_TAG, string>;
-
-/** A runner tag of a sandbox, under its name or the one it had before the rename. */
-export function runnerTag(
-  tags: Readonly<Record<string, string>> | undefined,
-  tag: keyof typeof RUNNER_TAG,
-): string | undefined {
-  return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
+/** The agent a sandbox's tags name, under the tag's name or the one it had before the rename. */
+export function agentTag(tags: Readonly<Record<string, string>> | undefined): string | undefined {
+  return tags?.[AGENT_TAG] ?? tags?.[AGENT_TAG_BEFORE_RENAME];
 }
-
-/** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
-const LAUNCH_FINGERPRINT_MARK = "-";
-
-/** What a launch tag's last part reads for a launch that reads its lines from the service. */
-const LINES_READ_MARK = "lines";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -195,12 +208,11 @@ const SANDBOX_LAYOUT: MachineLayout = {
   attachments: ATTACHMENT_DIRECTORY,
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
-  codexExecutable: undefined,
+  codexExecutable: CODEX_PIN.LINK,
+  codexHome: CODEX_PIN.HOME,
   linesRead: true,
+  transcriptsKept: true,
 };
-
-/** What a sandbox we open is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
-export const SANDBOX_NAME = "agent-sandbox-";
 
 /**
  * What a sandbox opened before the product's rename is named as, which the
@@ -211,37 +223,31 @@ export const SANDBOX_NAME = "agent-sandbox-";
  */
 export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 
-/**
- * Where the launch stands in the sandbox: the bundle as the file API uploads
- * it, as the default user, and where it is installed root's, in the directory
- * the image made root's (`RUNNER_DIRECTORY`), so no Terminal's shell changes
- * what runs as `agent`.
- */
-const RUNNER_PATH = {
-  UPLOAD: "/tmp/agent-runner.mjs",
-  INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
-} as const;
-
-/** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
-const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
+/** The runner as the image carries it (`apps/web/agent-image/Dockerfile`). */
+const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
 
 /**
  * The link a sandbox made before the product's rename is given on each
  * launch, root's, from our tools' directory to the one its image put them
- * in, so the runner's bundle and the Claude Code binary are found where the
+ * in, so the runner and the Claude Code binary are found where the
  * pins name them. Note that it can go only once Vercel lists no sandbox made
  * before the rename (named `luke-agent-` and a UUID), because a sandbox in
  * steady use resumes from its own snapshot for as long as it lives.
  */
 const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
 
-/** A checkout marked safe for git and shared with `agent`'s group, as the launch marks each: the agent's own and every repository it works in beside it. */
+/**
+ * A checkout marked safe for git in the sandbox and its repository shared
+ * with `agent`'s group, as the launch marks each: the agent's own and every
+ * repository it works in beside it. Note that nothing of the checkout's
+ * files is changed, because every write the checkout makes is already the
+ * group's (`../repository-shell.ts`'s `GROUP_WRITES`); the repository's
+ * sharing is set here for a checkout cloned before its clone set it.
+ */
 function sharedCheckout(path: string): readonly string[] {
   return [
     `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${path} || git config --system --add safe.directory ${path}`,
     `if [ -d ${path}/.git ] && ! git -C ${path} config --get core.sharedRepository | grep -Fxq group; then git -C ${path} config core.sharedRepository group; fi`,
-    `chmod -R g+rwX ${path}`,
-    `find ${path} -type d -exec chmod g+s {} +`,
   ];
 }
 
@@ -255,46 +261,47 @@ function sharedCheckoutsScript(paths: readonly string[]): string {
   return ["set -euo pipefail", ...paths.flatMap(sharedCheckout)].join("\n");
 }
 
-/** How long the marking of checkouts cloned under a running runner is waited on: `chmod -R` over a whole repository. */
+/** How long the marking of checkouts cloned under a running runner is waited on. */
 const SHARE_WAIT = Duration.minutes(2);
 
 /** Why checkouts cloned under a running runner were not shared with its user. */
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
 
+/** What a place holds where it holds the agent's own checkout: its repository's git folder. */
+const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
+
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
+/** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
+const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
+
 /**
- * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest we computed, the member's
- * installed skills, where the sandbox's opening uploaded them, moved where
- * only root writes and every user reads (`native-skills.ts`), each checkout
- * marked safe for git and shared with `agent`'s group, the agent's own and
- * those of the repositories it works in beside it at the paths given
- * (`extraCheckoutPaths`), none for an agent in one repository, whose launch
- * is the text it always was, the folder an agent saves what the service
- * reads back in made `agent`'s and readable by the default user the
- * service reads as (`SHARED_FILES_DIRECTORY`), then the runner in
- * place of the shell as `agent`, every capability dropped. `$1` is the
- * digest; the secrets are in the environment the API hands the command, and
- * `exec` hands them on to the runner alone. Note that the checkout's git
- * config is written only where it does not already say so, because a
- * `config.lock` an agent's git left behind when its runner was killed would
- * otherwise fail every relaunch after it.
+ * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
+ * member's installed skills, where the sandbox's opening uploaded them,
+ * moved where only root writes and every user reads (`native-skills.ts`),
+ * each checkout marked safe for git and shared with `agent`'s group, the
+ * agent's own and those of the repositories it works in beside it at the
+ * paths given (`extraCheckoutPaths`), none for an agent in one repository,
+ * and the folder an agent saves what the service reads back in made
+ * `agent`'s and readable by the default user the service reads as
+ * (`SHARED_FILES_DIRECTORY`). Note that the checkout's git config is written
+ * only where it does not already say so, because a `config.lock` an agent's
+ * git left behind when its runner was killed would otherwise fail every
+ * relaunch after it.
  */
-function launchScript(extraCheckouts: readonly string[]): string {
+function readyScript(extraCheckouts: readonly string[]): string {
   return [
     "set -euo pipefail",
     LINK_TOOLS_DIRECTORY,
-    `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
-    `rm -f ${RUNNER_PATH.UPLOAD}`,
-    `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
     `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
     ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
     `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
-    `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
   ].join("\n");
 }
 
-/** What `$0` reads as in the launch's shell. */
-const LAUNCH_NAME = "agent-runner";
+/** Why the sandbox could not be readied for the agent's runner. */
+const NOT_READIED = "the sandbox could not be readied for the agent's runner";
 
 /** How the read exits where the path is no regular file the sandbox's user may read. */
 const READ_EXIT = { NO_FILE: 3 } as const;
@@ -311,27 +318,6 @@ const READ_SCRIPT = [
   `head -c "$2" -- "$1" | base64 | tr -d '\\n'`,
 ].join("\n");
 
-/**
- * How an open past its Start's answer waits on an image still being
- * prepared, a template whose snapshot a create found gone among them: on the
- * template's build to its end (`AgentSandboxImage.prepared`), then asked
- * again at once, and given up where the image is still being prepared after
- * the template's own wait. An open answers preparing before any sandbox
- * stands, so making it again leaves nothing behind. `times` only bounds a
- * template that answers ready yet keeps losing its snapshot. A message's
- * relaunch past its answer retries on it too, its lease let go for each
- * wait (`runner-sessions.ts`'s `send`).
- */
-export const IMAGE_READY = {
-  times: 3,
-  while: (failure: { readonly _tag: string }) =>
-    failure instanceof ImagePreparing
-      ? Effect.flatMap(AgentSandboxImage, (image) =>
-          image.prepared.pipe(Effect.orElseSucceed(() => false)),
-        )
-      : Effect.succeed(false),
-};
-
 /** Runs one effect on the edge's runtime; the checkout reaches the sandbox through promises (`repository-shell.ts`). */
 export type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
 
@@ -345,110 +331,171 @@ const runningOfSession = Brand.nominal<MachineRunning>();
 const nameOfSandbox = Brand.nominal<MachineName>();
 
 /** The place a sandbox's running session stands for, under our session given. */
-function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
+function vercelPlace(session: string, name: string, sandboxSessionId: string): MachinePlace {
   return {
     machine: AGENT_MACHINE.VERCEL,
     session,
+    name: nameOfSandbox(name),
     running: runningOfSession(sandboxSessionId),
   };
 }
 
-/** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
-export interface TaggedRunner {
-  readonly sandboxSessionId: string;
-  readonly commandId: string;
-  readonly firstSequence: number;
-  /** None for a launch from before fingerprints were tagged. */
-  readonly fingerprint?: string;
+/** A sandbox the machine opened or found up: its name, and the session it runs. */
+interface OpenedPlace {
+  readonly name: string;
+  readonly running: string;
 }
 
-/** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
-function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint] = (runnerTag(tags, "LAUNCH") ?? "").split(
-    LAUNCH_FINGERPRINT_MARK,
-  );
-  const firstSequence = Number(sequence);
-  if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }), linesRead: true };
+/** What an agent with a repository is checked out from as its sandbox is created: the agent, and the reads the open made of its repositories. */
+interface AgentCheckoutReads {
+  readonly agent: WithRepository<Agent>;
+  readonly read: AgentRepositoryRead;
+  readonly extras: readonly AgentExtraRead[];
 }
 
-/** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
-export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
-  const tags = sandbox.tags ?? {};
-  const sandboxSessionId = runnerTag(tags, "SANDBOX_SESSION");
-  const commandId = runnerTag(tags, "COMMAND");
-  const launch = taggedLaunch(tags);
-  if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
-    return undefined;
+/** The sandbox session a place runs in, as the API names it. */
+function sessionOfPlace(place: OpenedPlace): SessionRef {
+  return { name: place.name, sessionId: place.running };
+}
+
+/** The same session as its firewall names it, with the account whose agent it is. */
+function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession {
+  return { userId, name: place.name, sandboxSessionId: place.running };
+}
+
+/**
+ * A launch's credentials as a sandbox's runner takes them: each a
+ * placeholder minted for the launch in its variable, and a swap its
+ * firewall keeps for the launch, which sets the value in the placeholder's
+ * place on requests to its target that present it, so no value enters the
+ * sandbox. Note that the swap matches the placeholder and not the target
+ * alone, because every process in the sandbox reaches out through that
+ * firewall, a Terminal's shell and a page in the agent's browser among them,
+ * and only one that reads the placeholder, the runner's own user, may act
+ * as the agent. A renewed credential is held the same way, and the sweep
+ * renews its swap.
+ */
+function heldAtFirewall(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const env: Record<string, string> = {};
+  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
+  for (const credential of credentials) {
+    const placeholder = Redacted.value(newPlaceholder());
+    env[credential.variable] = placeholder;
+    swaps.set(
+      credential.slot,
+      placeholderSwap({
+        ...credential.target,
+        header: credential.header,
+        placeholder: Redacted.make(`${credential.scheme}${placeholder}`),
+        value: Redacted.make(`${credential.scheme}${Redacted.value(credential.value)}`),
+      }),
+    );
   }
-  return { sandboxSessionId, commandId, ...launch };
+  return { env, swaps };
 }
 
-/** The launch tag's value for the mark given. Note that a launch that reads its lines always has a fingerprint, since both came in after fingerprints, so its read mark never stands in a fingerprint's place. */
-function launchTagOf(mark: RunnerMark): string {
-  if (mark.fingerprint === undefined) return String(mark.firstSequence);
-  const parts = [mark.firstSequence, mark.fingerprint];
-  return (mark.linesRead === true ? [...parts, LINES_READ_MARK] : parts).join(
-    LAUNCH_FINGERPRINT_MARK,
-  );
-}
-
-/** The tags a sandbox carries for the record given, beside its session's and its agent's. */
-function recordTags(session: string, agentId: string, record: RunnerRecord) {
-  const place = { [SESSION_TAG]: session, [RUNNER_TAG.AGENT]: agentId };
-  if (record.kind === RUNNER_RECORD.NONE) return place;
-  if (record.kind === RUNNER_RECORD.LAUNCHED) {
-    return { ...place, [RUNNER_TAG.LAUNCH]: launchTagOf(record.mark) };
-  }
+/** The launch a record tells of: its first event number and fingerprint, of a launch that reads its lines, as every sandbox's does. */
+function markOf(record: AgentRunnerRecord): RunnerMark {
   return {
-    ...place,
-    [RUNNER_TAG.SANDBOX_SESSION]: record.runner.handle.running,
-    [RUNNER_TAG.COMMAND]: record.runner.handle.command,
-    [RUNNER_TAG.LAUNCH]: launchTagOf(record.runner.mark),
+    firstSequence: record.firstSequence,
+    ...(record.fingerprint === null ? {} : { fingerprint: record.fingerprint }),
+    linesRead: true,
   };
 }
 
-/** The runner the sandbox's tags name, where the sandbox is up in the session it was started in, whether or not it has exited since. */
-function runnerInSession(session: string, sandbox: ListedSandbox) {
-  const runner = taggedRunner(sandbox);
+/** The record a place keeps for the runner record given, under the sandbox named; none for one that tells of no launch. */
+function storedRecord(
+  name: string,
+  agentId: string,
+  record: RunnerRecord,
+): AgentRunnerRecord | undefined {
+  if (record.kind === RUNNER_RECORD.NONE) return undefined;
+  const mark = record.kind === RUNNER_RECORD.LAUNCHED ? record.mark : record.runner.mark;
+  const runner = record.kind === RUNNER_RECORD.RUNNING ? record.runner.handle : undefined;
+  return {
+    agentId,
+    sandboxName: name,
+    firstSequence: mark.firstSequence,
+    fingerprint: mark.fingerprint ?? null,
+    sandboxSessionId: runner?.running ?? null,
+    commandId: runner?.command ?? null,
+  };
+}
+
+/** The place's record of its runner written in our store under the account given, or deleted where it tells of no launch. */
+function recordedIn(
+  place: {
+    readonly session: string;
+    readonly name: string;
+    readonly userId: string;
+    readonly agentId: string;
+  },
+  record: RunnerRecord,
+) {
+  const stored = storedRecord(place.name, place.agentId, record);
+  return stored === undefined
+    ? forgetAgentRunnerRecord(place.userId, place.session, place.name)
+    : writeAgentRunnerRecord(place.userId, place.session, stored);
+}
+
+/** The runner a record names, where the sandbox is up in the session that runner was started in, whether or not it has exited since. */
+function runnerInSession(
+  session: string,
+  sandbox: ListedSandbox,
+  record: AgentRunnerRecord,
+): RecordedRunner | undefined {
+  const { sandboxSessionId, commandId } = record;
   if (
-    runner === undefined ||
+    sandboxSessionId === null ||
+    commandId === null ||
     sandbox.status !== SANDBOX_STATUS.RUNNING ||
-    sandbox.currentSessionId !== runner.sandboxSessionId
+    sandbox.currentSessionId !== sandboxSessionId
   ) {
     return undefined;
   }
-  const { sandboxSessionId, commandId, ...mark } = runner;
   return {
-    handle: { ...vercelPlace(session, sandboxSessionId), command: commandId },
-    mark,
+    handle: { ...vercelPlace(session, sandbox.name, sandboxSessionId), command: commandId },
+    mark: markOf(record),
   };
 }
 
-/** A listed sandbox as the place a later call finds, under our session given. */
-function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
-  const tags = sandbox.tags ?? {};
+/** What a place this machine found keeps for its own later calls: the account its record is kept under. */
+interface KeptPlace {
+  readonly userId: string;
+}
+
+/** A listed sandbox as the place a later call finds, under the account's session given, with the session's record where it was written for this sandbox. */
+function foundOf(
+  userId: string,
+  session: string,
+  sandbox: ListedSandbox,
+  record: Option.Option<AgentRunnerRecord>,
+): FoundPlace {
+  const own = Option.getOrUndefined(
+    Option.filter(record, (each) => each.sandboxName === sandbox.name),
+  );
   const running =
     sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined
-      ? vercelPlace(session, sandbox.currentSessionId)
+      ? vercelPlace(session, sandbox.name, sandbox.currentSessionId)
       : undefined;
+  const kept: KeptPlace = { userId };
   return {
     machine: AGENT_MACHINE.VERCEL,
     session,
-    agentId: runnerTag(tags, "AGENT"),
+    agentId: agentTag(sandbox.tags),
     name: nameOfSandbox(sandbox.name),
     running,
-    runner: runnerInSession(session, sandbox),
-    launch: taggedLaunch(tags),
-    // SAFETY: the listing is this machine's own to read back in `resume`; no caller reads it.
-    kept: sandbox as unknown as MachineKept,
+    runner: own === undefined ? undefined : runnerInSession(session, sandbox, own),
+    launch: own === undefined ? undefined : markOf(own),
+    // SAFETY: what is kept is this machine's own to read back in `discard`; no caller reads it.
+    kept: kept as unknown as MachineKept,
   };
 }
 
-/** The listing a found place was read from, which `foundOf` kept. */
-function listedOf(found: FoundPlace): ListedSandbox {
-  // SAFETY: a place this machine found keeps the listing it was read from (`foundOf`).
-  return found.kept as unknown as ListedSandbox;
+/** What a found place keeps, which `foundOf` kept. */
+function keptOf(found: FoundPlace): KeptPlace {
+  // SAFETY: a place this machine found keeps what `foundOf` kept.
+  return found.kept as unknown as KeptPlace;
 }
 
 /**
@@ -459,41 +506,34 @@ function listedOf(found: FoundPlace): ListedSandbox {
  * launch handed it in its environment is redacted too, whatever its shape,
  * so neither its credential nor its bearer can reach the log.
  */
-const diedAtStart = (
-  api: VercelSandboxApi,
-  sandboxSessionId: string,
-  commandId: string,
-  secrets: readonly string[],
-) =>
+const diedAtStart = (session: SandboxSessionApi, commandId: string, secrets: readonly string[]) =>
   Effect.gen(function* () {
-    const exit = yield* api
-      .commandExit(sandboxSessionId, commandId)
-      .pipe(Effect.orElseSucceed(() => undefined));
-    const stderr = yield* api
-      .commandStderrTail(sandboxSessionId, commandId, secrets)
+    const exit = yield* session.commandExit(commandId).pipe(Effect.orElseSucceed(() => undefined));
+    const stderr = yield* session
+      .commandStderrTail(commandId, secrets)
       .pipe(Effect.orElseSucceed(() => undefined));
     yield* Effect.logWarning(
       `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
     );
   });
 
-/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account, over the store the machine was made on. */
+/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account and to what stands beside the checkout's own, over the store the machine was made on. */
 function repositoryFirewallOver(
   api: VercelSandboxApi,
   context: Context.Context<DatabaseServices>,
   session: FirewallSession,
+  beside: FirewallSources,
 ): RepositoryFirewall {
   const firewall = sandboxFirewall(api);
   return {
-    set: (slot, entry) => Effect.provideContext(firewall.set(session, slot, entry), context),
-    withdraw: (slot) => Effect.provideContext(firewall.withdraw(session, slot), context),
+    write: (sources) =>
+      Effect.provideContext(firewall.write(session, { ...beside, ...sources }), context),
   };
 }
 
-/** The sandbox session as the checkout reaches it, through the edge's runner, its firewall the account's given. */
+/** The sandbox session as the checkout reaches it, looked up at its first command and held for the rest, through the edge's runner, its firewall the account's given. */
 function repositorySandboxOver(
-  api: VercelSandboxApi,
-  running: string,
+  session: Effect.Effect<SandboxSessionApi, SandboxUnavailable>,
   run: SandboxRunner,
   firewall: RepositoryFirewall,
 ): RepositorySandbox {
@@ -501,12 +541,14 @@ function repositorySandboxOver(
     run: (ask) =>
       run(
         Effect.map(
-          api.run(running, {
-            command: "bash",
-            args: ["-c", ask.command],
-            ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
-            ...(ask.env === undefined ? undefined : { env: ask.env }),
-          }),
+          Effect.flatMap(session, (held) =>
+            held.run({
+              command: "bash",
+              args: ["-c", ask.command],
+              ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
+              ...(ask.env === undefined ? undefined : { env: ask.env }),
+            }),
+          ),
           (ran) => ({ exitCode: ran.exitCode, stdout: ran.stdout, stderr: ran.stderr }),
         ),
       ),
@@ -514,21 +556,89 @@ function repositorySandboxOver(
   };
 }
 
-/** The read as one command: bash, every capability dropped, the path and bound as its positional arguments. */
+/** The read as one command: bash, the path and bound as its positional arguments. */
 function readFileCommand(path: string, maxBytes: number) {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
-      "-c",
-      READ_SCRIPT,
-      "read-file",
-      path,
-      String(maxBytes),
-    ],
+    command: "bash",
+    args: ["-c", READ_SCRIPT, "read-file", path, String(maxBytes)],
   };
 }
+
+/**
+ * The firewall session a kept launch runs in, its sandbox found by name the
+ * way an agent's sandbox is found: the agent the launch named, the session
+ * its conversation records, the sandboxes tagged with it, and among them the
+ * one still running the owner's session. None where any of them no longer
+ * stands, as for a row its session outlived, or one kept before launches
+ * named their agent.
+ */
+const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
+  Effect.gen(function* () {
+    if (agentId === undefined) return undefined;
+    const agent = yield* readAgent(owner.userId, agentId);
+    if (Option.isNone(agent)) return undefined;
+    const runtime = yield* recordedRuntimeSession({
+      userId: owner.userId,
+      conversationId: agent.value.conversationId,
+    });
+    if (runtime === undefined) return undefined;
+    const sandboxes = yield* api.listTagged(runtime);
+    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
+    if (sandbox === undefined) return undefined;
+    return { ...owner, name: sandbox.name } satisfies FirewallSession;
+  });
+
+/** What a renewal writes once it gathered it: the session found running, the swap renewed, and the sources sent beside it. */
+interface SwapWrite {
+  readonly session: FirewallSession;
+  readonly entry: FirewallEntry;
+  readonly sources: FirewallSources;
+}
+
+/**
+ * A standing launch's swap renewed at its sandbox session's firewall
+ * (`MachineFirewall`'s `renew`): the fresh value asked only where the launch
+ * kept for the session holds the slot, set behind the same placeholder where
+ * the swap stands on the target's host alone and sets another value, and the
+ * session's whole policy sent with the agent's repository credential minted
+ * afresh beside it (`firewallSourcesOfAgent`). A launch whose sandbox no
+ * longer runs its session is left (`launchSession`), for the sweep's drop.
+ */
+const swapRenewed = <E extends { readonly _tag: string }, R>(
+  api: VercelSandboxApi,
+  firewall: SandboxFirewall,
+  owner: FirewallOwner,
+  { credential, fresh }: SwapRenewalAsk<E, R>,
+): Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices> =>
+  Effect.gen(function* () {
+    const launch = yield* firewall.launchOf(owner);
+    const standing = launch?.swaps.get(credential.slot);
+    if (launch === undefined || standing === undefined) return { outcome: SWAP_RENEWAL.LEFT };
+    const next: SwapRenewal | SwapWrite = yield* Effect.gen(function* () {
+      const value = yield* fresh;
+      if (value === undefined) return { outcome: SWAP_RENEWAL.UNANSWERED } as const;
+      const hosts = Redacted.value(standing.rules).map(([host]) => host);
+      if (!hosts.every((host) => host === credential.target.domain)) {
+        return { outcome: SWAP_RENEWAL.ELSEWHERE } as const;
+      }
+      const entry = renewedSwap(
+        standing,
+        Redacted.make(`${credential.scheme}${Redacted.value(value)}`),
+      );
+      if (entry === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const session = yield* launchSession(api, owner, launch.agentId);
+      if (session === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const sources = yield* firewallSourcesOfAgent(owner.userId, launch.agentId);
+      return { session, entry, sources };
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.succeed({ outcome: SWAP_RENEWAL.FAILED, failure: failure._tag } as const),
+      ),
+    );
+    if ("outcome" in next) return next;
+    yield* firewall.renew(next.session, launch, credential.slot, next.entry, next.sources);
+    return { outcome: SWAP_RENEWAL.RENEWED };
+  });
 
 /**
  * What the machine does to a place it already opened, over the API given:
@@ -541,49 +651,44 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
   const runningSession = (sessionId: string) =>
     Effect.gen(function* () {
       const sandboxes = yield* api.listTagged(sessionId);
-      const running = sandboxes.find(
+      const up = sandboxes.find(
         (sandbox) => sandbox.status !== undefined && UP_STATUSES.has(sandbox.status),
-      )?.currentSessionId;
-      if (running === undefined) return yield* new SandboxUnavailable({});
-      return running;
+      );
+      if (up?.currentSessionId === undefined) return yield* new SandboxUnavailable({});
+      return yield* api.session({ name: up.name, sessionId: up.currentSessionId });
     });
 
   return {
-    findPlaces: (session) =>
-      Effect.map(api.listTagged(session), (sandboxes) =>
-        sandboxes.map((sandbox) => foundOf(session, sandbox)),
+    findPlaces: (userId, session) =>
+      Effect.map(
+        Effect.all([api.listTagged(session), readAgentRunnerRecord(userId, session)], {
+          concurrency: "unbounded",
+        }),
+        ([sandboxes, record]) =>
+          sandboxes.map((sandbox) => foundOf(userId, session, sandbox, record)),
       ),
 
-    recordRunner: (place, record) =>
-      api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
+    recordRunner: recordedIn,
 
     firewall: {
-      set: (place, userId, slot, entry) =>
-        firewall.set({ userId, sandboxSessionId: place.running }, slot, entry),
-      withdraw: (place, userId, slot) =>
-        firewall.withdraw({ userId, sandboxSessionId: place.running }, slot),
-      clear: (place) => firewall.clear(place.running),
+      write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
+      keepLaunch: (place, userId, launch) =>
+        firewall.keepLaunch(firewallSessionOf(place, userId), launch),
+      clear: (place) => firewall.clear(sessionOfPlace(place)),
+      renew: (owner, ask) => swapRenewed(api, firewall, owner, ask),
     },
 
-    // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-    resume: (found) =>
-      Effect.gen(function* () {
-        yield* capSandboxTimeout(api, listedOf(found));
-        const resumed = yield* Effect.result(api.resume(found.name));
-        if (Result.isFailure(resumed)) {
-          if (resumed.failure.status === SNAPSHOT_GONE_STATUS) return PLACE_RESUME.GONE;
-          return yield* resumed.failure;
-        }
-        const session = resumed.success.currentSessionId;
-        if (session === undefined) return yield* new SandboxUnavailable({});
-        return vercelPlace(found.session, session);
-      }),
+    stop: (place) =>
+      Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.stop()),
 
-    stop: (place) => api.stopSession(place.running),
+    discard: (found) =>
+      Effect.andThen(
+        api.deleteSandbox(found.name),
+        forgetAgentRunnerRecord(keptOf(found).userId, found.session, found.name),
+      ),
 
-    discard: (found) => api.deleteSandbox(found.name),
-
-    writeFiles: (place, files) => api.writeFiles(place.running, files),
+    writeFiles: (place, files) =>
+      Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.writeFiles(files)),
 
     // Note that a sandbox's runner reads every line past its config from us, so a line written
     // here is a caller's mistake, refused loudly rather than written where nothing reads it.
@@ -591,13 +696,19 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
     wrote: () => Effect.succeed(false),
 
-    runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
+    runnerExit: (handle, within) =>
+      Effect.flatMap(api.session(sessionOfPlace(handle)), (session) =>
+        session.commandExit(handle.command, within),
+      ),
 
-    kill: (handle) => api.kill(handle.running, handle.command),
+    kill: (handle) =>
+      Effect.flatMap(api.session(sessionOfPlace(handle)), (session) =>
+        session.kill(handle.command),
+      ),
 
     readFile: (session, path, bound) =>
       Effect.flatMap(runningSession(session), (running) =>
-        Effect.map(api.run(running, readFileCommand(path, bound + 1)), (ran) =>
+        Effect.map(running.run(readFileCommand(path, bound + 1)), (ran) =>
           ran.exitCode === 0 ? new Uint8Array(Buffer.from(ran.stdout, "base64")) : undefined,
         ),
       ),
@@ -606,64 +717,43 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
-  /** The sandbox session as the checkout reaches it, its firewall the account's given, its record kept in the store given. */
+  /** The sandbox session as the checkout reaches it, its firewall the account's given, with what stands beside the checkout's own, its launch read from the store given. */
   const checkoutOver = (
     context: Context.Context<DatabaseServices>,
-    running: string,
+    sandbox: OpenedPlace,
     userId: string,
+    beside: FirewallSources = {},
   ) =>
     repositorySandboxOver(
-      api,
-      running,
+      sessionOnFirstUse(api, sessionOfPlace(sandbox)),
       run,
-      repositoryFirewallOver(api, context, { userId, sandboxSessionId: running }),
+      repositoryFirewallOver(api, context, firewallSessionOf(sandbox, userId), beside),
     );
 
-  /** The same, its record kept in the caller's store. */
-  const checkoutIn = (running: string, userId: string) =>
+  /** The same, its launch read from the caller's store. */
+  const checkoutIn = (sandbox: OpenedPlace, userId: string, beside: FirewallSources = {}) =>
     Effect.map(Effect.context<DatabaseServices>(), (context) =>
-      checkoutOver(context, running, userId),
+      checkoutOver(context, sandbox, userId, beside),
     );
 
-  /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
-  const createdFrom = (agent: Agent, sessionId: string, snapshotId: string) =>
-    api.create({
-      name: `${SANDBOX_NAME}${randomUUID()}`,
-      snapshotId,
-      tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
-      timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-      vcpus: sandboxVcpus(agent.repository),
-      keepLastSnapshots: {
-        count: CODER.SANDBOX_SNAPSHOTS.count,
-        expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-        deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-      },
-      env: SANDBOX_ENV,
-    });
-
-  /** The sandbox as it runs: its name, and the session it runs in; one Vercel names no session of is deleted again. */
-  const runningOf = (opened: ListedSandbox) =>
-    opened.currentSessionId === undefined
-      ? Effect.andThen(
-          Effect.ignore(api.deleteSandbox(opened.name)),
-          Effect.fail(new SandboxUnavailable({})),
-        )
-      : Effect.succeed({ name: opened.name, running: opened.currentSessionId });
+  /** The sandbox as it runs: its name, and the session it runs in. */
+  const runningOf = (opened: OpenedSandbox) => ({
+    name: opened.name,
+    running: opened.currentSessionId,
+  });
 
   /**
-   * The repository snapshot the agent's sandbox may open from: one of its
-   * workspace's, made on the image this launch opens, of the repository's
-   * default branch; none for an agent started on another branch, or on its
-   * starter's own token, whose access is not the workspace's.
+   * The base drive the agent's own may be forked from: its workspace's, of
+   * the repository's default branch; none for an agent started on another
+   * branch, or on its starter's own token, whose access is not the
+   * workspace's.
    */
-  const repositorySnapshotOf = (
+  const baseDriveOf = (
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
-    imageSnapshotId: string,
-  ): Option.Option<RepositorySnapshotOf> =>
+  ): Option.Option<BaseDriveOf> =>
     agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
       ? Option.some({
-          imageSnapshotId,
           workspaceId: read.workspaceId,
           fullName: read.fullName,
           defaultBranch: read.defaultBranch,
@@ -671,189 +761,204 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       : Option.none();
 
   /**
-   * The repository snapshot built past the request's answer, apart from
-   * the launch and its runner lease, so neither waits on it; nothing where
-   * no request's answer is being kept, as for a relaunch a message makes,
-   * which leaves the build to the next Start.
+   * The workspace's repository's base drive filled past the request's
+   * answer where it has none (`base-drive.ts`), apart from the launch and
+   * its runner lease, so neither waits on it; nothing where no request's
+   * answer is being kept, as for a relaunch a message makes, which leaves
+   * the fill to the next Start.
    */
-  const buildInBackground = (agent: Agent, of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
+  const fillBaseDriveInBackground = (
+    agent: Agent,
+    of: BaseDriveOf,
+    image: string,
+    read: AgentRepositoryRead,
+  ) =>
     Effect.gen(function* () {
       if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
       yield* afterResponse(
-        "A repository snapshot's build",
+        "A base drive's fill",
         Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
-          buildRepositorySnapshot(api, of, read, (running) =>
-            checkoutOver(context, running, agent.userId),
+          fillBaseDrive(api, of, image, read, (sandbox) =>
+            checkoutOver(context, sandbox, agent.userId),
           ),
         ),
       );
     });
 
   /**
-   * The agent's sandbox opened from its repository snapshot and its
-   * checkout brought up to the default branch; none where the snapshot was
-   * gone or its checkout would not refresh, the snapshot then forgotten so
-   * the next launch builds it again, and the sandbox this opened deleted.
-   * A Vercel that did not answer the create opens nothing here either, and
-   * forgets nothing, so the launch goes on as without a snapshot.
+   * The agent's checkout on its drive, as the drive came: one kept from an
+   * earlier sandbox of the session stands as the agent left it, as does one
+   * forked from the drive of the agent it was started from, as that agent
+   * left it; a fork of
+   * the base drive is brought up to the default branch and installed again,
+   * which fills in only what changed since the fill; an empty drive has the
+   * repository cloned onto it whole. An install that failed is said in the
+   * log and let be, since the agent installs for itself, as one did before
+   * drives.
    */
-  const openedFromRepositorySnapshot = (
+  const checkedOutOnDrive = (
     agent: WithRepository<Agent>,
-    sessionId: string,
-    harness: string,
-    of: RepositorySnapshotOf,
-    snapshotId: string,
+    sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
+    from: AgentDriveFrom,
   ) =>
     Effect.gen(function* () {
-      const opened = yield* Effect.flatMap(createdFrom(agent, sessionId, snapshotId), runningOf);
-      yield* refreshAgentCheckout(
-        agent,
-        yield* checkoutIn(opened.running, agent.userId),
-        read,
-      ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
-      return Option.some(opened);
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.gen(function* () {
-          yield* Effect.logWarning(
-            `A ${harness} sandbox did not open from its repository snapshot: ${describeFailure(failure)}`,
-          );
-          const unusable =
-            failure instanceof CheckoutRefused ||
-            failure.status === SNAPSHOT_GONE_STATUS ||
-            failure.status === NOT_FOUND_STATUS;
-          if (unusable) yield* Effect.ignore(forgetRepositorySnapshot(api, of, snapshotId));
-          return Option.none<{ readonly name: string; readonly running: string }>();
-        }),
-      ),
-    );
-
-  /**
-   * The agent's sandbox opened from the image, the image prepared again
-   * where its snapshot is gone, because otherwise every launch would fail
-   * on it until someone deleted the template by hand; this launch answers
-   * as preparing meanwhile.
-   */
-  const openedFromImage = (
-    image: AgentSandboxImageService,
-    agent: Agent,
-    sessionId: string,
-    snapshotId: string,
-  ) =>
-    createdFrom(agent, sessionId, snapshotId).pipe(
-      Effect.catchIf(
-        (failure) => failure.status === SNAPSHOT_GONE_STATUS,
-        () =>
-          Effect.flatMap(image.snapshotGone(snapshotId), () => Effect.fail(new ImagePreparing())),
-      ),
-      Effect.flatMap(runningOf),
-    );
-
-  /**
-   * The agent's sandbox with its repository checked out, on the read the
-   * caller made of it, which confirmed its workspace still reaches it
-   * before any sandbox opens on its code. Where its workspace's repository
-   * snapshot is ready, the sandbox opens from it and fetches only what
-   * landed since; otherwise it opens from the image and clones the
-   * repository whole, and the snapshot is built past the answer for the
-   * next launch (`repository-snapshot.ts`). A snapshot Vercel could not be
-   * asked about is passed by, and no build is started on it.
-   */
-  const primaryCheckedOut = (
-    image: AgentSandboxImageService,
-    agent: WithRepository<Agent>,
-    read: AgentRepositoryRead,
-    sessionId: string,
-    harness: string,
-    imageSnapshotId: string,
-  ) =>
-    Effect.gen(function* () {
-      const of = repositorySnapshotOf(agent, read, imageSnapshotId);
-      if (Option.isSome(of)) {
-        const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
-        if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
-          const fromSnapshot = yield* openedFromRepositorySnapshot(
-            agent,
-            sessionId,
-            harness,
-            of.value,
-            found.value.snapshotId,
-            read,
-          );
-          if (Option.isSome(fromSnapshot)) return fromSnapshot.value;
-        }
-        // The build reads the snapshot again and leaves one ready or being built be.
-        if (Option.isSome(found)) yield* buildInBackground(agent, of.value, read);
+      if (from === AGENT_DRIVE_FROM.KEPT || from === AGENT_DRIVE_FROM.SOURCE) return;
+      if (from === AGENT_DRIVE_FROM.EMPTY) {
+        return yield* cloneAgentRepository(agent, sandbox, read);
       }
-      const opened = yield* openedFromImage(image, agent, sessionId, imageSnapshotId);
-      yield* cloneAgentRepository(
-        agent,
-        yield* checkoutIn(opened.running, agent.userId),
-        read,
-        CHECKOUT_DEPTH.WHOLE,
-      ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
-      return opened;
+      yield* refreshAgentCheckout(agent, sandbox, read);
+      yield* installDependencies(sandbox).pipe(
+        Effect.catch(() => Effect.logWarning("An agent's install on its forked drive failed")),
+      );
     });
 
   /**
-   * The agent's sandbox with its repository checked out (`primaryCheckedOut`),
-   * and then each repository it works in beside its own cloned whole into
-   * its folder, on the reads the caller made of them (`cloneAgentExtras`),
-   * the sandbox deleted again where one would not clone; an agent in one
-   * repository clones nothing more.
+   * A sandbox `getOrCreate` created set up for a launch, in its `onCreate`
+   * beside the `agent` user it makes (`../agent-sandbox-open.ts`): the
+   * agent's repository checked out on the drive (`checkedOutOnDrive`), on
+   * the read the caller made of it, which confirmed its workspace still
+   * reaches it before any sandbox opens on its code, and each repository it
+   * works in beside its own cloned whole into its folder
+   * (`cloneAgentExtras`), one already standing on a kept drive left as it is.
    */
-  const checkedOutSandbox = (
-    image: AgentSandboxImageService,
-    agent: WithRepository<Agent>,
-    read: AgentRepositoryRead,
-    extras: readonly AgentExtraRead[],
-    sessionId: string,
-    harness: string,
-    imageSnapshotId: string,
+  const checkedOutIn = (
+    context: Context.Context<DatabaseServices>,
+    checkout: AgentCheckoutReads,
+    drive: AgentDrive,
+    opened: OpenedPlace,
   ) =>
-    Effect.gen(function* () {
-      const opened = yield* primaryCheckedOut(
-        image,
-        agent,
-        read,
-        sessionId,
-        harness,
-        imageSnapshotId,
+    Effect.suspend(() => {
+      const sandbox = checkoutOver(context, opened, checkout.agent.userId);
+      return Effect.andThen(
+        checkedOutOnDrive(checkout.agent, sandbox, checkout.read, drive.from),
+        cloneAgentExtras(sandbox, checkout.extras),
       );
-      if (extras.length === 0) return opened;
-      yield* cloneAgentExtras(yield* checkoutIn(opened.running, agent.userId), extras).pipe(
-        Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))),
-      );
-      return opened;
     });
 
   /**
-   * The agent's sandbox opened from the image, its repository checked out
-   * in it where it has one (`checkedOutSandbox`). The image's snapshot and
-   * the repository are asked at once, since neither waits on the other and
-   * both are asked before any sandbox opens.
+   * The session's sandbox opened through `getOrCreate`
+   * (`../agent-sandbox-open.ts`) at the size the agent's repository asks
+   * for, with whether it was created, its checkout made in its `onCreate`
+   * where the agent has a repository and the sandbox was created
+   * (`checkedOutIn`). A setup that fails fails the open, and what it made is
+   * left as it stands. Note that the setup's own failure is the open's,
+   * because the SDK hands `onCreate`'s rejection on as the call's, which
+   * would read as Vercel's rather than in the checkout's words.
    */
-  const openedCheckout = (
-    target: ConversationTarget,
+  const gotOn = (
     agent: Agent,
     sessionId: string,
-    harness: string,
+    drive: AgentDrive,
+    checkout: AgentCheckoutReads | undefined,
   ) =>
     Effect.gen(function* () {
-      const image = yield* AgentSandboxImage;
-      const [snapshot, read, extras] = yield* Effect.all(
+      const context = yield* Effect.context<DatabaseServices>();
+      let refused: CheckoutRefused | undefined;
+      const { sandbox, created } = yield* openAgentSandbox(
+        api,
+        {
+          sessionId,
+          tags: agentSandboxTags(sessionId, agent.id),
+          vcpus: sandboxVcpus(agent.repository),
+        },
+        checkout === undefined
+          ? undefined
+          : (opened) =>
+              run(
+                checkedOutIn(context, checkout, drive, runningOf(opened)).pipe(
+                  Effect.tapError((failure) =>
+                    Effect.sync(() => {
+                      refused = failure;
+                    }),
+                  ),
+                ),
+              ),
+      ).pipe(Effect.mapError((failure) => refused ?? failure));
+      return { ...runningOf(sandbox), created };
+    });
+
+  /**
+   * The agent's sandbox opened from the image on its session's drive
+   * (`agent-drive.ts`) through `getOrCreate` (`gotOn`), its repository
+   * checked out on it where it has one and the sandbox was created. The
+   * image's reference and the repository are read at once, since neither
+   * waits on the other and both are read before any drive or sandbox is
+   * made. A Start on the repository's default branch fills its base drive
+   * past the answer where it has none, for the agents after it.
+   */
+  const openedCheckout = (target: ConversationTarget, agent: Agent, sessionId: string) =>
+    Effect.gen(function* () {
+      const [image, read, extras] = yield* Effect.all(
         [
-          image.snapshotId,
+          Effect.flatMap(AgentImage, (agentImage) => agentImage.reference),
           hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
           hasRepository(agent) ? agentExtraReads(target, agent) : Effect.succeed([]),
         ],
         { concurrency: "unbounded" },
       );
-      if (Option.isNone(snapshot)) return yield* new LaunchRefused({ reason: "no snapshot" });
-      return hasRepository(agent) && read !== undefined
-        ? yield* checkedOutSandbox(image, agent, read, extras, sessionId, harness, snapshot.value)
-        : yield* openedFromImage(image, agent, sessionId, snapshot.value);
+      const checkout =
+        hasRepository(agent) && read !== undefined ? { agent, read, extras } : undefined;
+      const base =
+        checkout === undefined
+          ? Option.none<BaseDriveOf>()
+          : baseDriveOf(checkout.agent, checkout.read);
+      if (Option.isSome(base) && checkout !== undefined) {
+        yield* fillBaseDriveInBackground(agent, base.value, image, checkout.read);
+      }
+      const drive = yield* agentDrive(
+        api,
+        sessionId,
+        Option.getOrUndefined(base),
+        agent.startedFrom?.drive,
+      );
+      return yield* gotOn(agent, sessionId, drive, checkout);
+    });
+
+  /**
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
+   */
+  const ownCheckoutRestored = (
+    place: OpenedPlace,
+    target: ConversationTarget,
+    agent: WithRepository<Agent>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* api.session(sessionOfPlace(place));
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
+      const [read, plan] = yield* Effect.all(
+        [
+          agentRepositoryRead(target, agent),
+          agentCheckoutPlan(target, agent).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof CheckoutRefused
+                ? failure
+                : new CheckoutRefused({ reason: RESTORE_PLAN_UNREAD }),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const sandbox = yield* checkoutIn(place, agent.userId);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+      yield* finishCheckoutWith(sandbox, plan);
+      yield* Effect.logWarning(
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
+      );
     });
 
   return {
@@ -861,23 +966,22 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
 
     layout: () => Effect.succeed(SANDBOX_LAYOUT),
 
-    // What the deepen reads of GitHub (`agentDeepenPlan`) is read beside the sandbox's opening and
-    // the caller's own reads, and kept as it ended, so a read that failed fails the launch only
-    // once the sandbox it would delete stands, and never cuts its opening short. Where the caller
-    // waits on an image still being prepared (`IMAGE_READY`), only the opening is asked again, so
-    // the reads are made once. Note that a sandbox just opened holds no deepen's record, so none
-    // is looked for.
+    deliverCredentials: (_agent, credentials) => heldAtFirewall(credentials),
+
+    // What the checkout's finish reads of GitHub (`agentCheckoutPlan`) is read beside the sandbox's
+    // opening and the caller's own reads, and kept as it ended, so a read that failed fails the
+    // launch only once the sandbox stands, and never cuts its opening short. Note that a use that
+    // fails leaves the sandbox standing under the session's name, where the next message finds it.
     open: (ask, use) =>
       Effect.gen(function* () {
-        const opening = openedCheckout(ask.target, ask.agent, ask.session, ask.harness);
-        const [{ name, running }, [deepen, beside]] = yield* Effect.all(
+        const [{ name, running }, [plan, beside]] = yield* Effect.all(
           [
-            ask.waitOnImage ? Effect.retry(opening, IMAGE_READY) : opening,
+            openedCheckout(ask.target, ask.agent, ask.session),
             Effect.all(
               [
                 Effect.exit(
                   hasRepository(ask.agent)
-                    ? agentDeepenPlan(ask.target, ask.agent)
+                    ? agentCheckoutPlan(ask.target, ask.agent)
                     : Effect.succeed(undefined),
                 ),
                 ask.beside,
@@ -887,91 +991,115 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           ],
           { concurrency: "unbounded" },
         );
-        const repositorySandbox = yield* checkoutIn(running, ask.agent.userId);
-        const finishCheckout = Effect.flatMap(deepen, (plan) =>
-          plan === undefined
+        const repositorySandbox = yield* checkoutIn({ name, running }, ask.agent.userId);
+        const finishCheckout = Effect.flatMap(plan, (read) =>
+          read === undefined
             ? openWorkingFolder(repositorySandbox)
-            : deepenCheckoutWith(repositorySandbox, plan),
+            : finishCheckoutWith(repositorySandbox, read),
         );
         return yield* use(
           {
-            place: vercelPlace(ask.session, running),
+            place: vercelPlace(ask.session, name, running),
             name: nameOfSandbox(name),
             checkoutPath: SANDBOX_LAYOUT.checkoutPath,
             finishCheckout,
           },
           beside,
-        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
+        );
       }),
 
-    // The bundle's upload and the caller's steps run at once, since none waits on another and the
-    // command waits on them all. The runner is kept in the sandbox's tags before it reads anything,
-    // so a later call finds it. A runner started but never configured is ended, and the caller
-    // undoes what it recorded of it, so the next message relaunches whole rather than writing to a
-    // runner that waits for its config.
+    // A sandbox under its session's name is run again as it was opened, through `getOrCreate`
+    // (`gotOn`): resumed where it stands, or made again on the session's drive where its snapshot is
+    // gone, set up with nothing to check out, since the drive holds the checkout. One opened before,
+    // under a UUID, resumes from its snapshot alone, and is gone once that lapsed.
+    resume: (found, agent) =>
+      Effect.gen(function* () {
+        if (found.name === agentSandboxName(found.session)) {
+          const drive = { name: agentDriveName(found.session), from: AGENT_DRIVE_FROM.KEPT };
+          const { name, running, created } = yield* gotOn(agent, found.session, drive, undefined);
+          return { place: vercelPlace(found.session, name, running), created };
+        }
+        const resumed = yield* Effect.result(api.resume(found.name));
+        if (Result.isFailure(resumed)) {
+          if (snapshotGone(resumed.failure)) return PLACE_RESUME.GONE;
+          return yield* resumed.failure;
+        }
+        return {
+          place: vercelPlace(found.session, found.name, resumed.success.currentSessionId),
+          created: false,
+        };
+      }),
+
+    // The sandbox is readied as root once the caller's steps are done, since the readying shares
+    // the checkout they finish, and the runner is started as `agent` after it. The runner is recorded
+    // in our store before it reads anything, so a later call finds it. A runner started but
+    // never configured is ended, and the caller undoes what it recorded of it, so the next message
+    // relaunches whole rather than writing to a runner that waits for its config.
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
-    // so only a repository added since the place opened is cloned here.
-    checkOutExtras: (place, target, agent, shared) =>
+    // so only a repository added since the place opened is cloned here. A runner already running
+    // keeps its repository credential through the clone, minted afresh, since each write is whole.
+    // Before a relaunch (not `shared`), the agent's own checkout is cloned first where the place
+    // holds none (`ownCheckoutRestored`).
+    checkOutMissing: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
+        if (!shared) yield* ownCheckoutRestored(place, target, agent);
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
-        yield* cloneAgentExtras(yield* checkoutIn(place.running, agent.userId), reads);
+        const beside = shared ? yield* agentFirewallSources(target, agent) : {};
+        yield* cloneAgentExtras(yield* checkoutIn(place, agent.userId, beside), reads);
         if (!shared) return;
-        const commandId = yield* api.start(place.running, {
+        const session = yield* api.session(sessionOfPlace(place));
+        const commandId = yield* session.start({
           command: "bash",
           args: ["-c", sharedCheckoutsScript(reads.map((read) => read.path))],
           sudo: true,
         });
-        const exit = yield* api.commandExit(place.running, commandId, SHARE_WAIT);
+        const exit = yield* session.commandExit(commandId, SHARE_WAIT);
         if (exit !== 0) return yield* new CheckoutRefused({ reason: NOT_SHARED });
       }),
 
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
-        const running = place.running;
-        const [digest, ready] = yield* Effect.all(
-          [
-            Effect.gen(function* () {
-              const bundle = yield* (yield* RunnerBundle).contents;
-              yield* api.writeFiles(running, [
-                { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
-              ]);
-              return createHash("sha256").update(bundle).digest("hex");
-            }),
-            launch.ready,
-          ],
-          { concurrency: "unbounded" },
-        );
-        const commandId = yield* api.start(running, {
-          command: "bash",
-          args: ["-c", launchScript(launch.extraCheckouts ?? []), LAUNCH_NAME, digest],
+        const session = yield* api.session(sessionOfPlace(place));
+        const ready = yield* launch.ready;
+        const readied = yield* session.run({
+          command: "sudo",
+          args: ["-n", "bash", "-c", readyScript(launch.extraCheckouts ?? [])],
+        });
+        if (readied.exitCode !== 0) return yield* new SandboxUnavailable({ detail: NOT_READIED });
+        const commandId = yield* api.startAsUser(launch.name, AGENT_USER, {
+          command: "node",
+          args: [RUNNER_SCRIPT],
           cwd: CODER.CHECKOUT_PATH,
-          // Note that the credential and the bearer ride in the environment alone, which the API's
-          // sudo keeps, as Vercel documents it does, on an image that honors that (`sandbox-image.ts`).
-          env: { ...SANDBOX_ENV, ...launch.env },
-          sudo: true,
+          env: {
+            ...SANDBOX_ENV,
+            HOME: `/home/${AGENT_USER}`,
+            USER: AGENT_USER,
+            LOGNAME: AGENT_USER,
+            ...launch.env,
+          },
         });
         const handle: RunnerHandle = { ...place, command: commandId };
         yield* Effect.gen(function* () {
           const { lines, mark } = yield* launch.firstLines(ready, handle);
-          yield* api.updateTags(
-            launch.name,
-            recordTags(place.session, launch.agentId, {
-              kind: RUNNER_RECORD.RUNNING,
-              runner: { handle, mark },
-            }),
+          yield* recordedIn(
+            {
+              session: place.session,
+              name: launch.name,
+              userId: launch.userId,
+              agentId: launch.agentId,
+            },
+            { kind: RUNNER_RECORD.RUNNING, runner: { handle, mark } },
           );
-          yield* api
-            .writeStdin(running, commandId, lines)
+          yield* session
+            .writeStdin(commandId, lines)
             .pipe(
-              Effect.tapError(() =>
-                diedAtStart(api, running, commandId, Object.values(launch.env)),
-              ),
+              Effect.tapError(() => diedAtStart(session, commandId, Object.values(launch.env))),
             );
         }).pipe(
           Effect.tapError(() =>
-            Effect.ignore(Effect.andThen(api.kill(running, commandId), launch.abandon(ready))),
+            Effect.ignore(Effect.andThen(session.kill(commandId), launch.abandon(ready))),
           ),
         );
         return { handle, ready };

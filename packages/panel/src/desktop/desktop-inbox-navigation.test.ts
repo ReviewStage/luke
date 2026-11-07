@@ -24,11 +24,10 @@ import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
-import { beforeAll, test } from "vitest";
+import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseInboxTask } from "../tasks/use-inbox-task.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -163,27 +162,33 @@ test("a link to an item the account's feed leaves out waits for its task's own r
   await settle();
 
   assert.doesNotMatch(waiting, /Not found/u);
-  assert.match(
-    page.querySelector(".inbox-view-items")?.textContent ?? "",
-    /Expire after 7 days\?/u,
+  await vi.waitFor(() =>
+    assert.match(
+      page.querySelector(".inbox-view-items")?.textContent ?? "",
+      /Expire after 7 days\?/u,
+    ),
   );
 });
 
 test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
   world.feedRefused = true;
   const { page } = mount();
-  await settle();
-  const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
-    (each) => each.textContent === "Retry",
+  // Note that the refusal, and then the feed read again, stand once they reach the feed's query.
+  const retry = await vi.waitFor(
+    () =>
+      [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
+        (each) => each.textContent === "Retry",
+      ) ?? assert.fail("the list offers to read again"),
   );
-  assert.ok(retry, "the list offers to read again");
 
   world.feedRefused = false;
   act(() => retry.click());
   await settle();
-  assert.ok(
-    listed(page).some((row) => row.endsWith(THRESHOLD.title)),
-    "the feed is read again and its items drawn",
+  await vi.waitFor(() =>
+    assert.ok(
+      listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+      "the feed is read again and its items drawn",
+    ),
   );
 });
 
@@ -617,7 +622,9 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   act(() => world.setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
   await settle();
 
-  assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
+  await vi.waitFor(() =>
+    assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | ")),
+  );
 });
 
 test("an agent with no plan whose items are all settled stays listed, as main lists it holding them", async () => {
@@ -722,11 +729,13 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
   act(() => world.chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
-  assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
-    "Bump the Node image?",
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
+      "Bump the Node image?",
+    ),
   );
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
 });
 
 test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
@@ -797,7 +806,9 @@ test("an item a link names under an agent with no task that its own read does no
   );
   await settle();
 
-  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  await vi.waitFor(() =>
+    assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u),
+  );
 });
 
 test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
@@ -864,9 +875,11 @@ test("a link to an item newer than its task's last read waits for the read of it
   await settle();
 
   assert.doesNotMatch(waiting, /Not found/u);
-  assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
-    "Page on-call too?",
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('.inbox-tasks [aria-current="page"] .ui-list-row-title')?.textContent,
+      "Page on-call too?",
+    ),
   );
 });
 
@@ -935,17 +948,18 @@ test("an item a link names under an agent nothing waits on any more, read before
   );
   await settle();
 
-  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  await vi.waitFor(() =>
+    assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u),
+  );
 });
 
-test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face with no attention mark; Needs you leaves it out", async () => {
+test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face; Needs you leaves it out", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
   const rows = listed(page);
   assert.ok(rows.includes("Quarantine the flaky test?"), rows.join(" | "));
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".ui-list-row-meta");
-  assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".ui-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
@@ -1164,7 +1178,7 @@ test("a task chosen narrows the Inbox to every item of its own, open and settled
   chooseView(page, "Addressed to", "Me");
   await settle();
 
-  act(() => chooseInboxTask(BILLING.id));
+  act(() => world.narrowTo(BILLING.id));
   await settle();
   const narrowed = rowTitles(page).toSorted();
   const menu = page.querySelector('button[aria-label="View options"]');
@@ -1275,16 +1289,17 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
   const { page } = mount([], { holding: [] });
   await settle();
   act(() => world.chooseFromOutside({ agentId: AGENT.id, itemId: THRESHOLD.id, opened: true }));
-  await settle();
-  assert.match(page.textContent ?? "", /This item could not be read\./u);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /This item could not be read\./u));
 
   world.agentReadFails = false;
   act(() => buttonSaying("Retry").click());
   await settle();
-  assert.equal(
-    itemPane(page).getAttribute("aria-label"),
-    THRESHOLD.title,
-    "the item is read again",
+  await vi.waitFor(() =>
+    assert.equal(
+      itemPane(page).getAttribute("aria-label"),
+      THRESHOLD.title,
+      "the item is read again",
+    ),
   );
 });
 

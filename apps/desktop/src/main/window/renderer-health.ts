@@ -1,5 +1,5 @@
 /**
- * renderer-health.ts -- how each window's renderer fares, as main hears it: a panel that stopped answering, once per episode, and a window grown past its memory bound.
+ * renderer-health.ts -- how each window's renderer fares, as main hears it: a panel that stopped answering, once per episode, a window grown past its memory bound, and the CPU each kind of process spends.
  *
  * Electron tells main when a window's page stops answering and when it
  * answers again; main reads each process's working set from the operating
@@ -11,7 +11,7 @@
 
 import path from "node:path";
 import { Clock, Duration, Effect, Queue, Schedule, Stream } from "effect";
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, type ProcessMetric } from "electron";
 
 /** How often every window's working set is read. */
 const MEMORY_SAMPLE_INTERVAL = Duration.seconds(60);
@@ -21,6 +21,46 @@ const WORKING_SET_BOUND_BYTES = 1.5 * 1024 ** 3;
 
 /** Electron's process metrics count memory in kilobytes. */
 const BYTES_PER_KILOBYTE = 1024;
+
+/** How often every process's CPU time is read. */
+const CPU_SAMPLE_INTERVAL = Duration.seconds(15);
+
+/** How long the samples gather before each kind of process's are summed up and handed on. */
+const CPU_SUMMARY_SPAN = Duration.minutes(5);
+
+/** The kinds of process whose CPU is summarized. */
+export const PROCESS_KIND = {
+  MAIN: "main",
+  RENDERER: "renderer",
+  GPU: "gpu",
+  UTILITY: "utility",
+} as const;
+export type ProcessKind = (typeof PROCESS_KIND)[keyof typeof PROCESS_KIND];
+
+/** Each kind by Electron's name for it; a process of any other type is left out. */
+const KIND_OF_PROCESS_TYPE: Partial<Record<ProcessMetric["type"], ProcessKind>> = {
+  Browser: PROCESS_KIND.MAIN,
+  Tab: PROCESS_KIND.RENDERER,
+  GPU: PROCESS_KIND.GPU,
+  Utility: PROCESS_KIND.UTILITY,
+};
+
+/** Where the app's windows stand as a sample is read: one has the focus, one shows without it, or none shows. */
+export const WINDOW_STATE = {
+  FOCUSED: "focused",
+  VISIBLE: "visible",
+  HIDDEN: "hidden",
+} as const;
+export type WindowState = (typeof WINDOW_STATE)[keyof typeof WINDOW_STATE];
+
+/** How many agents were working as a sample is read, by rung. */
+export const WORKING_AGENTS = {
+  NONE: "0",
+  ONE: "1",
+  FEW: "2-4",
+  MANY: "5+",
+} as const;
+export type WorkingAgents = (typeof WORKING_AGENTS)[keyof typeof WORKING_AGENTS];
 
 /** What a window says of its page's responsiveness, by Electron's event names, and its close, which ends the following. */
 const WINDOW_EVENT = {
@@ -60,6 +100,19 @@ export interface WorkingSetCrossing {
   readonly workingSetBytes: number;
 }
 
+/** One kind of process's CPU over a summary's span, as a percentage of one core. */
+export interface CpuSummary {
+  readonly process: ProcessKind;
+  /** The mean over the span's samples of every process of this kind together. */
+  readonly meanPercent: number;
+  /** The highest one sample read. */
+  readonly maxPercent: number;
+  /** Where the windows stood on most of the span's samples. */
+  readonly windowState: WindowState;
+  /** How many agents were working on most of the span's samples. */
+  readonly workingAgents: WorkingAgents;
+}
+
 /** The document a page has loaded, by its file's name, never its whole address. */
 function documentOf(page: FollowedPage): string {
   const url = page.getURL();
@@ -94,6 +147,34 @@ function windowEvents(window: FollowedWindow): Stream.Stream<WindowEvent> {
       { discard: true },
     ),
   ).pipe(Stream.takeUntil((event) => event === WINDOW_EVENT.CLOSED));
+}
+
+/** The rung a count of working agents stands on. */
+function workingAgentsRung(count: number): WorkingAgents {
+  if (count >= 5) return WORKING_AGENTS.MANY;
+  if (count >= 2) return WORKING_AGENTS.FEW;
+  if (count === 1) return WORKING_AGENTS.ONE;
+  return WORKING_AGENTS.NONE;
+}
+
+/** Where the app's windows stand now. */
+function windowStateNow(): WindowState {
+  const windows = BrowserWindow.getAllWindows().filter((window) => !window.isDestroyed());
+  if (windows.some((window) => window.isFocused())) return WINDOW_STATE.FOCUSED;
+  if (windows.some((window) => window.isVisible() && !window.isMinimized())) {
+    return WINDOW_STATE.VISIBLE;
+  }
+  return WINDOW_STATE.HIDDEN;
+}
+
+/** The value counted most often, the first counted winning a tie. */
+function mostCounted<T>(counts: ReadonlyMap<T, number>): T | undefined {
+  let most: T | undefined;
+  let mostCount = 0;
+  for (const [value, count] of counts) {
+    if (count > mostCount) [most, mostCount] = [value, count];
+  }
+  return most;
 }
 
 /**
@@ -167,5 +248,81 @@ export function sampleWindowMemory(
       over = now;
     });
     return Effect.asVoid(Effect.repeat(sample, Schedule.spaced(MEMORY_SAMPLE_INTERVAL)));
+  });
+}
+
+/**
+ * Reads every process's CPU time now and then, for as long as it runs, and
+ * hands `summarized` one summary per kind of process at the end of each
+ * span: its mean and its highest sample, with where the windows stood and
+ * how many agents worked on most of them. A sample is each process's CPU
+ * time since the one before, divided by the time between them, summed over
+ * the processes of a kind. Note that it reads Electron's cumulative CPU
+ * time rather than its `percentCPUUsage`, which counts from whatever last
+ * asked for the metrics, and `workingSetOf` above asks too; and that a
+ * process first seen on a sample counts from the next.
+ */
+export function sampleProcessCpu(
+  workingAgents: () => number,
+  summarized: (summary: CpuSummary) => void,
+): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    // Each process's cumulative CPU seconds on the last sample, by its pid, and when that was.
+    let last: { readonly at: number; readonly cpuSeconds: ReadonlyMap<number, number> } | undefined;
+    let spanStart: number | undefined;
+    let percents = new Map<ProcessKind, number[]>();
+    let windowStates = new Map<WindowState, number>();
+    let agentRungs = new Map<WorkingAgents, number>();
+    const count = <T>(counts: Map<T, number>, value: T) => {
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    };
+    const summarize = () => {
+      const windowState = mostCounted(windowStates) ?? WINDOW_STATE.HIDDEN;
+      const working = mostCounted(agentRungs) ?? WORKING_AGENTS.NONE;
+      for (const [process, samples] of percents) {
+        const total = samples.reduce((sum, each) => sum + each, 0);
+        summarized({
+          process,
+          meanPercent: total / samples.length,
+          maxPercent: Math.max(...samples),
+          windowState,
+          workingAgents: working,
+        });
+      }
+      percents = new Map();
+      windowStates = new Map();
+      agentRungs = new Map();
+    };
+    const sample = Effect.flatMap(Clock.currentTimeMillis, (at) =>
+      Effect.sync(() => {
+        const cpuSeconds = new Map<number, number>();
+        const byKind = new Map<ProcessKind, number>();
+        for (const metric of app.getAppMetrics()) {
+          const kind = KIND_OF_PROCESS_TYPE[metric.type];
+          const seconds = metric.cpu.cumulativeCPUUsage;
+          if (kind === undefined || seconds === undefined) continue;
+          cpuSeconds.set(metric.pid, seconds);
+          const before = last?.cpuSeconds.get(metric.pid);
+          if (last === undefined || before === undefined || at <= last.at) continue;
+          const percent = (100 * Math.max(0, seconds - before) * 1000) / (at - last.at);
+          byKind.set(kind, (byKind.get(kind) ?? 0) + percent);
+        }
+        if (last !== undefined) {
+          for (const [kind, percent] of byKind) {
+            const samples = percents.get(kind) ?? [];
+            samples.push(percent);
+            percents.set(kind, samples);
+          }
+          count(windowStates, windowStateNow());
+          count(agentRungs, workingAgentsRung(workingAgents()));
+        }
+        last = { at, cpuSeconds };
+        spanStart ??= at;
+        if (at - spanStart < Duration.toMillis(CPU_SUMMARY_SPAN)) return;
+        summarize();
+        spanStart = at;
+      }),
+    );
+    return Effect.asVoid(Effect.repeat(sample, Schedule.spaced(CPU_SAMPLE_INTERVAL)));
   });
 }

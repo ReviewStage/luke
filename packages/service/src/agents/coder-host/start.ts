@@ -2,17 +2,13 @@ import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@repo/database/core/query";
 import { accountExperimentOn, readAccountPreferences } from "@repo/database/models/account-store";
 import { agentOwnerFactsOf } from "@repo/database/models/agent-owners";
-import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   type AgentPlace,
-  archiveAgentCommitted,
   createAgent,
   discardAgent,
   nativeRuntimesOfReached,
-  readAgent,
   readAgentByKey,
-  readAgentContext,
   readNewestAgentPlace,
   taskPilotStands,
 } from "@repo/database/models/agent-store";
@@ -25,7 +21,6 @@ import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
   readTask,
-  readTaskWorkspace,
   type StoredTask,
 } from "@repo/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@repo/database/models/workspace-store";
@@ -35,11 +30,7 @@ import {
   type LineSender,
   storeWriter,
 } from "@repo/database/models/writer";
-import type {
-  StoredArchive,
-  StoredAutomationOrigin,
-  StoredStartedFrom,
-} from "@repo/database/schemas/agent";
+import type { StoredAutomationOrigin, StoredStartedFrom } from "@repo/database/schemas/agent";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
   firstMessageText,
@@ -47,13 +38,8 @@ import {
   type Replay,
   START_NOTE_HEADING,
   type StartNoteHeading,
-  stepsBytes,
-  summaryBytes,
 } from "@repo/features/agent-replay";
 import {
-  AGENT_ARCHIVER,
-  AGENT_ATTACHMENT_TYPE,
-  AGENT_BOUNDS,
   AGENT_KIND,
   AGENT_MACHINE,
   AGENT_SOURCE,
@@ -66,14 +52,13 @@ import {
   type AgentStartFrom,
   type AgentStartRequest,
   type AgentSummary,
-  CONTEXT_WINDOW,
   EXTRA_REPOSITORY_REFUSAL,
   LOCAL_AGENT_REFUSAL,
 } from "@repo/features/agent-wire";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
-import { agentName, automationRun } from "@repo/features/model-label";
+import { automationRun } from "@repo/features/model-label";
 import { agentFallbackChoice, type ModelChoice } from "@repo/features/models-wire";
-import { planMarkdown } from "@repo/features/plan-markdown";
 import { TASK_MODE, type Task } from "@repo/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
 import { EXPERIMENT } from "@repo/settings";
@@ -84,7 +69,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
   SERVER_AGENT_START_FAILURE,
-  SERVER_AGENT_START_KIND,
   SERVER_AGENT_STARTER,
   SERVER_EVENT,
   type ServerAgentStarter,
@@ -111,18 +95,18 @@ import {
   offeredToAccount,
   validateModelChoice,
 } from "../../providers/model-catalog.js";
-import { admitsPlanWriter } from "../agent-reach.js";
-import { eveContent, keptHandedImages } from "../attached-files.js";
-import { EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { keptHandedImages, turnContent } from "../attached-files.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { readMentioned } from "../mentioned-reads.js";
 import {
   type AgentSessions,
   describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveTypedTurn,
   RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
-import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
-import { readMentioned } from "../mentioned-reads.js";
+  SESSION_SEND_OUTCOME,
+  SESSION_TURN,
+  type TypedTurn,
+} from "../sessions/agent-sessions.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -133,32 +117,25 @@ import {
   LocalAgentRefused,
   markedUnconnected,
 } from "./agent-runtime-choice.js";
-import { contextWindowOf } from "./context.js";
 import type { NativeRuntime } from "./native-runtime.js";
-import {
-  type FittedReplay,
-  replayOf,
-  type StartFrom,
-  type StartWhere,
-  startFromOf,
-} from "./replay.js";
-import {
-  type FittedSteps,
-  filesBytes,
-  fitReplay,
-  fromEveEstimate,
-  measuredBoundBytes,
-  REPLAY_FIT,
-  replayBudgetBytes,
-  replayTokens,
-  type SummaryModelOf,
-  summarizeSteps,
-  withinWindow,
-} from "./replay-summary.js";
+import type { SummaryModelOf } from "./replay-summary.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { agentSummary, summaryAccounts, summaryDevices } from "./status.js";
 import { agentLineSender } from "./steer.js";
-import { canceledTurn, summaryOf } from "./stop.js";
+import { summaryOf } from "./stop.js";
+import {
+  type Inherited,
+  landedInheriting,
+  openedTakingOver,
+  type ReplayFitter,
+  type StartWhere,
+  TAKEOVER,
+  type Takeover,
+  type TakeoverRules,
+  takeoverOf,
+  takeoverRules,
+  whereOf,
+} from "./takeover.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -176,12 +153,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * on a task that names none the agent works in none and asks nothing of GitHub. The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
- * agent's eve session opens with the task's document as the Markdown Copy
- * would put on the clipboard, or with the ask's prompt in the plan's place
+ * agent's session opens with the task's document as the Markdown Copy
+ * would put on the clipboard, or with the ask's prompt in the description's place
  * and the files attached to it, which only a prompt carries; a note the
  * ask carries rides after either under a heading of its own, so what the
- * developer said beyond the plan reaches the agent in the same first
- * message rather than as a second one on its heels. Once eve has taken an
+ * developer said beyond the description reaches the agent in the same first
+ * message rather than as a second one on its heels. Once its harness has taken an
  * agent on a task, the task moves into progress from the backlog or to do
  * and never back (`beginTaskWork`), a move that fails logged rather than
  * the Start's failure; a Start by hand on a task no one is assigned to assigns it to
@@ -191,29 +168,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * workspace's installation as a task's is.
  * A Start from another agent of the task, or of the workspace where the
  * source has no task, to continue it or to fork it at one of its messages,
- * hands the new agent that agent's brief with its
- * transcript replayed after it (`replay.ts`) and its work, what it had not
- * pushed included, copied to a branch of its own (`snapshot.ts`), the note
- * after both with the files the note carries, and runs it on that agent's
- * choice and servers unless the ask names its own, and an agent started from an
- * automation's run is no run of that automation. Its mentions and servers
- * are read from the source's brief and the note, as a fresh start's would
- * be, and never from the replay. A continue is named after its source,
- * `<title> (continued)`, where the ask names no title and the source has
- * one, and once eve has taken it the source is stopped as a Stop stops it,
- * since the work goes on in the new agent; a fork leaves its source
- * running, and a source that could not be stopped is logged, never the
- * Start's failure. A continue of a pilot is a pilot too, and takes over
- * from its source: the account's agents the source started that stand
- * unarchived report to the new pilot from the transaction that makes it
- * (`createAgent`), those of any pilot that took over from it before among
- * them, and once stopped the source is archived, by the coding agent that
- * continued it or else the member, which is logged where it fails; a source
- * eve would not stop stands unarchived. A fork of a pilot takes over nothing.
- * A member's continue of an agent a pilot started, such as a sub-pilot,
- * reports to that pilot as its source did; every other Start records only
- * the coding agent whose `start_agent` asks as its starter, the one its note
- * tells it to report to.
+ * inherits from that agent what `takeover.ts` decides and reads: its brief,
+ * its transcript replayed, its work, its choice, servers, place, branch, and
+ * extra repositories where the ask names none, and for a continue its stop
+ * once its harness has taken the new agent, a pilot taking over from a pilot.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -229,7 +187,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * its automation's own prompt mentions, never those of the webhook body or
  * the GitHub event its prompt carries after it, since whoever wrote those
  * is not the agent's developer.
- * A blank Start, on a task, hands the agent nothing, neither the plan nor
+ * A blank Start, on a task, hands the agent nothing, neither the description nor
  * a prompt, and opens no session: its first words, typed or spoken, open
  * one as they reach it (`steer.ts`), and leaves its task's status where it
  * stands, since no work was handed. It runs on the choice any Start does.
@@ -244,13 +202,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * (`alsoRepositories`), kept after it as the agent's extras
  * (`agent-repositories.ts`), each cloned beside its checkout under one token
  * for them all, and only in the cloud, through the one installation of the
- * App that reaches its own, for a starter with the Several repositories
- * experiment on (`extraRepositoriesOf`); a Start that names none reads and
+ * App that reaches its own (`extraRepositoriesOf`); a Start that names none reads and
  * writes exactly what it did before.
- * An eve that did not take the opening leaves no agent behind, so the retry
+ * A harness that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh, and so does one that could not be
  * reached, a first line that could not be written, and a Start cut short
- * before eve took it, each said as an error naming the agent (`agent-log.ts`).
+ * before the harness took it, each said as an error naming the agent (`agent-log.ts`).
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
  * Settings writes. Where the agent runs is the place the ask names, else
@@ -262,25 +219,26 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * (`runtime-sessions.ts`).
  */
 
+export { placeOfAgent } from "./takeover.js";
 export type { StartWhere };
 
 /**
  * Where a Start puts the agent and what it is handed: on a plan, handed the
- * plan or a prompt in its place, or in a workspace with no plan, on a
- * repository, handed a prompt, since there is no plan to hand it; in either,
+ * description or a prompt in its place, or in a workspace with no plan, on a
+ * repository, handed a prompt, since there is no description to hand it; in either,
  * another agent of that place's brief and transcript in the prompt's place
  * where it takes over from one, and a note after any of them.
  */
 export type StartPlace = StartWhere & {
-  /** The developer's words in the plan's place; none for the plan, or for a Start from another agent, whose brief stands for them. */
+  /** The developer's words in the description's place; none for the description, or for a Start from another agent, whose brief stands for them. */
   readonly prompt: string | undefined;
-  /** What the developer said for the agent beyond the plan or the prompt; none where they said nothing more. */
+  /** What the developer said for the agent beyond the description or the prompt; none where they said nothing more. */
   readonly note?: string | undefined;
   /** Whose note it is; the developer's unless a coding agent started this one. */
   readonly noteHeading?: StartNoteHeading | undefined;
-  /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
+  /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the description or a prompt; none for an agent started afresh. */
   readonly from?: AgentStartFrom | undefined;
-  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
+  /** Whether the agent is handed nothing, neither the description nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
   readonly blank?: boolean | undefined;
   /** What the agent is: a coder unless named, or a pilot where a continue of a task's pilot asks for one. */
   readonly kind?: AgentKind | undefined;
@@ -336,7 +294,7 @@ export interface AgentStarted {
   readonly txid?: string;
 }
 
-/** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
+/** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to the agent's harness. */
 export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
@@ -430,14 +388,6 @@ interface StartLanding {
   readonly place: AgentPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
-}
-
-/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the first message it is written into, which `firstMessage` writes for a replay or none. */
-interface ReplayFitter {
-  readonly prompt: string | undefined;
-  readonly fit: (
-    firstMessage: (replay: Replay | undefined) => string,
-  ) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
 
 /**
@@ -544,10 +494,11 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, its brief or name in place of its document where the account has Descriptions off, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
+  takeover: Takeover,
   fitter: ReplayFitter | undefined,
   noteFiles: NoteFiles | undefined,
   landed: StoredTask | undefined,
@@ -568,7 +519,7 @@ const landingOf = Effect.fnUntraced(function* (
       place: {
         taskId: null,
         organizationId: place.organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: handed.text,
       },
       startedFrom: handed.startedFrom,
@@ -583,7 +534,7 @@ const landingOf = Effect.fnUntraced(function* (
   const { task, ownerId } = read.value;
   const mover = ownerId === userId ? userId : undefined;
   // A Start from another agent goes its source's way; only a fresh one can make the task's pilot.
-  const kind = place.from === undefined ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;
+  const kind = takeover === TAKEOVER.FRESH ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;
   if (place.blank === true) {
     return {
       startedFrom: undefined,
@@ -591,10 +542,15 @@ const landingOf = Effect.fnUntraced(function* (
       repository: task.repository,
       task,
       mover,
-      place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
+      place: { taskId: place.taskId, descriptionSnapshot: null, prompt: null, kind },
     };
   }
-  const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
+  // A starter with Descriptions off hands no description: the task's brief in its place, or else its name.
+  const words =
+    brief === undefined && !(yield* descriptionsOnFor(userId, kind))
+      ? (read.value.brief ?? task.name)
+      : brief;
+  const handed = yield* handedOf(words ?? descriptionMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
     workspaceId: task.workspaceId,
@@ -602,198 +558,11 @@ const landingOf = Effect.fnUntraced(function* (
     task,
     mover,
     place:
-      brief === undefined
-        ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null, kind }
-        : { taskId: place.taskId, planSnapshot: null, prompt: handed.text, kind },
+      words === undefined
+        ? { taskId: place.taskId, descriptionSnapshot: handed.text, prompt: null, kind }
+        : { taskId: place.taskId, descriptionSnapshot: null, prompt: handed.text, kind },
   };
 });
-
-/** How many of the note's files are text files, which eve is handed inlined, and how many images and PDFs. */
-function noteFilesOf(files: readonly AgentAttachment[]): NoteFiles {
-  const text = files.filter((file) => file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT).length;
-  return { text, other: files.length - text };
-}
-
-function utf8Bytes(text: string): number {
-  return new TextEncoder().encode(text).byteLength;
-}
-
-/**
- * The newest step the source's work measured, read down its lineage from
- * the source to the first agent that ran one, since a source that never ran
- * a step carried the work of the agent before it; nothing where none did or
- * none reads.
- */
-const measuredStepOf = Effect.fnUntraced(function* (userId: string, lineage: readonly Agent[]) {
-  for (const agent of lineage) {
-    const context = yield* readAgentContext(userId, agent.id).pipe(
-      Effect.orElseSucceed(() => Option.none()),
-    );
-    if (Option.isSome(context) && context.value.lastStep !== null) {
-      return { step: context.value.lastStep, compacted: context.value.compactedAt !== null };
-    }
-  }
-  return undefined;
-});
-
-/**
- * How the replay of the agent a Start takes over from is fitted: against
- * the window of the model the new agent runs on, as the catalog lists it,
- * less the instructions the source's work last measured, or a fallback
- * where it measured none, and within the context it last measured where
- * eve compacted it (`measuredBoundBytes`), with the steps that do not fit
- * summarized on the model `summaryModel` finds at the model's lowest
- * effort, where it finds one (`replay-summary.ts`); then the whole first
- * prompt, the files and what a mention may add included, held to the
- * window (`withinWindow`).
- */
-const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  from: StartFrom,
-  choice: ModelChoice,
-  summaryModel: SummaryModelOf | undefined,
-  files: readonly AgentAttachment[],
-): Effect.fn.Return<ReplayFitter, never, DatabaseServices | ModelCatalog> {
-  const catalog = yield* ModelCatalog;
-  const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
-  const windowTokens = contextWindowOf(
-    offered,
-    choice.model,
-    choice.contextWindow ?? CONTEXT_WINDOW.LONG,
-  );
-  const lowest = offered.find((model) => model.id === choice.model)?.efforts[0] ?? choice.effort;
-  const measured = yield* measuredStepOf(userId, from.lineage);
-  // Note that a native harness's step estimates no instructions (`runner-events-app.ts`), since
-  // the CLI composes its own, so it is told the fallback as a source that measured none is.
-  const estimated =
-    measured === undefined
-      ? 0
-      : measured.step.systemPromptTokens + measured.step.toolDefinitionTokens;
-  const instructions =
-    estimated === 0 ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS : fromEveEstimate(estimated);
-  const bound = measuredBoundBytes(
-    measured === undefined
-      ? undefined
-      : { inputTokens: measured.step.inputTokens, compacted: measured.compacted },
-    stepsBytes(from.steps) + summaryBytes(from.carriedSummary),
-  );
-  const model =
-    summaryModel === undefined ? undefined : yield* summaryModel(userId, choice, lowest);
-  // Note that what a mention adds is written after the replay is fitted, so its bound is held back for it.
-  const besideBytes = filesBytes(files) + MENTIONED_BOUNDS.PART_CHARS;
-  return {
-    prompt: from.prompt,
-    fit: (firstMessage) =>
-      Effect.gen(function* () {
-        const budget = replayBudgetBytes(
-          windowTokens,
-          instructions,
-          utf8Bytes(firstMessage(undefined)) + filesBytes(files),
-        );
-        const fitted = yield* fitReplay(
-          from.steps,
-          from.carriedSummary,
-          bound === undefined ? budget : Math.min(budget, bound),
-          (dropped, earlier) =>
-            model === undefined
-              ? Effect.succeed(Option.none())
-              : summarizeSteps(model, dropped, windowTokens, earlier),
-        );
-        const promptTokens = (steps: FittedSteps) =>
-          instructions +
-          replayTokens(
-            utf8Bytes(firstMessage(replayOf(from, steps.kept, steps.summary).replay)) + besideBytes,
-          );
-        const held = withinWindow(fitted, promptTokens, windowTokens);
-        if (held !== fitted) {
-          yield* Effect.logWarning(
-            `a replay was cut to fit the window: ${held.kept.length} of ${fitted.kept.length} steps kept, its summary ${held.summary === undefined ? "left out" : "kept"}`,
-          );
-        }
-        return replayOf(from, held.kept, held.summary);
-      }),
-  };
-});
-
-/** A prompt with the note after it, the words a Start from another agent reads mentions from; none where there is neither. */
-function wordsOf(prompt: string | undefined, note: string | undefined): string | undefined {
-  const words = [prompt, note].filter((each) => each !== undefined);
-  return words.length === 0 ? undefined : words.join("\n\n");
-}
-
-/** What a continue's title adds to its source's. */
-const CONTINUED_SUFFIX = " (continued)";
-
-/** That suffix, however many times a chain of continues stacked it on a title written by hand. */
-const CONTINUED_SUFFIXES = /(?: \(continued\))+$/u;
-
-/**
- * A continue's title from its source's: the source's, with any suffix a
- * continue already gave it taken off and cut to fit, and the suffix after
- * it; none where the source has no title, so the model names the continue.
- */
-function continuedTitle(source: string | null): string | undefined {
-  const base = (source ?? "").replace(CONTINUED_SUFFIXES, "").trim();
-  if (base === "") return undefined;
-  const room = AGENT_BOUNDS.MAX_TITLE_CHARS - CONTINUED_SUFFIX.length;
-  let kept = "";
-  // Note that the title is cut by code point, so a cut never leaves half of a character.
-  for (const char of base) {
-    if (kept.length + char.length > room) break;
-    kept += char;
-  }
-  return `${kept.trimEnd()}${CONTINUED_SUFFIX}`;
-}
-
-/**
- * The source of a continue stopped as a Stop stops it, over the eve the
- * Start reached: a turn it still runs canceled and stamped, and nothing
- * where it runs none or a Stop already stands on it. Its sandbox is
- * stopped by its own turn's end, as a Stop leaves it. Answers whether the
- * stop held, false where the source could not be stopped, which is logged,
- * since the new agent stands either way.
- */
-const stoppedSource = (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
-    HostedRefusal,
-    HttpClient.HttpClient | DatabaseServices
-  >,
-  source: Agent,
-  /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
-  by: string | undefined,
-) =>
-  canceledTurn(
-    eve,
-    storeWriter({ tools: CODER_TOOL_SET }),
-    source,
-    by === undefined ? {} : { by },
-  ).pipe(
-    Effect.as(true),
-    Effect.catch((refusal) =>
-      Effect.as(
-        Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
-        false,
-      ),
-    ),
-  );
-
-/**
- * The pilot a continue took over from archived once it is stopped, by the
- * coding agent whose `start_agent` continued it or else by the member, and
- * the transaction it was archived in; none where it was not, which is
- * logged, since the new pilot stands either way.
- */
-const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
-  const archiver: StoredArchive =
-    by === undefined
-      ? { by: AGENT_ARCHIVER.MEMBER, userId }
-      : { by: AGENT_ARCHIVER.AGENT, userId, agentId: by.id, agentName: agentName(by) };
-  return archiveAgentCommitted(userId, pilot.id, true, archiver).pipe(
-    Effect.map(Option.flatMap(({ txid }) => Option.fromNullishOr(txid))),
-    Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none<string>())),
-  );
-};
 
 /**
  * The agent a Start made discarded because its session never opened, so a
@@ -843,84 +612,6 @@ const starterOf = (ask: Pick<StartAsk, "startedBy" | "automationOrigin">) =>
     : automationRun(ask) !== undefined
       ? SERVER_AGENT_STARTER.AUTOMATION
       : SERVER_AGENT_STARTER.MEMBER;
-
-/**
- * The pilot a continue keeps as its starter: the one that started its
- * source, where that is a pilot, so a continued sub-pilot still reports up
- * to its parent; none for a source no pilot started.
- */
-const pilotStarterOf = (userId: string, source: Agent) =>
-  source.startedByAgentId === null
-    ? Effect.succeed(undefined)
-    : Effect.map(hostedStoreOrUnavailable(readAgent(userId, source.startedByAgentId)), (starter) =>
-        Option.isSome(starter) && starter.value.kind === AGENT_KIND.PILOT
-          ? starter.value.id
-          : undefined,
-      );
-
-/** The place an agent stands in, which a Start from it puts the new agent in: its task, or, where it has none, its workspace and its repository, or none where it worked in none. */
-export function placeOfAgent(
-  agent: Pick<Agent, "taskId" | "organizationId" | "repository">,
-): StartWhere {
-  if (agent.taskId !== null) return { taskId: agent.taskId };
-  const { organizationId, repository } = agent;
-  return repository === null
-    ? { taskId: null, organizationId, repository }
-    : { taskId: null, organizationId, repository };
-}
-
-/** The place alone, as a Start from another agent reads its source against it. */
-function whereOf(place: StartWhere): StartWhere {
-  if (place.taskId !== null) return { taskId: place.taskId };
-  return place.repository === null
-    ? { taskId: null, organizationId: place.organizationId, repository: null }
-    : { taskId: null, organizationId: place.organizationId, repository: place.repository };
-}
-
-/** Whether an agent a retry found under its key stands in the place asked, and the account still reaches that place. */
-const madeInPlace = Effect.fnUntraced(function* (
-  userId: string,
-  made: Agent,
-  place: StartWhere,
-): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
-  if (made.taskId !== place.taskId) return false;
-  if (place.taskId !== null) {
-    return Option.isSome(yield* hostedStoreOrUnavailable(readTaskWorkspace(userId, place.taskId)));
-  }
-  if (made.organizationId !== place.organizationId) return false;
-  return yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
-});
-
-/**
- * The agent a Start from `from`, its source and the message it forks at
- * where it names one, under `idempotencyKey` already made,
- * where it stands in the place asked, or, with none asked, the one it stands
- * in, and the account still reaches that place; none otherwise. Note that it
- * reads the source not at all, because a retry is answered with the agent
- * its key made though the source may be gone since: every Start from an
- * agent asks this first, by its task or by the source's own path.
- */
-export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  idempotencyKey: string,
-  from: Pick<AgentStartFrom, "agentId" | "messageId">,
-  place: StartWhere | undefined,
-): Effect.fn.Return<Option.Option<Agent>, HostedRefusal, DatabaseServices> {
-  const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, idempotencyKey));
-  // Note that only the same Start is answered: the same source, forked at the same message or continued.
-  const startedFrom = Option.isSome(made) ? made.value.startedFrom : null;
-  if (
-    Option.isNone(made) ||
-    startedFrom?.agentId !== from.agentId ||
-    startedFrom.messageId !== from.messageId
-  ) {
-    return Option.none();
-  }
-  if (!(yield* madeInPlace(userId, made.value, place ?? placeOfAgent(made.value)))) {
-    return Option.none();
-  }
-  return made;
-});
 
 /**
  * The runtime a new agent's conversation is recorded on, with its payer,
@@ -979,15 +670,15 @@ function sourceOf(carried: SlackLineMetadata | undefined): AgentSource | undefin
  */
 function openingOf(
   agent: Agent,
-  ask: Pick<StartAsk, "automationOrigin" | "startedBy" | "carried">,
+  ask: Pick<StartAsk, "automationId" | "automationOrigin" | "startedBy" | "carried">,
   brief: { readonly prompt: string | null },
-  /** The agent it takes over from, continued or forked; none for a fresh Start. */
-  taken: { readonly source: Agent; readonly continued: boolean } | undefined,
+  /** What the line says of the agent it takes over from, continued or forked; none for a fresh Start. */
+  taken: TakeoverRules["startLine"],
 ): { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata } {
-  const { automationOrigin, startedBy, carried } = ask;
+  const { automationId, automationOrigin, startedBy, carried } = ask;
   if (automationOrigin !== undefined) {
     return {
-      sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
+      sender: { kind: MESSAGE_SENDER.AUTOMATION, automationId, name: automationOrigin.name },
       metadata: automationLineMetadata(automationOrigin.firing),
     };
   }
@@ -1002,12 +693,12 @@ function openingOf(
     taken === undefined
       ? {
           channel: MESSAGE_CHANNEL.START,
-          brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
+          brief: brief.prompt === null ? START_LINE_BRIEF.DESCRIPTION : START_LINE_BRIEF.PROMPT,
         }
       : {
           channel: MESSAGE_CHANNEL.START,
-          brief: taken.continued ? START_LINE_BRIEF.CONTINUE : START_LINE_BRIEF.FORK,
-          source_agent_id: taken.source.id,
+          brief: taken.brief,
+          source_agent_id: taken.sourceAgentId,
         };
   return { sender, metadata };
 }
@@ -1015,8 +706,7 @@ function openingOf(
 /**
  * The first message of a Start, written as the line awaiting its turn under
  * a fresh key, as a steer's is (`steer.ts`), and its line id, which a native
- * runner is handed and names back as it takes the line, and eve's receipt
- * takes by its words. Its
+ * runner is handed and names back as it takes the line. Its
  * dispatch has already happened by the time it matters: the line is written
  * standing, and the Start's own open is what hands it over.
  */
@@ -1160,22 +850,19 @@ const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
  * The repositories a Start names beside its agent's own, as GitHub spells
  * them, each with the branch its checkout is cloned at, read before
  * anything is written; none for a Start that names none, which reads
- * nothing more. They are refused, by why, for a starter with the Several
- * repositories experiment off, for an agent with no repository of its own,
- * and for one that would run on a device; refused as invalid where one is
- * named twice, the agent's own among them; and the agent's own and every
+ * nothing more. They are refused, by why, for an agent with no repository
+ * of its own and for one that would run on a device; refused as invalid
+ * where one is named twice, the agent's own among them; and the agent's own and every
  * extra must be reached through the one installation of the App that
  * reaches the first, so one token reaches them all (`repositorySetReach`),
  * each refused by name where it is reached only on the starter's token or
  * through another installation, and as not reachable, with why, where
  * neither reaches it. A branch named is confirmed on GitHub as the agent's
- * own is. Those a start from another agent carries from it (`inherited`)
- * ask no experiment, since its starter turned it on already, and one whose
- * branch GitHub no longer holds is cloned at its default branch, as the
+ * own is. Of those a start from another agent carries from it
+ * (`inherited`), one whose branch GitHub no longer holds is cloned at its default branch, as the
  * agent's own inherited branch is (`startBranchOf`).
  */
 const extraRepositoriesOf = Effect.fnUntraced(function* (
-  userId: string,
   named: readonly AgentAlsoRepository[] | undefined,
   landing: Pick<StartLanding, "workspaceId" | "repository">,
   where: StartMachine,
@@ -1187,11 +874,6 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   if (named === undefined || named.length === 0) return undefined;
-  const on =
-    inherited ||
-    (yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.SEVERAL_REPOSITORIES)));
-  if (!on)
-    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
   const own = landing.repository;
   if (own === null) {
     return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY));
@@ -1243,91 +925,33 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
   );
 });
 
-/**
- * The repositories the source of a start from another agent works in beside
- * its own (`readAgentRepositories`), each at the branch its checkout was
- * cloned at, and with no pull request, which stays the source's; none where
- * it works in one, or where the new agent works in no repository of its own
- * for them to stand beside. One that is the new agent's own is left out.
- */
-const carriedExtrasOf = Effect.fnUntraced(function* (
-  userId: string,
-  source: Agent,
-  own: string | null,
-): Effect.fn.Return<readonly AgentAlsoRepository[] | undefined, HostedRefusal, DatabaseServices> {
-  if (own === null) return undefined;
-  const [, ...extras] = yield* hostedStoreOrUnavailable(readAgentRepositories(userId, source.id));
-  const carried = extras
-    .filter((each) => each.repository.toLowerCase() !== own.toLowerCase())
-    .map((each) =>
-      each.baseBranch === null
-        ? { repository: each.repository }
-        : { repository: each.repository, branch: each.baseBranch },
-    );
-  return carried.length === 0 ? undefined : carried;
-});
-
-/** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
+/** Starts the account's agent on the task or in the workspace, as above; its sessions are composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<AgentStarted, HostedRefusal | ModelChoiceRefused, StartServices> {
-  // Note that a fresh Start's retry is answered with the agent its key made before where it runs is
-  // decided, because its task may run elsewhere since, or its device be away, and the agent stands.
-  if (ask.from === undefined) {
-    const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
-    if (Option.isSome(made) && (yield* madeInPlace(userId, made.value, whereOf(ask)))) {
-      return { agent: made.value, created: false };
-    }
-  }
-  // Note that a retry from another agent is answered before its source is read, because the source
-  // may be gone since the first Start made the agent its key names.
-  if (ask.from !== undefined) {
-    const made = yield* startedFromBefore(userId, ask.idempotencyKey, ask.from, ask);
-    if (Option.isSome(made)) return { agent: made.value, created: false };
-    // A key that already names the agent of another Start is refused, never answered with that agent.
-    const other = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
-    if (Option.isSome(other)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  // A source is read against the place asked, and one that is not of it is refused, never dropped.
-  const from =
-    ask.from === undefined
-      ? undefined
-      : yield* startFromOf(
-          userId,
-          whereOf(ask),
-          ask.from,
-          ask.attachments ?? [],
-          ask.idempotencyKey,
-        );
-  // A continue stops its source, so a source its starter's plan pays for is continued by those the
-  // plan's policy admits; a fork leaves its source running and runs on the forker's own payer.
-  if (from !== undefined && from.told.messageId === undefined) {
-    yield* admitsPlanWriter(userId, from.source);
-  }
-  // An agent started from another runs on that agent's choice unless the Start names one.
-  const accepted = acceptedChoiceRead(userId, ask.choice ?? from?.choice);
-  // A fresh Start's landing does not wait on its choice, so the two are read together; one from
-  // another agent fits that agent's replay to the choice's window, so its landing waits on it.
-  const [{ choice, keys }, landing] =
-    from === undefined
-      ? yield* bothInOrder(accepted, landingOf(userId, ask, undefined, undefined, ask.landed))
-      : yield* Effect.flatMap(accepted, (read) =>
-          Effect.gen(function* () {
-            const fitter = yield* replayFitterOf(userId, from, read.choice, ask.summaryModel, [
-              ...from.attachments,
-              ...(ask.attachments ?? []),
-            ]);
-            // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
-            const noteFiles = noteFilesOf(ask.attachments ?? []);
-            return [read, yield* landingOf(userId, ask, fitter, noteFiles, ask.landed)] as const;
-          }),
-        );
+  // Note that a retry is answered with the agent its key made before where it runs is decided, or its
+  // source read, because its task may run elsewhere since, its device be away, or its source be gone.
+  const taken = yield* takeoverOf(userId, ask);
+  if (taken.made !== undefined) return { agent: taken.made, created: false };
+  const rules = takeoverRules(taken.from, ask);
+  const inherited: Inherited = { from: taken.from, rules };
+  // An agent started from another runs on that agent's choice unless the Start names one, and is
+  // landed with that agent's replay fitted to the choice's window.
+  const { read, landing, carried, pilotStarter } = yield* landedInheriting(
+    userId,
+    ask,
+    inherited,
+    acceptedChoiceRead(userId, rules.choice),
+    (model, keys) => startRuntimeOf(userId, model, keys),
+    (fitter, noteFiles) => landingOf(userId, ask, rules.kind, fitter, noteFiles, ask.landed),
+  );
+  const { choice, keys } = read;
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
   // Note that a task started with its agent reached the repository a moment ago, in the same
   // request and as the same member, so that reach stands rather than a second round of GitHub reads.
@@ -1342,22 +966,14 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : ask.reached !== undefined && ask.reached.repository === landing.repository
         ? Effect.succeed(ask.reached)
         : workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
-  const branchOf = startBranchOf(userId, ask, from?.source.startBranch ?? null, landing, member);
+  const branchOf = startBranchOf(userId, ask, rules.branch, landing, member);
   const brief = landing.place;
-  // The words a mention is read from: the prompt with any note after it, or a plan start's note
+  // The words a mention is read from: the prompt with any note after it, or a description start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
-  const words = from === undefined ? (brief.prompt ?? ask.note) : wordsOf(from.prompt, ask.note);
-  // Note that an automation's run names its own prompt, because the words an outsider wrote beside it
-  // switch on nothing, and so does an agent started from one, with the developer's note after it.
-  const serverWords =
-    ask.serverWords ??
-    (from === undefined ? words : wordsOf(from.serverWords ?? from.prompt, ask.note));
+  const { words, serverWords } = rules.mentionWords(brief.prompt);
   // The files of the source's brief that fit, then those the note carries; a fresh start's are its own,
-  // a prompt's or, on the plan, the note's, such as the pictures `start_agent` hands on.
-  const attachments =
-    from === undefined
-      ? (ask.attachments ?? [])
-      : [...from.attachments, ...(ask.attachments ?? [])];
+  // a prompt's or, on the description, the note's, such as the pictures `start_agent` hands on.
+  const { attachments } = rules;
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
   const mentions =
@@ -1371,28 +987,15 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         );
   // GitHub's answers and the store's reads of the mentions wait on none of each other, so they are asked together.
   const [[reached, branch], reads] = yield* bothInOrder(bothInOrder(reach, branchOf), mentions);
-  // A continue is named after its source where the ask names nothing; a fork is named as it starts.
-  const continued = from !== undefined && from.told.messageId === undefined;
-  const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // A continue of a pilot is a pilot, which takes over the agents its source started.
-  const takesOver = continued && from.source.kind === AGENT_KIND.PILOT ? from.source : undefined;
   const place =
-    takesOver !== undefined && brief.taskId !== null ? { ...brief, kind: AGENT_KIND.PILOT } : brief;
-  // A member's continue of an agent a pilot started reports to that pilot; an agent's reports to
-  // the agent that asks, whom its note names.
-  const pilotStarter =
-    continued && ask.startedBy === undefined
-      ? yield* pilotStarterOf(userId, from.source)
-      : undefined;
+    rules.takesOver !== undefined && brief.taskId !== null
+      ? { ...brief, kind: AGENT_KIND.PILOT }
+      : brief;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the place it names or else its source or its starter's default, and its model, and never change.
-  const where = yield* machineOfStart(userId, ask, from?.source, landing.task);
+  const where = yield* machineOfStart(userId, ask, rules.source, landing.task);
   // A start from another agent works in the repositories its source worked in beside its own, unless it names others.
-  const carried =
-    ask.alsoRepositories === undefined && from !== undefined
-      ? yield* carriedExtrasOf(userId, from.source, landing.repository)
-      : undefined;
   const extras = yield* extraRepositoriesOf(
-    userId,
     ask.alsoRepositories ?? carried,
     landing,
     where,
@@ -1410,8 +1013,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       startedFrom: landing.startedFrom,
       source: sourceOf(ask.carried),
       startedByAgentId: ask.startedBy?.id ?? pilotStarter,
-      takesOverFrom: takesOver?.id,
-      title,
+      takesOverFrom: rules.takesOver?.id,
+      title: rules.title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
@@ -1424,7 +1027,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       githubAccess: reached?.access,
       startBranch: branch,
       extraRepositories: extras,
-      disabledServers: ask.disabledServers ?? from?.disabledServers,
+      disabledServers: rules.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:
         serverWords === undefined ? [] : mentionedServers(serverWords, landing.repository),
@@ -1434,22 +1037,23 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
-  const handed = brief.prompt ?? brief.planSnapshot;
-  if (handed !== null) {
+  const handed = brief.prompt ?? brief.descriptionSnapshot;
+  const opening = Effect.gen(function* () {
+    if (handed === null) return;
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
-    // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
+    // that the agent stands from here, so an opening cut short before the harness was asked, as a caller's
     // deadline cuts a `start_agent`, discards it as a refused one does, in a finalizer the
     // interruption cannot cut short, and says so, rather than leaving an agent no session was opened
-    // for. One cut short while eve was asked is said alone, since its session may have opened, a
+    // for. One cut short while the harness was asked is said alone, since its session may have opened, a
     // native launch handed on past the answer, and the agent is that session's.
     let asked = false;
     const opened = yield* Effect.gen(function* () {
-      const sessions = yield* eve.pipe(
+      const sessions = yield* agentSessions.pipe(
         Effect.tapError((refusal) =>
           discardedAt(
             userId,
             agent,
-            `eve could not be reached to start a coding agent: ${refusal.error}`,
+            `the agent's runtime could not be reached to start a coding agent: ${refusal.error}`,
             refusal.error,
             { failure: SERVER_AGENT_START_FAILURE.UNREACHABLE, startedBy: starterOf(ask) },
           ),
@@ -1462,7 +1066,15 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         attachments,
       ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
       const mentioned =
-        words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+        words === undefined
+          ? undefined
+          : mentionedContext(
+              words,
+              landing.task,
+              reads,
+              undefined,
+              yield* descriptionsOnFor(agent.userId, agent.kind),
+            );
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
       const line = yield* openingLine(
@@ -1470,12 +1082,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         handed,
         files,
         mentioned,
-        openingOf(
-          agent,
-          ask,
-          brief,
-          from === undefined ? undefined : { source: from.source, continued },
-        ),
+        openingOf(agent, ask, brief, rules.startLine),
       ).pipe(
         Effect.tapError((refusal) =>
           discardedAt(
@@ -1487,20 +1094,20 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           ),
         ),
       );
-      // The runtime says why an open it refused was refused; eve that could not be asked is said here.
+      // The runtime says why an open it refused was refused; one that could not be asked is said here.
       asked = true;
       return yield* sessions
         .open({
           conversationId: agent.conversationId,
-          turn: EVE_HOST_TURN.TYPED,
-          message: eveContent(handed, files, mentioned),
+          turn: SESSION_TURN.TYPED,
+          message: turnContent(handed, files, mentioned),
           lineId: line,
         })
         .pipe(
-          Effect.catchTag("EveUnreachable", (failure) =>
+          Effect.catchTag("SessionUnreachable", (failure) =>
             Effect.as(
               agentFailureSaid(
-                `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
+                `the agent's runtime could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
                 failure._tag,
                 true,
               ),
@@ -1528,7 +1135,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       ),
       Effect.annotateLogs(agentLogIds(agent)),
     );
-    if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+    if (opened === undefined || opened.outcome !== SESSION_SEND_OUTCOME.ACCEPTED) {
       // An image still being prepared is answered by name, so the Start is made again under its key.
       const refusal = opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened);
       // A native harness says why it refused where its harness decided it (`runner-sessions.ts`), so
@@ -1555,20 +1162,23 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     yield* Effect.logInfo("a Start opened its agent's session").pipe(
       Effect.annotateLogs(agentLogIds(agent)),
     );
-  }
-  // A place named is kept only once the agent stands for good, so a refused opening changes no pick.
-  yield* keptPick(userId, ask.runsOn);
-  // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
-  const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;
+  }).pipe(
+    // A place named is kept only once the agent stands for good, so a refused opening changes no pick.
+    Effect.andThen(keptPick(userId, ask.runsOn)),
+  );
+  // The source's transcript is the new agent's own before its first open forks it, and a continue's
+  // source stops once it opened, since the work goes on in the new agent; a fork's goes on beside it.
+  const archived = yield* openedTakingOver(
+    agentSessions,
+    userId,
+    ask.startedBy,
+    inherited,
+    agent,
+    opening,
+  );
   // The Start answers the last transaction it committed in, which Realtime delivers after every
   // one before it, so a client waiting on it sees the agent and its task's standing alike.
-  let committed = txid;
-  // The pilot taken over leaves the task's agents once stopped, its work going on in the new one;
-  // one eve would not stop still runs, so it stands where its messages still reach it.
-  if (takesOver !== undefined && stopped) {
-    const archived = yield* archivedPilot(userId, takesOver, ask.startedBy);
-    if (Option.isSome(archived)) committed = archived.value;
-  }
+  let committed = Option.getOrElse(archived, () => txid);
   if (landing.task !== undefined) {
     // A blank agent was handed no work, so its task stands where it is.
     if (handed !== null) {
@@ -1592,12 +1202,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     {
       model: choice.model,
       effort: choice.effort,
-      start_kind:
-        from === undefined
-          ? SERVER_AGENT_START_KIND.FRESH
-          : continued
-            ? SERVER_AGENT_START_KIND.CONTINUE
-            : SERVER_AGENT_START_KIND.FORK,
+      start_kind: rules.startKind,
       is_from_automation: automationRun(ask) !== undefined,
       started_by: starterOf(ask),
       has_task: ask.taskId !== null,
@@ -1647,8 +1252,8 @@ export const requestedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<
-    AgentSessions<EveTypedTurn>,
+  agentSessions: Effect.Effect<
+    AgentSessions<TypedTurn>,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
@@ -1661,7 +1266,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
-  const { agent, created, txid } = yield* startAgent(eve, userId, {
+  const { agent, created, txid } = yield* startAgent(agentSessions, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,
     choice,
@@ -1674,6 +1279,8 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     call: request.call,
     runsOn: request.runsOn,
     alsoRepositories: request.alsoRepositories,
+    branch: request.branch,
+    title: request.title,
     summaryModel,
     reached,
     landed,

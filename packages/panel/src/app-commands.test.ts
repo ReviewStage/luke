@@ -9,6 +9,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAppCommand, useAppKeymap, useMenuCommands, useMenuOffers } from "./app-commands.js";
 import { useFocusedRowKeys } from "./desktop/task-actions.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * The menu bar's commands as the window runs them under a dialog: Back and
@@ -66,7 +67,7 @@ function drawWindow(moves: string[]): (dialog: boolean) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const draw = (dialog: boolean) =>
-    act(() => root.render(createElement(HistoryWindow, { moves, dialog })));
+    act(() => root.render(withQueryClient(createElement(HistoryWindow, { moves, dialog }))));
   draw(false);
   return draw;
 }
@@ -131,7 +132,7 @@ test("J and ⌘Z run their commands, and nothing while the press is typing into 
   const moves: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(KeyedWindow, { moves })));
+  act(() => root.render(withQueryClient(createElement(KeyedWindow, { moves }))));
   const field = document.querySelector("textarea") ?? assert.fail("the field");
   pressJ(document.body);
   pressJ(field);
@@ -188,7 +189,7 @@ test("U, P, and S act on the focused sidebar row over the open thing, even once 
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const draw = (opened: number) =>
-    act(() => root.render(createElement(RowWindow, { presses, opened })));
+    act(() => root.render(withQueryClient(createElement(RowWindow, { presses, opened }))));
   draw(0);
   pressLetter("u");
   assert.deepEqual(presses.splice(0), ["open read"]);
@@ -221,7 +222,7 @@ test("the window tells the menu bar the commands it offers as one set each time 
   roots.push(root);
   const draw = async (linked: boolean) => {
     await act(async () => {
-      root.render(createElement(OfferingWindow, { linked }));
+      root.render(withQueryClient(createElement(OfferingWindow, { linked })));
       await Promise.resolve();
     });
   };

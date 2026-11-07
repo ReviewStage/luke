@@ -16,7 +16,7 @@ import type { PortActKind, PortActResult } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -202,13 +202,22 @@ async function mount(
         ),
       ),
     );
+  // Note that the page stands read once the memories the host holds reach their query, unless the test holds the read out.
+  const read = () =>
+    readsNothing
+      ? Promise.resolve()
+      : vi.waitFor(() =>
+          assert.equal(container.textContent?.includes("Reading Vespin's memory"), false),
+        );
   draw(workspace, signedIn ? READER : undefined);
   await settle();
+  await read();
   return {
     page: container,
     show: async (next, readerId = READER) => {
       draw(next, readerId);
       await settle();
+      await read();
     },
   };
 }
@@ -320,7 +329,7 @@ test("Delete asks first, then deletes the memory for good and lists what the hos
       .map((request) => request.payload),
     [{ workspaceId: ACME.id, id: DEPLOYS.id }],
   );
-  assert.deepEqual(words(page), [TESTS.text]);
+  await vi.waitFor(() => expect(words(page)).toEqual([TESTS.text]));
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
@@ -411,7 +420,7 @@ test("several memories chosen are forgotten on one question, one after another, 
       { workspaceId: ACME.id, id: pricing.id },
     ],
   );
-  assert.deepEqual(words(page), [TESTS.text]);
+  await vi.waitFor(() => expect(words(page)).toEqual([TESTS.text]));
 });
 
 test("showing another workspace holds that workspace's memories in place of the first's", async () => {
@@ -440,22 +449,21 @@ test("a workspace Vespin has remembered nothing in says so", async () => {
 
 test("a read that fails offers to try again, and no account holds nothing", async () => {
   readFails = true;
-  const { page: failed } = await mount();
+  // Note that the signed-out page is drawn first, since a second page's subscription would follow the first page's read again.
   const { page: signedOut } = await mount(false);
+  assert.equal(signedOut.textContent, "Sign in to use this page.");
+  assert.deepEqual(
+    sent.filter((request) => request.kind === ACT_KIND.MEMORIES_FOLLOW),
+    [],
+    "the signed-out page holds nothing",
+  );
+  const { page: failed } = await mount();
 
   assert.match(failed.textContent ?? "", /Vespin's memory could not be read\./u);
   readFails = false;
   act(() => button(failed, "Retry").click());
   await settle();
-  assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
-  assert.equal(signedOut.textContent, "Sign in to use this page.");
-  assert.deepEqual(
-    sent
-      .filter((request) => request.kind === ACT_KIND.MEMORIES_FOLLOW)
-      .map((request) => request.payload),
-    [{ workspaceId: ACME.id }],
-    "the signed-out page holds nothing",
-  );
+  await vi.waitFor(() => assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]));
 });
 
 test("while the memories are read the page says Reading, which is neither its failure nor its empty line", async () => {

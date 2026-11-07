@@ -14,13 +14,13 @@ import {
  *
  * A date's chip in an editor opens its picker and names its node anew
  * (`mention-chip.tsx`'s `MentionNodeChip`). Words drawn rather than edited,
- * the plan's sections at rest or the reader's own comment, take a change
+ * the description's sections at rest or the reader's own comment, take a change
  * too, so a date chip drawn in them opens the same picker
  * (`date-picker.tsx`) without the editor: the place drawing the words hands
  * its chips a door (`WordsDatesContext`), and the chip names where its link
  * is written in the words (`LinkDrawer`'s `at`). As the picker closes, a
  * date changed is written over the link in place, Clear takes the link out,
- * and the place saves the words through its own door, the plan's or the
+ * and the place saves the words through its own door, the description's or the
  * comment's edit. Words that take no change hand no door, and their date
  * chips open nothing, as before.
  *
@@ -63,7 +63,7 @@ export function useWordsDatePicker(): ((opening: DatePickerOpening) => void) | u
  * A room laid over the words drawn in `children`, the date picker their
  * chips open hanging in it, and the opener of that picker handed to them
  * (`useWordsDatePicker`). Its box is the room's own, so whatever it stands
- * in, a plan's body or the Comments tab, the picker is placed from it.
+ * in, a description's body or its comments list, the picker is placed from it.
  */
 export function WordsDatePickerRoom({ children }: { children: ReactNode }): React.JSX.Element {
   const room = useRef<HTMLDivElement>(null);

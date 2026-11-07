@@ -1,6 +1,7 @@
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { Effect, Option, Path, Schema } from "effect";
+import { Effect, Option, Path, Schema, type Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { folderMoves } from "./folder-moves.js";
 
 /**
  * host-device-record.ts -- a machine's record of the device it enrolled as (`device.json` in `vespin-host`'s state): its id, its device secret, the service it enrolled with, and whether that service has since refused the secret.
@@ -50,6 +51,11 @@ export const readHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
   return decodeDevice(text);
 });
 
+/** A pulse each time the record may have moved, as the folder it is written in is watched, since a write moves a new file over it. */
+export const hostDeviceMoves = (
+  stateRoot: string,
+): Stream.Stream<void, never, FileSystem.FileSystem | Path.Path> => folderMoves(stateRoot);
+
 /** The record written whole, readable by its owner alone, beside the file and moved over it. */
 export const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, device: HostDevice) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -63,6 +69,13 @@ export const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, d
   yield* fileSystem.writeFileString(written, "", { flag: "wx", mode: 0o600 });
   yield* fileSystem.writeFileString(written, `${encodeDevice(device)}\n`);
   yield* fileSystem.rename(written, file);
+});
+
+/** The record removed, as an uninstall removes it with the state, so the machine reads as never enrolled. */
+export const removeHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  yield* fileSystem.remove(path.join(stateRoot, DEVICE_FILE), { force: true });
 });
 
 /** The record marked refused, where it still holds the secret given, so a record enrolled again since is left alone. */

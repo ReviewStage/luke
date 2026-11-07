@@ -12,8 +12,8 @@ import {
 import { createTask } from "../../models/task-store.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import {
-  agentTablesRename,
   getTestDB,
+  laterRenames,
   migrationStatements,
   openWorkspace,
   syncCaptureTakenOff,
@@ -56,7 +56,7 @@ const agentHolding = () =>
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         repository: null,
-        planSnapshot: "# Teammate invitations\n",
+        descriptionSnapshot: "# Teammate invitations\n",
         prompt: null,
         runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
@@ -74,7 +74,7 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
         const digest = randomUUID();
         const holding = yield* agentHolding();
         const bare = yield* agentHolding();
-        const agentTables = yield* agentTablesRename();
+        const agentTables = yield* laterRenames();
         for (const statement of [...syncCaptureTakenOff(), ...agentTables.back, ...UNDO]) {
           yield* sql.unsafe(statement);
         }

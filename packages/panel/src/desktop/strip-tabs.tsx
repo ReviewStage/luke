@@ -4,8 +4,6 @@ import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import {
   IconButton,
   type MenuRow,
-  MoreButton,
-  moreLabel,
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
@@ -13,7 +11,6 @@ import {
   STATUS_TONE,
   type StatusTone,
   Tooltip,
-  useMenu,
 } from "@repo/ui";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import {
@@ -27,7 +24,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
@@ -38,7 +34,7 @@ import {
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./action-menu.js";
+import type { MenuAction, MenuEnds, MenuEntry } from "./action-menu.js";
 import { type AgentMenuDoors, agentMenuGroups } from "./agent-actions.js";
 import { MenuTab } from "./tab-strip.js";
 
@@ -48,15 +44,15 @@ import { MenuTab } from "./tab-strip.js";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * the tab's own keeping first, Close, Close others, and Pin or Unpin, then
- * exactly what the tab's ⋯ offers on what the tab shows: the one agent menu
+ * what the tab offers on what it shows: the one agent menu
  * (`agent-actions.tsx`'s `agentMenuGroups`) over the doors the tab has, an
  * agent's whole menu, a subagent's Copy link and copies, a file's or a
  * page's Copy link; or, on the Plan tab, which shows the task, the task's
  * one document menu (`task-actions.tsx`), handed to the tab whole
- * (`DocumentMenu`), its Pin the task's own rather than the tab's. Those its
- * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
- * tab's own body hands up while it is drawn, a Pull request tab's Refresh
- * and Open on GitHub (`useHandedTabActions`). On a phone a tab's body draws
+ * (`DocumentMenu`), its Pin the task's own rather than the tab's, with what
+ * the tab's own body hands up while it is drawn, a Pull request tab's
+ * Refresh and Open on GitHub (`useHandedTabActions`). No ⋯ stands on either
+ * strip's toolbar: the right-click is every tab's menu. On a phone a tab's body draws
  * no bar of its own and hands every control of it up the same way, and the
  * strip hands the tab it shows up (`DoorsTab`'s `onShown`), so the
  * task's header's ⋯ offers them (`task-pane-switcher.tsx`). Each strip
@@ -204,11 +200,11 @@ export function tabActionItems(
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: the tab's own keeping first, Close and Close
  * others, and Pin or Unpin, which puts it in the sidebar or takes it out;
- * then exactly what its ⋯ offers on what it shows (`contentActionGroups`).
- * Close others is left out where nothing else would close, and on the Plan
- * tab, whose right-click is the task's menu alone.
+ * then what it offers on what it shows, its body's own hand first
+ * (`tabContentGroups`). Close others is left out where nothing else would
+ * close, and on the Plan tab, whose right-click is the task's menu alone.
  */
-function tabActionGroups(doors: TabDoors): MenuEntry[][] {
+function tabActionGroups(doors: TabDoors): TabActionGroups {
   const { onClose } = doors;
   const close: MenuAction[] =
     onClose === undefined
@@ -226,18 +222,17 @@ function tabActionGroups(doors: TabDoors): MenuEntry[][] {
           // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
           commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, doors.onCloseOthers, doors.chosen),
         ];
-  return [[...close, ...closeOthers, ...pin], ...contentActionGroups(doors)].filter(
+  return [[...close, ...closeOthers, ...pin], ...tabContentGroups(doors)].filter(
     (group) => group.length > 0,
   );
 }
 
 /**
- * The chosen tab's actions as its toolbar's ⋯ offers them: the one agent
+ * What a tab offers on what it shows: the one agent
  * menu (`agentMenuGroups`) over the doors the tab has, which act on what it
  * shows, or the task's document menu on the Plan tab, and none of the tab's
- * own keeping, Close, Close others, and Pin, which stay on the right-click
- * alone. An agent's own page offers the same
- * in its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is
+ * own keeping, Close, Close others, and Pin. An agent's own page offers the same
+ * on its title's right-click (`desktop-agent-page.tsx`), so a taskless agent is
  * acted on as a task's is. Note that the tab's pin is not the agent's,
  * which a taskless agent's row has, so it is left out of the menu's doors.
  */
@@ -259,7 +254,7 @@ export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[
 }
 
 /**
- * The chosen tab's actions as a strip's ⋯ offers them: what its body hands
+ * The chosen tab's actions on what it shows: what its body hands
  * up while it is drawn (`handed`), first, then `contentActionGroups`. Note
  * that a tab's Copy link leads even what its body hands up, alone in its
  * group, because Copy link leads every menu that holds one.
@@ -373,50 +368,6 @@ export function useTabActions(actions: TabActionGroups | undefined): void {
 }
 
 /**
- * The chosen tab's ⋯, drawn into its toolbar's slot (`slot`) rather than on
- * the tab, as an editor's ⋯ acts on its active editor: it drops the tab's
- * content actions (`contentActionGroups`) under itself and takes focus back
- * when its menu closes by key. Note that it is portaled from the tab rather
- * than lifted to the toolbar, because what its actions open, an agent's
- * name field and its Archive's question, stands with the tab.
- */
-function ToolbarTabActions({
-  label,
-  groups,
-  ends,
-  slot,
-  replayUnmasked,
-}: {
-  label: string;
-  groups: TabActionGroups;
-  /** What the menu draws beyond its items: the task's document menu names the task and says who created it. */
-  ends: MenuEnds | undefined;
-  slot: HTMLElement;
-  /** Whether its items' words are the app's own (`ActionMenu`'s): so while the tab's body hands up none of its own, whose words this module cannot vouch for. */
-  replayUnmasked: boolean;
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  const named = moreLabel(label);
-  return createPortal(
-    <>
-      <MoreButton thing={label} {...menu.trigger()} />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={named}
-          menu={menu.drawn}
-          subject={ends?.subject}
-          footer={ends?.footer}
-          groups={tabActionItems(groups, menu.drawn.opener)}
-          onClose={menu.close}
-          replayUnmasked={replayUnmasked}
-        />
-      )}
-    </>,
-    slot,
-  );
-}
-
-/**
  * Hands a phone's header the tab while it is the one shown: its name as it
  * changes, and what it offers on what it shows, read as the header's ⋯
  * opens, since those actions are made anew on every draw; and nothing once
@@ -470,50 +421,36 @@ export interface TabLook {
 }
 
 /**
- * One tab of either strip, whatever its kind, with its menu
- * (`tabActionGroups`), and, while it is the chosen one and acts on what it
- * shows, its ⋯ in its toolbar's `slot`, or, where a phone's header stands
- * for the toolbar, the tab handed up to it (`onShown`). A strip passes no
- * slot on a phone, whose header offers what the ⋯ would.
+ * One tab of either strip, whatever its kind, with its menu on a
+ * right-click (`tabActionGroups`), and, where a phone's header stands for
+ * the toolbar, the tab handed up to it while it is the one shown
+ * (`onShown`), whose ⋯ offers what the right-click would on what it shows.
  */
 export function DoorsTab({
   look,
   doors,
   editor,
   tabRef,
-  slot,
   onShown,
 }: {
   look: TabLook;
   doors: TabDoors;
   editor?: React.ReactNode;
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
-  slot?: HTMLElement | null | undefined;
   /** Hears the tab while it is the one shown, and nothing once it is not; none where no phone's header asks. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const content = tabContentGroups(doors);
   useShownTab(onShown, look, content);
   return (
-    <>
-      <MenuTab
-        {...look}
-        editor={editor}
-        tabRef={tabRef}
-        onClose={doors.onClose}
-        groups={tabActionGroups(doors)}
-        ends={doors.document}
-      />
-      {look.selected && content.length > 0 && slot !== undefined && slot !== null ? (
-        <ToolbarTabActions
-          label={look.label}
-          groups={content}
-          ends={doors.document}
-          slot={slot}
-          replayUnmasked={doors.handed === undefined}
-        />
-      ) : null}
-    </>
+    <MenuTab
+      {...look}
+      editor={editor}
+      tabRef={tabRef}
+      onClose={doors.onClose}
+      groups={(opener) => tabActionItems(tabActionGroups(doors), opener)}
+      ends={doors.document}
+    />
   );
 }
 

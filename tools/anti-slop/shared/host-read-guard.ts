@@ -4,16 +4,16 @@ import { isTestFile } from "./kept-guard.ts";
 
 /**
  * host-read-guard.ts -- what the `no-follow-outside-host-read` rule reads:
- * the one module a surface reads server data through, the door it holds its
+ * the modules a surface reads server data through, the door they hold their
  * reads open by, and the kinds that read, as `@repo/host`'s `PORT_ACT_USE`
  * declares them.
  */
 export const HOST_READ_GUARD_RULE = "anti-slop/no-follow-outside-host-read";
 
-/** The hook every surface reads server data through, the one module that may open a read. */
-const HOOK_FILE = "packages/panel/src/use-host-read.ts";
+/** The module a surface reads server data through, the only one that may open a read: the live reads' TanStack Query queries. */
+const READ_FILES: ReadonlySet<string> = new Set(["packages/panel/src/live-reads.ts"]);
 
-/** The hook's door: it opens and polls the streams the hook holds, and only the hook imports it. */
+/** The live reads' door: it opens and polls the streams their queries hold, and only `live-reads.ts` imports it. */
 const DOOR_FILE = "packages/panel/src/act-stream.ts";
 
 /** The door's module, by its name however the path to it is spelled, with or without an extension. */
@@ -25,16 +25,16 @@ export function isWatchedSource(file: string): boolean {
     (file.startsWith("packages/panel/src/") || file.startsWith("packages/ui/src/")) &&
     TYPESCRIPT_SOURCE.test(file) &&
     !isTestFile(file) &&
-    file !== HOOK_FILE
+    !READ_FILES.has(file)
   );
 }
 
-/** Whether a file is the hook's door, which opens and polls what the hook holds and so reads nothing of its own. */
+/** Whether a file is the live reads' door, which opens and polls what their queries hold and so reads nothing of its own. */
 export function isHoldDoor(file: string): boolean {
   return file === DOOR_FILE;
 }
 
-/** Whether an import's specifier names the hook's door, from whatever folder it is spelled. */
+/** Whether an import's specifier names the live reads' door, from whatever folder it is spelled. */
 export function namesHoldDoor(specifier: string): boolean {
   return DOOR_MODULE.test(specifier);
 }
@@ -49,7 +49,7 @@ const READ_KINDS: ReadonlySet<string> = new Set(
     .map(([name]) => name),
 );
 
-/** Whether an act kind reads data a surface shows, which only `useHostRead` may ask. */
+/** Whether an act kind reads data a surface shows, which only a live read's query may ask. */
 export function isReadKind(name: string): boolean {
   return READ_KINDS.has(name);
 }

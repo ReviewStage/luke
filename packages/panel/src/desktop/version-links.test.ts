@@ -2,15 +2,16 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -20,9 +21,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * A plan's version has a link of its own: a version's row's menu copies its
- * plan's address under the version's number, which opens the plan's version
- * history on it, and says Link copied. Synthetic plan.
+ * A description's version has a link of its own: a version's row's menu copies its
+ * plan's address under the version's number, which opens the description's version
+ * history on it, and says Link copied. Synthetic description.
  */
 
 const ignore = (): void => undefined;
@@ -35,11 +36,11 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the plan by the notetaker. */
+/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -61,7 +62,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its versions read. */
+/** The description's version history over the window, its versions read. */
 function drawn(): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -81,39 +82,41 @@ function drawn(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        "div",
-        null,
-        createElement(ToastHost),
-        createElement(DesktopVersionHistory, {
-          sidebar: {
-            collapsed: false,
-            compact: false,
-            overlay: SIDEBAR_OVERLAY.CLOSED,
-            width: 264,
-            onToggle: ignore,
-            onOverlay: ignore,
-            onResize: ignore,
-            staged: false,
-          },
-          room: SHELL_ROOM.WIDE,
-          history: {
-            canGoBack: false,
-            canGoForward: false,
-            onBack: ignore,
-            onForward: ignore,
-            steps: { back: [], forward: [] },
-            onGoTo: ignore,
-          },
-          subject: taskVersionSubject(tasks),
-          account: {
-            status: ACCOUNT_STATUS.SIGNED_IN,
-            email: "dev@example.com",
-            provider: "github",
-          },
-          onExit: ignore,
-          onRestored: ignore,
-        }),
+      withQueryClient(
+        createElement(
+          "div",
+          null,
+          createElement(ToastHost),
+          createElement(DesktopVersionHistory, {
+            sidebar: {
+              collapsed: false,
+              compact: false,
+              overlay: SIDEBAR_OVERLAY.CLOSED,
+              width: 264,
+              onToggle: ignore,
+              onOverlay: ignore,
+              onResize: ignore,
+              staged: false,
+            },
+            room: SHELL_ROOM.WIDE,
+            history: {
+              canGoBack: false,
+              canGoForward: false,
+              onBack: ignore,
+              onForward: ignore,
+              steps: { back: [], forward: [] },
+              onGoTo: ignore,
+            },
+            subject: taskVersionSubject(tasks),
+            account: {
+              status: ACCOUNT_STATUS.SIGNED_IN,
+              email: "dev@example.com",
+              provider: "github",
+            },
+            onExit: ignore,
+            onRestored: ignore,
+          }),
+        ),
       ),
     ),
   );

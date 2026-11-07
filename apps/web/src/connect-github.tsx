@@ -30,6 +30,7 @@ import {
   TEXT_LINK_LOOK,
   TextLink,
 } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { landingDescription, useConnectReturn } from "./connect-return";
@@ -143,6 +144,22 @@ function settledView(step: ConnectStep): View | undefined {
 }
 
 /**
+ * Where the page stands: settled by its address, a sign-in a browser with no
+ * session needs before it starts, or the connect's answer once it is in.
+ */
+function viewOf(
+  step: ConnectStep,
+  sessionStands: boolean,
+  connecting: { readonly isIdle: boolean; readonly data: View | undefined },
+): View {
+  const settled = settledView(step);
+  if (settled !== undefined) return settled;
+  if (!connecting.isIdle) return connecting.data ?? WORKING;
+  if (!sessionStands) return signIn("Sign in to connect GitHub", SIGN_IN_BODY);
+  return WORKING;
+}
+
+/**
  * The page opens on GitHub's mark, badged once the connect has ended: the
  * title says where the connect stands, the description what to do about it,
  * with a link that offers a refused connect again, the body holds the
@@ -152,10 +169,11 @@ function settledView(step: ConnectStep): View | undefined {
  */
 function ConnectGitHub(): React.JSX.Element {
   const [step] = useState(() => connectStepFromSearch(window.location.search));
-  const [view, setView] = useState<View>(() => settledView(step) ?? WORKING);
   const session = authClient.useSession();
   const started = useRef(false);
+  const connecting = useMutation({ mutationFn: connect });
   const signInChoices = useSocialSignIn(authClient);
+  const view = viewOf(step, session.isPending || Boolean(session.data), connecting);
   const ended = view.kind === VIEW.SAID ? view.words : undefined;
   const { back, open } = useConnectReturn({
     landed: ended !== undefined,
@@ -163,15 +181,12 @@ function ConnectGitHub(): React.JSX.Element {
   });
 
   useEffect(() => {
-    if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || started.current) return;
-    if (!session.data) {
-      setView(signIn("Sign in to connect GitHub", SIGN_IN_BODY));
-      return;
-    }
+    if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || !session.data) return;
+    if (started.current) return;
     // Note that the work runs once per load: a reload claims the intent again and retries.
     started.current = true;
-    void connect(step.intent).then(setView);
-  }, [step, session.isPending, session.data]);
+    connecting.mutate(step.intent);
+  }, [step, session.isPending, session.data, connecting.mutate]);
 
   const retry = step.kind === CONNECT_STEP.FAILED ? step.retry : undefined;
   const body =

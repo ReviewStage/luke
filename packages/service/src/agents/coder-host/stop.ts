@@ -21,6 +21,7 @@ import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
 import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@repo/features/agent-wire";
 import { Clock, DateTime, Effect, Exit, Result } from "effect";
 import type { HttpClient } from "effect/http";
+import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -31,8 +32,8 @@ import { admitsPlanWriter } from "../agent-reach.js";
 import {
   type AgentSessions,
   describeUnreachable,
-  EVE_CANCEL_OUTCOME,
-} from "../eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+} from "../sessions/agent-sessions.js";
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
@@ -54,7 +55,7 @@ import {
  * stops one as the deployment acting for the member the caller acts for
  * (`../agent-tools.ts`). The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
- * one stopped in its place, and an eve that refuses leaves the row as it
+ * one stopped in its place, and a harness that refuses leaves the row as it
  * stood and the caller unavailable. An agent stopped for good, as an
  * archive or a delete wants it, must also have no turn coming that no
  * Stop could name yet: a session still coming up, or a line awaiting the
@@ -131,21 +132,21 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
+/** Whether the turn is one a Stop has something to stop: still running, with the runtime's id to name, and no Stop on it yet. */
 function stoppable(turn: AgentLatestTurn | undefined): turn is AgentLatestTurn & {
-  readonly eveTurnId: string;
+  readonly runtimeTurnId: string;
 } {
   return (
     turn !== undefined &&
     RUNNING_TURN_STATUSES.has(turn.status) &&
-    turn.eveTurnId !== null &&
+    turn.runtimeTurnId !== null &&
     turn.cancelRequestedAt === null
   );
 }
 
 /** What made a Stop, written on the turn's row beside its instant (`TurnCancelRequest`): none of it for a member's Stop. */
 export interface TurnStop {
-  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it. */
+  /** The id of the tool call the Stop is made under, where an agent's `stop_agent` made it. */
   readonly key?: string;
   /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or the app's. */
   readonly by?: string;
@@ -163,18 +164,36 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* canceledTurn(routedSessions(account), writer, agent, stop);
 });
 
+/** A Stop of the agent as every surface makes it, the app's button, `stop_agent`, and the command line alike: `stoppedTurn`, counted under the account where it stopped a turn. */
+export const stoppedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Effect.Effect<StoreWriter>,
+  account: string,
+  agent: Agent,
+  stop: TurnStop = {},
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  const stopped = yield* stoppedTurn(writer, account, agent, stop);
+  if (stopped) {
+    yield* recordServerEvent(
+      SERVER_EVENT.AGENT_STOP,
+      { userId: account, workspaceId: agent.organizationId },
+      { agent_kind: agent.kind },
+    );
+  }
+  return stopped;
+});
+
 /**
- * eve's cancel of the agent's turn under way, over the eve given, then the
- * row's stamp, and whether eve took the cancel; false where no turn runs
- * that a Stop has to stop, a turn already stamped among them, so a second
- * Stop asks eve nothing. A turn eve says ended meanwhile is stamped all the
- * same but answered false, since this Stop stopped nothing. A tool call's
- * key is written beside the stamp only where eve took the cancel, so the
+ * The harness's cancel of the agent's turn under way, over the sessions given,
+ * then the row's stamp, and whether the harness took the cancel; false where no
+ * turn runs that a Stop has to stop, a turn already stamped among them, so a
+ * second Stop asks the harness nothing. A turn the harness says ended meanwhile
+ * is stamped all the same but answered false, since this Stop stopped nothing.
+ * A tool call's key is written beside the stamp only where the harness took the cancel, so the
  * call run again finds the turn it stopped, and one that stopped nothing is
  * run again as it first ran.
  */
 export const canceledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<
+  agentSessionsOf: Effect.Effect<
     Pick<AgentSessions, "cancel">,
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
@@ -189,32 +208,33 @@ export const canceledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* hostedStoreOrUnavailable(replaceAgentWakeups(agent.id, []));
   // Every Stop, the developer's, a Continue's, another agent's, or a rewind's, pauses what is queued behind the
   // turn, so nothing more goes until Resume. Note that it pauses before the cancel goes out, because the turn's
-  // end may land before eve answers it, and would hand on a queue not yet paused.
+  // end may land before the harness answers it, and would hand on a queue not yet paused.
   yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return false;
   // The cancel names the turn the row was written for, never the session's turn under way, so a
-  // turn that ended between the read above and eve's answer is answered `no_active_turn` and
+  // turn that ended between the read above and the harness's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
-  const eve = yield* eveOf;
-  const canceled = yield* eve
-    .cancel(sessionId, turn.eveTurnId)
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to stop a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          { outcome: EVE_CANCEL_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+  const agentSessions = yield* agentSessionsOf;
+  const canceled = yield* agentSessions.cancel(sessionId, turn.runtimeTurnId).pipe(
+    Effect.catchTag("SessionUnreachable", (failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `the agent's runtime could not be reached to stop a coding agent: ${describeUnreachable(failure)}`,
         ),
+        {
+          outcome: SESSION_CANCEL_OUTCOME.FAILED,
+          status: HOSTED_HTTP_STATUS.BAD_GATEWAY,
+        } as const,
       ),
-    );
-  if (canceled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+    ),
+  );
+  if (canceled.outcome === SESSION_CANCEL_OUTCOME.FAILED) {
     return yield* Effect.fail(failedCallRefusal(canceled));
   }
-  const accepted = canceled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
+  const accepted = canceled.outcome === SESSION_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;
   const stamped = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
@@ -255,7 +275,7 @@ const AGENT_STOP_CONCURRENCY = 3;
  * Every agent stopped for good, as `stoppedForGood` stops each, a few at
  * once; the first refusal answered once every Stop has settled.
  * Note that no Stop is cut off by another's refusal, because one cut off
- * between eve's cancel and the row's stamp would leave a turn canceled
+ * between the harness's cancel and the row's stamp would leave a turn canceled
  * that the row still reads as running.
  */
 export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -285,7 +305,7 @@ export const everyStopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * Whether `stoppedForGood` would stop the agent rather than refuse it, read
  * before any Stop is sent: no line awaits the turn it opens, it is past its
- * start, and a turn still running carries eve's id for a Stop to name or a
+ * start, and a turn still running carries the runtime's id for a Stop to name or a
  * Stop already. A caller stopping several agents as one asks this of every
  * one first, so a refusal cancels nobody's work.
  */
@@ -309,7 +329,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
  * The agents as the sidebar reads them, under their conversations' locks as a
  * task's finish and its move to Done hold them (`tasks/task-finish.ts`), each
  * beside its newest turn: a line awaiting the turn it opens reads as running,
- * and a turn whose Stop is on its way to eve as stopped. Note that the agents
+ * and a turn whose Stop is on its way to its harness as stopped. Note that the agents
  * are read by one id list, because the transaction holds one connection and a
  * read per agent only adds trips.
  */
@@ -339,7 +359,7 @@ const settledStatus = (status: AgentStatus) =>
 /**
  * Whether every agent stands stopped, as `standingTurns` reads each: none
  * starting, nor running, nor holding a line awaiting its turn, a turn whose
- * Stop is on its way to eve reading as stopped, as `stoppedForGood` reads it.
+ * Stop is on its way to its harness reading as stopped, as `stoppedForGood` reads it.
  */
 export const standsStopped = (agents: readonly TaskStandingAgent[]) =>
   Effect.map(standingTurns(agents), (read) => read.every(({ status }) => settledStatus(status)));

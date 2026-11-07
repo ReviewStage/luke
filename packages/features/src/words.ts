@@ -48,14 +48,22 @@ export const VERB = {
 } as const;
 
 /**
- * What the account's connected services are called as a heading or a label:
- * Settings' page, the agent box's popover and ⋯, the @ menu, and the
- * automation editor all say it. "MCP server" names only a custom server added
- * by its URL, never one of these.
+ * What the account's connected services are called where they are connected:
+ * Settings' Integrations page and the setup that leads to it.
  */
 export const INTEGRATION_LABEL = {
   one: "Integration",
   many: "Integrations",
+} as const satisfies Noun;
+
+/**
+ * What those same services are called where an agent is handed them: the
+ * agent box's + menu and popover, the @ menu, and the automation editor's
+ * field, since an agent reaches each one as an MCP server.
+ */
+export const MCP_SERVER_LABEL = {
+  one: "MCP server",
+  many: "MCP servers",
 } as const satisfies Noun;
 
 /**
@@ -104,6 +112,20 @@ export function andList(names: readonly string[]): string {
 /** Names as a choice joins them: "Linear", "Linear or Notion", "Linear, Notion, or Sentry". */
 export function orList(names: readonly string[]): string {
   return OR.format(names);
+}
+
+/**
+ * The parts `orList` joins `count` items with, in order: each item by its
+ * index, and the words between them (", ", " or ", ", or "), so a line can
+ * draw each item as something other than words, a person's chip say.
+ */
+export function orListParts(
+  count: number,
+): readonly ({ readonly item: number } | { readonly words: string })[] {
+  const keys = Array.from({ length: count }, (_, index) => String(index));
+  return OR.formatToParts(keys).map((part) =>
+    part.type === "element" ? { item: Number(part.value) } : { words: part.value },
+  );
 }
 
 /** What a page that needs an account says to someone not signed in. One line for every page, so none is worded its own way. */
@@ -155,11 +177,16 @@ export function selectedWords(count: number): string {
   return `${formatCount(count)} selected`;
 }
 
-/** What a selection says of a row in it, the selection bar's Clear, and the name that Clear is heard by. */
+/** What a selection says of a row in it, the selection bar's Clear, the name that Clear is heard by, and the head's box and the menu beside it. */
 export const SELECTION_WORDS = {
   SELECTED: "Selected",
   CLEAR: "Clear",
   CLEAR_SELECTION: "Clear selection",
+  SELECT_ALL: "Select all",
+  SELECT_NONE: "Select none",
+  SELECT: "Select",
+  ALL: "All",
+  NONE: "None",
 } as const;
 
 /** An Inbox item as a count of arrivals names it: "1 new item", "2 new items". */

@@ -42,7 +42,7 @@ import {
  * moment the thread starts, so it is kept open until then. A call to our own
  * MCP server is named as our tool and its answer read as the JSON that
  * tool answers, a picture in it standing in for its bytes; a call to an
- * integration's own server is stored as eve's call of that integration's
+ * integration's own server is stored as the retired runtime's call of that integration's
  * tool is, so it draws with the service's mark and the tool's own name. Each shape is
  * read with a schema of the fields this reads alone, so a field Codex adds
  * changes nothing here, and a notification no schema fits is no moment.
@@ -110,6 +110,14 @@ const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
   ["invalid_user", PLAN_STATUS.INVALID],
   ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
 ]);
+
+/**
+ * What Codex 0.163.0 says of a plan its ChatGPT backend answers
+ * `usage_not_included` for (`CodexErr::UsageNotIncluded`), a plan that
+ * does not include it: an account not eligible, though Codex files it under
+ * `usageLimitExceeded`, which would otherwise read as a limit that resets.
+ */
+const PLAN_NOT_INCLUDED = "To use Codex with your ChatGPT plan, upgrade";
 
 /** The status OpenAI refuses a credential with, which a failed connection carries in its `codexErrorInfo`. */
 const HTTP_UNAUTHORIZED = 401;
@@ -281,7 +289,7 @@ function mcpAnswerText(content: readonly WireValue[], workspaceTool: boolean): s
 /**
  * The name and input a call to an MCP server is stored under: our tool's own
  * for our own server; for an integration's own server, its integration's
- * fixed name and envelope, as eve's nested call of the tool is stored
+ * fixed name and envelope, as the retired runtime's nested call of the tool is stored
  * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
  */
 function storedMcpCall(
@@ -673,6 +681,7 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const failure = words.length === 0 ? "turn_failed" : words.join(" ");
   const found = new Set([
     planStatusOfInfo(error?.codexErrorInfo),
+    said.includes(PLAN_NOT_INCLUDED) ? PLAN_STATUS.INELIGIBLE : undefined,
     ...quoted.map(([, , reason]) => PLAN_REASON_STATUS.get(reason ?? "")),
   ]);
   const plan = PLAN_REFUSAL_ORDER.find((status) => found.has(status));

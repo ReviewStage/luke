@@ -7,18 +7,29 @@
  * encodes the handler's value into the bytes the wire carries
  * (`packages/service/src/orpc/base.ts`); a JSON body is read strictly, its
  * params apart from it (`exactBodyInput`).
+ *
+ * The list, a start, a change, and the tree's writes (a block, a parent, a
+ * relation moved) declare the refusals their handlers answer
+ * (`packages/service/src/tasks/tasks-procedures.ts`) beyond those any
+ * procedure may (`declaredProcedure`): a plan, a workspace, or a related
+ * task out of reach as not found, a repository the workspace does not reach
+ * as not reachable or GitHub unanswered, the tree's own rules by name, and a
+ * write sent again under its key as already written. The rest declare every
+ * refusal until their own leaf declares them.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_START_BODY_BYTES } from "../agent-wire.js";
-import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
+import { descriptionEditAnswerSchema, descriptionEditRequestSchema } from "../description-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import {
-  planRevisionAnswerSchema,
-  planRevisionSeqSchema,
-  planRevisionsAnswerSchema,
+  descriptionRevisionAnswerSchema,
+  descriptionRevisionSeqSchema,
+  descriptionRevisionsAnswerSchema,
+  heldTaskListAnswerSchema,
   TASK_BOUNDS,
   TASK_LIST_QUERY,
   taskAnswerSchema,
@@ -26,7 +37,6 @@ import {
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
   taskFoundAnswerSchema,
-  taskListAnswerSchema,
   taskNumberSchema,
   taskParentRequestSchema,
   taskRelationChangeRequestSchema,
@@ -34,7 +44,14 @@ import {
   taskStartAnswerSchema,
   taskUpdateRequestSchema,
 } from "../task-wire.js";
-import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import {
+  bodyCap,
+  declaredProcedure,
+  exactBodyInput,
+  exactInput,
+  hostedProcedure,
+  refuses,
+} from "./base.js";
 
 /** A change is a name and a repository's name at most, so a body past this is none. */
 const NAME_BODY_BYTES = 8_192;
@@ -49,15 +66,28 @@ const START_BODY_BYTES = NAME_BODY_BYTES + BRIEF_BYTES + MAXIMUM_START_BODY_BYTE
 const EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
 const PLAN = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
-const REVISIONS = `${PLAN}/revisions` as const;
+const DESCRIPTION = `${PLAN}/description` as const;
+const REVISIONS = `${DESCRIPTION}/revisions` as const;
 const REVISION = `${REVISIONS}/{seq}` as const;
+
+/**
+ * The paths the task's description was edited and read back at before it
+ * was named the description, under the task's own path rather than its
+ * description's, which a released desktop or the published CLI still asks:
+ * each is answered as needing an update (`HOSTED_API_ERROR.HOST_UPGRADE_NEEDED`)
+ * rather than as a path the service never served.
+ */
+export const RETIRED_TASK_PATHS: readonly RegExp[] = [
+  /^\/api\/plans\/[^/]+\/edit\/?$/u,
+  /^\/api\/plans\/[^/]+\/revisions(?:\/[^/]+(?:\/restore)?)?\/?$/u,
+];
 
 /** The plan a path names, as text: the handler reads it as a UUID, so one that is none answers as no plan rather than as a request that does not read. */
 const taskParams = { id: EffectSchema.String };
 
 /** A revision's number as a path or a query carries it, read as the whole number from one it must be. */
 const revisionSeqText = EffectSchema.NumberFromString.pipe(
-  EffectSchema.decodeTo(planRevisionSeqSchema),
+  EffectSchema.decodeTo(descriptionRevisionSeqSchema),
 );
 
 /** The most a task's number may be, Postgres's integer, so a number past it names no task rather than failing its read. */
@@ -82,16 +112,28 @@ const startedSchema = EffectSchema.Struct({
 
 export const tasksContract = {
   /** The plans, and beside them the agents with no plan; the archived ones too where `archived=include` asks. */
-  list: hostedProcedure
+  list: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.TASKS }))
     .input(
       EffectSchema.Struct({
         [TASK_LIST_QUERY.ARCHIVED]: EffectSchema.optionalKey(EffectSchema.String),
       }),
     )
-    .output(EffectSchema.flip(taskListAnswerSchema)),
+    .output(EffectSchema.flip(heldTaskListAnswerSchema)),
   /** A plan started, and the agent it names started on it where it names one. */
-  create: hostedProcedure
+  create: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.ALREADY_WRITTEN,
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        HOSTED_API_ERROR.GITHUB_UNANSWERED,
+        HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED,
+        HOSTED_API_ERROR.TASK_PARENT_CYCLE,
+        HOSTED_API_ERROR.TASK_PARENT_HELD,
+        HOSTED_API_ERROR.TASK_BLOCK_CYCLE,
+      ),
+    )
     .meta(bodyCap(START_BODY_BYTES))
     .meta(
       openapi({
@@ -122,25 +164,52 @@ export const tasksContract = {
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskAnswerSchema)),
   /** Its name, repository, pin, archive, or workspace changed. */
-  update: hostedProcedure
+  update: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.ALREADY_WRITTEN,
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.NOT_PERMITTED,
+        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        HOSTED_API_ERROR.GITHUB_UNANSWERED,
+        HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED,
+        HOSTED_API_ERROR.AGENT_NOT_READY,
+      ),
+    )
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: PLAN, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskUpdateRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
   /** One block of it added or taken away, answered with it as it then stands. */
-  block: hostedProcedure
+  block: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.TASK_BLOCK_CYCLE))
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/blocks`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskBlockRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
   /** Its parent set, or cleared with null, answered with it as it then stands. */
-  parent: hostedProcedure
+  parent: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED,
+        HOSTED_API_ERROR.TASK_PARENT_CYCLE,
+      ),
+    )
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/parent`, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskParentRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
   /** One relation of it moved to another kind, in one transaction, answered with it as it then stands. */
-  relation: hostedProcedure
+  relation: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED,
+        HOSTED_API_ERROR.TASK_PARENT_CYCLE,
+        HOSTED_API_ERROR.TASK_BLOCK_CYCLE,
+      ),
+    )
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/relation`, inputStructure: "detailed" }),
@@ -151,25 +220,25 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskDeleteAnswerSchema)),
-  /** The developer's edit of the document. */
-  edit: hostedProcedure
+  /** The developer's edit of the description. */
+  editDescription: hostedProcedure
     .meta(bodyCap(EDIT_BODY_BYTES))
-    .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/edit`, inputStructure: "detailed" }))
-    .input(exactBodyInput(EffectSchema.Struct(taskParams), planEditRequestSchema))
-    .output(EffectSchema.flip(planEditAnswerSchema)),
-  /** A page of the plan's history, before the revision `before` names where it names one. */
-  revisions: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.POST, path: DESCRIPTION, inputStructure: "detailed" }))
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), descriptionEditRequestSchema))
+    .output(EffectSchema.flip(descriptionEditAnswerSchema)),
+  /** A page of the description's history, before the revision `before` names where it names one. */
+  descriptionRevisions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISIONS }))
     .input(
       EffectSchema.Struct({ ...taskParams, before: EffectSchema.optionalKey(revisionSeqText) }),
     )
-    .output(EffectSchema.flip(planRevisionsAnswerSchema)),
-  revision: hostedProcedure
+    .output(EffectSchema.flip(descriptionRevisionsAnswerSchema)),
+  descriptionRevision: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISION }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
-    .output(EffectSchema.flip(planRevisionAnswerSchema)),
-  /** One revision put back as the plan's content. */
-  restore: hostedProcedure
+    .output(EffectSchema.flip(descriptionRevisionAnswerSchema)),
+  /** One revision put back as the description's content. */
+  restoreDescription: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(taskRestoreAnswerSchema)),

@@ -3,6 +3,8 @@ import { readAccountPreferences } from "@repo/database/models/account-store";
 import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
+  hasRepository,
+  readAgent,
   settleAgentAuthor,
   type WithRepository,
 } from "@repo/database/models/agent-store";
@@ -36,16 +38,14 @@ import { extraCheckoutPaths, REPOSITORY_SANDBOX_CONTRACT } from "../repository-s
 import {
   cloneExtraRepository,
   cloneRepository,
-  deepenRepository,
   REPOSITORY_REFUSAL,
   type RepositoryRefusal,
   type RepositorySandbox,
   refreshRepository,
   runInSandbox,
-  SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import { FIREWALL_SLOT, githubEntry, type RepositoryCredential } from "../sandbox-firewall.js";
+import type { FirewallSources, RepositoryCredential } from "../sandbox-firewall.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -56,18 +56,18 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * (`repository-shell.ts`): the installation of its task's workspace is
  * confirmed to reach it and a read token minted for that one repository,
  * set at the sandbox's firewall for the clone alone and withdrawn after it.
- * A native harness's clone is whole, since it deepens at once, or is no
- * clone at all where its workspace's repository snapshot opened the sandbox
- * on a checkout already made, which is fetched up to the branch instead
- * (`refreshAgentCheckout`, `repository-snapshot.ts`).
- * The launch then deepens it (`deepenCheckoutWith`): a write token is
- * minted, carrying contents and pull requests write, since the agent pushes
- * a branch and opens a pull request from it, and set at the firewall for
- * the fetch of the rest of the history alone, since a branch and a pull
- * request are cut from it; the commit identity is set; and the token is
- * handed back for the authored file to set at the firewall for the
- * session's own commands, in the shape `githubEntry` gives it
- * (`../sandbox-firewall.ts`), which is where `gh` and `git push` reach
+ * The clone is whole, since a branch and a pull request are cut from the
+ * history, or is no clone at all where its drive was forked from its
+ * workspace's repository's base drive, whose whole checkout is fetched up
+ * to the branch instead (`refreshAgentCheckout`, `../agent-drive.ts`), or
+ * kept from an earlier sandbox of its session, whose checkout stands as the
+ * agent left it. The launch then finishes it (`finishCheckoutWith`): a
+ * write token is minted, carrying contents and pull requests write, since
+ * the agent pushes a branch and opens a pull request from it, and set at the
+ * firewall; the commit identity is set; and the token is handed back for
+ * the authored file to set at the firewall for the session's own commands,
+ * minted afresh at every write after
+ * (`agentFirewallSources`, `../sandbox-firewall.ts`), which is where `gh` and `git push` reach
  * GitHub; it never enters the sandbox's filesystem or environment. An installation token is good for an hour, so
  * the host mints another on the same terms when the session's step hook
  * finds the one standing old. No developer's sign-in token ever stands at
@@ -367,6 +367,58 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
   },
 );
 
+/**
+ * The agent's repository credential minted afresh, as `agentRepositoryToken`
+ * mints it, for a firewall write to carry (`../sandbox-firewall.ts`); none
+ * for an agent with no repository.
+ */
+export const agentFirewallSources = /* @__PURE__ */ Effect.fn("web/agentFirewallSources")(
+  function* (
+    target: ConversationTarget,
+    agent: Agent,
+  ): Effect.fn.Return<FirewallSources, CheckoutRefused, CheckoutServices> {
+    if (!hasRepository(agent)) return {};
+    const { token, fullName, access } = yield* agentRepositoryToken(target, agent);
+    return { github: { token, fullName, access } };
+  },
+);
+
+/**
+ * The same for the account's agent named, read afresh, for a firewall write
+ * made apart from the agent's own calls, as a launch's end or a sweep makes
+ * one; none where no agent is named or the account reaches it no longer.
+ */
+export const firewallSourcesOfAgent = /* @__PURE__ */ Effect.fn("web/firewallSourcesOfAgent")(
+  function* (
+    userId: string,
+    agentId: string | undefined,
+  ): Effect.fn.Return<FirewallSources, CheckoutRefused | StoreFailure, CheckoutServices> {
+    if (agentId === undefined) return {};
+    const agent = yield* readAgent(userId, agentId);
+    if (Option.isNone(agent)) return {};
+    const target = { userId, conversationId: agent.value.conversationId };
+    return yield* agentFirewallSources(target, agent.value);
+  },
+);
+
+/**
+ * The same for a write that takes an ended launch's swaps off a place a
+ * Terminal keeps up: none where the credential could not be minted, said in
+ * the log, because the ended runner's credentials must come off whether or
+ * not the shell goes on reaching GitHub.
+ */
+export const firewallSourcesAfterLaunch = (userId: string, agentId: string | undefined) =>
+  firewallSourcesOfAgent(userId, agentId).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `a held sandbox's repository credential was not minted as its launch ended: ${failure._tag}`,
+        ),
+        {} satisfies FirewallSources,
+      ),
+    ),
+  );
+
 /** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several, answering the repository at the place given among them. */
 const agentRepositoriesToken = Effect.fnUntraced(function* (
   target: ConversationTarget,
@@ -565,32 +617,21 @@ export const cloneAgentExtras = /* @__PURE__ */ Effect.fn("web/cloneAgentExtras"
   }
 });
 
-/** How deep an agent's checkout is cloned: one commit for eve's, whose first write deepens it, or whole for a native harness's, deepened at once anyway. */
-export const CHECKOUT_DEPTH = {
-  SHALLOW: "shallow",
-  WHOLE: "whole",
-} as const;
-
-export type CheckoutDepthChoice = (typeof CHECKOUT_DEPTH)[keyof typeof CHECKOUT_DEPTH];
-
 /**
- * The agent's repository cloned into the sandbox on the read the caller
- * made of it, at the branch it was started on where its row names one and
- * at the default branch otherwise, the read token standing at the firewall
- * for the clone alone: one commit deep by default, or whole where the caller
- * asks, as a native harness's launch does, since it deepens at once and a
- * whole clone is fetched in half the time of a shallow one deepened. The
- * checkout is recorded under the name the agent's row holds. Nothing else
- * is set: no commit identity and no credential, which the deepen sets
- * (`deepenCheckoutWith`). Note that a start branch deleted since the start
- * fails the clone, which says so in git's own words.
+ * The agent's repository cloned whole into the sandbox on the read the
+ * caller made of it, at the branch it was started on where its row names one
+ * and at the default branch otherwise, the read token standing at the
+ * firewall for the clone alone. The checkout is recorded under the name the
+ * agent's row holds. Nothing else is set: no commit identity and no
+ * credential, which the launch sets (`finishCheckoutWith`). Note that a
+ * start branch deleted since the start fails the clone, which says so in
+ * git's own words.
  */
 export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRepository")(
   function* (
     agent: WithRepository<Agent>,
     sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
-    depth: CheckoutDepthChoice = CHECKOUT_DEPTH.SHALLOW,
   ): Effect.fn.Return<void, CheckoutRefused> {
     yield* cloneRepository(
       sandbox,
@@ -600,21 +641,18 @@ export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRep
         recordedAs: agent.repository,
       },
       read.token,
-      {
-        ...(depth === CHECKOUT_DEPTH.SHALLOW ? { depth: SHALLOW_CLONE_DEPTH } : undefined),
-        access: read.access,
-      },
+      { access: read.access },
     ).pipe(Effect.mapError(refusedWith));
   },
 );
 
 /**
- * The checkout a repository snapshot opened the sandbox on brought up to the
- * repository's default branch, on the read the caller made of it, the token
+ * The checkout a fork of the repository's base drive holds brought up to
+ * the repository's default branch, on the read the caller made of it, the token
  * at the firewall for the fetch alone, and recorded under the name the
  * agent's row holds; refused, in git's words, where the sandbox holds no
  * checkout of that repository or the fetch failed. As after a clone, no
- * identity and no credential is set (`deepenCheckoutWith`).
+ * identity and no credential is set (`finishCheckoutWith`).
  */
 export const refreshAgentCheckout = /* @__PURE__ */ Effect.fn("web/refreshAgentCheckout")(
   function* (
@@ -656,21 +694,21 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
   }
 });
 
-/** What a deepen sets of GitHub's: the write token for the firewall, and who the commits are by. */
-export interface AgentDeepenPlan {
+/** What a checkout's finish sets of GitHub's: the write token for the firewall, and who the commits are by. */
+export interface AgentCheckoutPlan {
   readonly credential: RepositoryCredential;
   readonly identity: CheckoutIdentity;
 }
 
 /**
- * What the deepen reads of GitHub, apart from the sandbox: a write token
- * minted and the commit identity read, so a launch that opens a sandbox
- * anyway reads them while its checkout is made (`runner-sessions.ts`).
+ * What a checkout's finish reads of GitHub, apart from the sandbox: a write
+ * token minted and the commit identity read, so a launch that opens a
+ * sandbox anyway reads them while its checkout is made (`runner-sessions.ts`).
  */
-export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(function* (
+export const agentCheckoutPlan = /* @__PURE__ */ Effect.fn("web/agentCheckoutPlan")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
-): Effect.fn.Return<AgentDeepenPlan, CheckoutRefused | StoreFailure, CheckoutServices> {
+): Effect.fn.Return<AgentCheckoutPlan, CheckoutRefused | StoreFailure, CheckoutServices> {
   const minted = yield* agentRepositoryToken(target, agent);
   const identity = yield* identityOn(target, agent, minted);
   return {
@@ -680,8 +718,8 @@ export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(
 });
 
 /**
- * Who the agent's commits are by, read as a cloud checkout's deepen reads it
- * (`agentDeepenPlan`), for a checkout this service sets no identity in
+ * Who the agent's commits are by, read as a cloud checkout's finish reads it
+ * (`agentCheckoutPlan`), for a checkout this service sets no identity in
  * itself: a device's, which its launch line carries it to
  * (`machine/device-machine.ts`).
  */
@@ -693,13 +731,12 @@ export const agentCommitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIde
 });
 
 /**
- * The deepen's steps in the sandbox, on a plan already read: the write
- * token at the firewall, the rest of the history fetched through it, and
- * the identity set.
+ * A checkout's finish in the sandbox, on a plan already read: the write
+ * token at the firewall, and the identity set.
  */
-export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutWith")(function* (
+export const finishCheckoutWith = /* @__PURE__ */ Effect.fn("web/finishCheckoutWith")(function* (
   sandbox: RepositorySandbox,
-  plan: AgentDeepenPlan,
+  plan: AgentCheckoutPlan,
 ): Effect.fn.Return<void, CheckoutRefused> {
   const firewall = sandbox.firewall;
   if (firewall === undefined) {
@@ -707,10 +744,9 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
   }
   // The token is revealed only into the firewall rules set for GitHub.
   yield* firewall
-    .set(FIREWALL_SLOT.GITHUB, githubEntry(plan.credential))
+    .write({ github: plan.credential })
     .pipe(
       Effect.mapError(() => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED })),
     );
-  yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, plan.identity).pipe(Effect.mapError(refusedWith));
 });

@@ -74,8 +74,8 @@ import {
 /**
  * The events route, answered by its group the way a function answers it,
  * over a real dialect: a runner's batches of Claude Code's SDK messages,
- * posted under its bearer, land in the agent's transcript as the eve relay
- * would write them, a batch posted again changes nothing, and a wrong or
+ * posted under its bearer, land in the agent's transcript as the retired
+ * runtime's relay wrote its own, a batch posted again changes nothing, and a wrong or
  * retired bearer is refused before anything is read. The stream is P00's
  * hermetic one, as the runner's own tests replay it
  * (`packages/agent-runner/src/testing/recorded-stream.ts`), numbered as the
@@ -162,7 +162,7 @@ const agentOn = (
       model: harness.model,
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: harness.runtime,
       payer: harness.payer,
@@ -1811,7 +1811,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "an account OpenAI says is not eligible is marked so; a failure that says nothing of the plan, or an agent a key pays for, leaves the row as it stood",
+    "an account OpenAI says is not eligible, or whose plan does not include Codex, is marked so; a failure that says nothing of the plan, or an agent a key pays for, leaves the row as it stood",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1823,6 +1823,19 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             message:
               'unexpected status 403: {"error":{"code":"subscription_sharing_user_not_eligible"}}',
             codexErrorInfo: null,
+            additionalDetails: null,
+          }),
+        );
+
+        // As Codex says a plan its ChatGPT backend answers `usage_not_included` for: under a limit's word, though none resets.
+        const notIncluded = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(notIncluded.userId);
+        yield* post(
+          notIncluded.bearer,
+          refusedLaunch(notIncluded.lineId, 0, {
+            message:
+              "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+            codexErrorInfo: "usageLimitExceeded",
             additionalDetails: null,
           }),
         );
@@ -1854,10 +1867,12 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         assert.deepEqual(
           [
             yield* planRow(ineligible.userId),
+            yield* planRow(notIncluded.userId),
             yield* planRow(unrelated.userId),
             yield* planRow(onKey.userId),
           ],
           [
+            [PROVIDER_KEY_STATUS.INELIGIBLE, null],
             [PROVIDER_KEY_STATUS.INELIGIBLE, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
@@ -1934,6 +1949,53 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           AGENT_FAILURE.PROVIDER_KEY,
         ]);
         assert.deepEqual(yield* failureOf(onApp.target.conversationId), [AGENT_FAILURE.MODEL]);
+      }),
+  );
+
+  it.effect(
+    "a turn OpenAI refused on the starter's ChatGPT plan is reported with OpenAI's error whole, its code as OpenAI said it",
+    () =>
+      Effect.gen(function* () {
+        const reported: Readonly<Record<string, unknown>>[] = [];
+        const reporting = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push(attributes);
+          }),
+        ]);
+        const post = yield* standingWith(
+          {},
+          Layer.merge(Layer.empty as Layer.Layer<AfterResponse>, reporting),
+        );
+        const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(agent.userId);
+        // As OpenAI refused VESPIN-WEB-2R's turns: its JSON error, which Codex hands on as the turn's message and the runner as its end's.
+        const message = JSON.stringify(
+          {
+            error: {
+              message:
+                "User subscription sharing currently supports only text, image, and file messages, item references, additional tools, compaction summaries, reasoning items, Web Search call items, developer function and custom tool call items, and programmatic tool calling items.",
+              type: "invalid_request_error",
+              param: null,
+              code: "subscription_sharing_unsupported_capability",
+            },
+          },
+          null,
+          2,
+        );
+        const refused = refusedLaunch(agent.lineId, 0, {
+          message,
+          codexErrorInfo: "other",
+          additionalDetails: null,
+        });
+        // SAFETY: the runner's END, written in its JSON shape.
+        const end = {
+          sequence: refused.length - 1,
+          message: { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED, detail: message },
+        } as RunnerEvent;
+        yield* post(agent.bearer, [...refused.slice(0, -1), end]);
+
+        const detail = String(reported[0]?.detail);
+        assert.ok(detail.includes('"code": "subscription_sharing_unsupported_capability"'), detail);
       }),
   );
 
@@ -2070,7 +2132,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid as eve's step marks it",
+    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -2157,7 +2219,7 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
-it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", (it) => {
+it.layer(getTestDB())("the runner events route, as it keeps an agent", (it) => {
   const top = { parent_tool_use_id: null, session_id: SESSION };
   const numbered = (messagesOfLaunch: readonly unknown[], from = 0) =>
     // SAFETY: each message is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.

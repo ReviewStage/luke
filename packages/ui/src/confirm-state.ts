@@ -92,6 +92,33 @@ export interface ConfirmRejection {
 /** What a refused answer is reported as, built by the app that asked from the answer that refused it. */
 export type ConfirmFailure = (refused: ActionResult) => ReportedFailure;
 
+/**
+ * The act a question confirms, as its caller's mutation stands (`useMutation`):
+ * how it is sent, answering once it settled however it went; whether it is
+ * out; the newest answer's refusal, none while out, taken, or let go; and how
+ * that refusal is let go. Nothing here keeps an act's pending or refusal of
+ * its own.
+ */
+export interface ConfirmAct {
+  readonly run: () => Promise<unknown>;
+  readonly busy: boolean;
+  readonly refused: ActionResult | undefined;
+  readonly reset: () => void;
+}
+
+/** An act with nothing to wait on or refuse, as a question whose answer happens at once, or is sent on and never heard, confirms: `act` runs as the question is answered. */
+export function neverBusyAct(act: () => void): ConfirmAct {
+  return {
+    run: () => {
+      act();
+      return Promise.resolve();
+    },
+    busy: false,
+    refused: undefined,
+    reset: () => undefined,
+  };
+}
+
 /** One confirming action, as the line that offers it holds it. */
 export interface HeldConfirm {
   stage: ConfirmStage;
@@ -108,6 +135,12 @@ export interface HeldConfirm {
    * asking any more.
    */
   clear: () => void;
+  /**
+   * Stops reading the last answer's refusal as this question's own, leaving
+   * the caller's act as it stands, so it may be called while rendering, as a
+   * question whose subject or surface went is let go.
+   */
+  forget: () => void;
 }
 
 /**
@@ -116,16 +149,34 @@ export interface HeldConfirm {
  * the render that discovers its subject or its surface gone rather than from an
  * effect, the way an emptied filter is: a question whose subject or whose
  * surface has gone must never be drawn once and taken back on the next frame.
- * A refusal is handed on with what `failure` builds of the answer that
- * refused it, so whatever draws it reports it.
+ * The act and its refusal are the caller's mutation's (`act`), and a refusal
+ * is handed on with what `failure` builds of the answer that refused it, so
+ * whatever draws it reports it.
+ *
+ * Note that the question reads a refusal only of an answer it gave itself,
+ * since the mutation may be one a control beside it sends too, and lets go
+ * of only such a refusal, so what another press left stands.
+ *
+ * Note that an answer stands acting until its run has settled and the
+ * mutation no longer says it is out, because the mutation's own state
+ * reaches the render a notification after its run answers, and the refusal
+ * it carries must be the one drawn as the answer lands.
  */
 export function useConfirm(
   surroundings: ConfirmSurroundings,
-  action: () => Promise<ActionResult>,
+  act: ConfirmAct,
   failure: ConfirmFailure,
 ): HeldConfirm {
   const [held, setHeld] = useState<ConfirmStage>(CONFIRM_STAGE.RESTING);
-  const [refused, setRefused] = useState<ActionResult>();
+  const [answered, setAnswered] = useState(false);
+  // Whether the act's newest answer is one this question gave, which alone it reads as its own.
+  const [ran, setRan] = useState(false);
+  const newestRan = useRef(ran);
+  newestRan.current = ran;
+  if (held === CONFIRM_STAGE.ACTING && answered && !act.busy) {
+    setHeld(CONFIRM_STAGE.RESTING);
+    setAnswered(false);
+  }
   const stage = confirmStage(held, surroundings);
   if (stage !== held) setHeld(stage);
   // Read by the withdrawal, which a dialog holds as a callback rather than a
@@ -133,38 +184,37 @@ export function useConfirm(
   // stood when the callback was made.
   const standing = useRef(stage);
   standing.current = stage;
+  // The act is read as the press lands, so the confirm handed down stands across draws and still runs the newest.
+  const newestAct = useRef(act);
+  newestAct.current = act;
 
   const keep = useCallback(() => {
     if (!confirmWithdrawable(standing.current)) return;
     setHeld(CONFIRM_STAGE.RESTING);
   }, []);
-  // Whatever the last answer was refused for is cleared on the way in: a
+  // Whatever the last answer was refused for is let go on the way in: a
   // fresh question is a fresh decision, not one carrying the last one's
   // answer under it.
-  const ask = useCallback(() => {
-    setRefused(undefined);
-    setHeld(CONFIRM_STAGE.ASKING);
+  const letGo = useCallback(() => {
+    if (newestRan.current) newestAct.current.reset();
+    setRan(false);
   }, []);
-  const clear = useCallback(() => setRefused(undefined), []);
-  // The act is read as the press lands, so the confirm handed down stands across draws and still runs the newest.
-  const newestAction = useRef(action);
-  newestAction.current = action;
+  const forget = useCallback(() => setRan(false), []);
+  const ask = useCallback(() => {
+    letGo();
+    setHeld(CONFIRM_STAGE.ASKING);
+  }, [letGo]);
   const run = useCallback(() => {
+    setRan(true);
     setHeld(CONFIRM_STAGE.ACTING);
-    void newestAction
-      .current()
-      .then((result) => {
-        setRefused(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result);
-      })
-      // Settled in `finally` rather than after the answer, because a carrier
-      // that rejects rather than answering is still a line that has to be
-      // handed back: one left `ACTING` would draw a confirm nobody can take
-      // back. Answered either way — a refusal is an answer too,
-      // and asking again is a fresh decision rather than a confirm left
-      // standing over a subject that turned out to still be there.
-      .finally(() => {
-        setHeld(CONFIRM_STAGE.RESTING);
-      });
+    setAnswered(false);
+    // Settled however the run went, because a carrier that rejects rather
+    // than answering is still a line that has to be handed back: one left
+    // acting would draw a confirm nobody can take back.
+    void newestAct.current
+      .run()
+      .catch(() => undefined)
+      .finally(() => setAnswered(true));
   }, []);
 
   // Note that the failure is built of the answer once per answer, by the
@@ -172,6 +222,7 @@ export function useConfirm(
   // as its answer is.
   const newestFailure = useRef(failure);
   newestFailure.current = failure;
+  const refused = stage === CONFIRM_STAGE.ACTING || !ran ? undefined : act.refused;
   const rejection = useMemo(
     () =>
       refused === undefined || refused.status === ACTION_RESULT_STATUS.ACCEPTED
@@ -186,9 +237,10 @@ export function useConfirm(
       busy: stage === CONFIRM_STAGE.ACTING,
       ask,
       keep,
-      clear,
+      clear: letGo,
+      forget,
       run,
     }),
-    [stage, rejection, ask, keep, clear, run],
+    [stage, rejection, ask, keep, letGo, forget, run],
   );
 }

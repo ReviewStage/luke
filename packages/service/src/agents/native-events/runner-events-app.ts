@@ -25,7 +25,6 @@ import {
 } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
-import { redactCredentials } from "@repo/features/credential-redaction";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -90,6 +89,7 @@ import {
   projectMoments,
   withTurnServers,
 } from "./native-projection.js";
+import { redactKeepingPlanCodes } from "./runner-moments.js";
 
 /**
  * runner-events-app.ts -- where a native harness's runner posts its events, which land in the agent's transcript.
@@ -106,7 +106,7 @@ import {
  * one transaction with the number of the last event applied, so an event
  * already applied is passed over: a batch posted again, or two posts
  * racing, write nothing twice. A write the writer refuses is said in the
- * log and passed over, as eve's relay passes one over, since the runner
+ * log and passed over, since the runner
  * posting the batch again would be refused again. The answer names the last
  * event applied, which a relaunch numbers its events after. A runner posting
  * is a run under way, so a post keeps its sandbox alive past its short
@@ -163,7 +163,7 @@ interface Applying {
   readonly read: NativeReader;
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
   readonly payer: AgentPayer | undefined;
-  /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
+  /** The description or prompt the agent was handed first, whose share of its context the ring estimates. */
   readonly brief: string;
 }
 
@@ -222,9 +222,9 @@ export interface RunnerEventsOptions<R = never> {
   readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
    * Told once a batch that holds a launch's IDLE, and no END after it, has
-   * landed, after its transaction: the warm runner retired at once where
-   * its machine's warm window is zero, or its device waits to update
-   * (`sandboxAtRunnerIdle`). Nothing where left out.
+   * landed, after its transaction: the device's warm runner retired at once
+   * where its device waits to update (`sandboxAtRunnerIdle`). Nothing where
+   * left out.
    */
   readonly idled?: (idled: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
   /**
@@ -262,35 +262,37 @@ export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
 }
 
 /**
- * A launch's end as the sandbox hears it (`../coder-host/claude-code-sessions.ts`'s
- * `runnerEnded`): stopped, unless a developer's Terminal holds it or a newer
- * launch replaced this one, or a message the launch never took waits, which
- * the harness's sessions hand to a launch of their own once the answer has
- * left (`deliverWaiting`), so the ended runner's last post never waits on
- * it. A stop that fails is said in the log and passed over, because the
- * sandbox then stops at its own timeout or when the Terminal lease's sweep
- * finds it, and the events it ended are already kept.
+ * A launch's end as the sandbox hears it (`../coder-host/runner-sessions.ts`'s
+ * `runnerEnded`), once the ended runner's last post has its answer, so that
+ * post never waits on the runner lease or on Vercel's stop, which holds its
+ * call until the sandbox's snapshot is taken: stopped, unless a developer's
+ * Terminal holds it or a newer launch replaced this one, or a message the
+ * launch never took waits, which the harness's sessions then hand to a
+ * launch of their own (`deliverWaiting`). A stop that fails is said in the
+ * log and passed over, because the sandbox then stops at its own timeout,
+ * and the events it ended are already kept.
  */
 export function sandboxAtRunnerEnd(
   ended: RunnerEnded,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { sessionId } = ended;
   if (sessionId === undefined) return Effect.void;
-  return runnerEnded({
-    target: ended.target,
-    sessionId,
-    sequence: ended.sequence,
-    reason: ended.reason,
-  }).pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.flatMap((left) =>
-      left === RUNNER_ENDED.LINES_WAITING
-        ? afterResponse("a launch's waiting lines", waitingHandedOn(ended, sessionId))
-        : Effect.void,
-    ),
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
+  return afterResponse(
+    "a launch's end",
+    runnerEnded({
+      target: ended.target,
+      sessionId,
+      sequence: ended.sequence,
+      reason: ended.reason,
+    }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.flatMap((left) =>
+        left === RUNNER_ENDED.LINES_WAITING ? waitingHandedOn(ended, sessionId) : Effect.void,
+      ),
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
+        ),
       ),
     ),
   );
@@ -315,14 +317,13 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
   });
 
 /**
- * A launch's IDLE as the sandbox or the device hears it: the warm runner
- * retired at once where its machine's warm window is zero
- * (`CODER.RUNNER_WARM`), as a sandbox's is, or where its device waits to
- * switch release (`../coder-host/runner-sessions.ts`'s `runnerIdled`), so
- * its END stops the sandbox; a device's runner otherwise stays warm, and
- * the sweep retires it past the window. A retire that fails is said in the
- * log and passed over, because the sweep retires the runner once its grace
- * passes.
+ * A launch's IDLE as the device hears it: the warm runner retired at once
+ * where its device waits to switch release
+ * (`../coder-host/runner-sessions.ts`'s `runnerIdled`); it otherwise stays
+ * warm, and the sweep retires it past the window. A sandbox's runner is
+ * launched to end at its turn's end, so it posts no IDLE. A retire that
+ * fails is said in the log and passed over, because the sweep retires the
+ * runner once its grace passes.
  */
 export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
@@ -432,7 +433,7 @@ function sayTurnFailed(
     harness,
     turnId: failed.turnId,
     failure: failed.failure,
-    detail: redactCredentials(failed.detail),
+    detail: redactKeepingPlanCodes(failed.detail),
   };
   const issue = new NativeTurnFailed({
     message: `a ${harness} turn failed: ${failed.failure}`,
@@ -477,7 +478,7 @@ function landWrite(
         writer.enqueueTurn(target, {
           turnId: write.turnId,
           // A native turn's id is the one a Stop names it by (`coder-host/stop.ts`), since no runtime mints another.
-          eveTurnId: write.turnId,
+          runtimeTurnId: write.turnId,
           origin: TURN_ORIGIN.TYPED,
           model: applying.model,
           reasoningEffort: applying.reasoningEffort,
@@ -523,7 +524,7 @@ function landWrite(
       );
     case NATIVE_WRITE.PLAN_STATUS: {
       // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
-      // pays for, that key's, which a refusal marks invalid as eve's step does; a plan's limit is no key's.
+      // pays for, that key's, which a refusal marks invalid; a plan's limit is no key's.
       const row =
         applying.payer === AGENT_PAYER.API_KEY
           ? write.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
@@ -596,8 +597,8 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       });
       state = projected.state;
       writes.push(...projected.writes);
-      // A turn starting takes the servers mentioned to the agent since its last turn started, as
-      // eve's turn start does (`agent-runtime/servers.ts`), and keeps them for its calls at our own
+      // A turn starting takes the servers mentioned to the agent since its last turn started
+      // (`agent-runtime/servers.ts`), and keeps them for its calls at our own
       // MCP server, which hands them whatever the switches say (`integrations/connection-door.ts`).
       // They are taken event by event, so a turn that starts and ends within one batch takes its
       // own, never the next turn's.
@@ -723,7 +724,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     writer,
     read: reader,
     payer: Option.getOrUndefined(routing)?.payer ?? undefined,
-    brief: agent.value.prompt ?? agent.value.planSnapshot ?? "",
+    brief: agent.value.prompt ?? agent.value.descriptionSnapshot ?? "",
   };
   // Note that the turns the batch settles are heard once its transaction commits, not as the
   // writer's savepoint inside it ends, so what a listener reads of a turn (its final words, for

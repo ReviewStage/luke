@@ -8,7 +8,6 @@ import {
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { MentionLines } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -35,10 +34,17 @@ import {
   useMenu,
 } from "@repo/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
-import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  draftTab,
+  pageTab,
+  type StripTab,
+  sameTab,
+  subagentTab,
+} from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -46,12 +52,14 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
+import { agentOriginQuery } from "../live-reads.js";
 import { MemberDirectory } from "../member-directory.js";
 import { HERE } from "../route.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentName } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -76,7 +84,6 @@ import {
 import { type PinHolder, PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useHostRead } from "../use-host-read.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -242,7 +249,7 @@ function AgentPageBar({
   trail: readonly ToolbarPlace[] | undefined;
   /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
   steps: React.ReactNode;
-  terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
@@ -288,7 +295,7 @@ function AgentPageBar({
   const section = own
     ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
-  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its ⋯ offers no Open in Slack beside it.
+  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its menu offers no Open in Slack beside it.
   const groups = agentMenuGroups({
     chosen: true,
     ...actions.doors,
@@ -314,56 +321,67 @@ function AgentPageBar({
     ) : (
       label
     );
-  const more = (
+  // The agent's menu: a right-click on its name, or a phone's ⋯, which has no right-click to offer it on.
+  const drawnMenu =
+    menu.drawn === undefined ? null : (
+      <ActionMenu
+        label={moreLabel(ACTIONS_THING)}
+        menu={menu.drawn}
+        // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
+        groups={
+          phone === undefined
+            ? groups
+            : [
+                ...phoneFindGroups(),
+                ...groups,
+                ...(phone.onShowPanel === undefined
+                  ? []
+                  : [
+                      [
+                        {
+                          label: SHOW_PANEL,
+                          icon: <SidePanelIcon />,
+                          onSelect: phone.onShowPanel,
+                        },
+                      ],
+                    ]),
+              ]
+        }
+        onClose={menu.close}
+      />
+    );
+  const dialogs = (
     <>
-      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={moreLabel(ACTIONS_THING)}
-          menu={menu.drawn}
-          // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
-          groups={
-            phone === undefined
-              ? groups
-              : [
-                  ...phoneFindGroups(),
-                  ...groups,
-                  ...(phone.onShowPanel === undefined
-                    ? []
-                    : [
-                        [
-                          {
-                            label: SHOW_PANEL,
-                            icon: <SidePanelIcon />,
-                            onSelect: phone.onShowPanel,
-                          },
-                        ],
-                      ]),
-                ]
-          }
-          onClose={menu.close}
-        />
-      )}
+      {drawnMenu}
       {actions.dialog}
       {sectionDialogs.dialog}
     </>
   );
   if (phone !== undefined) {
     return (
-      <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
+      <PhoneHead
+        place="agent"
+        start={<PhoneBack back={phone.back} />}
+        title={title}
+        end={
+          <>
+            <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+            {dialogs}
+          </>
+        }
+      />
     );
   }
   return (
-    <Toolbar
-      title={title}
-      trail={trail}
-      actions={
-        <>
-          {steps}
-          {more}
-        </>
-      }
-    />
+    <>
+      <Toolbar
+        title={title}
+        trail={trail}
+        titleMenu={{ contextMenu: menu.contextMenu(), keyMenu: menu.keyMenu }}
+        actions={steps}
+      />
+      {dialogs}
+    </>
   );
 }
 
@@ -411,7 +429,6 @@ export function DesktopAgentPage({
     APP_COMMAND.EXIT_AGENT_PAGE,
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
-  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -431,7 +448,6 @@ export function DesktopAgentPage({
     [liveAgents, agentId],
   );
   const agents = useAgents({
-    acts: { act },
     taskId: undefined,
     agentId,
     repository: null,
@@ -449,10 +465,7 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   // The run that started an automation's agent, held while its page stands; an agent the list names no automation of has none, and asks nothing.
-  const run = useHostRead(
-    LIVE_READ.AGENT_ORIGINS,
-    agent?.automationName === undefined ? undefined : agentId,
-  );
+  const run = useQuery(agentOriginQuery(agent?.automationName === undefined ? undefined : agentId));
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -499,20 +512,20 @@ export function DesktopAgentPage({
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? tasks.agents.models,
     keywords,
-    origin: run.rows ?? undefined,
+    origin: run.data ?? undefined,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   });
-  const tab = useMemo(() => ({ agent: agentId }), [agentId]);
+  const tab = useMemo(() => agentTab(agentId), [agentId]);
   // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
   const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
     setDrafting({ agentId, draftId }),
   );
   // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
-  const draftTab =
+  const draftShownHere =
     draftShown !== undefined && agents.draft?.id === draftShown ? draftShown : undefined;
   const paneTab = useMemo(
-    () => (draftTab === undefined ? tab : { draft: draftTab }),
-    [draftTab, tab],
+    () => (draftShownHere === undefined ? tab : draftTab(draftShownHere)),
+    [draftShownHere, tab],
   );
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -523,7 +536,7 @@ export function DesktopAgentPage({
   // that opens another task, as a link to it opens (`route.ts`), a worker's opening through its delegation.
   const openPlace = useOpenPlace();
   const openTarget = useSteadyDoor((target: ToolTarget) => {
-    // An inbox call's row opens the window's Inbox on the thread its answer names, narrowed to the agent's task where it has one.
+    // An inbox call's row opens the window's Inbox on the thread its answer names, as a link to it does, without narrowing it (`openInboxItemOn`); one naming no thread opens the Inbox narrowed to the agent's task where it has one.
     if (target.kind === TOOL_TARGET.INBOX) {
       const { item } = target;
       openPlace?.(
@@ -538,19 +551,19 @@ export function DesktopAgentPage({
     }
     if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
     // Its plan's card names its task, an archived agent's among them, whose press opens the plan.
-    if (target.kind === TOOL_TARGET.PLAN && planId !== null) {
+    if (target.kind === TOOL_TARGET.DESCRIPTION && planId !== null) {
       openPlace?.({ kind: LINK_PLACE.TASK, planId });
     }
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
-    if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
+    if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose(pageTab(target.page));
   });
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = useSteadyDoor(
     (agent: string, callId: string, task: string, status: AgentStatus) => {
       views.onWorkerStatus(callId, status);
-      sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+      sidePanel.onChoose(subagentTab(callId, { agent, task }));
     },
   );
   const openPullRequest = useSteadyDoor((published: string, number?: number) =>
@@ -561,7 +574,7 @@ export function DesktopAgentPage({
   // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
   // A page of a task, or of another agent, opens beside the agent, read on its own place.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview({ page }, place),
+    sidePanel.onPreview(pageTab(page), place),
   );
   const { pullRequests, agentIds, heldIds } = control;
   const openHere = useMemo(
@@ -646,6 +659,7 @@ export function DesktopAgentPage({
     sidePanel.onPreviewFile({ path: skill.path }, undefined, fileReads);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
+  const changesPeople = useChangesPeople(agentId);
   const pullRequestCard = useSteadyDoor((url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
     if (pullRequest === undefined) return undefined;
@@ -660,7 +674,7 @@ export function DesktopAgentPage({
       subject: agentSubject(control, agentId, views.held, false),
       models: control.models,
       pullRequest,
-      people: peopleOf(control.changesPeople.get(agentId), pullRequest),
+      people: peopleOf(changesPeople, pullRequest),
       onOpenAgent: () => setDrafting(undefined),
     });
     return card ?? undefined;

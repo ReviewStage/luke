@@ -8,7 +8,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { SKILL_FILE_BOUNDS } from "./skill-file.js";
 
 /**
- * installed-skill-route-wire.ts -- what the installed skills routes take and answer: a paste previewed, skills installed from it, and one listed, read, toggled, updated, shared, or removed.
+ * installed-skill-route-wire.ts -- what the installed skills routes take and answer: a paste previewed, skills installed from it, and one listed, read, or removed.
  *
  * A member installs a skill by pasting a GitHub repository, a link to one
  * of its folders, an `npx skills add` line naming one, or a skill's text
@@ -33,7 +33,7 @@ export const INSTALLED_SKILL_LIST_QUERY = {
 export const INSTALLED_SKILL_PASTE_MAX_CHARS = SKILL_FILE_BOUNDS.MAX_FILE_BYTES * 2;
 
 /**
- * What a refused install or update carries beside its slug: the skill it
+ * What a refused install carries beside its slug: the skill it
  * refused, by name, where it read one, and why.
  */
 export const installedSkillRefusedDataSchema = EffectSchema.Struct({
@@ -145,12 +145,13 @@ const installedSkillSummarySchema = EffectSchema.Struct({
   description: EffectSchema.String,
   userInvocable: EffectSchema.Boolean,
   source: installedSkillSourceSchema,
-  enabled: EffectSchema.Boolean,
+  /** Always true, since every installed skill is on; kept for desktops released before this, which require it. */
+  enabled: EffectSchema.Literal(true),
   /** The workspace a workspace skill is; absent for a personal one. */
   workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   /** Who installed it; null once their account is gone. */
   installedBy: EffectSchema.NullOr(EffectSchema.String),
-  /** Whether the account may update, toggle, and remove it: its own personal skill, or its workspace's as an owner or admin. */
+  /** Whether the account may remove it: its own personal skill, or its workspace's as its installer or an owner or admin. */
   manageable: EffectSchema.Boolean,
   createdAt: EffectSchema.Number,
   updatedAt: EffectSchema.Number,
@@ -179,7 +180,7 @@ export const installedSkillContentSchema = EffectSchema.Struct({
 
 export type InstalledSkillContent = typeof installedSkillContentSchema.Type;
 
-/* ----- Install, toggle, update, share ----- */
+/* ----- Install and remove ----- */
 
 /**
  * An install: the paste, read afresh; whose the skills are; for a source,
@@ -208,34 +209,6 @@ const txid = EffectSchema.optionalKey(EffectSchema.String);
 export const installedSkillInstallAnswerSchema = EffectSchema.Struct({
   skills: EffectSchema.Array(installedSkillSummarySchema),
   txid,
-});
-
-/** A skill turned on or off. */
-export const installedSkillToggleRequestSchema = EffectSchema.Struct({
-  enabled: EffectSchema.Boolean,
-});
-
-/** A skill as a toggle or a share left it, and the transaction it committed in. */
-export const installedSkillAnswerSchema = EffectSchema.Struct({
-  skill: installedSkillSummarySchema,
-  txid,
-});
-
-/** An update, read in the workspace whose GitHub installation reaches the skill's repository. */
-export const installedSkillUpdateRequestSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-});
-
-/** A skill as an update left it, whether its files changed, and the transaction it committed in. */
-export const installedSkillUpdatedAnswerSchema = EffectSchema.Struct({
-  skill: installedSkillSummarySchema,
-  changed: EffectSchema.Boolean,
-  txid,
-});
-
-/** A personal skill shared with the workspace named, which it moves into. */
-export const installedSkillShareRequestSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
 });
 
 /** A skill removed, and the transaction it was removed in. */

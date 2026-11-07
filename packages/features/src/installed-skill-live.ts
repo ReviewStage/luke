@@ -35,7 +35,8 @@ const installedSkillLiveRowSchema = EffectSchema.Struct({
   description: EffectSchema.String,
   userInvocable: EffectSchema.Boolean,
   source: installedSkillSourceSchema,
-  enabled: EffectSchema.Boolean,
+  /** Always true, since every installed skill is on. */
+  enabled: EffectSchema.Literal(true),
   workspaceId: EffectSchema.NullOr(EffectSchema.String),
   installedBy: EffectSchema.NullOr(EffectSchema.String),
   manageable: EffectSchema.Boolean,

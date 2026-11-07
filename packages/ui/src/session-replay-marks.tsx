@@ -56,7 +56,7 @@
  * A stylesheet's rules: the recorder copies the rules of every sheet a
  * document or a shadow root adopts, and every rewrite of one, as they
  * stand, and no masking reaches CSS. Most sheets are the panel's own, but
- * one built from a person's words carries them in its selectors: a plan
+ * one built from a person's words carries them in its selectors: a description
  * diagram's measuring sheet names its classes, and the open comment
  * thread's names the thread. Such a sheet is written through
  * `writeWithheldSheet` and nothing else, which opens it with a rule that
@@ -85,6 +85,14 @@ const TYPED = 'textarea, [contenteditable]:not([contenteditable="false"])';
 
 /** The recorder's fixed class for an input whose changes it never reads. */
 const IGNORED_INPUT = "ph-ignore-input";
+
+/**
+ * The recorder's fixed class for what it leaves out whole: drawn as an empty
+ * box of its size, and none of its changes read. Note that a decoration that
+ * moves by rewriting its own attributes wears it too, because the recorder
+ * would otherwise serialize, mask, and send every step.
+ */
+export const REPLAY_LEFT_OUT = "ph-no-capture";
 
 /** The selector a withheld sheet's first rule is written with, which no element wears. */
 const WITHHELD = ".session-replay-withheld";

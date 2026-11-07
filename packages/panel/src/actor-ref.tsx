@@ -51,12 +51,11 @@ import {
 } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { BotIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
-import { type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
-import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { useCreator } from "./member-directory.js";
-import { useActorDoor } from "./person-door.js";
+import { useActorDoor, usePreloadedPerson } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
@@ -648,7 +647,7 @@ function subLine(...parts: readonly (string | undefined)[]): string | undefined 
   return said.length === 0 ? undefined : said.join(" · ");
 }
 
-/** What someone last did in this plan, as a quieter row under their card's head. */
+/** What someone last did in this description, as a quieter row under their card's head. */
 function LatestRow({ latest }: { latest: ReactNode }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -665,11 +664,11 @@ export function PersonCard({
   latest,
 }: {
   actor: PersonActor;
-  /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
+  /** Their latest activity in this description, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
 }): React.JSX.Element {
   // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
-  useEffect(PERSON_PAGE.prefetch, []);
+  usePreloadedPerson(actor.userId);
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -688,7 +687,7 @@ export function AppCard({
 }: {
   /** How long ago he wrote: "2h ago". */
   sub?: ReactNode;
-  /** What he last wrote in this plan, in a line: "Edited Rollout and Risks". */
+  /** What he last wrote in this description, in a line: "Edited Rollout and Risks". */
   latest?: ReactNode;
 }): React.JSX.Element {
   return (
@@ -703,7 +702,7 @@ export function AppCard({
 const SOMEONE_NOTES = {
   [SOMEONE_REASON.FORMER]: "No longer in this workspace",
   [SOMEONE_REASON.UNNAMED]: "Who made this change isn't known.",
-  [SOMEONE_REASON.EARLIER]: "The plan before its history began",
+  [SOMEONE_REASON.EARLIER]: "The description before its history began",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */

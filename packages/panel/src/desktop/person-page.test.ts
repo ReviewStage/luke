@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_STATUS, type ListedAgent } from "@repo/features/agent-wire";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
@@ -21,7 +21,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
-import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@repo/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -35,7 +35,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
@@ -51,7 +51,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
 /**
@@ -125,30 +125,40 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-sam", name: "Sam Ortiz", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
+/** One of a task's agents as the test names it, which last moved `at`. */
+interface AgentLine {
+  readonly id: string;
+  readonly title: string;
+  readonly status: ListedAgent["status"];
+  readonly at: number;
+  readonly startedBy: typeof CHARLES;
+}
+
 function agent(
   n: number,
   title: string,
   startedBy: typeof CHARLES,
-  status: TaskAgentLine["status"],
+  status: AgentLine["status"],
   ago: number,
-): TaskAgentLine {
+): AgentLine {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
     status,
     at: NOW - ago,
     startedBy,
   };
 }
 
+/** Each task's agents, by the task's id, which the list follows live. */
+const LINES = new Map<string, readonly AgentLine[]>();
+
 function task(
   n: number,
   name: string,
   createdBy: typeof CHARLES,
   ago: number,
-  agents: readonly TaskAgentLine[] = [],
+  agents: readonly AgentLine[] = [],
   assignee?: typeof CHARLES,
 ): TaskSummary {
   const summary: TaskSummary = {
@@ -162,17 +172,29 @@ function task(
     createdBy,
     ...(assignee === undefined ? undefined : { assignee }),
   };
+  LINES.set(summary.id, agents);
   if (agents.length === 0) return summary;
-  return {
-    ...summary,
-    agents: {
-      total: agents.length,
-      working: 0,
-      agents,
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
-  };
+  return { ...summary, agents: { total: agents.length, working: 0, pullRequestTotal: 0 } };
+}
+
+/** Every agent of the tasks, as the list follows them live, which the page lists them from: since its run began while it works, since its newest turn ended once it has. */
+function followedOf(tasks: readonly TaskSummary[]): readonly ListedAgent[] {
+  return tasks.flatMap((summary) =>
+    (LINES.get(summary.id) ?? []).map(({ at, ...line }) =>
+      listedAgent(
+        {
+          ...line,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planId: summary.id,
+          createdAt: at,
+          turnId: null,
+          ...(line.status === AGENT_STATUS.RUNNING ? { runStartedAt: at } : { settledAt: at }),
+        },
+        { workspaceId: ACME.id },
+      ),
+    ),
+  );
 }
 
 const BACKOFF = agent(1, "Jittered backoff", CHARLES, AGENT_STATUS.RUNNING, 12 * MINUTE);
@@ -262,8 +284,8 @@ beforeEach(() => {
         agent: {
           id: agentId,
           planId: CACHE.id,
-          model: CACHE_KEYS.model,
-          effort: CACHE_KEYS.effort,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
           title: CACHE_KEYS.title,
           createdAt: 1,
           status: AGENT_STATUS.COMPLETED,
@@ -352,6 +374,7 @@ function mountWith(
   holdPeople(reads.deliverMembers);
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
+      liveAgents: followedOf(more.tasks ?? overrides.tasks ?? TASKS),
       me: DEAN.userId,
       workspace: { ...ACME, memberCount },
       tasks: TASKS,
@@ -367,6 +390,8 @@ function mountWith(
         onChoose: (chosen) => opened.inbox.push(chosen),
         onOpenItem: (chosen) => opened.inbox.push(chosen),
         onClear: () => undefined,
+        narrowed: undefined,
+        onWiden: () => undefined,
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -399,6 +424,15 @@ function mountWith(
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  // Note that the people and the automations the host holds reach their queries a tick after they land, unless the test holds them out.
+  await vi.waitFor(() => {
+    const text = document.body.textContent ?? "";
+    assert.equal(
+      (!membersHeld && text.includes("Reading who they are")) ||
+        (!automationsHeld && /Reading (their|your) automations/u.test(text)),
+      false,
+    );
   });
 }
 
@@ -478,7 +512,9 @@ test("a teammate's page names them as the members read does and lists their work
   const { page } = mount(CHARLES.userId);
   await settle();
 
-  assert.deepEqual(head(page), ["Charles Pan", "Member · charles@example.com"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(head(page), ["Charles Pan", "Member · charles@example.com"]),
+  );
   assert.deepEqual(sections(page), {
     "Working now": ["Jittered backoff"],
     "Waiting on their answer": ["Retry 429s too?"],
@@ -513,7 +549,7 @@ test("someone who left is named as a former member, with what of theirs the work
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  assert.deepEqual(head(page), ["Priya Raman", "Former member"]);
+  await vi.waitFor(() => assert.deepEqual(head(page), ["Priya Raman", "Former member"]));
   assert.deepEqual(sections(page), { Created: ["Old auth shim removal"] });
 });
 
@@ -581,7 +617,10 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   const { page } = mount("user-sam");
   await settle();
 
-  assert.match(page.textContent ?? "", /Some inbox items could not be read\./u);
+  // Note that the feed's refusal reaches its query one notify tick later.
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /Some inbox items could not be read\./u),
+  );
   assert.ok(button(page, "Retry"));
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
@@ -590,7 +629,7 @@ test("someone who left whom only the place that opened the page names keeps that
   const { page } = mount("user-lee", "Lee Park");
   await settle();
 
-  assert.deepEqual(head(page), ["Lee Park", "Former member"]);
+  await vi.waitFor(() => assert.deepEqual(head(page), ["Lee Park", "Former member"]));
 });
 
 test("the reader's own page lists no question of an agent with no task, whose starter nobody names", async () => {
@@ -772,8 +811,12 @@ test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  const face = page.querySelector<HTMLElement>(".ui-page-header .actor-mark");
-  assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector(".ui-page-header .actor-mark img")?.getAttribute("src"),
+      PRIYA_PICTURE,
+    ),
+  );
 });
 
 test("a person's page lists the workspace's automations they made, never their own personal ones", async () => {
@@ -810,7 +853,7 @@ test("automations that could not be read say so and offer Retry, never passing f
   act(() => button(page, "Retry").click());
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.match(page.textContent ?? "", /Nothing of theirs here yet\./u);
 });
 
@@ -865,7 +908,7 @@ test("a page opened by a member's id alone stands a placeholder head while the m
   answerMembers();
   await settle();
 
-  assert.deepEqual(waits(page), []);
+  await vi.waitFor(() => assert.deepEqual(waits(page), []));
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
 });
 
@@ -883,7 +926,7 @@ test("a read of the workspace's people that was refused says so and offers Retry
   act(() => button(page, "Retry").click());
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
   assert.deepEqual(titles(page), ["Sam Ortiz"]);
 });

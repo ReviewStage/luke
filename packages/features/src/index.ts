@@ -24,6 +24,11 @@ export {
   type HostedAgentClientOptions,
 } from "./agent-client.js";
 export {
+  HostedAgentPortsClient,
+  type HostedAgentPortsClientOptions,
+  portForwardAddress,
+} from "./agent-ports-client.js";
+export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
@@ -33,10 +38,13 @@ export {
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
   type DeviceAgentUpdate,
+  HOST_PAIRING_FAILURE,
   HOST_PAIRING_OUTCOME,
   HostedDeviceAgentClient,
   type HostedDeviceAgentClientOptions,
+  type HostPairingFailed,
   type HostPairingOutcome,
+  OWN_ENROLL_FAILURE,
   OWN_ENROLL_OUTCOME,
   type OwnEnrollOutcome,
   pollHostPairing,
@@ -80,7 +88,9 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_CALL_FAILURE,
   MAC_COMMAND_NOT_CLAIMED,
+  type MacCommandCallFailure,
 } from "./mac-command-client.js";
 export {
   HostedMcpClientsClient,
@@ -116,9 +126,7 @@ export {
 export {
   HostedTerminalClient,
   type HostedTerminalClientOptions,
-  TERMINAL_UNANSWERED,
   type TerminalRelayAsk,
-  type TerminalUnanswered,
   terminalRelayAddress,
 } from "./terminal-client.js";
 export {

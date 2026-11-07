@@ -80,7 +80,9 @@ export function inAppScheme(address: string): string {
  * which no workspace's slug may be (`workspace-wire.ts`): every page the web
  * app serves under its own name (the root `vercel.json`,
  * `apps/web/vite.config.ts`), the path PostHog's traffic is passed on from
- * (`POSTHOG_PROXY.PATH`), and the words a later page is likeliest to want.
+ * (`POSTHOG_PROXY.PATH`), the path the web tab's Sentry envelopes are
+ * posted to (`SENTRY_TUNNEL.PATH`), the path the docs' Mintlify assets are
+ * passed on from, and the words a later page is likeliest to want.
  * It stands here, beside the home it names the paths of, because the link
  * grammar reads it too, so a page of ours is never read as a workspace's
  * Home, and this module imports nothing.
@@ -109,7 +111,6 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "docs",
   "download",
   "downloads",
-  "eve",
   "feed",
   "github-installed",
   "help",
@@ -126,6 +127,7 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "logout",
   "mac",
   "mcp",
+  "mintlify-assets",
   "new",
   "notifications",
   "oauth",
@@ -136,6 +138,7 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "plans",
   "pricing",
   "privacy",
+  "r8v3",
   "search",
   "security",
   "settings",

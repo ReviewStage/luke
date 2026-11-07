@@ -12,13 +12,12 @@ import {
   INBOX_SCOPE_KIND,
 } from "@repo/features/agent-view";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import { inboxAttachmentIdsIn } from "@repo/features/inbox-attachment-link";
 import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { AppInboxItems } from "@repo/host/app-state";
+import { useMinute } from "@repo/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { afterPaint } from "../after-paint.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -32,8 +31,9 @@ import {
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
+import { holderInboxQuery, holderInboxRetryMutation, inboxItemsQuery } from "../live-reads.js";
+import type { PictureReader } from "../picture-query.js";
 import { useSendQueue } from "../send-queue.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { messageFailureWords } from "./agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
 import {
@@ -50,7 +50,7 @@ import {
  * use-task-inbox.ts -- the open task's inbox as one control: its items, drawn from the account's feed at once and from the holder's own read as the host holds it, and the answers on their way back.
  *
  * The holder's own read, a task's by its plan or an agent's by its own id,
- * is held (`use-host-read.ts`) while the window shows the tasks and a task
+ * is held (`live-reads.ts`) while the window shows the tasks and a task
  * with an agent, or one main says an item waits on, is open, so the tab's
  * count stands whichever tab is chosen; the host keeps it followed a while
  * after, so a task taken up again draws from where its read stands. The
@@ -114,17 +114,13 @@ import {
  * Markdown draws names an attachment the service keeps, and their bytes are
  * read apart from the inbox, once per attachment while the task is open,
  * as a card first draws it: the host fetches them under the account
- * and the hook holds them as a `data:` URL the card draws, so a read of
- * the inbox that replaces every item draws the same picture again without
- * asking for it again, and a picture inside a settled card no one opened
- * is never asked for. A picture no item names any longer, once the agent
- * posted its item again, is let go, since the service deleted it too. A
- * picture landing before the hook's own read of the items does is kept all
- * the same, since the Inbox draws an item from its list's read first and
- * nothing would ask for the picture again, and so is one landing after
- * that read failed, when the Inbox draws from its list's read again; one
- * landing while that read stands, which no item names, is not. A read
- * that did not answer is held as failed, and the card offers to try again.
+ * and the window keeps each under its item and attachment as it keeps every
+ * picture (`../picture-query.ts`), as a `data:` URL the card draws, so a
+ * read of the inbox that replaces every item draws the same picture again
+ * without asking for it again, a picture inside a settled card no one
+ * opened is never asked for, and one no card draws any longer is let go a
+ * while after. A read that did not answer draws as failed, and the card
+ * offers to try again.
  *
  * What the developer has put on a card and not sent is its draft, kept by
  * item (`../composer-drafts.ts`), so it waits through a look at another tab,
@@ -153,9 +149,6 @@ export type InboxThreadStarter = (params: AgentInboxStartParams) => Promise<Agen
 export type InboxImageReader = (
   params: AgentInboxAttachmentParams,
 ) => Promise<AgentInboxAttachmentView>;
-
-/** One image as the hook holds it: the `data:` URL its card draws, or that its read did not answer. */
-export type InboxImage = { readonly url: string } | { readonly failed: true };
 
 /** A plain reply on its way, drawn at its thread's end until the item holds it: the key it goes under, its words and files, and when it was sent. */
 export interface PendingInboxReply {
@@ -223,12 +216,8 @@ export interface TaskInboxControl {
   readonly onAcknowledge: (item: InboxItem) => void;
   /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is, after every message of the item's on its way; nothing where it holds nothing the service takes or a nod is out. `taken` is called once the service took it, never where it refused it. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft, taken?: () => void) => void;
-  /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
-  readonly images: ReadonlyMap<string, InboxImage>;
-  /** Asks for an image a card draws, where it is neither held nor on its way. */
-  readonly onImage: (itemId: string, attachmentId: string) => void;
-  /** Reads an image again whose read did not answer. */
-  readonly onRetryImage: (attachmentId: string) => void;
+  /** How a card's image is read, by its item and attachment, and kept as the window's pictures are (`../picture-query.ts`). */
+  readonly images: InboxImageReads;
 }
 
 /** What a card says when its nod was not taken, by what had become of the item. */
@@ -327,98 +316,9 @@ function fedItemsOf(
   return fed[INBOX_SCOPE_KIND.PLAN][planId]?.filter((item) => item.agentId === id);
 }
 
-/**
- * Every attachment the items name: the files their threads' messages
- * carried, and the item's own pictures those messages' Markdown draws
- * (`inbox-attachment-link`).
- */
-function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
-  const named = new Set<string>();
-  for (const item of items) {
-    for (const message of item.thread ?? []) {
-      for (const file of message.files ?? []) named.add(file.attachmentId);
-      for (const attachmentId of inboxAttachmentIdsIn(message.text, item.id)) {
-        named.add(attachmentId);
-      }
-    }
-  }
-  return named;
-}
-
-/** The images held under the attachments still named; the rest let go. */
-function imagesNamed(
-  images: ReadonlyMap<string, InboxImage>,
-  named: ReadonlySet<string>,
-): ReadonlyMap<string, InboxImage> {
-  if ([...images.keys()].every((attachmentId) => named.has(attachmentId))) return images;
-  return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
-}
-
-/** An Inbox's pictures as read: each held by its attachment, and how one is asked for and asked for again. */
-export type InboxImageReads = Pick<TaskInboxControl, "images" | "onImage" | "onRetryImage">;
-
-/**
- * The pictures items draw, each read once as it is first drawn and held by
- * its attachment, for the task's Inbox. What `scope` reads is let go when it changes,
- * a picture no item among `items` names any longer is let go too, and one
- * landing after its scope moved on, or, while `drawn`, for an attachment no
- * item names, is kept for nobody. Note that one landing while not `drawn` is
- * kept, because the Inbox's pane draws the item from its list's read then,
- * and nothing would ask for the picture again.
- */
-function useInboxImageReads(input: {
-  read: InboxImageReader;
-  scope: string | undefined;
-  items: readonly InboxItem[];
-  drawn: boolean;
-}): InboxImageReads {
-  const { scope, items, drawn } = input;
-  const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
-  // The reads out now, by attachment, so an item drawn again while its read is out asks once.
-  const reading = useRef(new Set<string>());
-  const named = useMemo(() => attachmentsNamed(items), [items]);
-  const latest = useRef({ read: input.read, scope, drawn, named });
-  latest.current = { read: input.read, scope, drawn, named };
-  useEffect(() => {
-    setImages((standing) => imagesNamed(standing, named));
-  }, [named]);
-  const onImage = useCallback(
-    (itemId: string, attachmentId: string) => {
-      if (images.has(attachmentId) || reading.current.has(attachmentId)) return;
-      reading.current.add(attachmentId);
-      const askedOn = scope;
-      // Note that a picture is read once the frame that drew its place has painted, so it never holds up the thread.
-      afterPaint(() => {
-        latest.current
-          .read({ itemId, attachmentId })
-          .catch((): AgentInboxAttachmentView => UNANSWERED)
-          .then((answer) => {
-            reading.current.delete(attachmentId);
-            const image: InboxImage =
-              "failure" in answer
-                ? { failed: true }
-                : { url: `data:${answer.contentType};base64,${answer.base64}` };
-            const now = latest.current;
-            const kept = now.scope === askedOn && (!now.drawn || now.named.has(attachmentId));
-            setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
-          });
-      });
-    },
-    [images, scope],
-  );
-  // Another scope's images are its own: what this one asked for is let go with it.
-  useEffect(() => {
-    setImages(new Map());
-    reading.current.clear();
-  }, [scope]);
-  const onRetryImage = useCallback((attachmentId: string) => {
-    setImages((standing) => {
-      const next = new Map(standing);
-      next.delete(attachmentId);
-      return next;
-    });
-  }, []);
-  return { images, onImage, onRetryImage };
+/** An Inbox's pictures as its cards read them: by the item, as the scope the window keeps them under, and the attachment. */
+export interface InboxImageReads {
+  readonly read: PictureReader;
 }
 
 /** Where an item's card keeps its draft: the item, whatever its revision or status, so a message landing on it never moves the words being written. */
@@ -454,28 +354,18 @@ function keptDraft(draft: InboxDraft, revision: number): Draft {
     values: draft.values,
     steps: draft.steps,
     press: draft.press,
-    resolving: draft.resolving,
   };
-}
-
-/** Whether a draft holds picks of an answer, a resolve staged aside, which answers nothing and so never stands for the picks that went. */
-function holdsAnswer(draft: Draft): boolean {
-  return holdsPicks({ ...draft, resolving: undefined });
 }
 
 /**
  * What a box holds once a reply carrying an answer is refused: the words and
  * files that went, then any written on the thread while the answer stood
- * settled, and the picks that went unless others were made meanwhile, or a
- * resolve was staged meanwhile on a revision since, which the picks that went
- * no longer stand on.
+ * settled, and the picks that went unless others were made meanwhile.
  */
 function withRefused(now: Draft, went: Draft): Draft {
   if (holdsNothing(now)) return went;
-  const keeps = holdsAnswer(now) || (now.resolving === true && now.revision !== went.revision);
   return {
-    ...(keeps ? now : went),
-    resolving: now.resolving ?? went.resolving,
+    ...(holdsPicks(now) ? now : went),
     text: [went.text, now.text].filter((words) => words !== "").join("\n"),
     attachments: [...went.attachments, ...now.attachments],
   };
@@ -490,8 +380,7 @@ function withRefused(now: Draft, went: Draft): Draft {
 function carriedBack(first: Draft, behind: readonly Draft[]): Draft {
   return behind.reduce(
     (joined, went) => ({
-      ...(holdsAnswer(went) ? went : joined),
-      resolving: went.resolving ?? joined.resolving,
+      ...(holdsPicks(went) ? went : joined),
       text: [joined.text, went.text].filter((words) => words !== "").join("\n"),
       attachments: [...joined.attachments, ...went.attachments],
     }),
@@ -519,8 +408,7 @@ function holdsNothing(draft: Draft): boolean {
     draft.choices.length === 0 &&
     draft.values.length === 0 &&
     (draft.steps ?? []).length === 0 &&
-    draft.press === undefined &&
-    draft.resolving === undefined
+    draft.press === undefined
   );
 }
 
@@ -605,20 +493,21 @@ export function useHeldTaskInbox(input: {
   // listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
   const active = shown && taskId !== undefined && readable;
-  const holder = useHostRead(
-    LIVE_READ.HOLDER_INBOX,
-    useMemo(
-      () => (active && taskId !== undefined ? { kind, id: taskId } : undefined),
-      [active, kind, taskId],
-    ),
-  );
-  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  const holderKey = active && taskId !== undefined ? { kind, id: taskId } : undefined;
+  const holder = useQuery(holderInboxQuery(holderKey));
+  const { mutate: retryHolder } = useMutation(holderInboxRetryMutation());
+  // Note that Try again moves with the holder alone, as the read's own did, since a render builds its key anew.
+  const holderId = holderKey?.id;
+  const onRetry = useCallback(() => {
+    if (holderId !== undefined) retryHolder({ kind, id: holderId });
+  }, [retryHolder, kind, holderId]);
+  const feed = useQuery(inboxItemsQuery());
   // Note that an agent on a plan draws its own items among the plan's, which keep their identity while the plan's list stands.
   const planItems =
     kind === INBOX_SCOPE_KIND.AGENT && input.draftTask != null
-      ? feed.rows?.[INBOX_SCOPE_KIND.PLAN][input.draftTask]
+      ? feed.data?.[INBOX_SCOPE_KIND.PLAN][input.draftTask]
       : undefined;
-  const fedRows = feed.rows;
+  const fedRows = feed.data;
   const fed = useMemo(
     () =>
       planItems === undefined
@@ -627,22 +516,22 @@ export function useHeldTaskInbox(input: {
     [fedRows, planItems, kind, taskId, input.draftTask],
   );
   // The holder's own read stands in for the feed's once it answered, since it holds what the feed leaves out.
-  const pushed = holder.rows ?? fed;
-  const read = holder.status === HOST_READ_STATUS.READY;
-  const failed = holder.status === HOST_READ_STATUS.FAILED;
+  const pushed = holder.data ?? fed;
+  const read = holder.isSuccess;
+  const failed = holder.isError;
   const [held, setHeld] = useState<Held>(() => fresh(taskId, pushed));
   if (held.taskId !== taskId) setHeld(fresh(taskId, pushed));
   useInboxArrivals(
     { taskId: held.taskId, items: held.items, read: held.drawn },
     input.onScreen === true,
   );
-  // Note that a read that failed is drawn no longer, since the Inbox falls back to its list's read, whose pictures this hook's reads still hold.
-  const { images, onImage, onRetryImage } = useInboxImageReads({
-    read: input.agents.readInboxImage,
-    scope: taskId,
-    items: held.items,
-    drawn: held.drawn && !failed,
-  });
+  const readInboxImage = input.agents.readInboxImage;
+  const images = useMemo<InboxImageReads>(
+    () => ({
+      read: (itemId, attachmentId) => readInboxImage({ itemId, attachmentId }),
+    }),
+    [readInboxImage],
+  );
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [pendingReplies, setPendingReplies] = useState<
     ReadonlyMap<string, readonly PendingInboxReply[]>
@@ -902,7 +791,9 @@ export function useHeldTaskInbox(input: {
     latest.current.onRetryList();
   }, [held.items, ids]);
 
-  const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
+  // Note that the clock moves with the minute, so a thread whose reminder comes due counts again without a read.
+  const now = useMinute();
+  const board = useMemo(() => inboxBoard(held.items, readerId, now), [held.items, readerId, now]);
 
   return {
     board,
@@ -910,8 +801,8 @@ export function useHeldTaskInbox(input: {
     read,
     drawn: held.drawn,
     failed,
-    onRetry: holder.retry,
-    whole: holder.rows,
+    onRetry,
+    whole: holder.data,
     sending,
     pendingReplies,
     notes,
@@ -919,8 +810,6 @@ export function useHeldTaskInbox(input: {
     onAcknowledge,
     onMessage,
     images,
-    onImage,
-    onRetryImage,
   };
 }
 
@@ -1011,7 +900,6 @@ export function useInboxCardDrafts(
             attachments: kept.attachments,
             steps: kept.steps,
             press: kept.press,
-            resolving: kept.resolving,
           };
     },
     [drafts],
@@ -1030,7 +918,6 @@ export function useInboxCardDrafts(
         attachments: draft.attachments,
         steps: draft.steps,
         press: draft.press,
-        resolving: draft.resolving,
       })),
     [writer, draftsOn],
   );

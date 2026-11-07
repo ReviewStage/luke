@@ -6,10 +6,10 @@
  * what a window would: an answer, or a refusal in its sentence.
  */
 
-import type { WireBoundaryInput } from "@repo/wire";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import type { Router } from "@orpc/server";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Context, Effect } from "effect";
 import { ACT_ERROR, type ActPortClient, type PortActKind } from "../contract/index.js";
 import type { ActPortContext, ActSender } from "./base.js";

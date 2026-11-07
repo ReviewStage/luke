@@ -1,5 +1,12 @@
-import { Duration, Effect, Option, Stream } from "effect";
-import { LiveBroken, liveRows, type SealedRead, type TxWait } from "./live-follow.js";
+import { Effect, Option, Stream } from "effect";
+import {
+  LiveBroken,
+  liveRows,
+  resealWait,
+  type SealedRead,
+  type TxWait,
+  waitOrRegained,
+} from "./live-follow.js";
 
 /**
  * live-push.ts -- a read followed over the service's held poll for the windows that draw it, each change published for the host to push to them.
@@ -8,15 +15,16 @@ import { LiveBroken, liveRows, type SealedRead, type TxWait } from "./live-follo
  * rows are decoded where they arrive, and the value they stand for is
  * published each time they move. A read the service did not answer is
  * published as a failure and asked for again, and a follow that stops for
- * good is read again, each after `LIVE_RESEAL`. A read the service refused
+ * good is read again, each after a wait that doubles from `FOLLOW_RESEAL`'s
+ * first to its longest while each read again publishes nothing, so a read
+ * that keeps failing, or whose rows never decode, is not read whole every
+ * two seconds for as long as it is held; a wait ends at once where the
+ * service answers again (`waitOrRegained`). A read the service refused
  * for good, one naming nothing the account reaches, is published as a
  * failure and ends there, so a read held of a plan or an agent the reader
  * cannot reach is not asked again for as long as it is held. Only the value
  * is published.
  */
-
-/** How long after a read went unanswered, or a follow stopped for good, it is read again. */
-const LIVE_RESEAL = Duration.seconds(2);
 
 /** A read the service did not answer, `gone` where the read names nothing the account reaches. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
@@ -36,15 +44,19 @@ export interface LivePushDependencies<Part extends string, Value> {
 export function pushLive<Part extends string, Value>(
   dependencies: LivePushDependencies<Part, Value>,
 ): Effect.Effect<void> {
+  // Note that a read that published counts the next wait from the first again.
+  let fruitless = 0;
   // Each attempt answers whether the read is to be sealed again.
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.seal(false);
     if ("failure" in sealed) {
       yield* dependencies.publish(undefined);
       if (sealed.gone === true) return false;
-      yield* Effect.sleep(LIVE_RESEAL);
+      fruitless += 1;
+      yield* waitOrRegained(resealWait(fruitless));
       return true;
     }
+    let published = false;
     const rows = liveRows(
       {
         poll: (after) => dependencies.seal(true, after),
@@ -55,10 +67,14 @@ export function pushLive<Part extends string, Value>(
     yield* Stream.runForEach(rows, (read) =>
       Option.match(dependencies.decode(read), {
         onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: dependencies.publish,
+        onSome: (value) => {
+          published = true;
+          return dependencies.publish(value);
+        },
       }),
     ).pipe(Effect.catch(() => Effect.void));
-    yield* Effect.sleep(LIVE_RESEAL);
+    fruitless = published ? 0 : fruitless + 1;
+    yield* waitOrRegained(resealWait(fruitless));
     return true;
   });
   return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));

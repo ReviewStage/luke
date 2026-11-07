@@ -9,6 +9,7 @@ import { accountContract } from "./account.js";
 import { adminContract } from "./admin.js";
 import { agentBrowserTabsContract } from "./agent-browser-tabs.js";
 import { agentPagesContract } from "./agent-pages.js";
+import { agentPortsContract } from "./agent-ports.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
@@ -26,7 +27,7 @@ import { macCommandsContract } from "./mac-commands.js";
 import { mcpClientsContract } from "./mcp-clients.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
-import { planCommentsContract } from "./plan-comments.js";
+import { descriptionCommentsContract } from "./description-comments.js";
 import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { pullRequestsContract } from "./pull-requests.js";
 import { repositoryPinsContract } from "./repository-pins.js";
@@ -45,7 +46,7 @@ export { bodyCap, getBodyCap } from "./base.js";
 export { HOSTED_ERRORS } from "./errors.js";
 export { EVENTS_MAXIMUM_BODY_BYTES } from "./events.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
-export { TASK_START_STATUS } from "./tasks.js";
+export { RETIRED_TASK_PATHS, TASK_START_STATUS } from "./tasks.js";
 
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
@@ -53,6 +54,7 @@ export const hostedContract = {
   admin: adminContract,
   agentBrowserTabs: agentBrowserTabsContract,
   agentPages: agentPagesContract,
+  agentPorts: agentPortsContract,
   agentPullRequests: agentPullRequestsContract,
   agents: agentsContract,
   automations: automationsContract,
@@ -70,7 +72,7 @@ export const hostedContract = {
   mcpClients: mcpClientsContract,
   messages: messagesContract,
   models: modelsContract,
-  planComments: planCommentsContract,
+  descriptionComments: descriptionCommentsContract,
   plans: tasksContract,
   pullRequestChapters: pullRequestChaptersContract,
   pullRequests: pullRequestsContract,

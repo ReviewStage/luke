@@ -1,21 +1,27 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import {
+  DESCRIPTION_ATTACHMENT_KEEP,
+  keepDescriptionAttachment,
+} from "@repo/database/models/description-attachments";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { conversations, messages, turns } from "@repo/database/schemas/storage";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
 import { EXPERIMENT } from "@repo/settings";
 import {
   TURN_ORIGIN,
@@ -25,9 +31,6 @@ import {
   type WireBoundaryInput,
 } from "@repo/wire";
 import { webmBytes } from "@repo/wire/testing";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { Base64 } from "effect/encoding";
@@ -65,20 +68,25 @@ import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-co
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
-  type AgentToolCall,
   runAgentComment,
-  runAgentEditPlan,
+  runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
   runAgentShowPage,
-  runAgentTools,
 } from "../coder-host/agent-doors.js";
+import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import {
+  isServedTool,
+  refusedByDoor,
+  TOOL_CATALOG,
+  type WorkspaceMcpServices,
+} from "../tool-catalog/catalog.js";
+import { GATES, TOOL_GATE } from "../tool-catalog/gates.js";
 import {
   WORKSPACE_INTEGRATION_MCP_PATH,
   WORKSPACE_MCP_PATH,
@@ -89,14 +97,13 @@ import {
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
-import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_threads` and runs it through the coder host's inbox door
- * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
+ * as the agent's starter, the door the tool catalog names for it, and a wrong bearer, a missing one, and a retired
  * one are each refused before anything is read. Synthetic accounts and
  * words throughout.
  *
@@ -113,7 +120,7 @@ const PICTURE: Picture = {
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
 };
 
-/** A deployment that names nothing of its environment: no eve to reach, no keys. */
+/** A deployment that names nothing of its environment: nothing to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -123,6 +130,8 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
@@ -131,7 +140,7 @@ const NO_INTEGRATIONS = integrationConnectOf(() => ({
   configured: false,
 }));
 
-/** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
+/** The services the doors run against, over the test's database: GitHub, the catalog, and Linear none of them reach. */
 const doorServices = Effect.gen(function* () {
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -204,7 +213,7 @@ const agentWithBearer = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -230,7 +239,7 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const started = yield* createAgent(userId, {
     taskId: null,
     organizationId,
-    planSnapshot: null,
+    descriptionSnapshot: null,
     prompt: "Chart the funnel",
     idempotencyKey: randomUUID(),
     model: "openai/gpt-5.5",
@@ -317,16 +326,12 @@ function post(
   });
 }
 
-/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
-const SERVED_TOOLS = [
-  "post_thread",
-  "read_threads",
-  "withdraw_ask",
-  "open_pull_request",
-  "edit_plan",
-  "look_at_picture",
-  "show_image",
-  "show_page",
+/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
+const descriptionsOn = (userId: string) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+
+/** The agent tools about the workspace's agents, tasks, automations, and memory, each of whose catalog entries names its own run (`tool-catalog/catalog.ts`'s `agentTool`). */
+const AGENT_TOOLS = [
   "read_page",
   "start_agent",
   "stop_agent",
@@ -348,6 +353,19 @@ const SERVED_TOOLS = [
   "run_automation",
   "save_memory",
   "search_memory",
+] as const;
+
+/** The tools a native agent is served: every tool of our catalog that its harness has no equal of. */
+const SERVED_TOOLS = [
+  "post_thread",
+  "read_threads",
+  "withdraw_ask",
+  "open_pull_request",
+  "edit_description",
+  "look_at_picture",
+  "show_image",
+  "show_page",
+  ...AGENT_TOOLS,
   "read_comments",
   "reply_to_comment",
   "update_comment",
@@ -357,65 +375,43 @@ const SERVED_TOOLS = [
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
 
-/** A call of a door made directly, as eve's tool for it makes one through the coder host. */
+/** A call of a door made directly, as the catalog makes one for the server's tool. */
 type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   seams: AgentDoorSeams,
 ) => Effect.Effect<object, never, WorkspaceMcpServices>;
 
-const agentTool =
-  (tool: AgentToolCall["tool"]): DirectCall =>
-  (admitted, input, seams) =>
-    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() });
-
 const commentTool =
   (name: CommentToolName): DirectCall =>
   (admitted, input) =>
-    runAgentComment(admitted, name, input);
+    runAgentComment(admitted, name, input, true);
 
 /**
- * Each tool's own door, called as eve's tool calls it: the server's answer to
+ * Each tool's own door, called directly as the catalog calls it: the server's answer to
  * a tool is to be this one's, so a tool routed to any other door, or to
- * none, answers otherwise.
+ * none, answers otherwise. The agent tools are left out, since each one's
+ * catalog entry names its run itself, and no door of theirs stands apart
+ * from the catalog to call.
  */
-const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
+const DOOR_OF: Readonly<
+  Record<Exclude<ServedTool, "run_on_mac" | "browser" | (typeof AGENT_TOOLS)[number]>, DirectCall>
+> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
-  edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
+  edit_description: (admitted, input) => runAgentEditDescription(admitted, input, 0, NO_SANDBOX),
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
-  read_page: agentTool("read_page"),
-  start_agent: agentTool("start_agent"),
-  stop_agent: agentTool("stop_agent"),
-  list_agents: agentTool("list_agents"),
-  read_agent: agentTool("read_agent"),
-  message_agent: agentTool("message_agent"),
-  update_agent: agentTool("update_agent"),
-  list_models: agentTool("list_models"),
-  list_tasks: agentTool("list_tasks"),
-  read_task: agentTool("read_task"),
-  create_task: agentTool("create_task"),
-  update_task: agentTool("update_task"),
-  create_section: agentTool("create_section"),
-  delete_section: agentTool("delete_section"),
-  list_automations: agentTool("list_automations"),
-  create_automation: agentTool("create_automation"),
-  update_automation: agentTool("update_automation"),
-  delete_automation: agentTool("delete_automation"),
-  run_automation: agentTool("run_automation"),
-  save_memory: agentTool("save_memory"),
-  search_memory: agentTool("search_memory"),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
   update_comment: commentTool("update_comment"),
 };
 
-/** The eve tools a harness has its own of, which the server never serves. */
+/** The tools a harness has its own of, as the retired runtime named them, which the server never serves. */
 const HARNESS_TOOLS = [
   "bash",
   "read_file",
@@ -544,7 +540,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a tool the server does not hold and a method it does not know are protocol errors; a notification is taken with no body",
+    "a tool the server does not hold and a method it does not know are protocol errors, a tool since renamed is a tool error naming the tool in its place, and a notification is taken with no body",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -555,6 +551,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           id: 4,
           method: "tools/call",
           params: { name: "bash", arguments: {} },
+        });
+        const renamedTool = yield* post(fetch, agent.bearer, {
+          jsonrpc: "2.0",
+          id: 7,
+          method: "tools/call",
+          params: { name: "edit_plan", arguments: { taskId: agent.taskId, notes: [] } },
         });
         const unknownMethod = yield* post(fetch, agent.bearer, {
           jsonrpc: "2.0",
@@ -573,6 +575,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         );
 
         assert.equal(unknownTool.body.error.code, -32602);
+        assert.equal(renamedTool.body.result.isError, true);
+        assert.match(renamedTool.body.result.content[0].text, /`edit_description`/u);
         assert.equal(unknownMethod.body.error.code, -32601);
         assert.deepEqual(
           [notification.status, notification.body],
@@ -583,13 +587,13 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list names every Vespin tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    "tools/list names every Vespin tool the agent's harness has no equal of, each with its catalog entry's schema, and none the harness has",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true },
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
         });
         const client = yield* connected(fetch, agent.bearer);
 
@@ -600,7 +604,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
-          const served = WORKSPACE_MCP_TOOLS.get(tool.name);
+          const served = isServedTool(tool.name) ? TOOL_CATALOG.get(tool.name) : undefined;
           assert.ok(served !== undefined);
           assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
@@ -610,35 +614,10 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
 
   it.effect.each([
     {
-      // An agent on no task is listed the plan's tools all the same.
+      // An agent on no task is listed the description's tools all the same.
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
-    },
-    {
-      why: "a teammate has put words into, run_on_mac",
-      agent: Effect.gen(function* () {
-        const agent = yield* agentInSandbox;
-        const teammate = `user-${randomUUID()}`;
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
-        );
-        yield* Database.use((db) =>
-          db.insert(messages).values({
-            userId: agent.userId,
-            conversationId: agent.conversationId,
-            seq: 1,
-            clientId: randomUUID(),
-            role: "user",
-            parts: [],
-            placedAt: new Date(0),
-            sender: MESSAGE_SENDER.MEMBER,
-            senderUserId: teammate,
-          }),
-        );
-        return agent;
-      }),
-      withheld: ["run_on_mac"],
     },
     {
       why: "on a device, the browser and run_on_mac",
@@ -655,7 +634,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory where its starter has Memory off",
+    "tools/list leaves out what the catalog's gates offer no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -665,7 +644,13 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const left = [...withheld, "save_memory", "search_memory"];
+        const left = [
+          ...withheld,
+          "save_memory",
+          "search_memory",
+          "edit_description",
+          "look_at_picture",
+        ];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !left.includes(name)).sort(),
@@ -674,11 +659,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "edit_plan holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
+    "edit_description holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentInSandbox;
+        yield* descriptionsOn(agent.userId);
         const runTurn = Database.use((db) =>
           db.insert(turns).values({
             userId: agent.userId,
@@ -688,22 +674,25 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           }),
         );
         const client = yield* connected(fetch, agent.bearer);
-        const editPlan = (count: number, turn: string) => {
+        const editDescription = (count: number, turn: string) => {
           const notes = Array.from({ length: count }, (_, index) => ({
             kind: "add",
             section: "Approach",
             text: `- ${turn} note ${index + 1}.`,
           }));
           return Effect.promise(() =>
-            client.callTool({ name: "edit_plan", arguments: { taskId: agent.taskId, notes } }),
+            client.callTool({
+              name: "edit_description",
+              arguments: { taskId: agent.taskId, notes },
+            }),
           );
         };
 
-        const early = yield* editPlan(1, "Unrecorded turn");
+        const early = yield* editDescription(1, "Unrecorded turn");
         yield* runTurn;
-        const first = yield* editPlan(39, "First turn");
-        const fortieth = yield* editPlan(1, "First turn's last");
-        const past = yield* editPlan(1, "First turn's extra");
+        const first = yield* editDescription(39, "First turn");
+        const fortieth = yield* editDescription(1, "First turn's last");
+        const past = yield* editDescription(1, "First turn's extra");
         yield* Database.use((db) =>
           db
             .update(turns)
@@ -711,18 +700,18 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
             .where(eq(turns.conversationId, agent.conversationId)),
         );
         yield* runTurn;
-        const next = yield* editPlan(1, "Second turn");
+        const next = yield* editDescription(1, "Second turn");
         yield* Effect.promise(() => client.close());
 
         assert.deepEqual(firstJson(early), {
           status: "rejected",
-          reason: PLAN_EDIT_REFUSAL.NO_TURN,
+          reason: DESCRIPTION_EDIT_REFUSAL.NO_TURN,
         });
         assert.deepEqual(firstJson(first), { status: "accepted", taken: 39 });
         assert.deepEqual(firstJson(fortieth), { status: "accepted", taken: 1 });
         assert.deepEqual(firstJson(past), {
           status: "rejected",
-          reason: PLAN_EDIT_REFUSAL.TOO_MANY,
+          reason: DESCRIPTION_EDIT_REFUSAL.TOO_MANY,
         });
         assert.equal(past.isError, true);
         assert.deepEqual(firstJson(next), { status: "accepted", taken: 1 });
@@ -756,11 +745,56 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "each tool answers as its own door does, called as eve's tool calls it, for the same agent and input",
+    "a device agent's run_on_mac and browser are refused at the catalog in its sandbox gate's words, and neither door runs",
+    () =>
+      Effect.gen(function* () {
+        // A browser that would answer and keep its tab, were the door run.
+        const peer = yield* fakeCdpPeer({
+          pages: [{ targetId: "tab-1", url: "https://shop.test/", title: "Shop" }],
+          answer: (command) => PAGE_ANSWERS[command.method],
+        });
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          undefined,
+          agentBrowserTestLayer(peer, SESSION),
+        );
+        const agent = yield* agentInSandbox;
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.agentId)),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const mac = yield* Effect.promise(() =>
+          client.callTool({ name: "run_on_mac", arguments: { command: "ls ~/code" } }),
+        );
+        const browser = yield* Effect.promise(() =>
+          client.callTool({
+            name: "browser",
+            arguments: { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        const refused = { status: "not-run", reason: GATES[TOOL_GATE.SANDBOX].refusal };
+        assert.deepEqual([mac.isError, firstJson(mac)], [true, refused]);
+        assert.deepEqual([browser.isError, firstJson(browser)], [true, refused]);
+        assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "each tool answers as its own door does, called directly as the catalog calls it, for the same agent and input",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        // Every gate stands open, so each call reaches its door.
+        yield* writeAccountPreferences(agent.userId, {
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
+        });
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
         const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);
@@ -784,7 +818,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no harness to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";
@@ -807,6 +841,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* descriptionsOn(agent.userId);
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
@@ -818,7 +853,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         }
         const loaded = (name: string) =>
           listed.tools.find((tool) => tool.name === name)?._meta?.["anthropic/alwaysLoad"];
-        assert.equal(loaded("edit_plan"), true);
+        assert.equal(loaded("edit_description"), true);
         assert.equal(loaded("look_at_picture"), undefined);
       }),
   );
@@ -848,15 +883,16 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a picture of the agent's plan comes back as its look's status and image content, never as text",
+    "a picture of the agent's description comes back as its look's status and image content, never as text",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
-        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT)
+        yield* descriptionsOn(agent.userId);
+        const kept = yield* keepDescriptionAttachment(agent.userId, agent.taskId, PICTURE);
+        if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
           return assert.fail("the picture was not kept");
-        const address = planAttachmentAddress(
+        const address = descriptionAttachmentAddress(
           { taskId: agent.taskId, attachmentId: kept.id },
           "acme",
         );
@@ -876,18 +912,20 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a look at a video of the agent's plan comes back as the refusal alone, with no image and none of its bytes",
+    "a look at a video of the agent's description comes back as the refusal alone, with no image and none of its bytes",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* descriptionsOn(agent.userId);
         const video: Picture = {
           contentType: PICTURE_MEDIA_TYPE.WEBM,
           bytes: webmBytes(1280, 800),
         };
-        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, video);
-        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the video was not kept");
-        const address = planAttachmentAddress(
+        const kept = yield* keepDescriptionAttachment(agent.userId, agent.taskId, video);
+        if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
+          return assert.fail("the video was not kept");
+        const address = descriptionAttachmentAddress(
           { taskId: agent.taskId, attachmentId: kept.id },
           "acme",
         );

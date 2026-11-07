@@ -19,15 +19,15 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { useConnected } from "../connection.js";
-import { failureShown, unreadShown } from "../failure-report.js";
-import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
-import { PANEL_SPAN } from "../panel-spans.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
   type ComposerQuote,
-  type PlanEditorModule,
-} from "../plan-editor/contract.js";
+  type DescriptionEditorModule,
+} from "../description-editor/contract.js";
+import { failureShown, unreadShown } from "../failure-report.js";
+import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
+import { PANEL_SPAN } from "../panel-spans.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
@@ -38,7 +38,6 @@ import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js"
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { focusMissing } from "./inbox-ask-controls.js";
 import { type InboxMissing, missingWords } from "./inbox-ask-words.js";
-import type { InboxCloser } from "./inbox-close.js";
 import {
   acknowledgedOnOpen,
   awaitsNod,
@@ -160,9 +159,6 @@ const SEND = "Send";
 /** What Send is named while its send is out. */
 const SENDING = "Sending";
 
-/** What the line asks for while a resolve is staged, its words going to the agent beside it. */
-const RESOLVE_PLACEHOLDER = "Tell the agent why (optional)";
-
 /** What Send reads, in words, while the box starts a new thread. */
 const START_THREAD = "Start thread";
 
@@ -193,7 +189,7 @@ interface AnswerField {
   readonly editor: RefObject<ComposerEditorHandle | undefined>;
   readonly room: RefObject<HTMLDivElement | null>;
   /** The editor's bundle, once it has loaded; none while it loads or where it could not. */
-  readonly module: PlanEditorModule | undefined;
+  readonly module: DescriptionEditorModule | undefined;
   /** Whether the editor's bundle could not be loaded. */
   readonly failed: boolean;
   /** Reads the editor's bundle again, the way on from a load that failed. */
@@ -231,9 +227,9 @@ function useAnswerField({
 }): AnswerField {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  const { planEditor } = useSideBundles();
-  const bundle = useAtomValue(planEditor);
-  const reload = useAtomRefresh(planEditor);
+  const { descriptionEditor } = useSideBundles();
+  const bundle = useAtomValue(descriptionEditor);
+  const reload = useAtomRefresh(descriptionEditor);
   const pickers = useComposerPickers({
     editor,
     room,
@@ -427,8 +423,6 @@ interface AnswerBoxProps {
   thread: readonly InboxMessage[];
   /** The open ask's controls, the card's body over its foot; nothing where none waits, or the ask is of words alone. */
   controls: React.ReactNode;
-  /** Resolves the item without an answer, handed while its question's × has staged that, which Send then does; none otherwise. */
-  resolver?: InboxCloser | undefined;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
@@ -466,7 +460,6 @@ function AnswerCard({
   agent,
   thread,
   controls,
-  resolver,
   skills,
   keywords,
   replyScope,
@@ -486,17 +479,14 @@ function AnswerCard({
   // Note that the checkbox unticks once its thread is started, and while ticked a question's controls step aside, the question left waiting.
   const [asNew, setAsNew] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [closing, setClosing] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const starts = newThread !== undefined && asNew;
-  // Note that a staged resolve goes with Send, the box's words and files beside it as its note, or alone where it holds none.
-  const resolves = resolver !== undefined && !starts;
   const asks = controls !== undefined && !starts;
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
   standing.current = draft;
-  // Note that only a nod, a thread start, and a resolve hold the box; a reply leaves it at once and the next may follow.
-  const sending = control.sending.has(item.id) || starting || closing;
+  // Note that only a nod and a thread start hold the box; a reply leaves it at once and the next may follow.
+  const sending = control.sending.has(item.id) || starting;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
     holder: {
@@ -513,12 +503,11 @@ function AnswerCard({
   const nod = awaitsNod(item) && emptyBox(draft) && !nodded && !starts;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
-  const sendable =
-    starts || resolves
-      ? (resolves || !emptyBox(draft)) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
-      : nod || inboxThreadSend(thread, draft) !== undefined;
+  const sendable = starts
+    ? !emptyBox(draft) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
+    : nod || inboxThreadSend(thread, draft) !== undefined;
   // Note that what an unfinished answer lacks is said only once a send was refused, and goes once it is filled.
-  const missing = starts || nod || resolves ? undefined : inboxMissing(thread, draft);
+  const missing = starts || nod ? undefined : inboxMissing(thread, draft);
   const [wanting, setWanting] = useState(false);
   if (wanting && missing === undefined) setWanting(false);
   const box = useRef<HTMLDivElement>(null);
@@ -526,11 +515,7 @@ function AnswerCard({
     setWanting(true);
     focusMissing(box.current, lacks);
   };
-  const placeholder = starts
-    ? NEW_THREAD_PLACEHOLDER
-    : resolves
-      ? RESOLVE_PLACEHOLDER
-      : answerPlaceholder(asks, undefined);
+  const placeholder = starts ? NEW_THREAD_PLACEHOLDER : answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
     placeholder,
@@ -586,31 +571,6 @@ function AnswerCard({
     setRefusal(undefined);
     setCut(false);
     control.onMessage(item, draft);
-  };
-  // Note that the box's words and files go with the close as its note, so the agent hears both in one message. The
-  // box lets go of them at once, as a reply does, since the item reads resolved the moment it is pressed; a close
-  // refused puts them back ahead of what was written meanwhile, the resolve still staged on the revision it was
-  // pressed on, so it can be sent again or undone, or lapses where the agent's change refused it.
-  const resolve = (closer: InboxCloser) => {
-    setRefusal(undefined);
-    setCut(false);
-    const note = { text: draft.note, attachments: draft.attachments };
-    if (emptyBox(draft)) {
-      void closer(item);
-      return;
-    }
-    setClosing(true);
-    control.onDraft(item, { ...draft, note: "", attachments: [] });
-    void closer(item, undefined, note).then((closed) => {
-      setClosing(false);
-      if (closed.kept) return;
-      const now = standing.current;
-      control.onDraft(item, {
-        ...now,
-        note: [note.text, now.note].filter((words) => words !== "").join("\n"),
-        attachments: [...note.attachments, ...now.attachments],
-      });
-    });
   };
   const acknowledge = () => {
     setRefusal(undefined);
@@ -711,7 +671,6 @@ function AnswerCard({
         onSubmit={() => {
           if (files.reading) return;
           if (starts) start(newThread);
-          else if (resolver !== undefined) resolve(resolver);
           else if (nod) acknowledge();
           else if (missing !== undefined) refuse(missing);
           else message();

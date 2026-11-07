@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { AgentStatus } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
@@ -9,11 +8,11 @@ import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskStatus } from "@repo/features/task-wire";
 import { taskKey } from "@repo/features/workspace-key";
 import type { AppStateSnapshot } from "@repo/host/app-state";
-import * as Atom from "effect/reactivity/Atom";
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { appStateDerivedAtom } from "../use-app-state.js";
+import { appStateQuery, memoizedSelect } from "../use-app-state.js";
 import { useMentionedPlace } from "./mentioned-place.js";
 
 /**
@@ -33,10 +32,11 @@ import { useMentionedPlace } from "./mentioned-place.js";
  * from the account signing in (`compose-tasks.ts`), which brings each task's
  * name as the service gives it.
  *
- * The document's names are built once per delivery in an atom every chip
- * shares, rather than once per chip, so a transcript of a hundred chips
- * builds them once; and not at all for a delivery that moved neither the
- * tasks, the Inbox, nor the active task's pages.
+ * The document's names are built once per delivery in a memoized select
+ * every chip shares (`memoizedSelect`), rather than once per chip, so a
+ * transcript of a hundred chips builds them once; and not at all for a
+ * delivery that moved neither the tasks, the Inbox, nor the active task's
+ * pages.
  */
 
 /** No people: what a caller outside a member directory names. */
@@ -71,43 +71,24 @@ function agentsNamedBy(
   return named;
 }
 
-/** The slices of the document the names are read from: the tasks, the Inbox, and the active task's pages. */
-interface NamedSlices {
-  readonly planning: AppStateSnapshot["tasks"] | undefined;
-  readonly inbox: AppStateSnapshot["inbox"] | undefined;
-  readonly pages: readonly PageLine[] | undefined;
-}
-
 /** The active task's pages as the window holds them; none with no task open, or before they are read. */
 function activePagesOf(state: AppStateSnapshot | undefined): readonly PageLine[] | undefined {
   const taskId = state?.tasks.activeTaskId;
   return taskId === undefined ? undefined : state?.[LIVE_READ.PAGES][PAGE_OWNER.TASK][taskId]?.rows;
 }
 
-/** The slices, which tell their readers only when one is a new object, so a delivery that kept them all builds nothing. */
-const namedSlicesAtom: Atom.Atom<NamedSlices> = Atom.withEquality(
-  appStateDerivedAtom(
-    (state): NamedSlices => ({
-      planning: state?.tasks,
-      inbox: state?.inbox,
-      pages: activePagesOf(state),
-    }),
-  ),
-  (held, next) =>
-    held.planning === next.planning && held.inbox === next.inbox && held.pages === next.pages,
-);
-
-/** The names the document holds, no people among them, the one value every reader of this window shares. */
-const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, (slices) => {
-  const { planning, inbox } = slices;
+/** The names the document holds, no people among them, from the tasks, the Inbox, and the active task's pages. */
+function heldNamesOf(
+  planning: AppStateSnapshot["tasks"] | undefined,
+  inbox: AppStateSnapshot["inbox"] | undefined,
+  activePages: readonly PageLine[] | undefined,
+): KnownNames {
   const tasks = new Map(planning?.tasks.map((task) => [task.id, task.name]));
   const agents = new Map<string, string>();
   const agentModels = new Map<string, string>();
-  for (const task of planning?.tasks ?? []) {
-    for (const agent of task.agents?.agents ?? []) {
-      agents.set(agent.id, agentName(agent));
-      agentModels.set(agent.id, agent.model);
-    }
+  for (const agent of planning?.taskAgents ?? []) {
+    agents.set(agent.id, agentName(agent));
+    agentModels.set(agent.id, agent.model);
   }
   const automations = new Map<string, string>();
   for (const agent of planning?.tasklessAgents ?? []) {
@@ -129,7 +110,7 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, (slices) 
       }),
     );
   }
-  const pages = new Map(slices.pages?.map((page) => [page.id, page.title]));
+  const pages = new Map(activePages?.map((page) => [page.id, page.title]));
   const inboxItems = new Map(
     [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].map(
       (item) => [item.id, item.title],
@@ -145,28 +126,35 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, (slices) 
     people: NO_PEOPLE,
     automations,
   };
-});
+}
+
+/** The names of a window before the first document arrives. */
+const NO_HELD_NAMES = heldNamesOf(undefined, undefined, undefined);
+
+/** The names the document holds, the one value every reader of this window shares, made again only for a delivery that moved the tasks, the Inbox, or the active task's pages. */
+const selectHeldNames = memoizedSelect(
+  (state) => [state.tasks, state.inbox, activePagesOf(state)],
+  heldNamesOf,
+);
 
 /** Each listed task's status, by its id, built once per delivery that moved the slices the names are read from, as the names are. */
-const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
-  namedSlicesAtom,
-  ({ planning }) =>
+const selectHeldStatuses = memoizedSelect(
+  (state) => [state.tasks],
+  (planning): ReadonlyMap<string, TaskStatus> =>
     new Map(
-      (planning?.tasks ?? []).flatMap((task) =>
+      planning.tasks.flatMap((task) =>
         task.status === undefined ? [] : [[task.id, task.status] as const],
       ),
     ),
 );
 
-/** Each listed agent's status, a task's row's and those on no task, by its id, built as the task statuses are. */
-const heldAgentStatusesAtom: Atom.Atom<ReadonlyMap<string, AgentStatus>> = Atom.map(
-  namedSlicesAtom,
-  ({ planning }) =>
+/** Each listed agent's status, a task's and those on no task, by its id, built as the task statuses are. */
+const selectHeldAgentStatuses = memoizedSelect(
+  (state) => [state.tasks],
+  (planning): ReadonlyMap<string, AgentStatus> =>
     new Map([
-      ...(planning?.tasks ?? []).flatMap((task) =>
-        (task.agents?.agents ?? []).map((agent) => [agent.id, agent.status] as const),
-      ),
-      ...(planning?.tasklessAgents ?? []).map((agent) => [agent.id, agent.status] as const),
+      ...(planning.taskAgents ?? []).map((agent) => [agent.id, agent.status] as const),
+      ...(planning.tasklessAgents ?? []).map((agent) => [agent.id, agent.status] as const),
     ]),
 );
 
@@ -184,39 +172,54 @@ function sameTargets(
 }
 
 /**
- * Each listed task's key (`ACME-42`), the link its mention is written with,
- * built once per delivery that moved the slices the names are read from, as
- * the names are. A key two tasks share, as two workspaces whose names begin alike
- * give theirs, names neither, so words never chip the wrong task. It tells
- * its readers only when a key or its link changed, which a task's other
- * moves never do, so the words drawn with it are read again only then.
+ * Each listed task's key (`ACME-42`), the link its mention is written with.
+ * A key two tasks share, as two workspaces whose names begin alike give
+ * theirs, names neither, so words never chip the wrong task.
  */
-const heldKeyTargetsAtom: Atom.Atom<ReadonlyMap<string, string>> = Atom.withEquality(
-  Atom.map(namedSlicesAtom, ({ planning }) => {
-    const workspaces = new Map(planning?.workspaces.map((workspace) => [workspace.id, workspace]));
-    const targets = new Map<string, string>();
-    const shared = new Set<string>();
-    for (const task of planning?.tasks ?? []) {
-      const workspace = workspaces.get(task.workspaceId);
-      if (workspace === undefined || task.number === undefined) continue;
-      const key = taskKey(workspace.name, task.number);
-      if (targets.has(key)) shared.add(key);
-      const place = { workspace: workspace.slug ?? "", repository: null };
-      targets.set(key, encodeMention({ kind: MENTION_KIND.TASK, taskId: task.id }, place));
-    }
-    for (const key of shared) targets.delete(key);
-    return targets.size === 0 ? NO_KEY_TARGETS : targets;
-  }),
-  sameTargets,
+function keyTargetsOf(planning: AppStateSnapshot["tasks"]): ReadonlyMap<string, string> {
+  const workspaces = new Map(planning.workspaces.map((workspace) => [workspace.id, workspace]));
+  const targets = new Map<string, string>();
+  const shared = new Set<string>();
+  for (const task of planning.tasks) {
+    const workspace = workspaces.get(task.workspaceId);
+    if (workspace === undefined || task.number === undefined) continue;
+    const key = taskKey(workspace.name, task.number);
+    if (targets.has(key)) shared.add(key);
+    const place = { workspace: workspace.slug ?? "", repository: null };
+    targets.set(key, encodeMention({ kind: MENTION_KIND.TASK, taskId: task.id }, place));
+  }
+  for (const key of shared) targets.delete(key);
+  return targets.size === 0 ? NO_KEY_TARGETS : targets;
+}
+
+/** The keys last handed to the readers, kept while a delivery names the same keys by the same links. */
+let heldKeyTargets: ReadonlyMap<string, string> = NO_KEY_TARGETS;
+
+/**
+ * The keys, built once per delivery that moved the task list, as the names
+ * are. It tells its readers only when a key or its link changed, which a
+ * task's other moves never do, so the words drawn with it are read again
+ * only then. Note that the last answer is kept here by hand, because a
+ * `structuralSharing` function on one reader's `useQuery` becomes the
+ * shared app-state query's own (`QueryObserver.setOptions`), which would
+ * then compare whole documents with it.
+ */
+const selectKeyTargets = memoizedSelect(
+  (state) => [state.tasks],
+  (planning) => {
+    const next = keyTargetsOf(planning);
+    if (!sameTargets(heldKeyTargets, next)) heldKeyTargets = next;
+    return heldKeyTargets;
+  },
 );
 
 /**
  * The names words written with any among them are drawn with as a chip:
  * each listed task's key, by the link it names its task with
- * (`heldKeyTargetsAtom`). The same object until a key or a link changes.
+ * (`keyTargetsOf`). The same object until a key or a link changes.
  */
 export function useWordTargets(): ReadonlyMap<string, string> {
-  return useAtomValue(heldKeyTargetsAtom);
+  return useQuery({ ...appStateQuery, select: selectKeyTargets }).data ?? NO_KEY_TARGETS;
 }
 
 /**
@@ -225,13 +228,21 @@ export function useWordTargets(): ReadonlyMap<string, string> {
  * none for a task the window does not list, or none asked for.
  */
 export function useTaskStatus(taskId: string | undefined): TaskStatus | undefined {
-  const statuses = useAtomValue(heldStatusesAtom);
-  return taskId === undefined ? undefined : statuses.get(taskId);
+  const select = useCallback(
+    (state: AppStateSnapshot) =>
+      taskId === undefined ? undefined : selectHeldStatuses(state).get(taskId),
+    [taskId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
 }
 
 /** The status of the agent the window lists by `agentId`; none where it lists no such agent. */
 export function useAgentStatus(agentId: string): AgentStatus | undefined {
-  return useAtomValue(heldAgentStatusesAtom).get(agentId);
+  const select = useCallback(
+    (state: AppStateSnapshot) => selectHeldAgentStatuses(state).get(agentId),
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
 }
 
 /**
@@ -242,7 +253,7 @@ export function useAgentStatus(agentId: string): AgentStatus | undefined {
  * the catalog read, every caller shares the one map of agents' names it named.
  */
 export function useKnownNames(automationId?: string): KnownNames {
-  const held = useAtomValue(heldNamesAtom);
+  const held = useQuery({ ...appStateQuery, select: selectHeldNames }).data ?? NO_HELD_NAMES;
   const { members, former } = useMemberDirectory();
   const agents = agentsNamedBy(held.agents, held.agentModels, useMentionedPlace().models);
   const automation = useAutomation(automationId)?.automation;

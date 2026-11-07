@@ -20,16 +20,18 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/actor-model";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { agentRow, taskRowName } from "@repo/ui/task-list-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef } from "react";
-import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
-import { DraftMark } from "../draft-mark.js";
+import { leftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { agentReadsUnread } from "../tasks/use-task-looks.js";
@@ -119,6 +121,7 @@ export function SidebarAgent({
   repository,
   face = true,
   nest,
+  place,
   shown,
   onOpen,
   onPin,
@@ -140,6 +143,8 @@ export function SidebarAgent({
   face?: boolean;
   /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
   /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
@@ -160,9 +165,9 @@ export function SidebarAgent({
     row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
-  const place = useRowPlace();
+  const rowPlace = useRowPlace();
   const coarse = useCoarsePointer();
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   const reads = useAgentReadMarks();
   // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike,
   // and the agent on screen only by a mark by hand, since what it does lands before the reader's eyes.
@@ -170,13 +175,15 @@ export function SidebarAgent({
   // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
   const actions = useAgentActions(
     agent,
-    { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
+    { ...agents, readAgent: (agentId) => readAgentById(queryClient, agentId) },
     { label: name, shown, terminals: { onOpenTerminal: undefined }, onDeleted },
   );
   const { archive } = actions.doors;
   const archived = agent.archivedAt !== undefined;
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
+  // A message to it that did not go wears the failed mark in the pencil's place.
+  const sendFailed = useFailedAgents().includes(agent.id) && !current;
   const { rename } = actions;
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
@@ -229,6 +236,7 @@ export function SidebarAgent({
           ref={hold}
           motionKey={agent.id}
           nest={nest}
+          place={place}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -279,7 +287,7 @@ export function SidebarAgent({
                 {starter === undefined ? null : (
                   <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
                 )}
-                {drafted ? <DraftMark /> : null}
+                {leftMark(sendFailed, drafted)}
                 {agentEndMark(agent, false)}
                 <Time at={at} now={now} hint={false} />
               </span>
@@ -289,7 +297,7 @@ export function SidebarAgent({
           unread={isUnread}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
-          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown, true)}
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, rowPlace), shown, true)}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing || coarse ? null : <RowMarks marks={marks} />}

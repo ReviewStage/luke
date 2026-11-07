@@ -114,7 +114,8 @@ export function MenuTab({
   ends,
   ...tab
 }: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu" | "menu" | "hint"> & {
-  groups: MenuEntry[][];
+  /** The menu's items, made as it opens from where it opened, so an item can hang a menu of its own there. */
+  groups: (opener: HTMLElement) => MenuEntry[][];
   /** What the menu draws beyond its items: the Plan tab's names the task and says who created it. */
   ends?: MenuEnds | undefined;
 }): React.JSX.Element {
@@ -138,7 +139,11 @@ export function MenuTab({
             menu={menu.drawn}
             subject={ends?.subject}
             footer={ends?.footer}
-            groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
+            groups={withRowMoves(
+              groups(menu.drawn.opener),
+              placeOf?.(menu.drawn.opener),
+              ROW_RUN.ALONG,
+            )}
             onClose={menu.close}
             replayUnmasked
           />

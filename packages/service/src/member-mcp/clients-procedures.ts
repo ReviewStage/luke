@@ -3,7 +3,8 @@
  *
  * A client a member allowed holds their consent and the tokens minted on
  * it, in the OAuth provider's own tables. The read lists the member's
- * consents for every client but the desktop's, on the account's bearer,
+ * consents for every client but the desktop's, and the command-line tool,
+ * which skips consent, by the live token it holds, on the account's bearer,
  * through Drizzle (`oauth-grants.ts`), since every endpoint of the
  * provider's that lists them takes a session. The revoke runs under the
  * Mac's session, since it deletes the consent through the provider's own
@@ -21,7 +22,7 @@
 import { listOAuthGrants, revokeOAuthClientTokens } from "@repo/database/models/oauth-grants";
 import type { McpClient, McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import { Effect } from "effect";
-import { DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
+import { CLI_OAUTH_CLIENT, DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -36,6 +37,13 @@ import type { ClientConsentDelete } from "./client-consents.js";
 /** The clients no member revokes here: the desktop's own, which signs the Mac in. */
 const FIRST_PARTY_CLIENTS: readonly string[] = [DESKTOP_OAUTH_CLIENT.id];
 
+/**
+ * The clients that skip consent and are listed by the live token they hold:
+ * the command-line tool alone, named rather than every skip-consent client
+ * but the desktop's, so a first-party client nobody meant to show never does.
+ */
+const TOKEN_LISTED_CLIENTS: readonly string[] = [CLI_OAUTH_CLIENT.id];
+
 export interface McpClientsProcedureSeams {
   resolveUserId: UserIdResolver;
   resolveSessionUserId: SessionUserIdResolver;
@@ -48,7 +56,9 @@ export interface McpClientsProcedureSeams {
 /** The member's clients as the wire carries them, with the server's address. */
 function clientsOf(userId: string, serverUrl: string) {
   return Effect.map(
-    hostedStoreOrUnavailable(listOAuthGrants(userId, FIRST_PARTY_CLIENTS)),
+    hostedStoreOrUnavailable(
+      listOAuthGrants(userId, { except: FIRST_PARTY_CLIENTS, tokenOnly: TOKEN_LISTED_CLIENTS }),
+    ),
     (grants): McpClientsAnswer => ({
       serverUrl,
       clients: grants.map(

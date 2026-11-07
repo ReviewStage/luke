@@ -1,9 +1,11 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { LANDING_CLOSE_TAB, LANDING_TONE } from "@repo/features/landing-outcome";
 import { oauthRedirectDestination, oauthScopeLines } from "@repo/features/oauth-consent";
+import { QUERY_ROOT } from "@repo/panel/query-keys";
 import { AuthMark, AuthPage, CONSENT_ANSWER, type ConsentAnswer, ConsentCard } from "@repo/ui";
+import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { createAuthClient } from "better-auth/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
 import "./styles.css";
 import { readingWords } from "@repo/features/words";
@@ -58,24 +60,47 @@ const signedIn = authClient
 /**
  * The request this page asks about: the client's registered name, as the
  * provider's public client read answers it, the account, and the scopes and
- * redirect the signed authorization names; undefined where any is missing.
+ * redirect the signed authorization names; null where any is missing. It is
+ * read once and kept (`staleTime: Infinity`), and a read that fails says so
+ * at once (`retry: false`).
  */
-async function readRequest(): Promise<ConsentRequest | undefined> {
-  const authorization = new URLSearchParams(window.location.search);
+function consentRequestQuery(authorization: URLSearchParams) {
   const clientId = authorization.get(AUTHORIZATION.CLIENT_ID);
   const redirectUri = authorization.get(AUTHORIZATION.REDIRECT_URI);
-  if (clientId === null || redirectUri === null) return undefined;
-  const [session, client] = await Promise.all([
-    signedIn,
-    authClient.oauth2.publicClient({ query: { client_id: clientId } }),
-  ]);
-  if (!session || !client.data) return undefined;
-  return {
-    client: client.data.client_name ?? UNNAMED_CLIENT,
-    account: session.user.email,
-    abilities: oauthScopeLines(authorization.get(AUTHORIZATION.SCOPE) ?? ""),
-    destination: oauthRedirectDestination(redirectUri),
-  };
+  const scope = authorization.get(AUTHORIZATION.SCOPE) ?? "";
+  return queryOptions({
+    queryKey: [QUERY_ROOT.CONSENT_REQUEST, clientId, redirectUri, scope],
+    queryFn: async (): Promise<ConsentRequest | null> => {
+      if (clientId === null || redirectUri === null) return null;
+      const [session, client] = await Promise.all([
+        signedIn,
+        authClient.oauth2.publicClient({ query: { client_id: clientId } }),
+      ]);
+      if (!session || !client.data) return null;
+      return {
+        client: client.data.client_name ?? UNNAMED_CLIENT,
+        account: session.user.email,
+        abilities: oauthScopeLines(scope),
+        destination: oauthRedirectDestination(redirectUri),
+      };
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * The member's answer, sent to the provider. Note that the desktop's client
+ * skips this page, so its hand-off (`desktop-session.tsx`) is where a sign-in
+ * is usually counted; one that passes both is counted once, by its session.
+ * It is counted before the answer goes, because the browser leaves as it
+ * lands. A refused answer throws, so the page says it failed.
+ */
+async function sendAnswer(given: ConsentAnswer): Promise<void> {
+  const accept = given === CONSENT_ANSWER.ALLOW;
+  if (accept) await completeSiteSignIn(signedIn);
+  const result = await authClient.oauth2.consent({ accept });
+  if (result.error) throw new Error("The consent answer was refused.");
 }
 
 /** What the page says while it reads the request, and once it cannot go on. */
@@ -96,37 +121,27 @@ const CONSENT_WORDS = {
  * no name to give.
  */
 function Consent(): React.JSX.Element {
-  const [state, setState] = useState<ConsentState>({ step: CONSENT_STEP.READING });
-  const [answering, setAnswering] = useState<ConsentAnswer>();
-  useEffect(() => {
-    void readRequest().then((request) =>
-      setState(
-        request === undefined
-          ? { step: CONSENT_STEP.FAILED }
-          : { step: CONSENT_STEP.ASKING, request },
-      ),
-    );
-  }, []);
+  const [authorization] = useState(() => new URLSearchParams(window.location.search));
+  const request = useQuery(consentRequestQuery(authorization));
+  const answering = useMutation({ mutationFn: sendAnswer });
+  const state: ConsentState =
+    request.isError || request.data === null || answering.isError
+      ? { step: CONSENT_STEP.FAILED }
+      : request.data === undefined
+        ? { step: CONSENT_STEP.READING }
+        : { step: CONSENT_STEP.ASKING, request: request.data };
 
-  const answer = async (given: ConsentAnswer) => {
-    if (answering !== undefined) return;
-    setAnswering(given);
-    const accept = given === CONSENT_ANSWER.ALLOW;
-    // Note that the desktop's client skips this page, so its hand-off
-    // (`desktop-session.tsx`) is where a sign-in is usually counted; one
-    // that passes both is counted once, by its session. It is counted
-    // before the answer goes, because the browser leaves as it lands.
-    if (accept) await completeSiteSignIn(signedIn);
-    const result = await authClient.oauth2.consent({ accept });
-    if (result.error) setState({ step: CONSENT_STEP.FAILED });
+  const answer = (given: ConsentAnswer) => {
+    if (!answering.isIdle) return;
+    answering.mutate(given);
   };
 
   if (state.step === CONSENT_STEP.ASKING) {
     return (
       <ConsentCard
         {...state.request}
-        answering={answering}
-        onAnswer={(given) => void answer(given)}
+        answering={answering.isIdle ? undefined : answering.variables}
+        onAnswer={answer}
       />
     );
   }

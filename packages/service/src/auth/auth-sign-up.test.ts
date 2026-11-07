@@ -11,9 +11,11 @@ import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { Clock, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
+import { onboardingEventsFromEnvironment } from "../accounts/onboarding-events.js";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { accountDeletionTestServices } from "../testing/account-deletion-services.js";
@@ -26,10 +28,10 @@ import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
  * A new account, signed up through the auth route over Better Auth's own
  * hooks and organization plugin as `auth.ts` configures them, on a migrated
  * PGlite: it comes away owning its personal workspace, with nothing else
- * asked of the service, and is sent one welcome email, which signing in again
- * does not repeat. Email and password sign-up stands in for the Google
- * or GitHub sign-in, whose provider this test cannot be. Synthetic account
- * throughout.
+ * asked of the service, and is sent one welcome email and started on the
+ * onboarding emails, which signing in again does not repeat. Email and
+ * password sign-up stands in for the Google or GitHub sign-in, whose provider
+ * this test cannot be. Synthetic account throughout.
  */
 
 const BASE_URL = "http://127.0.0.1";
@@ -37,6 +39,9 @@ const BASE_URL = "http://127.0.0.1";
 const WELCOME_FROM = "Charles <charles@app.test>";
 
 const ADA = { name: "Ada Lovelace", email: "ada@example.com", password: "a-password-long-enough" };
+
+/** When the test signs up, a day past the epoch, so the email's hour is counted from it. */
+const SIGNED_UP_AT = Date.parse("1970-01-02T00:00:00.000Z");
 
 const decodeSignedUp = Schema.decodeUnknownSync(
   Schema.Struct({ user: Schema.Struct({ id: Schema.String }) }),
@@ -46,6 +51,7 @@ it.effect(
   "a new account signed up through the auth route owns its personal workspace and is welcomed once",
   () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(SIGNED_UP_AT);
       const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
         Effect.promise(() => opened.close()),
       );
@@ -60,24 +66,24 @@ it.effect(
       });
       yield* Effect.gen(function* () {
         const resend = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
-        const welcomeMail = welcomeMailFromEnvironment.pipe(
-          Layer.provide(
-            Layer.merge(
-              resend.layer,
-              ConfigProvider.layer(
-                ConfigProvider.fromUnknown({
-                  [WELCOME_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
-                  [WELCOME_MAIL_ENVIRONMENT.FROM]: WELCOME_FROM,
-                }),
-              ),
-            ),
+        const resendServices = Layer.merge(
+          resend.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              [WELCOME_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
+              [WELCOME_MAIL_ENVIRONMENT.FROM]: WELCOME_FROM,
+            }),
           ),
         );
+        const welcomeMail = welcomeMailFromEnvironment.pipe(Layer.provide(resendServices));
+        const onboarding = onboardingEventsFromEnvironment.pipe(Layer.provide(resendServices));
         const services = Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
+          Layer.succeed(Clock.Clock, yield* Clock.Clock),
           welcomeMail,
           accountDeletionTestServices,
+          onboarding,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(
           authApp((request) => auth.handler(request), workspaceSeams(auth.api)).pipe(
@@ -102,14 +108,33 @@ it.effect(
         assert.equal(signedIn.status, HOSTED_HTTP_STATUS.OK);
         yield* Effect.promise(() => dispose());
 
-        const emails = resend.requests.map(
-          (request) =>
-            JSON.parse(request.body ?? "{}") as { from: string; to: string[]; text: string },
-        );
+        const sentTo = (pathname: string) =>
+          resend.requests
+            .filter((request) => request.pathname === pathname)
+            .map((request) => JSON.parse(request.body ?? "{}") as unknown);
+        assert.deepEqual(sentTo("/contacts"), [{ email: ADA.email }]);
+        assert.deepEqual(sentTo("/events/send"), [
+          { event: "vespin.signed_up", email: ADA.email, payload: { greeting: "Hey Ada," } },
+        ]);
+        const emails = resend.requests
+          .filter((request) => request.pathname === "/emails")
+          .map(
+            (request) =>
+              JSON.parse(request.body ?? "{}") as {
+                from: string;
+                to: string[];
+                scheduled_at: string;
+                template: { id: string; variables: { GREETING: string } };
+              },
+          );
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, WELCOME_FROM);
         assert.deepEqual(emails[0]?.to, [ADA.email]);
-        assert.ok(emails[0]?.text.startsWith("Hey Ada,"));
+        assert.deepEqual(emails[0]?.template, {
+          id: "founder-welcome",
+          variables: { GREETING: "Hey Ada," },
+        });
+        assert.equal(emails[0]?.scheduled_at, "1970-01-02T01:00:00.000Z");
 
         const [personal, ...others] = yield* Database.use((db) =>
           db

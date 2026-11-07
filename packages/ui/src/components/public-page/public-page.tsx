@@ -1,6 +1,6 @@
 import { type ReactNode, useId } from "react";
-import { TEXT_VARIANT } from "../text/text.js";
 import { SiteFrame, SiteRule } from "../landing/site-frame.js";
+import { TEXT_VARIANT } from "../text/text.js";
 import { TextLink } from "../text-link/text-link.js";
 
 /**
@@ -173,7 +173,7 @@ export function PublicPage({
   const intro = back !== undefined || said(title) || said(lead);
   return (
     <SiteFrame bar={banner} barCall={bannerCall} footer={footer}>
-      <div className="ui-public-page @container flex flex-col min-w-0 text-foreground font-ui">
+      <div className="ui-public-page @container flex grow flex-col min-w-0 text-foreground font-ui">
         <main
           className={`${COLUMN_CLASS} ${WIDTH_CLASS[width]} ui-public-page-main flex-1 pt-public-page-start pb-public-page-end wrap-anywhere`}
           data-width={width}

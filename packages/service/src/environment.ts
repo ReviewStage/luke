@@ -1,9 +1,28 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@repo/database/models/provider-key-seal";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@repo/features/provider-key-wire";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
-import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
+import {
+  AUTH_DEPLOYMENT_ENVIRONMENT,
+  DEPLOYMENT_ENVIRONMENT,
+  GITHUB_APP_ENVIRONMENT,
+} from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
 import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
+
+/** The variable our own key for titles is read from, an Anthropic API key spent on every title and nothing else. */
+const TITLE_MODEL_ENVIRONMENT = {
+  ANTHROPIC_API_KEY: "TITLE_ANTHROPIC_API_KEY",
+} as const;
+
+/** The variables a Preview's stand-in API keys are read from, one per provider; no other deployment reads them. */
+const PREVIEW_API_KEY_ENVIRONMENT = {
+  [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "PREVIEW_ANTHROPIC_API_KEY",
+  [PROVIDER_KEY_PROVIDER.OPENAI]: "PREVIEW_OPENAI_API_KEY",
+} as const satisfies Record<ProviderKeyProvider, string>;
+
+/** A Preview's stand-in API key for each provider it holds one for; none on any other deployment. */
+export type PreviewApiKeys = Readonly<Partial<Record<ProviderKeyProvider, Redacted.Redacted>>>;
 
 /**
  * What the deployment's environment says about the hosted tier, read once as
@@ -11,9 +30,11 @@ import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
  *
  * A blank value is dropped here rather than at the endpoints: an absent
  * value and a whitespace one both mean it is unset, so the endpoints see one
- * absence. The deployment holds no model provider key of its own: every
- * model call runs on the account's own key, sealed under
- * `providerKeyEncryptionKeys`.
+ * absence. The deployment holds one model provider key of its own, for
+ * titles alone (`titleAnthropicApiKey`); every other model call runs on the
+ * account's own key, sealed under `providerKeyEncryptionKeys`, or on a
+ * Preview, its stand-in where that key is missing or unreadable
+ * (`previewApiKeys`).
  */
 export interface HostedEnvironmentValues {
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
@@ -30,8 +51,19 @@ export interface HostedEnvironmentValues {
   readonly cronSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs our GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
-  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of ours stands in. */
+  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call on an account's key unmade, since no key of ours stands in. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
+  /** our own Anthropic API key, which every title is generated on (`agents/coder-host/model.ts`) and nothing else; absent names each from its first words, with no model. */
+  readonly titleAnthropicApiKey: Redacted.Redacted | undefined;
+  /**
+   * A Preview's stand-in API key for each provider, spent where an account's
+   * own key for that provider is missing or does not open
+   * (`accounts/own-api-key.ts`), since a Preview's database is copied from
+   * production's with every key sealed under production's ring, which a
+   * Preview never holds. Read only where `VERCEL_ENV` is `preview`, so
+   * production and a local run never spend one, set or not.
+   */
+  readonly previewApiKeys: PreviewApiKeys;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -54,6 +86,20 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
       Option.map(Option.fromNullishOr(text(Redacted.value(secret))), Redacted.make),
     ),
   );
+}
+
+/** The stand-in keys a Preview holds, or none where the deployment is no Preview. */
+function previewApiKeysOf(
+  environment: string | undefined,
+  read: Record<ProviderKeyProvider, Option.Option<Redacted.Redacted>>,
+): PreviewApiKeys {
+  if (environment !== DEPLOYMENT_ENVIRONMENT.PREVIEW) return {};
+  const keys: Partial<Record<ProviderKeyProvider, Redacted.Redacted>> = {};
+  for (const provider of Object.values(PROVIDER_KEY_PROVIDER)) {
+    const key = presentRedacted(read[provider]);
+    if (key !== undefined) keys[provider] = key;
+  }
+  return keys;
 }
 
 /**
@@ -80,6 +126,18 @@ export const hostedEnvironment = Layer.effect(
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
       ),
+      titleAnthropicApiKey: Config.option(
+        Config.Redacted(TITLE_MODEL_ENVIRONMENT.ANTHROPIC_API_KEY),
+      ),
+      deployment: Config.option(Config.String(AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT)),
+      previewApiKeys: Config.all({
+        [PROVIDER_KEY_PROVIDER.ANTHROPIC]: Config.option(
+          Config.Redacted(PREVIEW_API_KEY_ENVIRONMENT[PROVIDER_KEY_PROVIDER.ANTHROPIC]),
+        ),
+        [PROVIDER_KEY_PROVIDER.OPENAI]: Config.option(
+          Config.Redacted(PREVIEW_API_KEY_ENVIRONMENT[PROVIDER_KEY_PROVIDER.OPENAI]),
+        ),
+      }),
     }),
     (read) => {
       const cronSecret = presentRedacted(read.cronSecret);
@@ -92,6 +150,8 @@ export const hostedEnvironment = Layer.effect(
         cronSecret,
         githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
+        titleAnthropicApiKey: presentRedacted(read.titleAnthropicApiKey),
+        previewApiKeys: previewApiKeysOf(present(read.deployment), read.previewApiKeys),
       };
       return Effect.succeed(values);
     },

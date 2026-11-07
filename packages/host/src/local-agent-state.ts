@@ -1,5 +1,6 @@
-import { Effect, Path } from "effect";
+import { Effect, Path, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { folderMoves } from "./folder-moves.js";
 
 /**
  * local-agent-state.ts -- what a machine keeps of its local agents between runs: which agents' folders it made (`owned-agents` in its state), kept and read by the follower (`compose-local-agents.ts`).
@@ -25,6 +26,10 @@ export const keepOwnedAgent = (stateRoot: string, agentId: string) =>
     yield* fileSystem.writeFileString(path.join(owned, agentId), "");
   }).pipe(Effect.ignore);
 
+/** A pulse each time the agents kept as ones whose folder this machine made may have moved, from the moment their folder stands. */
+export const ownedAgentsMoves = (stateRoot: string) =>
+  Stream.unwrap(Effect.map(Path.Path, (path) => folderMoves(path.join(stateRoot, OWNED_FOLDER))));
+
 /** The agents kept as ones whose folder this machine made, by id; none where the record cannot be read. */
 export const ownedAgents = (stateRoot: string) =>
   Effect.gen(function* () {
@@ -32,6 +37,14 @@ export const ownedAgents = (stateRoot: string) =>
     const path = yield* Path.Path;
     return yield* fileSystem.readDirectory(path.join(stateRoot, OWNED_FOLDER));
   }).pipe(Effect.orElseSucceed((): readonly string[] => []));
+
+/** No agent kept as one whose folder this machine made, so an uninstall after it leaves every agent's folder as it stands. */
+export const forgetOwnedAgents = (stateRoot: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fileSystem.remove(path.join(stateRoot, OWNED_FOLDER), { recursive: true, force: true });
+  });
 
 /** The agent given no longer kept as one whose folder this machine made, once its folder is gone. */
 export const forgetOwnedAgent = (stateRoot: string, agentId: string) =>

@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh -- installs our host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to the service with a code a member approves, and upgrades it in place when run again.
+# install.sh -- installs our host into the account that runs it, on a Linux box (x64 or arm64) or an Apple silicon Mac, connects it to the service with a code a member approves, and upgrades it in place when run again; in its `cli` mode, installs the `vespin` command instead.
 #
 # Served by the web app at /install.sh with the release, and the origin it
 # was fetched from, written in (packages/service/src/agents/host-install-script-app.ts),
@@ -45,6 +45,21 @@
 # `vespin-host connect` by hand is followed within a minute. Run again, it
 # upgrades in place: the box keeps its pairing, and the service is restarted
 # on the new release.
+#
+# Its `cli` mode installs the `vespin` command's release (CLI_RELEASE in
+# packages/features/src/cli-release.ts) into the account instead, and sets up
+# no service, connects nothing, and needs no systemd or git:
+#
+#   curl -fsSL https://vespin.dev/install.sh | sh -s cli
+#
+#   ~/.local/share/vespin-cli/versions/<version>/ each release, as its tarball's vespin/ folder
+#   ~/.local/bin/vespin                           absolute link to …/versions/<version>/bin/vespin
+#
+# It checks the tarball against the SHA-256 this script carries as the host's
+# install does, links the command to the new release, and removes every other
+# release. Run again, it upgrades in place, or says the release is installed
+# already; `vespin update` runs it so, and reads a command whose real path
+# stands under versions/ as one this mode installed.
 set -eu
 
 VERSION="@@VERSION@@"
@@ -54,12 +69,22 @@ URL_X64="@@URL_X64@@"
 URL_ARM64="@@URL_ARM64@@"
 SHA256_DARWIN_ARM64="@@SHA256_DARWIN_ARM64@@"
 URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
+CLI_VERSION="@@CLI_VERSION@@"
+CLI_SHA256_X64="@@CLI_SHA256_X64@@"
+CLI_SHA256_ARM64="@@CLI_SHA256_ARM64@@"
+CLI_SHA256_DARWIN_ARM64="@@CLI_SHA256_DARWIN_ARM64@@"
+CLI_URL_X64="@@CLI_URL_X64@@"
+CLI_URL_ARM64="@@CLI_URL_ARM64@@"
+CLI_URL_DARWIN_ARM64="@@CLI_URL_DARWIN_ARM64@@"
 
 ORIGIN="@@ORIGIN@@"
+# What the script installs, as its messages name it; the cli mode names its own.
+PRODUCT="Vespin host"
 UNIT="vespin-host.service"
 # A Mac's LaunchAgent, by its label.
 MAC_LABEL="dev.vespin.host.standalone"
-# The oldest macOS it installs on: the release's Node (24) needs macOS 13.5.
+# The oldest macOS it installs on: the release's Node (24) needs macOS 13.5,
+# the command's as the host's.
 MAC_MIN_VERSION="13.5"
 # The folder that stands where systemd runs the box; a test points it elsewhere.
 SYSTEMD_RUN_DIR="${APP_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
@@ -145,7 +170,7 @@ require_macos_version() {
   if [ "$major" -gt "$need_major" ] || { [ "$major" -eq "$need_major" ] && [ "$minor" -ge "$need_minor" ]; }; then
     return 0
   fi
-  fail "Vespin host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
+  fail "$PRODUCT needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
 }
 
 # Refuses a run as root under sudo from another account, whose files would
@@ -239,7 +264,7 @@ download() {
   elif command -v wget >/dev/null 2>&1; then
     wget -q -O "$2" "$1" || fail "Could not download $1"
   else
-    fail "Vespin host needs curl or wget to download its release."
+    fail "$PRODUCT needs curl or wget to download its release."
   fi
 }
 
@@ -464,8 +489,123 @@ release_target() {
   [ -n "$target_sha256" ] || fail "Vespin host $VERSION has no release for $target_name yet."
 }
 
-# Installs, connects and starts the host in this account, the options parsed.
+# The command's files, under the account's home, by the names the header lists.
+cli_paths() {
+  CLI_RELEASES="$HOME/.local/share/vespin-cli"
+  CLI_LINK="$HOME/.local/bin/vespin"
+}
+
+# Refuses a computer the command has no release for, before it changes
+# anything, saying where npm installs it instead: its kernel ($1) and its
+# machine ($2).
+require_cli_target() {
+  case "$1-$2" in
+    Darwin-arm64)
+      cli_target_name="darwin-arm64"
+      cli_target_url="$CLI_URL_DARWIN_ARM64"
+      cli_target_sha256="$CLI_SHA256_DARWIN_ARM64"
+      ;;
+    Linux-x86_64 | Linux-amd64)
+      cli_target_name="linux-x64"
+      cli_target_url="$CLI_URL_X64"
+      cli_target_sha256="$CLI_SHA256_X64"
+      ;;
+    Linux-aarch64 | Linux-arm64)
+      cli_target_name="linux-arm64"
+      cli_target_url="$CLI_URL_ARM64"
+      cli_target_sha256="$CLI_SHA256_ARM64"
+      ;;
+    *) fail "Vespin CLI has no release for $1 on $2. Install it with npm instead, on Node 20 or later: npm i -g vespin" ;;
+  esac
+}
+
+# Refuses a run as root under sudo from another account, whose command would
+# land in root's account rather than the one that typed it, and a run with no
+# home to install into.
+require_cli_account() {
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    fail "Run it without sudo, as the account that will use vespin: curl -fsSL $ORIGIN/install.sh | sh -s cli"
+  fi
+  [ -n "${HOME:-}" ] && [ -d "$HOME" ] || fail "This account has no home folder to install Vespin CLI into (HOME is ${HOME:-not set})."
+  command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 ||
+    fail "Vespin CLI needs sha256sum (coreutils) or shasum to check its download."
+}
+
+# Unpacks the checked tarball $1 into the command's releases, as
+# versions/$CLI_VERSION, and points the command's link at it. Note that it is
+# unpacked into $work, a folder of the releases' own, so the version's folder
+# appears whole, and that no service runs from a release, so one standing
+# there already is swapped without a stop.
+install_cli_release() {
+  mkdir -p "$CLI_RELEASES/versions" "$work/unpacked"
+  tar -xzf "$1" -C "$work/unpacked" || fail "Could not unpack ${1##*/}"
+  [ -x "$work/unpacked/vespin/bin/vespin" ] || fail "${1##*/} holds no vespin."
+  target="$CLI_RELEASES/versions/$CLI_VERSION"
+  [ ! -e "$target" ] || mv "$target" "$work/replaced"
+  mv "$work/unpacked/vespin" "$target"
+  mkdir -p "$(dirname "$CLI_LINK")"
+  ln -sfn "$target/bin/vespin" "$CLI_LINK"
+  ok "Installed Vespin CLI $CLI_VERSION to $target"
+}
+
+# Removes every release of the command but the one its link names.
+remove_other_cli_releases() {
+  for release in "$CLI_RELEASES/versions"/*; do
+    [ -e "$release" ] && [ "$release" != "$CLI_RELEASES/versions/$CLI_VERSION" ] || continue
+    rm -rf "$release"
+  done
+}
+
+# Installs the `vespin` command's release into this account, or says it is
+# installed already, and how to reach it where ~/.local/bin is not on PATH.
+main_cli() {
+  [ "$#" -eq 0 ] || fail "Unknown option: $1"
+  PRODUCT="Vespin CLI"
+  [ -n "$CLI_VERSION" ] || fail "Vespin CLI has no release yet. Install it with npm instead, on Node 20 or later: npm i -g vespin"
+  kernel="$(uname -s)"
+  require_cli_target "$kernel" "$(hardware_machine)"
+  if [ "$kernel" = "Darwin" ]; then
+    require_macos_version "$(sw_vers -productVersion 2>/dev/null || true)"
+  fi
+  require_cli_account
+  cli_paths
+  [ -n "$cli_target_sha256" ] || fail "Vespin CLI $CLI_VERSION has no release for $cli_target_name yet."
+
+  installed="$CLI_RELEASES/versions/$CLI_VERSION/bin/vespin"
+  if [ -x "$installed" ] && [ "$(readlink "$CLI_LINK" 2>/dev/null || true)" = "$installed" ]; then
+    ok "Vespin CLI $CLI_VERSION is installed already, at $CLI_LINK"
+  else
+    printf 'Vespin CLI %s for %s, for %s\n' "$CLI_VERSION" "$cli_target_name" "$(id -un)"
+    mkdir -p "$CLI_RELEASES"
+    work="$(mktemp -d "$CLI_RELEASES/.install.XXXXXX")"
+    trap 'rm -rf "$work"' EXIT
+    tarball="vespin-$CLI_VERSION-$cli_target_name.tar.gz"
+    download "$cli_target_url" "$work/$tarball"
+    check_sha256 "$work/$tarball" "$cli_target_sha256"
+    ok "Downloaded and checked $tarball (sha256 matches)"
+    install_cli_release "$work/$tarball"
+  fi
+  remove_other_cli_releases
+
+  case ":${PATH:-}:" in
+    *":$(dirname "$CLI_LINK"):"*) printf '\nRun vespin login to sign in.\n' ;;
+    *)
+      printf '\n%s is not on your PATH. Add it to your shell'"'"'s profile:\n' "$(dirname "$CLI_LINK")"
+      printf '  export PATH="$HOME/.local/bin:$PATH"\n'
+      printf 'Then run vespin login to sign in.\n'
+      ;;
+  esac
+  printf 'To upgrade later, run vespin update.\n'
+}
+
+# Installs, connects and starts the host in this account, the options parsed;
+# with `cli` first, installs the command instead.
 main() {
+  if [ "${1:-}" = cli ]; then
+    shift
+    main_cli "$@"
+    return 0
+  fi
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --origin)
@@ -522,8 +662,9 @@ main() {
   fi
   remove_other_releases
 
-  printf '\nConnected. This box gets ready in Vespin, then you can pick it under a task'"'"'s Runs on.\n'
-  printf 'To upgrade later, run the same command again.\n'
+  # Note that nothing says how to upgrade, because the host updates itself to each release.
+  printf '\n'
+  ok "Ready. Pick it under a task's Runs on in Vespin."
   printf 'To remove it: %s uninstall\n' "$TYPED_LINK"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about
   # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.

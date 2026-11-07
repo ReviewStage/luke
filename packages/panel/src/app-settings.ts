@@ -8,6 +8,7 @@
  */
 
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import type {
   MicrophoneControl,
   NotificationsControl,
@@ -15,13 +16,19 @@ import type {
 } from "@repo/settings/settings-controls";
 import type { SettingsView } from "@repo/settings/settings-views";
 import { fixtureUpdate } from "@repo/settings/update-row";
-import type { ActionResult } from "@repo/wire";
-import * as Atom from "effect/reactivity/Atom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { useAct } from "./act.js";
+import { actMutation, pressMutation } from "./act-mutations.js";
 import type { SettingsPanelProps } from "./settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "./settings/workspace-page.js";
-import { APP_SETTINGS_VIEW, APP_SLICE, useAppSlice } from "./use-app-state.js";
+import {
+  appStateQuery,
+  selectAccount,
+  selectAppSettingsView,
+  selectAudio,
+  selectNotifications,
+  selectRun,
+} from "./use-app-state.js";
 
 /** What the window hands Settings: the page it shows, and the doors it answers through. */
 export interface SettingsDoors {
@@ -29,21 +36,16 @@ export interface SettingsDoors {
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<ActionResult>;
   onRequestMicrophone: () => void | Promise<void>;
   workspace: WorkspaceSettingsControl;
 }
 
-/** The update the window shows: the document's, or a fixture run's staged one, made once per change to either slice. */
-const SHOWN_UPDATE = Atom.make((get) => {
-  const run = get(APP_SLICE.RUN);
-  const update = get(APP_SLICE.UPDATE);
-  return run === undefined || update === undefined ? undefined : fixtureUpdate(run, update);
-});
+/** The update the window shows: the document's, or a fixture run's staged one. */
+const selectShownUpdate = (state: AppStateSnapshot) => fixtureUpdate(state.run, state.update);
 
 /** The update the window shows, redrawn only as the update or the run moves. */
 export function useShownUpdate(): UpdateControl["update"] | undefined {
-  return useAppSlice(SHOWN_UPDATE);
+  return useQuery({ ...appStateQuery, select: selectShownUpdate }).data;
 }
 
 /**
@@ -53,12 +55,24 @@ export function useShownUpdate(): UpdateControl["update"] | undefined {
  * draw the sidebar again.
  */
 export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | undefined {
-  const { act, press } = useAct();
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
-  const run = useAppSlice(APP_SLICE.RUN);
-  const settings = useAppSlice(APP_SETTINGS_VIEW);
-  const audio = useAppSlice(APP_SLICE.AUDIO);
-  const notificationsStatus = useAppSlice(APP_SLICE.NOTIFICATIONS)?.status;
+  const { mutateAsync: checkForUpdate } = useMutation(actMutation(ACT_KIND.UPDATE_CHECK));
+  const { mutate: installUpdate } = useMutation(pressMutation(ACT_KIND.UPDATE_INSTALL));
+  const { mutate: moveToApplications } = useMutation(
+    pressMutation(ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS),
+  );
+  const { mutate: openRelease } = useMutation(pressMutation(ACT_KIND.UPDATE_OPEN_RELEASE));
+  const { mutate: openMicrophoneSettings } = useMutation(
+    pressMutation(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
+  );
+  const { mutate: openNotificationsSettings } = useMutation(
+    pressMutation(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+  );
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
+  const audio = useQuery({ ...appStateQuery, select: selectAudio }).data;
+  const notificationsStatus = useQuery({ ...appStateQuery, select: selectNotifications }).data
+    ?.status;
   const update = useShownUpdate();
   const packaged = run?.packaged;
   const commit = run?.commit;
@@ -72,13 +86,13 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
             // Answered rather than fire-and-forget so the row that asked redraws from
             // the same snapshot the broadcast carries to every other window.
             onCheck: async () => {
-              await act(ACT_KIND.UPDATE_CHECK);
+              await checkForUpdate();
             },
-            onInstall: () => press(ACT_KIND.UPDATE_INSTALL),
-            onMoveToApplications: () => press(ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS),
-            onOpenLatest: () => press(ACT_KIND.UPDATE_OPEN_RELEASE),
+            onInstall: () => installUpdate(),
+            onMoveToApplications: () => moveToApplications(),
+            onOpenLatest: () => openRelease(),
           },
-    [update, packaged, commit, act, press],
+    [update, packaged, commit, checkForUpdate, installUpdate, moveToApplications, openRelease],
   );
   return useMemo(() => {
     if (account === undefined || run === undefined || audio === undefined) return undefined;
@@ -88,17 +102,16 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     const microphone: MicrophoneControl = {
       status: audio.microphoneStatus,
       onRequest: doors.onRequestMicrophone,
-      onOpenSettings: () => press(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
+      onOpenSettings: () => openMicrophoneSettings(),
     };
     const notifications: NotificationsControl = {
       status: notificationsStatus,
       packaged: run.packaged,
-      onOpenSettings: () => press(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+      onOpenSettings: () => openNotificationsSettings(),
     };
     return {
       account,
       onSignOut: doors.onSignOut,
-      onDeleteAccount: doors.onDeleteAccount,
       view: doors.view,
       onViewChange: doors.onViewChange,
       microphone,
@@ -108,5 +121,15 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       capabilities: run.capabilities,
       workspace: doors.workspace,
     };
-  }, [account, run, settings, audio, notificationsStatus, updates, doors, press]);
+  }, [
+    account,
+    run,
+    settings,
+    audio,
+    notificationsStatus,
+    updates,
+    doors,
+    openMicrophoneSettings,
+    openNotificationsSettings,
+  ]);
 }

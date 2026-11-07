@@ -1,11 +1,12 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, pullRequestAddressOf } from "@repo/features/link-grammar";
 import { summaryOfTaskless, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { listedPullRequestOf } from "@repo/ui/pull-request-link";
-import * as Atom from "effect/reactivity/Atom";
-import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, useCallback } from "react";
 import { tabCard } from "../desktop/tab-card.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 import { type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-place.js";
 import { TAB_KIND } from "./tab-look.js";
@@ -20,7 +21,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * A chip of an agent of the plan's page it stands on hangs that agent's
  * tab's card, as the page reads it (`mention-chip.tsx`'s `agentOf`). Any
  * other, an agent of another task of the workspace or of none, in a
- * transcript, the Inbox, or a plan, hangs the same card (`agent-ref.tsx`'s
+ * transcript, the Inbox, or a description, hangs the same card (`agent-ref.tsx`'s
  * `AgentCard`), drawn from the agents the task list carries: every task's,
  * archived ones among them, and those on no task. So hanging one asks the
  * service nothing, and a rename or an archive shows on it as the list's row
@@ -79,15 +80,23 @@ function listedAgentOf(tasks: TasksView | undefined, agentId: string): Listed {
   return answered ? UNLISTED.ABSENT : UNLISTED.READING;
 }
 
-/** One agent as the task list carries it, for every card of it. */
-const listedAgentAtom = Atom.family((agentId: string) =>
-  Atom.map(APP_SLICE.TASKS, (tasks) => listedAgentOf(tasks, agentId)),
-);
+/** One agent as the task list carries it, for a card of it; reading until the first document arrives. */
+function useListedAgent(agentId: string): Listed {
+  const select = useCallback(
+    (state: AppStateSnapshot) => listedAgentOf(state.tasks, agentId),
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data ?? UNLISTED.READING;
+}
 
-/** The model one agent runs on, as the task list carries it, for every mark of it; none where it carries no such agent. */
-const listedModelAtom = Atom.family((agentId: string) =>
-  Atom.map(listedAgentAtom(agentId), (listed) => agentOf(listed)?.model),
-);
+/** The model one agent runs on, as the task list carries it, for a mark of it; none where it carries no such agent. */
+function useListedModel(agentId: string): string | undefined {
+  const select = useCallback(
+    (state: AppStateSnapshot) => agentOf(listedAgentOf(state.tasks, agentId))?.model,
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
+}
 
 /** What a mark draws of the model the list carries, or of none. */
 type ModelDrawer = (model: string | undefined) => ReactNode;
@@ -104,7 +113,7 @@ export function ReadAgentModel({
   agentId: string;
   children: ModelDrawer;
 }): ReactNode {
-  return children(useAppSlice(listedModelAtom(agentId)));
+  return children(useListedModel(agentId));
 }
 
 /** What a card of an agent's says of the task it works on: its name as the window lists it, none, or another the window does not list. */
@@ -148,7 +157,7 @@ export function MentionedAgentCard({
   fallback: ReactNode;
 }): ReactNode {
   const place = useMentionedPlace();
-  const listed = useAppSlice(listedAgentAtom(agentId));
+  const listed = useListedAgent(agentId);
   const agent = agentOf(listed);
   const foot = useTaskFoot(agent);
   if (listed === UNLISTED.READING) return reading;
@@ -170,10 +179,10 @@ interface OwnedPullRequest {
 
 /** The agent that opened the pull request a link names, among the tasks and the agents on no task the window lists; none where none of them did. */
 function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
-  const tasks = useAppSlice(APP_SLICE.TASKS);
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   if (tasks === undefined) return undefined;
   const number = pullRequestAddressOf(url)?.number;
-  const listed = listedPullRequestOf(url, tasks.tasks, tasks.tasklessAgents);
+  const listed = listedPullRequestOf(url, tasks.taskPullRequests ?? [], tasks.tasklessAgents);
   return listed === undefined ? undefined : { ...listed, number };
 }
 
@@ -196,7 +205,7 @@ function OwnedPullRequestCard({
   const place = useMentionedPlace();
   const openPlace = useOpenPlace();
   const { agentId, taskId, number } = owned;
-  const listed = useAppSlice(listedAgentAtom(agentId));
+  const listed = useListedAgent(agentId);
   const pullRequest = useListedPullRequest(agentId);
   if (listed === UNLISTED.READING) return reading;
   const agent = agentOf(listed);

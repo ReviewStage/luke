@@ -2,15 +2,21 @@ import {
   Card,
   CardPress,
   GAP,
+  LIST_ROW_LEAD,
+  LIST_ROW_META,
   List,
   ListRow,
   SELECT_BOX_PLACE,
   SelectionBar,
+  SelectionPicker,
   SelectionRegion,
+  SelectionToolbar,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Toolbar,
+  UnreadMark,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
@@ -25,7 +31,10 @@ import { CatalogSection } from "../section";
  * Then cards of the app's own under two heads, chosen the same way across
  * both in one region, each with the box at its start that the pointer
  * chooses it by, shown under the pointer and on every card while any is
- * chosen, and X choosing the card in hand.
+ * chosen, and X choosing the card in hand. Last, a list of mail whose
+ * head says how many are chosen in its name's place, led by a box choosing
+ * every row or none, its acts as glyphs, each row's box coming in over its
+ * unread dot under the pointer, as the Inbox's list draws it.
  */
 
 const TASKS = [
@@ -120,6 +129,86 @@ function ChoosingCards(): React.JSX.Element {
   );
 }
 
+const MAIL = [
+  { id: "threshold", task: "Billing alerts", title: "Alert at 80%?", unread: true },
+  { id: "expiry", task: "Team invites", title: "Expire after 7 days?", unread: false },
+  { id: "retry", task: "Billing alerts", title: "How is a failed email retried?", unread: true },
+] as const;
+
+function ChoosingMail(): React.JSX.Element {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set(["expiry"]));
+  const clear = () => setSelected(new Set());
+  const count = selected.size;
+  return (
+    <div className="catalog-column">
+      <Toolbar
+        lead={
+          count === 0 ? null : (
+            <SelectionPicker
+              count={count}
+              total={MAIL.length}
+              onAll={() => setSelected(new Set(MAIL.map((item) => item.id)))}
+              onNone={clear}
+              controls="selection-mail-list"
+              by={[
+                {
+                  label: "Read",
+                  count: MAIL.filter((item) => !item.unread).length,
+                  onSelect: () =>
+                    setSelected(
+                      new Set(MAIL.filter((item) => !item.unread).map((item) => item.id)),
+                    ),
+                },
+                {
+                  label: "Unread",
+                  count: MAIL.filter((item) => item.unread).length,
+                  onSelect: () =>
+                    setSelected(new Set(MAIL.filter((item) => item.unread).map((item) => item.id))),
+                },
+              ]}
+            />
+          )
+        }
+        title={count === 0 ? "Inbox" : `${count} selected`}
+        titleReplayUnmasked
+        actions={
+          <SelectionToolbar
+            count={count}
+            onClear={clear}
+            controls="selection-mail-list"
+            acts={[
+              { label: "Mark as read", icon: <GLYPH.DONE />, onAct: clear },
+              {
+                label: "Remind me",
+                icon: <GLYPH.TIME />,
+                menu: [[{ label: "Tomorrow", onSelect: clear }]],
+              },
+            ]}
+          />
+        }
+      />
+      <List id="selection-mail-list" label="Inbox" selection={{ selected, onChange: setSelected }}>
+        {MAIL.map((item) => (
+          <ListRow
+            key={item.id}
+            selectKey={item.id}
+            selectBox
+            leading={<UnreadMark unread={item.unread} />}
+            lead={{ icon: <GLYPH.TASK />, label: item.task }}
+            leadAt={LIST_ROW_LEAD.ABOVE}
+            title={item.title}
+            description="The agent asks before it goes on."
+            unread={item.unread}
+            meta="3m"
+            metaAt={LIST_ROW_META.TITLE}
+            onPress={() => undefined}
+          />
+        ))}
+      </List>
+    </div>
+  );
+}
+
 function Selection(): React.JSX.Element {
   return (
     <>
@@ -131,6 +220,12 @@ function Selection(): React.JSX.Element {
         title="Cards of the app's own, chosen across groups by their boxes, ⌘, ⇧, and X"
       >
         <ChoosingCards />
+      </CatalogSection>
+      <CatalogSection
+        id="selection-mail"
+        title="Mail chosen by the box over its dot, its head saying how many with its acts as glyphs"
+      >
+        <ChoosingMail />
       </CatalogSection>
     </>
   );

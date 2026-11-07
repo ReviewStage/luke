@@ -9,11 +9,11 @@
  * may ride in it. A turn that read the web has a page's words in its
  * context, which anyone could have written. Both are read from the store's
  * record of the turn under way, the agent's newest, so every runtime is held
- * to the one rule, eve's and a native harness's alike: the line that opened
+ * to the one rule alike: the line that opened
  * it, by the sender its row keeps (`MESSAGE_SENDER.AUTOMATION`), or by
  * keeping none on an agent an automation started, and its
  * journal, by the calls of any web read it holds, our own page read,
- * eve's provider-run search, the agent's browser, and Claude Code's and
+ * the retired runtime's provider-run search, the agent's browser, and Claude Code's and
  * Codex's own. Note that a web read the relay has not yet written, such as
  * one made in the same step as the remember, is not seen, because the
  * journal is what the turn has recorded so far; and that a worker's read is
@@ -33,12 +33,11 @@ import {
   readMessageByClientId,
 } from "@repo/database/models/message-reads";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
 import { automationRun } from "@repo/features/model-label";
 import { toolPartName } from "@repo/wire/ui-messages";
 import { Effect } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 
 /** Why a turn may keep no memory, in words the model can act on. */
@@ -78,9 +77,10 @@ function calledTool(part: {
 /**
  * Whether a line of the agent's conversation is an automation's run: by the
  * sender its row keeps, or, on an agent an automation started, a line that
- * kept none. Note that the second is the first line of an eve agent an
- * automation started, because eve's session takes it as it opens and the
- * relay writes it with no sender (`coder-host/start.ts`), while every line
+ * kept none. Note that the second is the first line of an agent from
+ * before the native harnesses that an automation started, because the
+ * retired runtime's session took it as it opened and its relay wrote it
+ * with no sender (`coder-host/start.ts`), while every line
  * a member sends keeps theirs.
  */
 const automationLine = (agent: Agent, messageId: string) =>

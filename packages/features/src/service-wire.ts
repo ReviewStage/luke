@@ -70,14 +70,8 @@ export const HOSTED_API_ERROR = {
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /**
-   * The agent runs on a native harness whose sandbox image is still being
-   * prepared, so it could not start or take the message yet; nothing was
-   * written, and the same request a little later, under the same key, is taken.
-   */
-  AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
-   * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
+   * of the app cannot reach yet, such as a call; nothing
    * was written or charged. It is reached from the agent's own tab.
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
@@ -149,6 +143,8 @@ export const HOSTED_API_ERROR = {
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
+  /** The coding agent's sandbox can never resume: its snapshot expired or was deleted, its saved files with it, and the agent's next turn starts a fresh one. Nothing was resumed. */
+  SANDBOX_SNAPSHOT_GONE: "sandbox-snapshot-gone",
   /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: a file past its bound, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
@@ -179,6 +175,12 @@ export const HOSTED_API_ERROR = {
   HOST_PAIRING_HELD: "host-pairing-held",
   /** A write sent again under the idempotency key (`IDEMPOTENCY_KEY`) it was taken under before; it was not run again, so what it wrote stands as the service holds it now. */
   ALREADY_WRITTEN: "already-written",
+  /** The member has Memory off, so their workspace's memories are neither kept nor searched for them; nothing was read or written. */
+  MEMORY_OFF: "memory-off",
+  /** A memory's words look like they hold a credential, which is never kept; nothing was written. */
+  MEMORY_CREDENTIAL: "memory-credential",
+  /** The workspace holds as many memories as it may (`MEMORY_BOUNDS.MAX_MEMORIES`), so a new one is refused until one is corrected or forgotten; nothing was written. */
+  MEMORY_FULL: "memory-full",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

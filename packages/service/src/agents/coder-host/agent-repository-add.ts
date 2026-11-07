@@ -9,9 +9,8 @@
  *
  * - to anyone but the agent's starter or one of their agents, since the
  *   token the set is minted on is minted for the starter;
- * - while the starter has the Several repositories experiment off;
  * - to an agent caller that has heard words from another account
- *   (`heardFromAnotherAccount`, as `run_on_mac` is gated), so words from a
+ *   (`heardFromAnotherAccount`), so words from a
  *   review comment on a public repository never widen what an agent's
  *   token reaches, its own or another agent's it would then message;
  * - for an agent that works in no repository of its own, or runs on a
@@ -37,7 +36,6 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { accountExperimentOn } from "@repo/database/models/account-store";
 import {
   APPEND_REFUSAL,
   type AppendRefusal,
@@ -55,7 +53,6 @@ import {
   type AgentAlsoRepository,
   EXTRA_REPOSITORY_REFUSAL,
 } from "@repo/features/agent-wire";
-import { EXPERIMENT } from "@repo/settings";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp, REPOSITORY_SET_UNREACHED } from "../../github/github-app.js";
@@ -67,8 +64,8 @@ import {
   hostedStoreOrUnavailable,
   repositoryNotReachable,
 } from "../../http/http-effect.js";
-import type { AgentSessions } from "../eve-host/eve-sessions.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
+import type { AgentSessions } from "../sessions/agent-sessions.js";
 import { RUNNER_CHECKOUT, runnerCheckedOut } from "./runtime-sessions.js";
 import { confirmedBranch } from "./start.js";
 import { agentLineSender, steerAgent } from "./steer.js";
@@ -81,7 +78,7 @@ export interface RepositoryAdder {
 
 /** How the agent is told: the sessions and the writer its line goes through, and the key it is sent under, which a repeat carries again. */
 export interface RepositoryTelling {
-  readonly eve: AgentSessions;
+  readonly agentSessions: AgentSessions;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly clientKey: string;
 }
@@ -114,12 +111,6 @@ const checkedRepository = Effect.fnUntraced(function* (
   asked: AgentAlsoRepository,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   if (adder.userId !== agent.userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const on = yield* hostedStoreOrUnavailable(
-    accountExperimentOn(agent.userId, EXPERIMENT.SEVERAL_REPOSITORIES),
-  );
-  if (!on) {
-    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
-  }
   if (adder.agent !== undefined) {
     const caller = { userId: adder.agent.userId, conversationId: adder.agent.conversationId };
     if (yield* hostedStoreOrUnavailable(heardFromAnotherAccount(caller))) {
@@ -205,7 +196,7 @@ export const addAgentRepository = /* @__PURE__ */ Effect.fn("web/addAgentReposit
   // Note that only a checkout that landed in a running place is told, so an idle agent is never woken by a
   // line saying something not yet true, and an agent adding to itself reads the line as its call's answer.
   if (live && adder.agent?.id !== agent.id) {
-    yield* steerAgent(telling.eve, telling.writer, agent.userId, agent, {
+    yield* steerAgent(telling.agentSessions, telling.writer, agent.userId, agent, {
       text: addedRepositoryLine(added),
       clientKey: telling.clientKey,
       sender: agentLineSender(agent),

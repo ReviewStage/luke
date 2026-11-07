@@ -15,6 +15,14 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
+  /* A run of rows drawing only those near the view (virtual-rows.tsx) stands
+     as one box of the card, its rows placed in it absolutely: each is ruled
+     from the row above it but the run's first, by its place in the whole
+     run rather than among the rows drawn, since the first drawn may be any. */
+  .ui-settings-section-card > .ui-virtual-rows > .ui-virtual-row:not([data-index="0"]) {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
   /* A row inset under the row above that stands inside a box of its own, as
      a row with a menu of its own does, is ruled where its inset starts, as a
      bare inset row is: the box draws no rule, and the row draws it from its
@@ -26,6 +34,36 @@
   }
 
   .ui-settings-section-card > * + * > .ui-settings-row[data-indent="mark"] {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  /* The rows a row folds under it (`SettingsRowsFold`) stand in a box of
+     their own, ruled as the card's own: each from the row above it, the
+     first from the head row, an inset row from its inset edge. The box
+     draws no rule, and a closed one stands nowhere. */
+  .ui-settings-rows-fold {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .ui-settings-rows-fold[hidden] {
+    display: none;
+  }
+
+  .ui-settings-section-card > .ui-settings-rows-fold {
+    border-top: none;
+  }
+
+  .ui-settings-rows-fold > * {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  .ui-settings-rows-fold > *:not(.ui-settings-row):has(> .ui-settings-row[data-indent="mark"]) {
+    border-top: none;
+  }
+
+  .ui-settings-rows-fold > * > .ui-settings-row[data-indent="mark"] {
     border-top: 1px solid var(--ui-color-border);
   }
 

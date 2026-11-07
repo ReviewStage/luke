@@ -2,29 +2,33 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { EXPERIMENT } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
+import { draftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useStageRoom } from "../stage-room.js";
-import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
+import { useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, registryWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
+import { shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
@@ -38,7 +42,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
@@ -49,7 +53,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -78,8 +81,11 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The task open in the window, holding a comment, so its panel has a tab to show. */
-const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.COMMENTS]: true } };
+/** The task open in the window. */
+const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: {} };
+
+/** The task's agent, whose Pull request tab the panel was left open on, so it has a tab to show. */
+const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** The desktop's window at its usual width. */
 const WIDE = 1280;
@@ -100,8 +106,11 @@ beforeEach(() => {
     JSON.stringify({
       open: true,
       tabs: ["plan", "inbox", "comments"],
-      tab: "comments",
+      tab: { changes: AGENT },
       width: 400,
+      tasks: {
+        [DOCUMENT_TASK.id]: { opened: [], closed: [], changes: [{ changes: AGENT }] },
+      },
     }),
   );
   fakeAppPlatform(QUIET_PANEL);
@@ -123,6 +132,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
+
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
+function underRouter(shell: ReactElement, standing?: string): ReactElement {
+  return routed().under(shell, standing);
+}
+
 /** Resizes the panel's stage, as a phone turned or a browser window dragged does. */
 function resizeStage(width: number): void {
   stageWidth = width;
@@ -134,7 +151,7 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const sidebar = useSidebarCollapse(false, stage.compact);
-  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], undefined, room);
+  const sidePanel = useSidePanel(undefined, OPEN_TASK, [AGENT], [], [], [AGENT], room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, onCancelSignIn: ignore },
@@ -145,6 +162,12 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
       // An account with a task, so Home rests on its own page rather than a new account's welcome.
       tasks: [DOCUMENT_TASK],
       region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+      // Note that the panel stands beside a draft agent's tab, since the task's details take its room.
+      mainTabs: {
+        ...tasksControl().mainTabs,
+        tabs: [MAIN_TAB.OVERVIEW, draftTab("draft")],
+        tab: draftTab("draft"),
+      },
       sidePanel,
     }),
     history: {
@@ -155,6 +178,8 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -177,7 +202,14 @@ function mount(width: number, onTask = true): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window, { onTask }))));
+  act(() =>
+    root?.render(
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        underRouter(createElement(Window, { onTask })),
+      ),
+    ),
+  );
   return container;
 }
 
@@ -317,8 +349,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     null,
     "the header's way back stands for the sidebar's toggle and New task",
   );
-  // Note that the panel opens on the board, a tab pushed over the column's plan, which its way back names by the task.
-  assert.equal(headBack(page).getAttribute("aria-label"), `Back to ${DOCUMENT_TASK.name}`);
+  // Note that the panel opens on the board, a tab pushed over the column's draft, which its way back names.
+  assert.equal(headBack(page).getAttribute("aria-label"), "Back to New agent");
 
   resizeStage(WIDE);
   assert.deepEqual(
@@ -339,8 +371,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   );
   assert.equal(
     headBack(page).getAttribute("aria-label"),
-    null,
-    "over the column's Overview, whose way back leads out of the task by its words",
+    `Back to ${DOCUMENT_TASK.name}`,
+    "over the column's draft, whose way back leads to the task's details",
   );
 });
 
@@ -410,36 +442,17 @@ test("beside the work an open floating sidebar leaves the work answering, as it 
   assert.equal(main.hasAttribute("inert"), false);
 });
 
-/** Answers the page as a browser tab's, whose own Back and Forward walk the history. */
-function inBrowserTab(): void {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: (query: string) => ({
-      matches: query === "(display-mode: browser)",
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }),
-  });
-}
-
 /** Whether the column's Back and Forward stand. */
 function historyArrows(page: HTMLElement): boolean {
   return page.querySelector('.title-bar-controls[data-edge="column"]') !== null;
 }
 
-test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
-  inBrowserTab();
+test("a phone draws no Back and Forward in the drawer's head; a wide window keeps them", () => {
   const page = mount(PHONE, false);
   openDrawer();
   assert.equal(historyArrows(page), false);
 
   resizeStage(WIDE);
-  assert.equal(historyArrows(page), true);
-});
-
-test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
-  const page = mount(PHONE, false);
-  openDrawer();
   assert.equal(historyArrows(page), true);
 });
 

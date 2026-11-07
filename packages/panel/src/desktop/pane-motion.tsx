@@ -34,7 +34,9 @@
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
- * frame with nothing easing behind it.
+ * frame with nothing easing behind it. Nor does the window going to another
+ * place, since navigation does not travel (docs/DESIGN.md): a panel the new
+ * place stands open, or shut, lands there at once.
  */
 
 import { MOTION_TOKEN, tokenTiming } from "@repo/ui";
@@ -44,7 +46,7 @@ import { Component, type RefObject, useLayoutEffect, useRef, useState } from "re
 const GLIDERS = [
   ".ui-toolbar-heading",
   ".ui-toolbar-actions",
-  ".desktop-document .plan-body",
+  ".desktop-document .description-body",
   ".desktop-agent > *",
   ".desktop-empty-region > *",
   ".automation-editor",
@@ -130,6 +132,8 @@ type SheetMotions = WeakMap<Element, SheetMotion>;
 interface PaneGlideProps {
   root: RefObject<HTMLElement | null>;
   layout: PaneLayout;
+  /** Where the window stands, the side panel's stop: a change to it lands the panes at once rather than playing them. */
+  place?: string | undefined;
 }
 
 /** It holds no state of its own. */
@@ -378,8 +382,8 @@ function play(root: HTMLElement, before: Snapshot, sheets: SheetMotions): void {
 export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapshot | null> {
   readonly #sheets: SheetMotions = new WeakMap();
 
-  /** The frame waited on before the window's panes play anything, while it stands. */
-  #opening: number | undefined;
+  /** When the window opened, or last arrived at a place, in the page's time. */
+  #arrived = 0;
 
   /**
    * Lands every pane motion under way where it is going, as the window is
@@ -387,36 +391,47 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
    * it stood.
    */
   readonly #land = (): void => {
+    if (!("getAnimations" in document)) return;
     for (const motion of document.getAnimations()) {
       if (motion.id === PANE_MOTION) motion.finish();
     }
   };
 
   /**
-   * Note that the window plays nothing until it has drawn twice, because
-   * what it opens with settles over its first frames, a summary's pin
-   * waiting on its column's width among it, and none of that is a change
-   * anyone asked for: the window opens as it stands.
+   * Whether the window is still settling where it opened or arrived, for as
+   * long as a pane's motion runs. Note that nothing plays meanwhile, because
+   * what a place stands with settles over the frames after it, a summary's
+   * pin waiting on its column's measure among it, and none of that is a
+   * change anyone asked for: the window stands as the place does.
    */
+  #settling(root: HTMLElement): boolean {
+    const duration = Number(paneTiming(root)?.duration ?? 0);
+    return performance.now() - this.#arrived < duration;
+  }
+
   override componentDidMount(): void {
     window.addEventListener("resize", this.#land);
-    this.#opening = requestAnimationFrame(() => {
-      this.#opening = requestAnimationFrame(() => {
-        this.#opening = undefined;
-      });
-    });
+    this.#arrived = performance.now();
   }
 
   override componentWillUnmount(): void {
     window.removeEventListener("resize", this.#land);
-    if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
   }
 
+  /**
+   * Note that a place arrived at plays nothing, and lands what was playing,
+   * because the panel the window left, or the one the place stands, is no
+   * change anyone asked for there.
+   */
   override getSnapshotBeforeUpdate(previous: PaneGlideProps): Snapshot | null {
     const root = this.props.root.current;
-    if (root === null || this.#opening !== undefined) return null;
-    if (sameLayout(previous.layout, this.props.layout)) return null;
-    return measure(root, this.#sheets);
+    if (previous.place !== this.props.place) {
+      this.#land();
+      this.#arrived = performance.now();
+      return null;
+    }
+    if (root === null || sameLayout(previous.layout, this.props.layout)) return null;
+    return this.#settling(root) ? null : measure(root, this.#sheets);
   }
 
   override componentDidUpdate(

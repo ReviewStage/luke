@@ -9,6 +9,12 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import {
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
+import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
@@ -21,13 +27,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-} from "@repo/features/plan-comment-wire";
-import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -44,10 +44,12 @@ import {
   UNREAD,
 } from "@repo/host/app-state";
 import { TASKS_ACT_KIND } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
+import { agentTab, changesTab, draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -55,25 +57,21 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
-import {
-  type FixedSidePanelTab,
-  PULL_REQUEST_VIEW,
-  SIDE_PANEL_TAB,
-  type SidePanelTab,
-} from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { askKept } from "../act.js";
-import { handHostReads, handMembers } from "../testing/app-state.js";
+import { handHostReads, handMembers, handState, registryWith } from "../testing/app-state.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import type { SummaryPin } from "./task-summary.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -92,11 +90,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the plan's comments beside it. */
+/** The side panel shown on the description's comments beside it. */
+/** A File tab of the task, which the panel draws in these tests. */
+const NOTES = fileTab("docs/notes.md");
+
+/** The file the File tab shows, opened on the task. */
+const NOTES_OPENED = { path: NOTES.file, range: undefined, opened: 0, browsedOn: TASK.id };
+
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
   ...tasksControl().sidePanel,
   open: true,
-  tab: SIDE_PANEL_TAB.COMMENTS,
+  strip: [NOTES],
+  files: [NOTES_OPENED],
+  tab: NOTES,
 };
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
@@ -106,16 +112,18 @@ test("a task the service will not hand the reader, as a link to another workspac
   const root = createRoot(container);
   act(() =>
     root.render(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: tasksControl({
-          page: TASKS_PAGE.DOCUMENT,
-          activeTaskId: TASK.id,
-          region: { kind: DOCUMENT_REGION.MISSING },
-          onLeaveTask: () => left.push(TASK.id),
+      withQueryClient(
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.MISSING },
+            onLeaveTask: () => left.push(TASK.id),
+          }),
         }),
-      }),
+      ),
     ),
   );
   const close = [...container.querySelectorAll("button")].find(
@@ -140,16 +148,19 @@ test("a task's comments are held from its open, so its first ready frame marks t
   const from = body.indexOf("seven days");
   const thread = {
     id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "seven days",
     anchor: { from, to: from + "seven days".length },
     section: "Goal",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       {
         id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-        kind: PLAN_COMMENT_ENTRY.COMMENT,
-        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-lee", name: "Lee Park" } },
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: {
+          actor: DESCRIPTION_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-lee", name: "Lee Park" },
+        },
         words: "Should this be a setting?",
         at: 1,
       },
@@ -160,6 +171,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
   };
   const held: TasksCommentsFollow[] = [];
   fakeAppBridge({});
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const reads = handHostReads({});
   fakeActPort({
     [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: (subject) => {
@@ -167,7 +179,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
       // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() =>
         reads.deliverComments({
-          [COMMENT_SUBJECT.PLAN]: { [TASK.id]: { rows: [thread] } },
+          [COMMENT_SUBJECT.DESCRIPTION]: { [TASK.id]: { rows: [thread] } },
           [COMMENT_SUBJECT.PAGE]: {},
         }),
       );
@@ -183,7 +195,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
         tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
       }),
     );
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
 
@@ -202,7 +214,8 @@ test("a task's comments are held from its open, so its first ready frame marks t
     ),
   );
   assert.equal(
-    container.querySelector(`mark.plan-comment-mark[data-threads~="${thread.id}"]`)?.textContent,
+    container.querySelector(`mark.description-comment-mark[data-threads~="${thread.id}"]`)
+      ?.textContent,
     "seven days",
   );
   act(() => root.unmount());
@@ -214,30 +227,32 @@ test("a task with no agent tab draws a new agent's draft", () => {
   const drawn = () => {
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: tasksControl({
-          page: TASKS_PAGE.DOCUMENT,
-          activeTaskId: TASK.id,
-          region: { kind: DOCUMENT_REGION.READY, task: TASK },
-          mainTabs: {
-            ...tasksControl().mainTabs,
-            tabs: [{ draft: DRAFT_ID }],
-            tab: { draft: DRAFT_ID },
-          },
-          agents: agentsControl({
-            agentIds: [],
-            draft: {
-              id: DRAFT_ID,
-              prompt: "",
-              attachments: [],
-              choice: undefined,
-              disabledServers: [],
+      withQueryClient(
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            mainTabs: {
+              ...tasksControl().mainTabs,
+              tabs: [draftTab(DRAFT_ID)],
+              tab: draftTab(DRAFT_ID),
             },
+            agents: agentsControl({
+              agentIds: [],
+              draft: {
+                id: DRAFT_ID,
+                prompt: "",
+                attachments: [],
+                choice: undefined,
+                disabledServers: [],
+              },
+            }),
           }),
         }),
-      }),
+      ),
     );
     return page;
   };
@@ -245,7 +260,7 @@ test("a task with no agent tab draws a new agent's draft", () => {
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
 });
 
-test("a wide plan with no agent offers New agent at its head, which opens the draft the + menu's New agent opens", async () => {
+test("a wide task's details with no agent offer New agent at their head, which opens a draft as the way back to the agents does", async () => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
   fakeActPort({});
@@ -256,7 +271,7 @@ test("a wide plan with no agent offers New agent at its head, which opens the dr
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -280,30 +295,41 @@ test("a wide plan with no agent offers New agent at its head, which opens the dr
     ) ?? assert.fail("New agent is offered");
 
   act(() => newAgent(container.querySelector(".plan-agents [aria-label='Agents']")).click());
-  const plus =
-    container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
-    assert.fail("the + stands");
-  await act(async () => plus.click());
-  act(() => newAgent(container.querySelector(".ui-searchable-menu")).click());
+  const back =
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document button")].find(
+      (each) => each.textContent === "Agents",
+    ) ?? assert.fail("the way back to the agents stands");
+  act(() => back.click());
 
-  assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
+  assert.deepEqual(chosen, [draftTab("draft"), draftTab("draft")], "both open a draft alike");
   act(() => root.unmount());
   container.remove();
 });
 
+/** A draft agent's tab, which a page beside its side panel shows. */
+const DRAFT_TAB = draftTab("draft");
+
 /** The task's page with the side panel open on `tab`, as markup. */
-function panelTab(tab: FixedSidePanelTab): HTMLElement {
+function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks: tasksControl({
-        page: TASKS_PAGE.DOCUMENT,
-        activeTaskId: TASK.id,
-        region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        sidePanel: { ...tasksControl().sidePanel, open: true, tab },
+    withQueryClient(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          // Note that the panel stands beside an agent's tab, since the task's details take its room.
+          mainTabs: {
+            ...tasksControl().mainTabs,
+            tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
+            tab: DRAFT_TAB,
+          },
+          sidePanel: DOCUMENT_PANEL,
+        }),
       }),
-    }),
+    ),
   );
   const page = document.createElement("div");
   page.innerHTML = markup;
@@ -311,7 +337,7 @@ function panelTab(tab: FixedSidePanelTab): HTMLElement {
 }
 
 test("the panel's tab panel is labeled by its chosen tab, which controls it", () => {
-  const side = panelTab(SIDE_PANEL_TAB.COMMENTS).querySelector("aside[aria-label='Panel']");
+  const side = panelTab().querySelector("aside[aria-label='Panel']");
   const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
   assert.ok(panel && chosen, "the panel shows its chosen tab");
@@ -412,7 +438,7 @@ async function _narrowTaskInbox(
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -423,8 +449,8 @@ async function _narrowTaskInbox(
             sidePanel: {
               ...tasksControl().sidePanel,
               open: true,
-              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
             me: reader.me,
@@ -527,7 +553,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", async () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -538,18 +564,19 @@ test("a plan's document opens on its path, its repository as plain words, then i
     ...TASK,
     repository: "acme/web",
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-lee", name: "Lee Park" },
       at: 2,
       duringCall: false,
     },
   };
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -565,13 +592,24 @@ test("a plan's document opens on its path, its repository as plain words, then i
       ),
     ),
   );
-  const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
+  // Note that the plan's last editor is drawn once Plans reaches the page through the Query client.
+  await vi.waitFor(() =>
+    assert.match(container.querySelector(".description-byline")?.textContent ?? "", /Edited /u),
+  );
+  const body = container.querySelector(
+    ".desktop-document .description-document-body .description-body",
+  );
   // A task from before statuses draws no standing chip.
   const path = body?.firstElementChild;
   const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
 
   assert.equal(body?.previousElementSibling === null, true, "nothing stands over the document");
+  assert.equal(
+    container.querySelector(".desktop-document .task-details-back")?.textContent,
+    "Agents",
+    "the way back to the agents is pinned in the card",
+  );
   assert.equal(path?.classList.contains("plan-task-path"), true, "the path leads the document");
   assert.match(path?.textContent ?? "", /acme\/web/u, "the path names the repository");
   assert.equal(
@@ -582,7 +620,7 @@ test("a plan's document opens on its path, its repository as plain words, then i
     "the repository is words, not a press",
   );
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.ok(byline?.classList.contains("description-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());
   container.remove();
@@ -613,7 +651,7 @@ test("a sub-task's row opens the task as a sidebar row does, never a link to its
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => linked.push(link) },
@@ -668,7 +706,7 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   const listed = [subTask("t-2", 2, TASK.id), subTask("t-3", 3, other.id)];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const open = (task: Task) =>
     act(() =>
       root.render(
@@ -707,7 +745,7 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", async () => {
   const agent: AgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -746,12 +784,13 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       assumptions: [],
     },
   };
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
@@ -807,12 +846,16 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
-  const own = chip("relay#42");
-  assert.ok(own, "the agent's pull request is its chip");
+  // Note that the plan's chips are drawn once Plans reaches the page through the Query client.
+  const own = await vi.waitFor(() => {
+    const found = chip("relay#42");
+    assert.ok(found, "the agent's pull request is its chip");
+    return found;
+  });
   act(() => own.click());
   assert.deepEqual(opened, [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id },
+    changesTab(agent.id),
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
@@ -822,9 +865,9 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   act(() => chip("relay#9")?.click());
   assert.deepEqual(opened.slice(2), [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id, number: 7 },
+    changesTab(agent.id, 7),
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id, number: 9 },
+    changesTab(agent.id, 9),
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
@@ -836,16 +879,20 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 /** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
-function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
+function panelPage(
+  tab: SidePanelTab,
+  overrides: Partial<TasksControl> = {},
+  summary: SummaryPin = UNPINNED_SUMMARY,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
     act(() =>
       root.render(
         onRegistry(
-          AtomRegistry.make(),
+          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
+            summary,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -870,26 +917,30 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   };
 }
 
-test("the plan stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
+test("the description stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const column = (tab: MainTab): Partial<TasksControl> => ({
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
       tab,
       openAgents: [agentId],
     },
   });
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
-  assert.ok(document, "the plan is drawn on Overview");
+  assert.ok(document, "the description is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column({ agent: agentId }));
-  assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
+  page.draw(NOTES, column(agentTab(agentId)));
+  assert.equal(
+    page.container.querySelector(".desktop-document"),
+    document,
+    "the same description stands",
+  );
   assert.equal(document.hasAttribute("hidden"), true);
 
-  page.draw(SIDE_PANEL_TAB.COMMENTS, column(MAIN_TAB.OVERVIEW));
+  page.draw(NOTES, column(MAIN_TAB.OVERVIEW));
   assert.equal(page.container.querySelector(".desktop-document"), document);
   assert.equal(document.hasAttribute("hidden"), false);
   page.unmount();
@@ -901,20 +952,26 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   );
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(SIDE_PANEL_TAB.COMMENTS, {
-    mainTabs: {
-      ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
-      tab: MAIN_TAB.OVERVIEW,
-      onClose: () => closed.push("column"),
+  const page = panelPage(
+    NOTES,
+    {
+      mainTabs: {
+        ...tasksControl().mainTabs,
+        tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
+        tab: agentTab(agentId),
+        onClose: () => closed.push("column"),
+      },
+      sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
+      pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     },
-    sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
-  });
+    // The summary stands pinned beside the document, since the rail draws the panel's kinds alone.
+    { ...UNPINNED_SUMMARY, pinned: true },
+  );
   act(() => relayout());
-  const row = [
-    ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
-  ].find((each) => each.getAttribute("aria-label") === "Comments");
-  assert.ok(row, "the summary offers the Comments tab");
+  const row = [...document.querySelectorAll<HTMLButtonElement>("li button")].find((each) =>
+    each.textContent?.includes("Invite funnel"),
+  );
+  assert.ok(row, "the summary offers the page's tab");
   act(() => row.click());
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 
@@ -938,7 +995,7 @@ function standingPageMounted(keeps: boolean) {
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           Fragment,
           null,

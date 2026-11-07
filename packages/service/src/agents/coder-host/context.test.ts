@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { agentContextOf } from "./context.js";
 
 /**
- * context.test.ts -- where an agent's context ring says its harness compacts: Claude Code's own line, not eve's share.
+ * context.test.ts -- where an agent's context ring says its harness compacts: Claude Code's own line, not the retired runtime's share.
  */
 
 /** An agent that has taken one step, in Opus 5.5's long window. */

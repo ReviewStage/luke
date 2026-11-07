@@ -81,8 +81,6 @@
   --terminal-cyan: light-dark(#1b7c83, #39c5cf);
   --terminal-white: light-dark(#6e7781, #b1bac4);
   --terminal-bright-black: light-dark(#57606a, #6e7681);
-  /* The terminal's own notes, held to 4.5:1 on the ground in either appearance. */
-  --terminal-note: light-dark(#57606a, #9198a1);
   --terminal-bright-red: light-dark(#a40e26, #ffa198);
   --terminal-bright-green: light-dark(#1a7f37, #56d364);
   --terminal-bright-yellow: light-dark(#633c01, #e3b341);
@@ -118,7 +116,7 @@
      far it is asked to go, which is what makes every move read as the same
      hand. */
 
-  /* A comment's anchored words (`tasks/plan-comments.tsx`): a wash under
+  /* A comment's anchored words (`tasks/description-comments.tsx`): a wash under
      the words and an edge beneath them, both stronger while their thread is
      open or the pointer is on them, in an amber that is neither the blue of
      a selection, the yellow of a find, nor the orange of attention. */
@@ -325,9 +323,10 @@ body,
 
 /* The mark's ink is `@repo/ui`'s (`marks/product-mark.css`); its size where
    nothing more particular lays it out is the window's, except where it is
-   asked to fill its box (`fill`), which this unlayered size would otherwise
-   beat. */
-.ui-product-mark:not([data-fill="true"]) {
+   asked to fill its box (`fill`) or to stand as a line glyph (`glyph`) at the
+   size its seat gives the glyphs beside it, which this unlayered size would
+   otherwise beat. */
+.ui-product-mark:not([data-fill="true"], [data-glyph="true"]) {
   width: 18px;
   height: 18px;
 }
@@ -375,6 +374,7 @@ body,
 .app-stage[data-capture="true"],
 body:has(.app-stage[data-capture="true"]) {
   --ui-duration-shape: 0s;
+  --ui-duration-showcase: 0s;
   --ui-duration-exit: 0s;
   --ui-duration-quick: 0s;
   --ui-duration-fast: 0s;

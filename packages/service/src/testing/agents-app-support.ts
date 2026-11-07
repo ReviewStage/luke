@@ -1,13 +1,14 @@
 /**
- * agents-app-support.ts -- the fixtures and helpers the `agents-app*.test.ts` files share: the routes' paths, the scripted eve, GitHub and catalog, and the request and answer builders.
+ * agents-app-support.ts -- the fixtures and helpers the `agents-app*.test.ts` files share: the routes' paths, the scripted harness, GitHub and catalog, and the request and answer builders.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText } from "@repo/database/models/task-store";
+import { saveDescriptionText } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages } from "@repo/database/schemas/storage";
@@ -21,6 +22,7 @@ import {
 } from "@repo/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import {
@@ -39,25 +41,25 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import type { MessageReceivedPart } from "eve/client";
 import { agentPullRequestProcedures } from "../agents/agent-pull-request-procedures.js";
 import { agentsApp } from "../agents/agents-app.js";
 import { agentsProcedures } from "../agents/agents-procedures.js";
+import type { MessageReceivedPart } from "../agents/attached-files.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
 import type { SummaryModelOf } from "../agents/coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  EveUnreachable,
-} from "../agents/eve-host/eve-sessions.js";
 import { messagesProcedures } from "../agents/messages-procedures.js";
 import { type SandboxStopReach, sessionSandboxesLayer } from "../agents/session-sandboxes.js";
+import {
+  type AgentSessions,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+  SessionUnreachable,
+} from "../agents/sessions/agent-sessions.js";
 import { AgentSandbox } from "../agents/terminal/agent-sandbox.js";
 import { requestUserId } from "../auth/bearer.js";
 import {
@@ -100,6 +102,7 @@ import {
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
+import { sandboxFetchOver } from "../testing/vercel-sandbox-fake.js";
 import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 
 export const ORIGIN = "https://app.test";
@@ -126,7 +129,7 @@ const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\
 export const TASKS = "/api/plans";
 /** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
 export const TASK = (taskId: string) => `${TASKS}/${taskId}`;
-/** A Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
+/** A Stop on a task, served by the hosted oRPC router, which reaches the agent's harness as the request's caller. */
 /** The brain's own transcript of a task, served by the hosted oRPC router. */
 /** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
@@ -160,7 +163,7 @@ export function freshInstallation(
 export const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
+/** The saved description as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 export const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 export const SOL = "openai/gpt-6.1-sol";
@@ -212,48 +215,48 @@ export interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** One session opened, as the fake eve saw it. */
+/** One session opened, as the fake harness saw it. */
 interface Opened {
   readonly authorization: string;
-  readonly message: EveMessage;
+  readonly message: SessionMessage;
   readonly sessionId: string;
 }
 
-/** One follow-up handed to a session, as the fake eve saw it. */
+/** One follow-up handed to a session, as the fake harness saw it. */
 interface Sent {
   readonly authorization: string;
   readonly sessionId: string;
-  readonly message: EveMessage;
+  readonly message: SessionMessage;
 }
 
-/** How the fake eve answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
+/** How the fake harness answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
 export type SendAnswer =
-  | typeof EVE_SEND_OUTCOME.ACCEPTED
-  | typeof EVE_SEND_OUTCOME.NOT_READY
-  | typeof EVE_SEND_OUTCOME.RETIRED
-  | typeof EVE_SEND_OUTCOME.FAILED;
+  | typeof SESSION_SEND_OUTCOME.ACCEPTED
+  | typeof SESSION_SEND_OUTCOME.NOT_READY
+  | typeof SESSION_SEND_OUTCOME.RETIRED
+  | typeof SESSION_SEND_OUTCOME.FAILED;
 
 /** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
 export function sessionCookieOf(userId: string): string {
   return `better-auth.session_token=${userId}`;
 }
 
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
+/** How the fake harness writes down the deployment acting for an account, apart from any bearer a request carried. */
 export function deploymentFor(account: string): string {
   return `deployment for ${account}`;
 }
 
-/** eve as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
-export function fakeEve(
+/** The harness as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
+export function fakeAgentSessions(
   options: {
     readonly reachable?: boolean;
     readonly cancels?: boolean;
     readonly sends?: SendAnswer;
-    /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
+    /** How many cancels the harness holds every cancel's answer for, so a caller asking them one at a time never hears back. */
     readonly cancelsTogether?: number;
-    /** What eve looks at as it is asked to retire a session, written down beside the retire. */
+    /** What the harness looks at as it is asked to retire a session, written down beside the retire. */
     readonly resetSees?: Effect.Effect<boolean>;
-    /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
+    /** What happens while a cancel is out, before the harness answers it, as a turn's end racing the Stop does. */
     readonly canceling?: Effect.Effect<void>;
   } = {},
 ) {
@@ -263,7 +266,7 @@ export function fakeEve(
   const canceled: (readonly [string, string])[] = [];
   /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
   const canceledAs: string[] = [];
-  /** Every session eve was asked to retire, in order. */
+  /** Every session the harness was asked to retire, in order. */
   const reset: string[] = [];
   /** Who asked each retire, in order, as `canceledAs` writes it. */
   const resetAs: string[] = [];
@@ -271,12 +274,12 @@ export function fakeEve(
   const resetSaw: boolean[] = [];
   let sessions = 0;
   let deliveries = 0;
-  const eve = (authorization: string): AgentSessions => ({
+  const agentSessions = (authorization: string): AgentSessions => ({
     open: (message) =>
       Effect.suspend(() => {
         if (options.reachable === false) {
           return Effect.fail(
-            new EveUnreachable({
+            new SessionUnreachable({
               // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
               cause: {
                 _tag: "RequestError",
@@ -290,37 +293,37 @@ export function fakeEve(
         // A Claude Code session's id, as every agent here runs on its harness, so a Stop or a retire reaches the harness too.
         const sessionId = `${NATIVE_SESSION_PREFIX.claude_code}${String(sessions).padStart(22, "0")}`;
         opened.push({ authorization, message, sessionId });
-        return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
+        return Effect.succeed({ outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId });
       }),
     send: (sessionId, message) =>
       Effect.sync(() => {
         sent.push({ authorization, sessionId, message });
-        switch (options.sends ?? EVE_SEND_OUTCOME.ACCEPTED) {
-          case EVE_SEND_OUTCOME.ACCEPTED:
+        switch (options.sends ?? SESSION_SEND_OUTCOME.ACCEPTED) {
+          case SESSION_SEND_OUTCOME.ACCEPTED:
             deliveries += 1;
             return {
-              outcome: EVE_SEND_OUTCOME.ACCEPTED,
+              outcome: SESSION_SEND_OUTCOME.ACCEPTED,
               sessionId,
               deliveryId: `delivery-${deliveries}`,
             };
-          case EVE_SEND_OUTCOME.NOT_READY:
-            return { outcome: EVE_SEND_OUTCOME.NOT_READY };
-          case EVE_SEND_OUTCOME.RETIRED:
-            return { outcome: EVE_SEND_OUTCOME.RETIRED };
-          case EVE_SEND_OUTCOME.FAILED:
-            return { outcome: EVE_SEND_OUTCOME.FAILED, status: 500 };
+          case SESSION_SEND_OUTCOME.NOT_READY:
+            return { outcome: SESSION_SEND_OUTCOME.NOT_READY };
+          case SESSION_SEND_OUTCOME.RETIRED:
+            return { outcome: SESSION_SEND_OUTCOME.RETIRED };
+          case SESSION_SEND_OUTCOME.FAILED:
+            return { outcome: SESSION_SEND_OUTCOME.FAILED, status: 500 };
         }
       }),
-    cancel: (sessionId, eveTurnId) =>
+    cancel: (sessionId, runtimeTurnId) =>
       Effect.suspend(() => {
-        canceled.push([sessionId, eveTurnId]);
+        canceled.push([sessionId, runtimeTurnId]);
         canceledAs.push(authorization);
         if (canceled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
         return Effect.as(
           Effect.andThen(together.await, options.canceling ?? Effect.void),
           options.cancels === false
-            ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
+            ? { outcome: SESSION_CANCEL_OUTCOME.FAILED, status: 403 }
+            : { outcome: SESSION_CANCEL_OUTCOME.ACCEPTED },
         );
       }),
     reset: (sessionId) =>
@@ -329,11 +332,11 @@ export function fakeEve(
           reset.push(sessionId);
           resetAs.push(authorization);
           resetSaw.push(saw);
-          return { outcome: EVE_RESET_OUTCOME.RESET };
+          return { outcome: SESSION_RESET_OUTCOME.RESET };
         }),
       ),
   });
-  return { eve, opened, sent, canceled, canceledAs, reset, resetAs, resetSaw };
+  return { agentSessions, opened, sent, canceled, canceledAs, reset, resetAs, resetSaw };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads, and the suite's key ring, which a sandbox's firewall record is sealed under. */
@@ -346,6 +349,8 @@ const NO_KEYS: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */
@@ -401,7 +406,7 @@ function publicRequest(request: Request): Request | undefined {
 }
 
 /**
- * The group over the test's own database, GitHub, and eve, stood once and
+ * The group over the test's own database, GitHub, and harness, stood once and
  * answering every request of the test, so what it keeps between two
  * requests, the published answers, is kept as one function instance keeps
  * it; let go with the test's scope.
@@ -409,7 +414,7 @@ function publicRequest(request: Request): Request | undefined {
 export const standing = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
-  eve: ReturnType<typeof fakeEve>,
+  agentSessions: ReturnType<typeof fakeAgentSessions>,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
   titleModel: InboxTitleModelOf = () => Effect.succeed(undefined),
@@ -423,8 +428,10 @@ export const standing = (
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_KEYS),
-      scriptedHarnessLayer((account) => eve.eve(harnessFor(account))),
+      scriptedHarnessLayer((account) => agentSessions.agentSessions(harnessFor(account))),
       github.layer,
+      // A sandbox's calls reach the same fake as GitHub's, through the `fetch` `@vercel/sandbox` sends on.
+      sandboxFetchOver(github.respond),
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       Layer.succeed(SentryApp, sentryAppService(undefined, [])),
@@ -446,10 +453,11 @@ export const standing = (
           (input) =>
             Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
-      eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+      agentSessions: (authorization: Redacted.Redacted) =>
+        agentSessions.agentSessions(Redacted.value(authorization)),
       // The deployment acting for an account, an agent's starter for another agent's message or the
       // account a cookie named, which the fake writes down apart from any bearer.
-      eveAs: (account: string) => eve.eve(deploymentFor(account)),
+      agentSessionsAs: (account: string) => agentSessions.agentSessions(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
       sessionSandboxes,
@@ -646,12 +654,12 @@ export const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
 /**
  * An owner who holds one task on the repository, its workspace connected to
  * an installation reaching it, another account beside them, and the group
- * over that GitHub and the eve given.
+ * over that GitHub and the harness given.
  */
 export const openTask = (
   options: {
     readonly repository?: string | null;
-    readonly eve?: ReturnType<typeof fakeEve>;
+    readonly agentSessions?: ReturnType<typeof fakeAgentSessions>;
     /** What the repository answers on its own paths, for a test of what an agent published. */
     readonly github?: RepositoryScript;
     /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
@@ -676,7 +684,11 @@ export const openTask = (
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanText(owner, task.id, SAVED);
+    yield* saveDescriptionText(owner, task.id, SAVED);
+    // Both accounts have Descriptions on, so an agent started on the task is handed its description.
+    for (const account of [owner, other]) {
+      yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+    }
     const installation = freshInstallation();
     assert.equal(
       yield* connectWorkspaceGitHub(task.workspaceId, installation),
@@ -687,17 +699,17 @@ export const openTask = (
       [`Bearer ${other}`, other],
     ]);
     const github = githubReaching([installation], undefined, undefined, options.github);
-    const eve = options.eve ?? fakeEve();
+    const agentSessions = options.agentSessions ?? fakeAgentSessions();
     const { ask, fetch, mcpFetch } = yield* standing(
       bearers,
       github,
-      eve,
+      agentSessions,
       options.summaryModel,
       options.sessionSandboxes,
       options.titleModel,
       options.afterResponse,
     );
-    return { owner, other, task, installation, eve, github, ask, fetch, mcpFetch };
+    return { owner, other, task, installation, agentSessions, github, ask, fetch, mcpFetch };
   });
 
 /** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
@@ -957,8 +969,8 @@ export const transcriptRow = (
 
 export const text = (words: string) => ({ type: "text", text: words });
 
-/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
-export function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
+/** A message as the retired runtime's receipt listed it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
+export function receiptOf(handed: SessionMessage["message"] | undefined): MessageReceivedPart[] {
   assert.ok(Array.isArray(handed), "the message carried parts");
   return handed.flatMap((part): MessageReceivedPart[] => {
     if (part.type === "text") return [{ type: "text", text: part.text }];
@@ -969,8 +981,8 @@ export function receiptOf(handed: EveMessage["message"] | undefined): MessageRec
 }
 
 /** The first message the newest session opened on, read back into its brief, its replay, and its note. */
-export function openedParts(eve: ReturnType<typeof fakeEve>) {
-  const message = eve.opened.at(-1)?.message.message;
+export function openedParts(agentSessions: ReturnType<typeof fakeAgentSessions>) {
+  const message = agentSessions.opened.at(-1)?.message.message;
   if (message === undefined || Array.isArray(message)) {
     return assert.fail("the session opened on words alone");
   }
@@ -979,24 +991,24 @@ export function openedParts(eve: ReturnType<typeof fakeEve>) {
 
 /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
 export const messagedAgent = (
-  eve: ReturnType<typeof fakeEve>,
+  agentSessions: ReturnType<typeof fakeAgentSessions>,
   turn: { readonly running: boolean } | undefined,
   sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   afterResponse?: Layer.Layer<AfterResponse>,
 ) =>
   Effect.flatMap(
     openTask({
-      eve,
+      agentSessions,
       ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
       ...(afterResponse === undefined ? undefined : { afterResponse }),
     }),
-    (opened) => agentStartedOn(opened, eve, turn),
+    (opened) => agentStartedOn(opened, agentSessions, turn),
   );
 
 /** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `messagedAgent` starts the first. */
 export const agentStartedOn = (
   opened: Effect.Success<ReturnType<typeof openTask>>,
-  eve: ReturnType<typeof fakeEve>,
+  agentSessions: ReturnType<typeof fakeAgentSessions>,
   turn: { readonly running: boolean } | undefined,
 ) =>
   Effect.gen(function* () {
@@ -1008,7 +1020,7 @@ export const agentStartedOn = (
     const stored = yield* readAgent(opened.owner, agent.id);
     assert.ok(Option.isSome(stored));
     const target = { userId: opened.owner, conversationId: stored.value.conversationId };
-    const sessionId = eve.opened.at(-1)?.sessionId ?? "";
+    const sessionId = agentSessions.opened.at(-1)?.sessionId ?? "";
     assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const turnId = randomUUID();
@@ -1016,7 +1028,7 @@ export const agentStartedOn = (
       yield* writer.enqueueTurn(target, {
         turnId,
         origin: TURN_ORIGIN.TYPED,
-        eveTurnId: "turn_0",
+        runtimeTurnId: "turn_0",
       });
       yield* writer.consume(target, {
         kind: RUN_EVENT.TURN_STARTED,
@@ -1027,7 +1039,7 @@ export const agentStartedOn = (
         trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
-      // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
+      // A receipt of the Start's first message, as the retired runtime's relay wrote one, takes the line the Start wrote into the turn.
       const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
       assert.equal(Result.getOrUndefined(taken)?.length, 1);
       if (!turn.running) {

@@ -8,7 +8,7 @@
  * and nobody's personal one, and the table lists them unless the read asks
  * for every workspace. What a row names is the workspace's name, its owner,
  * counts, statuses, and the GitHub account its installation is on, never a
- * task's title, a plan's text, or anything a member wrote.
+ * task's title, a description's text, or anything a member wrote.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";

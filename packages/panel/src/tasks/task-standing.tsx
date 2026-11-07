@@ -10,7 +10,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import { noMatchWords, readFailedWords, TERM } from "@repo/features/words";
+import { noMatchWords, TERM } from "@repo/features/words";
 import { taskKey } from "@repo/features/workspace-key";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -19,13 +19,11 @@ import {
   CHIP_LOOK,
   CHIP_WIDTH,
   type Crumb,
-  ErrorState,
   FailureNote,
   GAP,
   Inline,
   type MenuRow,
   POPOVER_ALIGN,
-  Spinner,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -38,9 +36,9 @@ import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { failureShown, unreadShown } from "../failure-report.js";
+import { failureShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { memberRows } from "../member-rows.js";
+import { memberReadNote, memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useTaskCard } from "./chip-cards.js";
@@ -48,7 +46,7 @@ import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js"
 import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.js";
 
 /**
- * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
+ * task-standing.tsx -- a task's head over its description: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
  * Over the title stands the task's path (`TaskPath`), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
@@ -210,15 +208,7 @@ function TaskAssigneePicker({
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to"
       noMatch={noMatchWords(TERM.MEMBER)}
-      note={
-        refused ? (
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={retry}>
-            {readFailedWords(TERM.MEMBER.many)}
-          </ErrorState>
-        ) : reading ? (
-          <Spinner delay label="Reading members" />
-        ) : undefined
-      }
+      note={memberReadNote({ reading, refused, retry })}
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       look={CHIP_LOOK.TOOLBAR}
@@ -255,7 +245,7 @@ export interface TaskStandingDoor {
   readonly onOpenTask?: ((taskId: string) => void) | undefined;
   /** The add menu's door, and the ask from the task's menus or ⌘K to open it; none where no relation is added here. */
   readonly relations?: TaskRelationsDoor | undefined;
-  /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
+  /** Whether the description is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
   readonly inSight?: boolean | undefined;
 }
 
@@ -486,7 +476,7 @@ export function TaskStandingChips({
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   /** The add menu's door; without it the menu hangs nowhere here. */
   relations?: TaskRelationsDoor | undefined;
-  /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
+  /** Whether the description is in sight, which S waits on, so it never opens a menu behind another tab. */
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;

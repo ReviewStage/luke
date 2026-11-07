@@ -82,6 +82,7 @@ test("the snapshot's preferences part carries only the keys v0.18.0 reads, whate
     agentEnter: AGENT_ENTER.QUEUE,
     commitAuthor: COMMIT_AUTHOR.APP,
     setupFinished: true,
+    setupPlace: '{"audience":"me","at":1}',
   } satisfies Required<AccountPreferences>;
   const shared = Object.keys(accountPreferencesParts(everything).preferences);
   assert.deepEqual(

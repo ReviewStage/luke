@@ -6,10 +6,10 @@ import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
  *
  * An agent's status is its conversation's newest turn row and the one
  * thing beside it, a message of the developer's still awaiting its turn:
- * `starting` before the first turn is queued, `running` while eve runs a
+ * `starting` before the first turn is queued, `running` while its harness runs a
  * turn or a line waits for the turn it will open, and how the newest turn
  * ended after. A turn still running that carries a Stop stamp reads as
- * canceled already, since the Stop is on its way to eve and nothing the
+ * canceled already, since the Stop is on its way to the agent's harness and nothing the
  * turn still does changes where it ends. An agent with no turn row long
  * past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather than
  * starting forever, as one that never started.
@@ -36,7 +36,7 @@ import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
 
 /**
  * How long after its Start an agent with no turn row yet still reads as
- * starting. eve took the session and its first turn lands in seconds; an
+ * starting. The agent's harness took the session and opens its first turn; an
  * agent still without one past this is read as failed, so nothing reads
  * starting forever.
  */
@@ -44,8 +44,8 @@ export const STARTING_GRACE_MILLIS = 5 * 60 * 1000;
 
 /**
  * How long a line of the developer's may stand with no turn to take it
- * while none runs, and still read the agent as running. eve opens the turn
- * on a line it took in seconds, as it lands the first turn of a Start
+ * while none runs, and still read the agent as running. The agent's harness
+ * opens the turn on a line it took, as it opens the first turn of a Start
  * (`STARTING_GRACE_MILLIS`, whose length this shares); a line still waiting
  * past this is one whose turn is not coming.
  */
@@ -87,7 +87,7 @@ export interface StatusStanding {
   readonly createdAt: number;
   readonly now: number;
   readonly awaitingLineAt?: number | undefined;
-  /** Whether the agent was started blank, handed neither the plan nor a prompt, so no first turn is on its way; unsaid reads as not. */
+  /** Whether the agent was started blank, handed neither the description nor a prompt, so no first turn is on its way; unsaid reads as not. */
   readonly blank?: boolean | undefined;
 }
 

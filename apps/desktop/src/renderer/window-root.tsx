@@ -3,8 +3,9 @@
  *
  * The panel's entry (`index.tsx`, loaded by `index.html`) runs it. This
  * module is the window's startup, and a runtime edge
- * (`tools/anti-slop/effect-edges.json`) where it runs the first read: it is
- * evaluated once per window, so no two windows share a browser registry.
+ * (`tools/anti-slop/effect-edges.json`) where it reads the window's document
+ * into its Query client: it is evaluated once per window, so no two windows
+ * share a browser registry.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -12,6 +13,7 @@ import { ACT_PORT, type PreloadBridge } from "@repo/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
+import { LiveReadSubscription } from "@repo/panel/live-reads";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
@@ -19,10 +21,10 @@ import {
   markWindowStart,
   PANEL_SPAN,
 } from "@repo/panel/panel-spans";
+import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
-import { appStateFirstRead } from "@repo/panel/use-app-state";
-import { ReloadState } from "@repo/ui/error-boundary";
-import { Effect } from "effect";
+import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
+import { RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
@@ -77,7 +79,7 @@ export function mountWindow(
   // What the panel times, recorded through the same SDK once it stands, and
   // every failure it shows, reported through it.
   installPanelSpanRecorder(sentry.recordSpan);
-  installShownFailureReporter(sentry.reportShownFailure);
+  installShownFailureReporter(sentry.reportShownFailure, queryClient);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
@@ -100,7 +102,9 @@ export function mountWindow(
       // Main listens on the push stream before the document is read, so a
       // document pushed while the read is in flight is heard, not lost.
       await pushes.opened;
-      await Effect.runPromise(appStateFirstRead);
+      // The document is read into the window's Query client before anything is drawn over it, so
+      // no reader draws a first frame without it.
+      await queryClient.ensureQueryData(appStateQuery);
     } catch (error) {
       console.error("The window's state could not be read; its surface is not drawn.", error);
       // A window with no state is a failure, so it is sent as an event through
@@ -115,10 +119,20 @@ export function mountWindow(
         BLANK_WINDOW.FIRST_READ,
       );
       sentry.load();
-      draw(<ReloadState failure={WINDOW_FAILED} onReload={reloadWindow} />);
+      draw(
+        <ReloadState failure={WINDOW_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadWindow} />,
+      );
       return;
     }
     endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
-    draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);
+    draw(
+      <RegistryContext.Provider value={rendererRegistry}>
+        <QueryProvider>
+          <AppStateSubscription />
+          <LiveReadSubscription />
+          {surface}
+        </QueryProvider>
+      </RegistryContext.Provider>,
+    );
   })();
 }

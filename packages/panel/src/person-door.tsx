@@ -1,5 +1,5 @@
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { appPlatform } from "./app-platform.js";
 import { useMemberDirectory } from "./member-directory.js";
 
@@ -31,6 +31,21 @@ export const OpenPersonProvider = OpenPersonContext.Provider;
 /** The window's opener for a person's page; nothing outside the window. */
 export function useOpenPerson(): OpenPerson | undefined {
   return useContext(OpenPersonContext);
+}
+
+/** Reads a person's page ahead of a press the pointer says is coming, in the workspace the place is in. */
+type PreloadPerson = (userId: string, workspaceId?: string) => void;
+
+const PreloadPersonContext = createContext<PreloadPerson | undefined>(undefined);
+
+/** Hands the window's read-ahead of a person's page to everything under it. */
+export const PreloadPersonProvider = PreloadPersonContext.Provider;
+
+/** Reads `userId`'s page ahead as the place drawing this stands, in the workspace the place is in; nothing outside the window. */
+export function usePreloadedPerson(userId: string): void {
+  const preload = useContext(PreloadPersonContext);
+  const { workspaceId } = useMemberDirectory();
+  useEffect(() => preload?.(userId, workspaceId), [preload, userId, workspaceId]);
 }
 
 /** GitHub's own address, which a GitHub account's page stands under. */

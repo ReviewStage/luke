@@ -3,28 +3,20 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@repo/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { HOST_CAPABILITY } from "@repo/settings";
-import { noNetwork } from "@repo/wire/testing";
-import { ConfigProvider, Effect, Layer, Path, Result } from "effect";
+import { Effect, Layer, Path, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { AccountSourceHost } from "./account-source.js";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
-import { hostKernelLayer } from "./effect/kernel.js";
 import {
-  AppIdentity,
-  Environment,
-  IdSource,
-  RunMode,
-  reporterLayer,
+  LoopbackListener,
+  MirrorPlatform,
   SecretCipher,
-  ShutdownSignal,
   SignInConsent,
-  StateRoot,
   TerminalSocket,
   ThisMacHost,
 } from "./effect/seams.js";
@@ -38,8 +30,8 @@ import {
   NOT_ON_THIS_PLATFORM,
 } from "./host-concerns.js";
 import { oauthAccountSourceLayer } from "./oauth-account-source.js";
-import { runModeFor } from "./run-mode.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
+import { machineOver } from "./testing/host-machine.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
@@ -48,32 +40,6 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
  * with none of their seams provided and refuses their methods, where the
  * desktop's, built with all of them, answers.
  */
-
-/**
- * Every seam a host stands on whatever it was built with, the kernel over
- * them. The account source is each test's own, so none of the desktop's
- * source's seams are here.
- */
-const machineOver = (stateRoot: string) =>
-  Layer.provideMerge(
-    hostKernelLayer,
-    Layer.mergeAll(
-      Layer.succeed(StateRoot, stateRoot),
-      Layer.succeed(RunMode, runModeFor({ capture: false, fixture: true })),
-      Layer.succeed(AppIdentity, {
-        appVersion: "0.0.0-test",
-        packaged: false,
-        platform: PRODUCT_PLATFORM.DESKTOP,
-      }),
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      Layer.succeed(IdSource, { create: () => "id" }),
-      reporterLayer(() => undefined),
-      Layer.succeed(ShutdownSignal, { notify: undefined }),
-      NodeFileSystem.layer,
-      NodePath.layer,
-      noNetwork,
-    ),
-  );
 
 /** The desktop's own account source, over its cipher and its loopback consent. */
 const desktopAccountSource = Layer.provide(
@@ -91,44 +57,39 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for an agent's terminals and a ChatGPT sign-in, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
-  const chatGptSignIn = yield* gateway.call(GATEWAY_METHOD.CHATGPT_SIGN_IN);
-  return { concerns, terminals, chatGptSignIn };
+  return { concerns, terminals };
 });
 
 describe("the host's platform concerns", () => {
-  it.effect(
-    "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
-    () =>
-      Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
-        // Note that nothing here provides a `ChildProcessSpawner`, a
-        // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
-        // asks for neither, and a build that reached for one anyway would die
-        // here on the missing service.
-        const browser = hostStandingLayer.pipe(
-          Layer.provideMerge(hostAssemblyLayer([])),
-          Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
-        );
+  it.effect("left out, need no spawner or terminal socket, and refuse their methods", () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
+      // Note that nothing here provides a `ChildProcessSpawner` or a
+      // `TerminalSocket`. The layer's type, narrowed to the concerns chosen,
+      // asks for neither, and a build that reached for one anyway would die
+      // here on the missing service.
+      const browser = hostStandingLayer.pipe(
+        Layer.provideMerge(hostAssemblyLayer([])),
+        Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
+      );
 
-        const asked = yield* Effect.provide(askedOfStandingHost, browser);
+      const asked = yield* Effect.provide(askedOfStandingHost, browser);
 
-        const notHere = {
-          ok: false,
-          error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
-        };
-        assert.deepEqual(asked.terminals, notHere);
-        assert.deepEqual(asked.chatGptSignIn, notHere);
-        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.CHATGPT_SIGN_IN), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
-        assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
-        assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
-      }).pipe(Effect.provide(NodeFileSystem.layer)),
+      const notHere = {
+        ok: false,
+        error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
+      };
+      assert.deepEqual(asked.terminals, notHere);
+      assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
+      assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
+      assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
+      assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.MICROPHONE]);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
@@ -142,13 +103,21 @@ describe("the host's platform concerns", () => {
             desktopAccountSource,
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
-            Layer.succeed(SignInConsent, { open: loopbackConsent }),
+            Layer.succeed(LoopbackListener, () => Effect.succeed(undefined)),
+            Layer.succeed(MirrorPlatform, {
+              folder: stateRoot,
+              prefetchScript: () => "exit 1",
+              worktreeScript: () => "exit 1",
+              listScript: () => "exit 1",
+              removeScript: () => "exit 1",
+            }),
             Layer.succeed(ThisMacHost, {
               stateRoot,
               runsHost: false,
               loaded: Effect.succeed(false),
               install: () => Effect.succeed(Result.fail("no install in a fixture")),
               stop: Effect.succeed(Result.fail("no launchd in a fixture")),
+              uninstall: Effect.succeed(Result.fail("no install in a fixture")),
               machine: Effect.succeed({
                 name: "Studio",
                 platform: DEVICE_PLATFORM.DARWIN,
@@ -166,15 +135,14 @@ describe("the host's platform concerns", () => {
         ok: false,
         error: { code: GATEWAY_ERROR.REFUSED, message: "signed out" },
       });
-      // The ChatGPT sign-in answers too, unanswered behind the closed account gate, and opens no browser.
-      assert.deepEqual(asked.chatGptSignIn, { ok: true, result: { failure: "unanswered" } });
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.TERMINALS,
-        HOST_CAPABILITY.CHATGPT_SIGN_IN,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
+        HOST_CAPABILITY.PORT_FORWARDS,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
@@ -183,7 +151,9 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
-        HOST_CAPABILITY.CHATGPT_SIGN_IN,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
+        HOST_CAPABILITY.PORT_FORWARDS,
+        HOST_CAPABILITY.CLI_INSTALL,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
