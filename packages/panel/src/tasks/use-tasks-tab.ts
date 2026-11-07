@@ -2276,9 +2276,10 @@ export function useTasksTab(input: {
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
         if (opening.current === timed) opening.current = undefined;
-        // A refusal with no way of its own stands again what stood where the open was pressed.
-        if (onRefused === undefined) standBack();
-        else onRefused();
+        // A refusal with no way of its own stands again what stood where another task's open was pressed; the task already
+        // open, and a fixture run's, which binds nothing asked of it, stand as they are.
+        if (onRefused !== undefined) onRefused();
+        else if (fixture === undefined && taskId !== openTaskId) standBack();
       };
       if (fixture === undefined) setAsked(ask);
       sendSelect({ taskId }).then((opened) => {
