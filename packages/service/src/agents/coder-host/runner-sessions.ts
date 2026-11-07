@@ -539,10 +539,9 @@ function launchFingerprint(
 /**
  * Whether the agent's turn ended longer ago than the warm window of the
  * machine given (`CODER.RUNNER_WARM`), so we have closed or are closing it,
- * and the runner may soon end itself at its own idle cap. Never where the
- * window is zero, whose runner is launched to end at its turn's end. An
- * ended turn with no settle time stamped reads as ended long ago, as the
- * sweep reads it.
+ * and the runner may soon end itself (`CODER.RUNNER_WARM_SLACK`). Never
+ * where the window is zero, whose runner is launched to end at its turn's
+ * end. An ended turn with no settle time stamped reads as ended long ago.
  */
 function pastWarmWindow(
   machine: AgentMachineKind,
@@ -905,8 +904,10 @@ export const runnerSessions = <
                   .config(agent, layout, resume, firstSequence, rewindBefore)
                   .pipe(Effect.withSpan("web/runnerConfig"));
                 // Note that a runner stays warm past the agent's turn only on a machine with a warm
-                // window (`CODER.RUNNER_WARM`), for its sweep to retire; a sandbox's ends at its turn's end.
-                const warm = !Duration.isZero(CODER.RUNNER_WARM[place.running.machine]);
+                // window (`CODER.RUNNER_WARM`), ending itself once it passes; a sandbox's ends at its turn's end.
+                const window = CODER.RUNNER_WARM[place.running.machine];
+                const warm = !Duration.isZero(window);
+                const warmForMs = Duration.toMillis(Duration.sum(window, CODER.RUNNER_WARM_SLACK));
                 return {
                   config: {
                     ...config,
@@ -915,7 +916,7 @@ export const runnerSessions = <
                       ? { transcriptsUrl: options.transcriptsUrl }
                       : undefined),
                     ...(fork ? { fork } : undefined),
-                    ...(warm ? { warm } : undefined),
+                    ...(warm ? { warm, warmForMs } : undefined),
                     ...(trace === undefined ? undefined : { trace }),
                   },
                   rewind,
@@ -2343,29 +2344,6 @@ export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (ret
   return yield* holdingRunner(retiring.agentId, retiredHolding(machine, retiring));
 });
 
-/**
- * A warm runner a sweep found past its machine's window retired as
- * `retireWarmRunner` retires one, in whatever session its place runs now,
- * but only where no other call holds the agent's runner lease: whether the
- * line was written, or none at once where a call holds the lease, so the
- * sweep passes the agent by until its next minute rather than waiting out
- * `CODER.RUNNER_LEASE.WAIT` behind a send. A send that holds the lease
- * either took the runner, which then reads as at work, or found it gone and
- * relaunched.
- */
-export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(function* (
-  retiring: Omit<WarmRunner, "running">,
-) {
-  const machine = yield* deploymentLifecycle;
-  const found = yield* firstPlace(machine, retiring.userId, retiring.sessionId);
-  const running = Option.getOrUndefined(found)?.running;
-  if (running === undefined) return Option.some(false);
-  return yield* holdingRunnerIfFree(
-    retiring.agentId,
-    retiredHolding(machine, { ...retiring, running: running.running }),
-  );
-});
-
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
@@ -2411,9 +2389,8 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
  * runner retired at once (`retireWarmRunner`) where its device last beat
  * that it waits to switch release (`HOST_UPDATE.WAITING`), so a host waiting
  * to update goes idle as its last turn ends. It otherwise stays warm for the
- * next message, and is retired past its window by the sweep
- * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it
- * (`sendHolding`). Retiring under the runner lease is what keeps a message
+ * next message, and past its window ends itself or is retired by a message
+ * sent past it (`sendHolding`). Retiring under the runner lease is what keeps a message
  * sent at the turn's end: one a send wrote first is taken by the runner,
  * which still reads its stdin, and one sent after finds the runner no
  * longer told of and relaunches. Nothing for a sandbox's runner, which is

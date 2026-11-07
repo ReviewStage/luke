@@ -28,7 +28,8 @@
  * Code's background work outlives a `result`. A turn that is over ends the
  * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
  * IDLE and keeps the launch up (`RUNNER_WARM`) for the service's next message,
- * until the service retires it or its cap ends it as `idled`. One interrupted
+ * until the service or its host retires it or its warm window ends it as
+ * `idled`. One interrupted
  * after the service's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
@@ -1254,10 +1255,10 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   );
   const outcome = yield* Effect.gen(function* () {
     for (;;) {
-      // A warm launch waits at most its cap for the next signal, and ends where none came.
+      // A warm launch waits at most its window for the next signal, and ends where none came.
       const next = launch.warm
         ? yield* Queue.take(signals).pipe(
-            Effect.timeoutOption(Duration.millis(RUNNER_WARM.IDLE_CAP_MS)),
+            Effect.timeoutOption(Duration.millis(config.warmForMs ?? RUNNER_WARM.IDLE_CAP_MS)),
           )
         : Option.some(yield* Queue.take(signals));
       if (Option.isNone(next)) return ended(RUNNER_END.IDLED);

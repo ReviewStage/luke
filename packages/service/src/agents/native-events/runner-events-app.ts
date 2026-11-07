@@ -316,10 +316,10 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
  * A launch's IDLE as the device hears it: the warm runner retired at once
  * where its device waits to switch release
  * (`../coder-host/runner-sessions.ts`'s `runnerIdled`); it otherwise stays
- * warm, and the sweep retires it past the window. A sandbox's runner is
- * launched to end at its turn's end, so it posts no IDLE. A retire that
- * fails is said in the log and passed over, because the sweep retires the
- * runner once its grace passes.
+ * warm, and ends itself past the window. A sandbox's runner is launched to
+ * end at its turn's end, so it posts no IDLE. A retire that fails is said in
+ * the log and passed over, because the host retires its own warm runners
+ * while it waits to update.
  */
 export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
