@@ -127,7 +127,6 @@ import {
   recordAgentNativeSession,
   recordAgentRunnerToken,
 } from "@repo/database/models/agent-store";
-import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
 import { holdsSessionEntries } from "@repo/database/models/claude-session-entries";
 import {
   clearNativeRewindHanded,
@@ -1026,17 +1025,6 @@ export const runnerSessions = <
             ),
           );
         }
-        // A released wait's wakeups go once the CLI has started again and taken its first
-        // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy the service
-        // still held would fire twice, or after the agent canceled it. A launch that failed
-        // before this leaves them for the sweep to deliver.
-        yield* replaceAgentWakeups(agent.id, []).pipe(
-          Effect.catch((failure) =>
-            Effect.logWarning(
-              `a relaunched agent's wakeups were not handed back: ${failureKind(failure)}`,
-            ),
-          ),
-        );
       }).pipe(
         Effect.withSpan(LAUNCH_SPAN, {
           attributes: {
@@ -1647,7 +1635,7 @@ export const runnerSessions = <
      * A Stop of the turn named, under the agent's runner lease, to the runner
      * as it stands once the lease is held; answers the launch the stop line
      * was written to, which its force ends (`forcedStop`). A turn still
-     * running whose runner is no longer up, as after a released wait, or
+     * running whose runner is no longer up, or one that
      * exited before the line reached it (Vercel's 404), is a Stop taken all
      * the same, with no line to write, which the force settles.
      */

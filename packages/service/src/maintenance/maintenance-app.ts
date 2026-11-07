@@ -2,17 +2,12 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { Effect, Layer } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
-import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
-import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
-import type { GitHubApp } from "../github/github-app.js";
 import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
-import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
-import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
 import { sweepPortShares } from "./port-share-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -25,27 +20,19 @@ const SWEEP_MONITOR: CronMonitor = {
   failuresBeforeIssue: 3,
 };
 
-/**
- * The scheduled sweep handed the deployment's real seams. A wakeup
- * reaches its agent's session through `routedSessions` acting
- * for the agent's owner, never the bearer the cron called with.
- */
+/** The scheduled sweep handed the deployment's real seams. */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
 ): Effect.fn.Return<
   Response,
   unknown,
-  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
 > {
   const environment = yield* HostedEnvironment;
-  const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const sessionsFor: SessionsForAccount = routedSessions;
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
     monitor: sentryCronCheckIns(SWEEP_MONITOR),
-    sweepNativeWakeups: (now) =>
-      sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     sweepPortShares: (now) => sweepPortShares(new Date(now)),
   });
@@ -57,7 +44,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
  * since `vercel.json` sends the function only its own path.
  */
 export function maintenanceApp(): WebRoutes<
-  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
 > {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`: the handler decides its own method refusal, so a

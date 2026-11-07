@@ -22,9 +22,6 @@ import { Effect, Exit, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { claudeCodeLive } from "./claude-code.js";
 import { codexToken } from "./codex-token.js";
-import { hostProcessTable, MAC_PS } from "./host-processes.js";
-import { runsOnHost } from "./launch.js";
-import { processTable } from "./processes.js";
 import { CODEX_TOKEN_COMMAND, RUNNER_END } from "./protocol.js";
 import { runAgent } from "./runner.js";
 
@@ -58,11 +55,6 @@ const launch = runAgent({
     Layer.mergeAll(
       claudeCodeLive,
       FetchHttpClient.layer,
-      // The machine's own processes, read beside the runner's, for a wait's release (runner.ts):
-      // the sandbox's `/proc`, or on a host the box's, the agent's told apart by descent and group.
-      runsOnHost(process.env)
-        ? hostProcessTable(process.pid, { proc: "/proc", ps: MAC_PS })
-        : processTable("/proc", process.pid),
       // Codex's app-server, spawned as the runner's own child (codex.ts).
       NodeChildProcessSpawner.layer.pipe(
         Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),

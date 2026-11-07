@@ -9,7 +9,6 @@ import {
   recordAgentStep,
   takeAgentMentionedServers,
 } from "@repo/database/models/agent-store";
-import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
 import {
   type NativeProjectionRow,
   withNativeProjection,
@@ -513,11 +512,6 @@ function landWrite(
     case NATIVE_WRITE.FAILED:
       // Said once the batch has landed, so a turn is said failed only once its row is.
       return Effect.void;
-    case NATIVE_WRITE.WAKEUPS:
-      return replaceAgentWakeups(
-        applying.agentId,
-        write.wakeups.map(({ at, prompt }) => ({ at: new Date(at), prompt })),
-      );
     case NATIVE_WRITE.PLAN_STATUS: {
       // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
       // pays for, that key's, which a refusal marks invalid; a plan's limit is no key's.

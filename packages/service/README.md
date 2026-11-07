@@ -2628,8 +2628,6 @@ The sweep ends what no request will. `MaintenanceSweeps`
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
-- `nativeWakeups`: native agents' due wakeups delivered, each as a message
-  from the service.
 - `syncLog`: the sync log's transactions older than its keep pruned.
 
 No sweep settles a turn whose runner went quiet. Every post a runner makes,

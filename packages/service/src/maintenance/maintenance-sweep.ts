@@ -9,7 +9,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
@@ -20,8 +19,6 @@ import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
 interface MaintenanceSweeps {
-  /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
-  sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
   /** Closes the shared ports' links no one has visited for their idle bound, holding the rest's sandboxes, answering how many closed. */
@@ -46,7 +43,6 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 }
 
 interface MaintenanceSweepAnswer {
-  nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
   /** Shared ports' links closed for going unvisited. */
@@ -85,7 +81,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
   const now = yield* Clock.currentTimeMillis;
   return {
-    nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
     portShares: yield* isolated("sweepPortShares", sweeps.sweepPortShares(now)),
   };

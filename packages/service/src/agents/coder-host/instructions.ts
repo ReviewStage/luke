@@ -224,7 +224,7 @@ const STOPS_AT_TURN_END = "Everything you start stops when your turn ends.";
  * How a Claude Code agent waits on its checks. Note that ScheduleWakeup's own
  * description speaks of a /loop, which an agent of ours runs none of, so the
  * words say what each field it requires takes here: the prompt the wakeup
- * delivers, which wakes the agent's next turn (`runner.ts`'s `wakeupsOf`).
+ * delivers, which wakes the agent's next turn in the CLI the runner keeps up while it waits.
  */
 const SCHEDULE_WAKEUP_WORDS =
   "wait with ScheduleWakeup for about as long as the checks usually take, though its description speaks of a /loop you are not in: its `prompt` is what to do once it fires, such as `Read the checks on pull request #<number>`, its `noop` is false, and its `reason` is one short sentence";

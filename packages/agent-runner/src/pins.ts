@@ -50,10 +50,8 @@ export const PLAYWRIGHT_PIN = {
 /**
  * Our own browser in an agent's sandbox, as its start (`@repo/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
- * display Xvfb draws it on. It runs as the sandbox's default user, so the
- * runner's reader of the sandbox's processes (`processes.ts`) never counts
- * it as the agent's, and a wait after the agent opened its browser can still
- * stop the sandbox, whose stop keeps the browser's profile on its disk.
+ * display Xvfb draws it on. It runs as the sandbox's default user, and a
+ * stop of the sandbox keeps the browser's profile on its disk.
  */
 export const SANDBOX_BROWSER_PIN = {
   /** Chromium's DevTools port on the sandbox's loopback, as its `--remote-debugging-port` flag names it. */

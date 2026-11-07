@@ -25,7 +25,6 @@ import { vi } from "vitest";
 import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import { codexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
-import { processTable } from "./processes.js";
 import {
   CODEX_EFFORT,
   CODEX_PLAN_BACKEND,
@@ -53,7 +52,6 @@ import {
   type Spawned,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
-import { UNREAD_PROC } from "./testing/fake-proc.js";
 import { makeFakeService } from "./testing/fake-service.js";
 
 const BEARER = "runner-bearer-for-tests";
@@ -238,8 +236,6 @@ function launch(
           server.layer,
           extra.http ?? service.layer,
           claude.layer,
-          // Codex never waits on a wakeup, so no wait of its is released whatever runs.
-          processTable(UNREAD_PROC, 1),
           Logger.layer([recorder]),
         ),
       ),

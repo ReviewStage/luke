@@ -14,12 +14,7 @@ import {
   type WireValue,
 } from "@repo/wire";
 import { Option, Schema } from "effect";
-import {
-  NATIVE_ENDING,
-  NATIVE_MOMENT,
-  type NativeMoment,
-  type NativeWakeup,
-} from "./native-moments.js";
+import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
 
 /**
  * runner-moments.ts -- what every harness's reader reads alike: the runner's own events, and a tool's answer as the transcript settles its call.
@@ -53,20 +48,25 @@ export const PICTURE_STAND_IN = "[image]";
 
 const readType = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String }));
 const readAccepted = Schema.decodeUnknownOption(Schema.Struct({ uuid: Schema.String }));
+/**
+ * The end a runner posted where it let a wait on wakeups go so its sandbox
+ * could stop, read as a turn that ended, the wakeups it named dropped. A
+ * host bundles its own runner, so this is read until the host version floor
+ * (`HOST_VERSION.FLOOR`) reaches 0.25.0, the first release whose runner
+ * holds such a wait rather than ending on it.
+ */
+const LEGACY_RELEASED = "released";
+
 const readEnd = Schema.decodeUnknownOption(
   Schema.Struct({
-    reason: Schema.Literals(Object.values(RUNNER_END)),
+    reason: Schema.Literals([...Object.values(RUNNER_END), LEGACY_RELEASED]),
     detail: Schema.optionalKey(Schema.String),
-    wakeups: Schema.optionalKey(
-      Schema.Array(Schema.Struct({ at: Schema.String, prompt: Schema.String })),
-    ),
   }),
 );
 
 /** How each of the runner's endings reads on the turn. */
 const ENDING_OF_RUNNER_END = {
   [RUNNER_END.TURN_ENDED]: NATIVE_ENDING.DONE,
-  [RUNNER_END.RELEASED]: NATIVE_ENDING.DONE,
   [RUNNER_END.STOPPED]: NATIVE_ENDING.STOPPED,
   [RUNNER_END.INPUT_CLOSED]: NATIVE_ENDING.FAILED,
   [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
@@ -77,34 +77,16 @@ const ENDING_OF_RUNNER_END = {
 /** The ends that are no failure, which carry no detail. */
 const QUIET_ENDS: ReadonlySet<RunnerEnd> = new Set([
   RUNNER_END.TURN_ENDED,
-  RUNNER_END.RELEASED,
   RUNNER_END.STOPPED,
   RUNNER_END.IDLED,
 ]);
 
-/**
- * The wakeups an end leaves the agent: a released wait's, each whose
- * instant reads, or none for a Stop; nothing for any other end, which
- * leaves the agent's wakeups as they stood.
- */
-function wakeupsOf(
-  reason: RunnerEnd,
-  wakeups: readonly { readonly at: string; readonly prompt: string }[] | undefined,
-): readonly NativeWakeup[] | undefined {
-  if (reason === RUNNER_END.STOPPED) return [];
-  if (reason !== RUNNER_END.RELEASED) return undefined;
-  return (wakeups ?? []).flatMap(({ at, prompt }) => {
-    const due = Date.parse(at);
-    return Number.isNaN(due) ? [] : [{ at: due, prompt }];
-  });
-}
-
 function endMoments(message: WireValue): readonly NativeMoment[] {
   const read = readEnd(message);
   if (Option.isNone(read)) return [];
-  const { reason, detail } = read.value;
+  const { detail } = read.value;
+  const reason = read.value.reason === LEGACY_RELEASED ? RUNNER_END.TURN_ENDED : read.value.reason;
   const said = detail === undefined ? reason : `${reason} ${detail}`;
-  const wakeups = wakeupsOf(reason, read.value.wakeups);
   return [
     {
       kind: NATIVE_MOMENT.ENDED,
@@ -113,7 +95,6 @@ function endMoments(message: WireValue): readonly NativeMoment[] {
         ? undefined
         : { detail: redactKeepingPlanCodes(said).slice(0, END_DETAIL_CHARS) }),
       ...(reason === RUNNER_END.FAILED ? { launchFailed: true } : undefined),
-      ...(wakeups === undefined ? undefined : { wakeups }),
     },
   ];
 }
