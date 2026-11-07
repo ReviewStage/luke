@@ -55,7 +55,10 @@
  * `resend` asks and each time one is laid behind them, until one is still
  * unanswered; one the service took already under its key
  * (`Written.settled`) stands down at once, and one it refused is taken back
- * and counted (`PoolOptions.replayRefused`). One whose declaration holds its
+ * and counted (`PoolOptions.replayRefused`). A waiting write is sent again
+ * only as the account that asked it (`PoolOptions.holder`): one whose
+ * account the session no longer holds is let go, taken back as a sign-out
+ * takes it, and never sent. One whose declaration holds its
  * caller (`QueuedWrite.holds`) answers it only once it is sent again, as a
  * start whose outcome its window draws does. At most `QUEUE_BOUND` wait;
  * past them a write unanswered is taken back. They are handed out to be
@@ -283,6 +286,12 @@ export interface PoolOptions {
   readonly mintKey: () => string;
   /** Runs once for each waiting write the service refused as it was sent again. */
   readonly replayRefused: Effect.Effect<void>;
+  /**
+   * Who the writes are sent as now, an opaque identity read as a write is
+   * asked and again before each time it is sent from the waiting writes;
+   * none where every write is sent under one account.
+   */
+  readonly holder?: (() => string | undefined) | undefined;
 }
 
 /** Every row the reads hold, and the writes drawn over them. */
@@ -347,11 +356,12 @@ interface Turn {
   readonly dropped: Deferred.Deferred<void>;
 }
 
-/** How one more attempt of a waiting write ended: kept, refused and taken back, or still unanswered. */
+/** How one more attempt of a waiting write ended: kept, refused and taken back, still unanswered, or let go unsent because its account is gone. */
 const RETRIED = {
   KEPT: "kept",
   REFUSED: "refused",
   UNANSWERED: "unanswered",
+  LET_GO: "let-go",
 } as const;
 
 type Retried = (typeof RETRIED)[keyof typeof RETRIED];
@@ -704,6 +714,8 @@ function written<Row extends object, Change, Input, Answer>(
       });
     }).pipe(Effect.ensuring(Deferred.succeed(turn.dropped, undefined)));
     const plan = declaration.queue;
+    // Note that the account is read as the write is asked, or laid back from the store its account opened, so a later send can tell another.
+    const askedAs = queue.options?.holder?.();
     const mintKey = queue.options?.mintKey;
     const key = plan === undefined || mintKey === undefined ? undefined : (restored ?? mintKey());
     // Note that the input is kept as its declaration keeps it as it is asked, so one that will not keep never waits.
@@ -764,9 +776,15 @@ function written<Row extends object, Change, Input, Answer>(
     /** The write laid behind those waiting, still standing, sent again as they are; let go, its caller hears `meanwhile`. */
     const waits = (kept: QueuedEntry, meanwhile: Answer) =>
       Effect.suspend(() => {
+        const letGo = Effect.andThen(drop, Deferred.succeed(heard, meanwhile));
         const waiting: Waiting = {
           entry: kept,
           retried: Effect.gen(function* () {
+            // Note that the account is read again just before the send, because the session may move with no word to the pool, and a write is never carried under another's credential.
+            if (queue.options?.holder?.() !== askedAs) {
+              yield* letGo;
+              return RETRIED.LET_GO;
+            }
             const answered = yield* attempt(true);
             if ("refused" in answered) {
               if (answered.unanswered === true) return RETRIED.UNANSWERED;
@@ -778,7 +796,7 @@ function written<Row extends object, Change, Input, Answer>(
             yield* Deferred.succeed(heard, answered.answer);
             return RETRIED.KEPT;
           }),
-          letGo: Effect.andThen(drop, Deferred.succeed(heard, meanwhile)),
+          letGo,
         };
         return movedTo(queue, [...queue.waiting, waiting]);
       });
