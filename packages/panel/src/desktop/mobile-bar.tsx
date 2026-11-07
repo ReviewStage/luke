@@ -2,7 +2,6 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { BarAction, BarItem, BarItems, MENU_KEEPS_CLEAR, PlusIcon, SearchIcon } from "@repo/ui";
 import { raiseKeyboard } from "@repo/ui/command";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { runAppCommand } from "../app-commands.js";
@@ -53,7 +52,7 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl): boolean {
   if (automationsView.open) return automationsTab(automationsView.place);
   // So does Admin: a section stands over the bar, an account's or a day's page under one keeps the whole screen.
   if (adminView.open) return adminSection(adminView.view);
-  return tasks.page === TASKS_PAGE.HOME;
+  return tasks.atHome;
 }
 
 /** The bar; see the module's head. */

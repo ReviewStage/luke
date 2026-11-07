@@ -38,6 +38,9 @@ export const VERSION_HISTORY_WORDS = "Version history";
 /** What the Inbox's step is called. */
 export const INBOX_WORDS = "Inbox";
 
+/** What Home is called, as its step and its page name it. */
+export const HOME_WORDS = "Home";
+
 /** The parts of the Tasks tab a step's name is read again from: the task list, the open task's agents and pages. */
 type StepNameTasks = Pick<
   TasksControl,
@@ -123,7 +126,7 @@ export function stepTitle(
 
 /** What the step of the place the window's state says is called. */
 function stateStepTitle(tasks: StepTitleTasks): StepTitle | undefined {
-  if (tasks.boundFor === undefined) return { label: "Home" };
+  if (tasks.boundFor === undefined) return { label: HOME_WORDS };
   const name = taskName(tasks, tasks.boundFor);
   if (name === undefined) return undefined;
   // Note that the strips are named only once they are the task's, as the history reads them.

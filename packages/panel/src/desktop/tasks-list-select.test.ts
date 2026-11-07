@@ -30,6 +30,7 @@ import {
   AGENT_AWAY,
   AUTOMATIONS_AWAY,
   BOARD_AWAY,
+  HOME_AWAY,
   INBOX_AWAY,
   PERSON_AWAY,
   UNKNOWN_WORKSPACE_AWAY,
@@ -231,6 +232,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       versionHistoryView: VERSION_HISTORY_AWAY,
       inboxView: INBOX_AWAY,
       unknownWorkspaceView: UNKNOWN_WORKSPACE_AWAY,
+      homeView: HOME_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }

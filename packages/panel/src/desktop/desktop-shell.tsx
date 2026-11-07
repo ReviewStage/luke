@@ -81,7 +81,7 @@ import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
-import { DesktopTasks } from "./desktop-tasks.js";
+import { DesktopHomePage, DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -1189,15 +1189,28 @@ export function UnknownWorkspacePlace(): React.JSX.Element {
 }
 
 /**
- * What a place the window's state says draws in the places' content slot,
- * a task or Home. Every route not yet moved onto the router draws this one
- * component, so moving between them keeps it drawn.
+ * What a task's place draws in the places' content slot: the task bound
+ * for, or its page in the shape it lands in while the host opens it, as a
+ * link to it waits on its task. Every route of a task's draws this one
+ * component, so moving between them keeps it drawn; it is what stands
+ * while a link's route waits on the account's workspaces too
+ * (`panel-router.tsx`).
  */
 export function StatePlace(): React.JSX.Element {
+  const { tasks, room, looks, away } = useShellPlaces();
+  return <DesktopTasks tasks={tasks} looks={looks} room={room} away={away} />;
+}
+
+/**
+ * What Home's routes draw in the places' content slot: the page of no task
+ * bound, its New task composer, under the workspace listed
+ * (`ROUTED_PLACE.HOME`).
+ */
+export function HomePlace(): React.JSX.Element {
   const { tasks, room, sidebar, settings, looks, away } = useShellPlaces();
   const { account } = settings;
   return (
-    <DesktopTasks
+    <DesktopHomePage
       tasks={tasks}
       looks={looks}
       room={room}

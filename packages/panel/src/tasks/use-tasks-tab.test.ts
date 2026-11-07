@@ -58,7 +58,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { serveEffectsOn } from "@repo/ui/testing/effect-services";
-import { useRouter } from "@tanstack/react-router";
+import { createMemoryHistory, useRouter } from "@tanstack/react-router";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
@@ -76,6 +76,8 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
+import { usePlaceBinding } from "../places/place-binding.js";
+import { useWindowPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   FAKE_ANSWER,
@@ -104,7 +106,13 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
 import { useVersionHistoryRoute, type VersionHistoryRoute } from "../version-history-route.js";
-import { useBoardRoute, usePersonRoute, useUnknownWorkspaceRoute } from "../workspace-routes.js";
+import {
+  type HomeRoute,
+  useBoardRoute,
+  useHomeRoute,
+  usePersonRoute,
+  useUnknownWorkspaceRoute,
+} from "../workspace-routes.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
@@ -298,12 +306,14 @@ function mount(
     automations,
     versionHistory,
     inbox,
+    home,
   }: {
     tasks: TasksControl;
     room: ShellRoom;
     automations: AutomationsRoute;
     versionHistory: VersionHistoryRoute;
     inbox: InboxRoute;
+    home: HomeRoute;
   }) {
     windowHistory = useWindowHistory({
       known: true,
@@ -314,8 +324,19 @@ function mount(
       automations,
       versionHistory,
       inbox,
+      home,
       room,
       tasks,
+    });
+    // Home and the task bound follow each other, as the window's root keeps them.
+    const place = useWindowPlace().place;
+    usePlaceBinding({
+      known: true,
+      place,
+      bound: tasks.boundFor,
+      onUnbind: tasks.onUnbindTask,
+      onToBound: () => windowHistory?.onLeaveRouted(),
+      onToUnbound: home.onOpen,
     });
     return null;
   }
@@ -360,6 +381,11 @@ function mount(
       onStay: () => undefined,
     });
     const inboxView = useInboxRoute({ onClose: leaveRouted, onStay: () => undefined });
+    // Home is the listed workspace's, as the window's root opens it.
+    const homeView = useHomeRoute({
+      listed: () => control?.workspace?.slug ?? control?.workspace?.id,
+      onClose: leaveRouted,
+    });
     restand = setHeld;
     control = useTasksTab({
       tasks: held.tasks,
@@ -394,6 +420,7 @@ function mount(
         onClose: leaveRouted,
         onStay: () => undefined,
       }),
+      homeView,
     });
     return held.history
       ? createElement(WindowHistoryProbe, {
@@ -402,6 +429,7 @@ function mount(
           automations: automationsView,
           versionHistory: versionHistoryView,
           inbox: inboxView,
+          home: homeView,
         })
       : null;
   }
@@ -411,13 +439,17 @@ function mount(
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
   const root = createRoot(container);
   roots.push(root);
+  // Note that Admin standing is the router's, which stands at its address rather than Home's.
+  const held = windowRouter(
+    createMemoryHistory({ initialEntries: [standing.admin === true ? "/acme/admin" : "/app"] }),
+  );
   // The test's Query client is handed the document here, its descriptions among it, rather than one an earlier test handed.
   act(() => {
-    root.render(
-      windowRouter().provide(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), surface)),
-    );
+    root.render(held.provide(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), surface)));
   });
   return {
+    /** Where the router's history stands. */
+    at: () => held.history.location.pathname,
     told,
     agentActs,
     shownAgents,
@@ -1024,7 +1056,7 @@ test("a task opened from a list, gone back to from the sidebar, or named by a ch
 
 test("in a narrow room Back to a task opens it as it stood, its panel open on the tab it showed, where a task opened from a list lands on its plan", async () => {
   const tab = mount(
-    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    { shown: true, tasks: LISTING, room: SHELL_ROOM.NARROW, history: true },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
@@ -1032,21 +1064,21 @@ test("in a narrow room Back to a task opens it as it stood, its panel open on th
   assert.deepEqual(panel().strip, [FILE]);
 
   act(() => tab.control().onSelect(OTHER_TASK_ID));
-  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  tab.stand({ tasks: { ...LISTING, activeTaskId: OTHER_TASK_ID } });
   await settle();
   assert.equal(panel().open, false, "the task opened from a list lands on its plan");
   assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW);
 
   act(() => tab.history().onBack());
   assert.equal(tab.control().boundFor, TASK.id);
-  tab.stand({ tasks: OPEN });
+  tab.stand({ tasks: LISTING });
   await settle();
   assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
 });
 
 test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {
   const tab = mount(
-    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    { shown: true, tasks: LISTING, room: SHELL_ROOM.NARROW, history: true },
     {
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
       [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
@@ -1056,6 +1088,8 @@ test("in a narrow room a task with no page behind it leaves for Home, not the Bo
   const away = tab.history().away;
 
   act(() => tab.history().onLeave());
+  // Note that the host lets go of the task once Home's arrival asks it to, so the navigation lands first.
+  await settle();
   tab.stand({ tasks: listRead([listed()]) });
   await settle();
   const left = {
@@ -2084,6 +2118,35 @@ test("a start refused after another agent's page was opened leaves that page sta
   });
 
   assert.equal(tab.control().agentView.agentId, "agent-b");
+});
+
+test("a start refused that was pressed on the page saying a workspace is not there stands that page again", async () => {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: TWO_WORKSPACES });
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  await settleQueries();
+  act(() => tab.control().onOpenLink({ workspace: "ghost", place: { kind: LINK_PLACE.HOME } }));
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Sweep the tests.",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  };
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed });
+  });
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+
+  assert.equal(tab.at(), "/ghost");
 });
 
 test("a start refused after the Board was opened leaves the Board standing rather than the agent's page the start was pressed on", async () => {

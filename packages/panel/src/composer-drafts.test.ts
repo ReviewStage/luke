@@ -790,11 +790,12 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
     false,
     "the open card shows them",
   );
-  const home = { ...inWorkspace(), page: TASKS_PAGE.HOME, activeTaskId: undefined };
+  const home = { ...inWorkspace(), page: TASKS_PAGE.HOME, activeTaskId: undefined, atHome: true };
   assert.equal(await newTaskDrafted(home), false, "Home's composer shows them");
   assert.equal(
     await newTaskDrafted({
       ...home,
+      atHome: false,
       personView: { ...tasksControl().personView, userId: "user-sam", name: "Sam" },
     }),
     true,

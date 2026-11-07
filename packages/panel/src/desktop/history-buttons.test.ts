@@ -176,7 +176,7 @@ test("Back held opens its list and its release takes no step, while a quick pres
 });
 
 test("repeated steps named nothing are listed in separate page groups, one for each time the window returned to the page", () => {
-  const home = { kind: "home", of: undefined } as const;
+  const home = { kind: "routed", of: "/acme" } as const;
   const window = mount([
     { at: 3, title: undefined, page: home },
     { at: 2, title: undefined, page: home },

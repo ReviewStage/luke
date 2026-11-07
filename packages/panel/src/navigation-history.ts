@@ -1,9 +1,9 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a task's page, the home page, the Inbox, or a routed place,
- * Settings, Admin, a workspace's Board, a person's page, the Automations
- * pages, or a description's version history, and the history is the one a browser keeps: the places behind,
+ * A place is a task's page or a routed place, Home, the Inbox, Settings,
+ * Admin, a workspace's Board, a person's page, the Automations pages, or a
+ * description's version history, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
  * moves it, so a task opened from the sidebar, by a key, by starting it, or
@@ -15,15 +15,18 @@
  * (`panel-router.tsx`), each place saved in its entry's state as what a step
  * back reopens it from, the way a browser's `history.state` stands beside
  * its URL, and the path of its app link as its address: the link Copy link names for
- * the step (`links-at-hand.ts`), so the two never disagree, or `/app` for a
- * place with none. The step standing takes its address again whenever that
+ * the step (`links-at-hand.ts`), so the two never disagree. A task whose
+ * link is not drawn yet stands at the address its links name it by, and one
+ * whose workspace is not known writes no step until it is, so a link loaded
+ * before the account's workspaces are read waits on its own route and its
+ * step takes the entry it loaded on. The step standing takes its address again whenever that
  * link changes, as when a workspace's slug is read after the visit; a step
  * behind takes it when the window is back on it. The desktop's router keeps
  * its history in memory, and nothing there reads an address; the web's is
  * the tab's own. The router's history names only the entry standing, so the
  * trail of steps around it is kept here beside it (`WindowTrail`).
  *
- * Settings, Admin, the Board, a person's page, an agent's own page, and a version history are the router's places
+ * Home, Settings, Admin, the Board, a person's page, an agent's own page, and a version history are the router's places
  * (`panel-router.tsx`): the router writes their entries as it navigates
  * there, and the trail follows each write as a routed step
  * (`PLACE_KIND.ROUTED`), which holds only its address, stands where the
@@ -102,8 +105,7 @@
  * in place, so a phone opens on the Inbox and Back never lands on Home.
  */
 
-import { PRODUCT_SURFACE } from "@repo/features/analytics";
-import { linkOf, type ReadLink, taskLinkStep } from "@repo/features/link-grammar";
+import { LINK_PLACE, linkOf, type ReadLink, taskLinkStep } from "@repo/features/link-grammar";
 import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import { type StripTab, sameTab, tabKey, taggedStripTab } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -141,6 +143,7 @@ import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import type { InboxChoice, LeaveGuard, TasksControl } from "./tasks/use-tasks-tab.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 import type { VersionHistoryRoute } from "./version-history-route.js";
+import type { HomeRoute } from "./workspace-routes.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -151,10 +154,12 @@ export const MOUSE_BUTTON = {
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
   TASK: "plan",
-  HOME: "home",
-  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, an agent's own page, the Automations pages, a task's version history, or the Inbox, which its route draws and its own history moves (`ROUTED_PLACE`). */
+  /** A place the router says the window stands on, Home, Settings, Admin, a workspace's Board, a person's page, an agent's own page, the Automations pages, a task's version history, or the Inbox, which its route draws and its own history moves (`ROUTED_PLACE`). */
   ROUTED: "routed",
 } as const;
+
+/** The kind Home's step was saved under before Home was the router's, which a tab's entries may still hold across a deploy, read back as the routed step at its entry's address. */
+const SAVED_HOME_KIND = "home";
 
 /** The side panel as a step holds it: its tab shown while open, `null` while shut, and none where it was not yet known. */
 type SideStep = SidePanelTab | null | undefined;
@@ -180,7 +185,6 @@ type Place =
       /** The side panel's tab shown while it is open, in a wide room (a narrow one keeps it in `panel`), `null` while it is shut, and none while its tabs are not yet the task's. */
       readonly side?: SideStep;
     }
-  | { readonly kind: typeof PLACE_KIND.HOME }
   | {
       readonly kind: typeof PLACE_KIND.ROUTED;
       /** The address the router stood on, which its entry is held at, and which alone tells one routed step from another. */
@@ -331,14 +335,14 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the home page, or a routed place at the same address. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, or a routed place at the same address. */
 function samePage(one: Place, other: Place): boolean {
-  if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
     return one.address === other.address;
   }
-  if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
-  return true;
+  return (
+    one.kind === PLACE_KIND.TASK && other.kind === PLACE_KIND.TASK && one.taskId === other.taskId
+  );
 }
 
 /** The tab a narrow room's side panel shows over the plan, while it is open. */
@@ -444,8 +448,6 @@ function surfacesOf(place: Place | undefined, columnKnown: boolean): OpenSurface
         : [];
       return [...column, ...sideSurface];
     }
-    case PLACE_KIND.HOME:
-      return [{ surface: PRODUCT_SURFACE.HOME }];
     case PLACE_KIND.ROUTED:
       // Note that a routed place is counted by the place its route stands on, which its step does not hold (its declaration's `surfaces`).
       return [];
@@ -517,17 +519,13 @@ function sameDraft(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: a new automation's page, and any
- * place before its workspace is read, the home page a fresh tab rests on
- * among them, which takes its link's address in place once it is.
- * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
- * so it names no workspace's place.
+ * The address the window is handed while it stands on no place, at which no
+ * step is written: Home's while no workspace is listed (`ROUTED_PLACE.HOME`).
  */
 const NO_LINK_ADDRESS = "/app";
 
-/** The address a step is held at: its link's path, with the query and fragment it carries, since a browser holds a same-origin path; `/app` where it has none. */
-function addressOf(link: ReadLink | undefined): string {
-  if (link === undefined) return NO_LINK_ADDRESS;
+/** The address a step is held at: its link's path, with the query and fragment it carries, since a browser holds a same-origin path. */
+function addressOf(link: ReadLink): string {
   const url = new URL(linkOf(link.place, link.workspace));
   return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -693,8 +691,6 @@ function pageOf(place: Place): HistoryPage {
       return { kind: place.kind, of: place.taskId };
     case PLACE_KIND.ROUTED:
       return { kind: place.kind, of: place.address };
-    default:
-      return { kind: place.kind, of: undefined };
   }
 }
 
@@ -934,8 +930,6 @@ function taggedPlace(place: Place): Place {
       const panel = place.panel === undefined ? undefined : { ...place.panel, tab: panelTab };
       return { ...place, column, side, panel };
     }
-    case PLACE_KIND.HOME:
-      return place;
     default: {
       const side = taggedSide(place.side);
       return side === place.side ? place : { ...place, side };
@@ -947,6 +941,9 @@ function taggedPlace(place: Place): Place {
 function savedStepOf(location: HistoryLocation): SavedStep | undefined {
   const { step } = location.state;
   if (!isSavedStep(step)) return undefined;
+  // Note that the kind is read as any string a browser held, since an entry may hold one this build no longer writes.
+  const kind: string = step.place.kind;
+  if (kind === SAVED_HOME_KIND) return { ...step, place: routedPlace(location.href) };
   const place = taggedPlace(step.place);
   return place === step.place ? step : { ...step, place };
 }
@@ -1294,12 +1291,12 @@ function useHistory(input: {
   }, [held, place, address, own]);
 
   useEffect(() => {
-    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
+    // An entry holding no step is a page loaded there, which the router stands on as its address says: a routed place, Home at
+    // `/app` among them, writes its step there as it stands, and a task's address is its link, which opens it again
+    // (`load-link.ts`); the window already there writes its step on it.
     const arriveNowhere = (was: TrailEntry) => {
-      const home: Place = { kind: PLACE_KIND.HOME };
-      if (sameStep(was.state, home)) {
-        own(() => recordTrail(held, { kind: TRAIL_WRITE.PUSH, entry: was }));
-      } else latest.current.go(home);
+      if (was.address !== held.history.location.href) return;
+      own(() => recordTrail(held, { kind: TRAIL_WRITE.PUSH, entry: was }));
     };
     // The window following the trail where the router's history moved it, asking first, or standing it back on the window's step where it may not go.
     const follow = (moved: Trail, was: TrailEntry) => {
@@ -1459,6 +1456,8 @@ export function useWindowHistory(input: {
   versionHistory: Pick<VersionHistoryRoute, "listAddress">;
   /** What the history reads of the Inbox beyond where it stands: the list under its item, the item chosen, and the doors that stand its list (`inbox-route.ts`). */
   inbox: Pick<InboxRoute, "listAddress" | "chosen" | "choiceOf" | "onOpen" | "onClear">;
+  /** Home as the router stands it, which a routed place left with no task bound opens (`workspace-routes.ts`). */
+  home: Pick<HomeRoute, "onOpen">;
   /** The room the panel's stage gives, narrow where it shows one pane at a time. */
   room: ShellRoom;
   tasks: Pick<
@@ -1524,6 +1523,16 @@ export function useWindowHistory(input: {
   useEffect(() => {
     if (routed?.address !== leaving) setLeaving(undefined);
   }, [routed, leaving]);
+  // A routed place left with no task bound is left for Home, the place of no task, as a visit after it; Home itself stays.
+  const leftForNone = routed !== undefined && routed.address === leaving && boundFor === undefined;
+  const leftHome = leftForNone && routed.place === ROUTED_PLACE.HOME;
+  // Note that Home's door is read as the leave lands, so a door drawn anew opens Home no second time.
+  const home = useRef(input.home);
+  home.current = input.home;
+  useEffect(() => {
+    if (leftHome) setLeaving(undefined);
+    else if (leftForNone) home.current.onOpen();
+  }, [leftForNone, leftHome]);
   const known = input.known;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
@@ -1535,6 +1544,20 @@ export function useWindowHistory(input: {
     stepped.set(taskLinkStep(task), task.id);
     everStepped.set(task.workspaceId, stepped);
   }
+  // A task whose link is not drawn yet, as one the host is still opening, stands at the address its links name it by, under its
+  // workspace, else the one listed; none while no workspace of it is known, since every other address is another place's.
+  const taskAddress = useMemo(() => {
+    if (input.link !== undefined) return addressOf(input.link);
+    const task = tasks.tasks.find((each) => each.id === boundFor);
+    const home =
+      task === undefined
+        ? tasks.workspace
+        : tasks.workspaces.find((each) => each.id === task.workspaceId);
+    const workspace = home?.slug ?? home?.id ?? task?.workspaceId;
+    if (boundFor === undefined || workspace === undefined) return undefined;
+    const planId = task === undefined ? boundFor : taskLinkStep(task);
+    return addressOf({ workspace, place: { kind: LINK_PLACE.TASK, planId } });
+  }, [input.link, tasks.tasks, tasks.workspace, tasks.workspaces, boundFor]);
   const titleLabel = input.title?.label;
   const titleDetail = input.title?.detail;
   const titleColumn = input.title?.panes?.column;
@@ -1542,9 +1565,14 @@ export function useWindowHistory(input: {
   // Whether the window stands on a workspace's address naming none of the reader's, as the router says, until a door leaves it.
   const unknownWorkspace =
     routed?.place === ROUTED_PLACE.UNKNOWN_WORKSPACE && routedAddress !== undefined;
+  const homeBound =
+    routed?.place === ROUTED_PLACE.HOME && routedAddress !== undefined && boundFor !== undefined;
   const untitled = useMemo((): Place | undefined => {
     // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
     if (!known || unknownWorkspace) return undefined;
+    // Note that Home with a task still bound is no step, because the binding is about to move one or the other: the task
+    // leaves Home, or arriving on Home lets go of the task (`places/place-binding.ts`).
+    if (homeBound) return undefined;
     if (routedAddress !== undefined) {
       // Note that an Inbox item's step and an agent page's hold the side panel beside them, as a task's does, which no address says.
       const besideItem = inboxOpen && inboxChosen !== undefined;
@@ -1553,7 +1581,9 @@ export function useWindowHistory(input: {
         ? { kind: PLACE_KIND.ROUTED, address: routedAddress }
         : { kind: PLACE_KIND.ROUTED, address: routedAddress, side };
     }
-    if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
+    // Note that with no task bound and no routed place standing the window stands on no place yet: a link's task waiting on
+    // its open, or the host's binding of none on its way to Home (`places/place-binding.ts`).
+    if (boundFor === undefined || taskAddress === undefined) return undefined;
     return {
       kind: PLACE_KIND.TASK,
       taskId: boundFor,
@@ -1564,6 +1594,8 @@ export function useWindowHistory(input: {
   }, [
     known,
     unknownWorkspace,
+    homeBound,
+    taskAddress,
     routedAddress,
     narrow,
     boundFor,
@@ -1666,7 +1698,6 @@ export function useWindowHistory(input: {
     }
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
     else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.taskId, to.side);
-    if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
   };
   // The side panel as a wide step, an Inbox item's, or an agent page's held it: shut, or open on its tab, on the stop's own task or agent; one not yet known is left as it stands.
   // Note that it is shut only where the step is the stop standing, because another stop starts with it shut, and
@@ -1717,7 +1748,7 @@ export function useWindowHistory(input: {
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     held,
     place,
-    address: routedAddress ?? addressOf(input.link),
+    address: routedAddress ?? taskAddress ?? NO_LINK_ADDRESS,
     reachable,
     named,
     go,
@@ -1727,7 +1758,11 @@ export function useWindowHistory(input: {
   // A phone has no Home: wherever the window would stand on it, it stands on
   // the Inbox's list (`mobile-bar.tsx`), which takes Home's step in place, so
   // Back never lands on a Home that would only leave again.
-  const homeOnPhone = narrow && tasks.signedIn && untitled?.kind === PLACE_KIND.HOME;
+  const homeOnPhone =
+    narrow &&
+    tasks.signedIn &&
+    untitled?.kind === PLACE_KIND.ROUTED &&
+    routed?.place === ROUTED_PLACE.HOME;
   const phoneWorkspace = tasks.workspace;
   const openInbox = inbox.onOpen;
   useEffect(() => {

@@ -33,7 +33,8 @@ import { windowRouter } from "./testing/window-router.js";
 /**
  * app-account-home.test.ts -- an account leaving the window takes its place
  * with it: signed out from Settings, the next account to sign in finishes
- * setup on Home rather than on the Settings the last one left open.
+ * setup on Home, standing at Home's own route under the workspace listed,
+ * rather than on the Settings the last one left open.
  */
 
 const REQUIRED = { accountRequired: true } as const;
@@ -172,8 +173,9 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   };
   // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
   await writeHandedAppState();
+  const held = windowRouter();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(withQueryClient(windowRouter().drawn())));
+  act(() => root?.render(withQueryClient(held.drawn())));
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();
@@ -187,14 +189,17 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
+  await settle();
   assert.equal(document.querySelector(".desktop-settings") === null, true, "Settings is gone");
-  assert.ok(document.querySelector(".home-composer"), "Home stands");
+  assert.equal(held.history.location.pathname, "/app", "Home stands at its route");
+  assert.ok(document.querySelector(".home-composer"), "Home's route draws Home");
 });
 
 test("an account a team invited stays in setup once it connects an agent, until Finish lets it in", async () => {
   await writeHandedAppState();
+  const held = windowRouter();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(withQueryClient(windowRouter().drawn())));
+  act(() => root?.render(withQueryClient(held.drawn())));
   await settle();
   await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
   await deliver(graceInvited(false), 3);
@@ -208,5 +213,11 @@ test("an account a team invited stays in setup once it connects an agent, until 
   assert.equal(document.querySelector(".home-composer"), null, "Home waits on Finish");
 
   act(() => button("Finish").click());
-  assert.ok(document.querySelector(".home-composer"), "Home stands");
+  await settle();
+  assert.equal(
+    held.history.location.pathname,
+    `/${TEAM.id}`,
+    "Home stands under the team's workspace",
+  );
+  assert.ok(document.querySelector(".home-composer"), "Home's route draws Home");
 });

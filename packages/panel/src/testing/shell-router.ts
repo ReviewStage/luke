@@ -4,8 +4,8 @@
  * The shell draws what stands past its gates through the router's `Outlet`
  * (`desktop-shell.tsx`), so a test of it stands it under a router too: a
  * root drawing the shell under test, the places beside the sidebar
- * (`ShellPlaces`) with what the window's state says in their slot
- * (`StatePlace`), and the routed places, Settings, Admin, the Board, a
+ * (`ShellPlaces`) with a task's place in their slot (`StatePlace`), Home
+ * (`HomePlace`), and the routed places, Settings, Admin, the Board, a
  * person's page, the Automations pages, and a version history, as their own
  * lazy modules and frames draw them, an agent's own page, and the Inbox, kept beside them all,
  * whose route draws nothing of its own (`InboxPlace`). It is built from TanStack Router's own
@@ -16,6 +16,7 @@
  * The history is a memory one at `at`.
  */
 
+import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AnyRouter,
@@ -32,6 +33,7 @@ import {
   AgentPlace,
   AutomationsRouteLoading,
   BoardRouteLoading,
+  HomePlace,
   InboxPlace,
   PersonRouteLoading,
   SettingsRouteLoading,
@@ -44,9 +46,10 @@ import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
 import { testQueryClientNow } from "./copy-feedback.js";
 
-/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, the Inbox, or a person's page. */
+/** Where a shell under test stands: Home, a task's place, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, the Inbox, or a person's page. */
 export const SHELL_AT = {
   PLACES: "/app",
+  TASK: "/acme/task/1",
   INBOX: "/acme/inbox",
   SETTINGS: "/app/settings",
   ADMIN: "/acme/admin",
@@ -94,10 +97,11 @@ interface StandingProps {
     readonly automationsView?: { readonly open?: boolean };
     readonly history?: { readonly open?: boolean };
     readonly inboxView?: { readonly open?: boolean };
+    readonly page?: string;
   };
 }
 
-/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, a version history, the Inbox, an agent's or a person's page where one stands, else the places. */
+/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, a version history, the Inbox, an agent's or a person's page where one stands, a task's place where one is open, else Home. */
 function standingOf(shell: ReactElement): string {
   const props: StandingProps =
     typeof shell.props === "object" && shell.props !== null ? shell.props : {};
@@ -110,17 +114,18 @@ function standingOf(shell: ReactElement): string {
   const agent = props.tasks?.agentView?.agentId;
   if (agent !== undefined) return agentAt(agent);
   const person = props.tasks?.personView?.userId;
-  return person === undefined ? SHELL_AT.PLACES : personAt(person);
+  if (person !== undefined) return personAt(person);
+  return props.tasks?.page === TASKS_PAGE.DOCUMENT ? SHELL_AT.TASK : SHELL_AT.PLACES;
 }
 
 /** A router over the shell, the places, and the routed places, standing at `at`. */
 function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
   const root = createRootRoute({ component: ShellRoot });
   const places = createRoute({ getParentRoute: () => root, id: "places", component: ShellPlaces });
-  const stateRoute = createRoute({
+  const homeRoute = createRoute({
     getParentRoute: () => places,
     path: SHELL_AT.PLACES,
-    component: StatePlace,
+    component: HomePlace,
   });
   const admin = createRoute({
     getParentRoute: () => places,
@@ -164,6 +169,11 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     component: InboxPlace,
   });
   const inboxItem = createRoute({ getParentRoute: () => inbox, path: "$itemId" });
+  const task = createRoute({
+    getParentRoute: () => workspace,
+    path: "task/$taskId",
+    component: StatePlace,
+  });
   const agent = createRoute({
     getParentRoute: () => workspace,
     path: "agent/$agentId",
@@ -201,13 +211,14 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
   const router = createRouter({
     routeTree: root.addChildren([
       places.addChildren([
-        stateRoute,
+        homeRoute,
         admin,
         board,
         person,
         workspace.addChildren([
           automationPages.addChildren([automations, automation]),
           inbox.addChildren([inboxItem]),
+          task,
           agent.addChildren([agentPage]),
         ]),
       ]),

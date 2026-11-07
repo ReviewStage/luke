@@ -61,10 +61,10 @@ test.each([
   ["/acme/inbox/item-1", ROUTED_PLACE.INBOX],
   ["/acme/agent/agent-1", ROUTED_PLACE.AGENT],
   ["/left", ROUTED_PLACE.UNKNOWN_WORKSPACE],
-  ["/acme", undefined],
+  ["/acme", ROUTED_PLACE.HOME],
   ["/acme/agent/agent-1/changes", undefined],
   ["/acme/task/7", undefined],
-  ["/app", undefined],
+  ["/app", ROUTED_PLACE.HOME],
 ] as const)("%s stands on its routed place, where it is one", (address, place) => {
   assert.equal(routedPlaceOf(matchesOf(address), ACCESS), place);
 });

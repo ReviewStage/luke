@@ -49,7 +49,6 @@ import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, makeWait, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
 import { STRIP_TAB_KIND, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
-import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
@@ -61,7 +60,7 @@ import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-tit
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
-import type { RoutedPlace } from "../places/routed-places.js";
+import { ROUTED_PLACE, type RoutedPlace } from "../places/routed-places.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -274,8 +273,12 @@ function StopCard({
   );
 }
 
-/** Where the window stands now, as the switcher reads it. */
-function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
+/** Where the window stands now, as the switcher reads it, Home by its route. */
+function standingOf(
+  tab: PanelTab,
+  tasks: TasksControl,
+  place: RoutedPlace | undefined,
+): Stop | undefined {
   const { mainTabs, sidePanel, personView } = tasks;
   const column = mainTabs.tab;
   return shownStop({
@@ -288,7 +291,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
         : { userId: personView.userId, name: personView.name, workspaceId: personView.workspaceId },
     board: tasks.boardView.open,
     automations: tasks.automationsView.open,
-    home: tasks.page === TASKS_PAGE.HOME && !tasks.adminView.open,
+    home: place === ROUTED_PLACE.HOME,
     boundFor: tasks.boundFor,
     openTaskId: tasks.activeTaskId,
     column,
@@ -423,7 +426,7 @@ export function TabSwitcher({
   }, []);
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
-  const now = standingOf(tab, tasks);
+  const now = standingOf(tab, tasks, place);
   const title = stepTitle(place, tasks);
   useEffect(() => {
     const before = shown.current;

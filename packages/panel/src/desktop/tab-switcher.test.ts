@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import { ROUTED_PLACE, type RoutedPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
@@ -124,7 +125,7 @@ async function mounted(room: ShellRoom = SHELL_ROOM.WIDE) {
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
-  const draw = async (tasks: TasksControl) => {
+  const draw = async (tasks: TasksControl, place: RoutedPlace | undefined = undefined) => {
     act(() =>
       root.render(
         withQueryClient(
@@ -134,7 +135,7 @@ async function mounted(room: ShellRoom = SHELL_ROOM.WIDE) {
             createElement(TabSwitcher, {
               available: true,
               tab: PANEL_TAB.TASKS,
-              place: undefined,
+              place,
               onTabChange: () => undefined,
               tasks,
             }),
@@ -549,7 +550,7 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(onTask(NOTES, told, { boundFor: undefined }));
+  await window.draw(onTask(NOTES, told, { boundFor: undefined }), ROUTED_PLACE.HOME);
   press();
   await window.draw(onTask(README, told));
   press();
