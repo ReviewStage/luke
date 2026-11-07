@@ -3656,7 +3656,7 @@ export function useTasksTab(input: {
   };
 
   /**
-   * An app link opened as `openPlace` opens its place, once a task it names
+   * An app link opened as its route reads it (`openLinked`) opens its place, once a task it names
    * by its number in the link's workspace is found by its id on the
    * service. One not found, or not answered, opens by the number as an id
    * naming no task does, its read saying it is not there; nothing opens
@@ -3861,12 +3861,14 @@ export function useTasksTab(input: {
    * to bring the thread or the section into view, and a page opens the side
    * panel on its tab, on its task or on the page of its agent on no task.
    * Each is the description's but a page, so while descriptions are off a
-   * link to one opens the task's agents.
+   * link to one opens the task's agents. A routed place's own page opens
+   * through the door that place has: the task's tabs, its version history,
+   * or what stands in the plan's place. Note that nothing is checked here:
+   * a place the account cannot read is read all the same, and its read says
+   * it is not there.
    */
   const openRouted = ({ declared, link }: RoutedLink) => {
     const { workspace, place } = link;
-    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
-    navigations.current += 1;
     switch (declared) {
       case LINK_ROUTED_PLACE.COMMENT: {
         if (place.kind !== LINK_PLACE.COMMENT) return;
@@ -3910,33 +3912,10 @@ export function useTasksTab(input: {
       case LINK_ROUTED_PLACE.PULL_REQUEST_THREAD:
         if (isAgentPlace(place)) openAgentPlace(place, workspace);
         return;
-    }
-  };
-
-  // A link opened by matching it on the route tree, as its link place's route reads it, else through the door its kind has.
-  const openLinked = (link: ReadLink) => {
-    const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
-    const routed = routedLinkOf(router, link, input.taskView.workspaceNow() ?? listedStep);
-    if (routed !== undefined) openRouted(routed);
-    else openPlace(link);
-  };
-
-  /**
-   * An app link's place opened through the door each kind already has: the
-   * task's tabs, its side panel, its version history, or what stands in the
-   * plan's place. One of an agent's messages opens the agent's tab and asks
-   * it to bring the message into view. Note
-   * that nothing is checked here: a place the account cannot read is read
-   * all the same, and its read says it is not there.
-   */
-  const openPlace = ({ workspace, place }: ReadLink) => {
-    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
-    navigations.current += 1;
-    switch (place.kind) {
       // A step naming no workspace of the reader's, by id, slug, or former slug, is not there for them, so it stands as not
       // found rather than opening the listed workspace or where the window rests.
-      case LINK_PLACE.HOME:
-      case LINK_PLACE.BOARD:
+      case LINK_ROUTED_PLACE.HOME:
+      case LINK_ROUTED_PLACE.BOARD:
         if (
           viewed.workspaces.length > 0 &&
           workspaceOfSlug(viewed.workspaces, workspace) === undefined
@@ -3949,40 +3928,45 @@ export function useTasksTab(input: {
         if (place.kind === LINK_PLACE.HOME) goHome();
         else openBoard(workspaceOfSlug(viewed.workspaces, workspace));
         return;
-      case LINK_PLACE.TASK:
+      case LINK_ROUTED_PLACE.TASK:
+        if (place.kind !== LINK_PLACE.TASK) return;
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
         return;
-      case LINK_PLACE.VERSION:
+      case LINK_ROUTED_PLACE.VERSION:
+        if (place.kind !== LINK_PLACE.VERSION) return;
         openHistory(place.planId, {
           spot: { revision: place.revision, opened: undefined, listed: false },
           workspace,
         });
         return;
-      case LINK_PLACE.PERSON: {
+      case LINK_ROUTED_PLACE.PERSON: {
+        if (place.kind !== LINK_PLACE.PERSON) return;
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
         const home = workspaceOfSlug(viewed.workspaces, workspace);
         listLinked(workspace);
         openPerson(place.userId, undefined, home);
         return;
       }
-      case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen, narrowed to the task it names or to none.
+      // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen, narrowed to the task it names or to none.
+      case LINK_ROUTED_PLACE.INBOX:
+        if (place.kind !== LINK_PLACE.INBOX) return;
         standInbox(inboxIn(listLinked(workspace), place.planId), undefined);
         return;
-      }
-      case LINK_PLACE.INBOX_ITEM:
-        openInboxItem(workspace, place);
+      case LINK_ROUTED_PLACE.INBOX_ITEM:
+        if (place.kind === LINK_PLACE.INBOX_ITEM) openInboxItem(workspace, place);
         return;
-      case LINK_PLACE.AUTOMATIONS:
+      case LINK_ROUTED_PLACE.AUTOMATIONS:
         openAutomations({ kind: AUTOMATIONS_PAGE.LIST }, workspace);
         return;
-      case LINK_PLACE.AUTOMATION:
+      case LINK_ROUTED_PLACE.AUTOMATION:
+        if (place.kind !== LINK_PLACE.AUTOMATION) return;
         openAutomations(
           { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
           workspace,
         );
         return;
-      case LINK_PLACE.AUTOMATION_RUN:
+      case LINK_ROUTED_PLACE.AUTOMATION_RUN:
+        if (place.kind !== LINK_PLACE.AUTOMATION_RUN) return;
         openAutomations(
           { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId, runId: place.runId },
           workspace,
@@ -3990,13 +3974,24 @@ export function useTasksTab(input: {
         return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
       // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
-      case LINK_PLACE.ADMIN:
-        input.adminView.onOpen(adminViewOfLink(place));
-        return;
-      // Settings is the window's, not the Plans tab's, so its link is opened there.
-      case LINK_PLACE.SETTINGS:
+      case LINK_ROUTED_PLACE.ADMIN:
+        if (place.kind === LINK_PLACE.ADMIN) input.adminView.onOpen(adminViewOfLink(place));
         return;
     }
+  };
+
+  /**
+   * A link opened by matching it on the route tree, as its place's
+   * declaration reads it (`places/link-places.ts`). Note that a link to
+   * Settings matches none, since Settings is the window's, not the Tasks
+   * tab's, and the window opens its link before it reaches here (`app.tsx`).
+   */
+  const openLinked = (link: ReadLink) => {
+    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
+    navigations.current += 1;
+    const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+    const routed = routedLinkOf(router, link, input.taskView.workspaceNow() ?? listedStep);
+    if (routed !== undefined) openRouted(routed);
   };
 
   // An inbox item's code opens in its task's File tab; on a task not yet

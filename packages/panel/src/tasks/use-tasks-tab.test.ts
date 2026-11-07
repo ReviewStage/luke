@@ -67,7 +67,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
-import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
+import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
@@ -1757,20 +1757,169 @@ test.each([
     THREAD_PANEL,
   ],
   ["a review thread's link under /plan/", `${ON_PLAN}/changes/files/thread/PRRT_1`, THREAD_PANEL],
-  [
-    "a worker of our own under /plan/, read as its task",
-    `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}/worker/toolu_1`,
-    { ...AGENT_COLUMN, panel: { open: false, tab: undefined } },
-  ],
-  [
-    "a channel's link, read as the Inbox",
-    `${LINK_ORIGIN}/${LISTED_STEP}/channel/c-1`,
-    { inbox: true },
-  ],
 ] as const)(
   "%s opens what it names, matched on the route tree",
   async (_spelling, href, expected) => {
     const opened = await agentOpenedBy(href);
+    const read = Object.fromEntries(
+      Object.keys(expected).map((key) => [key, opened[key as keyof typeof opened]]),
+    );
+    assert.deepEqual(read, expected);
+  },
+);
+
+const ITEM_ID = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+const PICTURE = "files/0f1e2d3c-4b5a-4987-8a6b-5c4d3e2f1a0b";
+
+/** Mounts the window over two workspaces on the open task, the service finding the task numbered 42, the Inbox item, and every agent on `alerts`, and opens `href` as a link in it. */
+async function placeOpenedBy(href: string) {
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: TASK.id } },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.TASKS_FIND]: () => Promise.resolve({ taskId: "alerts" }),
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () =>
+        Promise.resolve({ agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id }),
+      [ACT_KIND.AGENTS_PAGE]: () =>
+        Promise.resolve({
+          agent: {
+            ...RUNNING_AGENT,
+            planId: "alerts",
+            automationId: null,
+            workspaceId: ACME.id,
+            repository: null,
+          },
+        }),
+    },
+  );
+  await settle();
+  act(() => tab.control().onOpenLink(linkAt(href)));
+  await settle();
+  const control = tab.control();
+  return {
+    at: tab.at(),
+    listed: control.workspace?.slug,
+    task: opensAsked(tab.payloads).at(-1),
+    version: control.history.open ? control.history.spot?.revision : undefined,
+    board: control.boardView.open,
+    person: control.personView.userId,
+    inbox: control.inboxView.open
+      ? { chosen: control.inboxView.chosen, narrowed: control.inboxView.narrowed }
+      : undefined,
+    automations: control.automationsView.open ? control.automationsView.place : undefined,
+    admin: tab.adminOpens,
+  };
+}
+
+const ACME_AT = `${LINK_ORIGIN}/acme`;
+const BY_ID = {
+  inbox: {
+    chosen: { taskId: "alerts", itemAgentId: AGENT_ID, itemId: ITEM_ID, opened: true },
+    narrowed: undefined,
+  },
+};
+const UNDER_TASK = {
+  inbox: { chosen: { taskId: "alerts", itemId: ITEM_ID, opened: true }, narrowed: undefined },
+};
+const INBOX = { inbox: { chosen: undefined, narrowed: undefined } };
+const NARROWED = { inbox: { chosen: undefined, narrowed: "alerts" } };
+const EDIT = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "a1" };
+
+test.each([
+  ["Home's link", ACME_AT, { listed: "acme", board: false, inbox: undefined }],
+  [
+    "Home's link under a workspace not the reader's",
+    `${LINK_ORIGIN}/someone-elses`,
+    { at: "/someone-elses", listed: "personal" },
+  ],
+  ["the Board's link", `${ACME_AT}/tasks`, { listed: "acme", board: true }],
+  ["a task's link", `${ACME_AT}/task/alerts`, { task: "alerts" }],
+  ["a task's link under /plan/", `${ACME_AT}/plan/alerts`, { task: "alerts" }],
+  ["a task's link by its number", `${ACME_AT}/task/42`, { task: "alerts" }],
+  ["a task's link by its key", `${ACME_AT}/task/ACME-42`, { task: "alerts" }],
+  [
+    "a worker of our own under its task, read as its task",
+    `${ACME_AT}/task/alerts/worker/toolu_1`,
+    { task: "alerts" },
+  ],
+  [
+    "a worker of our own under /plan/, read as its task",
+    `${ACME_AT}/plan/alerts/worker/toolu_1`,
+    { task: "alerts" },
+  ],
+  ["a turn of our own, read as its task", `${ACME_AT}/task/alerts/work/3`, { task: "alerts" }],
+  [
+    "a picture of the task's description, read as its task",
+    `${ACME_AT}/task/alerts/${PICTURE}`,
+    { task: "alerts" },
+  ],
+  ["a version's link", `${LINK_ORIGIN}/personal/task/${TASK.id}/version/3`, { version: 3 }],
+  [
+    "a version's link under /plan/",
+    `${LINK_ORIGIN}/personal/plan/${TASK.id}/version/3`,
+    { version: 3 },
+  ],
+  [
+    "a person's link",
+    `${LINK_ORIGIN}/personal/person/user-charles`,
+    { listed: "personal", person: "user-charles" },
+  ],
+  ["the Inbox's link", `${ACME_AT}/inbox`, { listed: "acme", ...INBOX }],
+  ["a channel's link, read as the Inbox", `${ACME_AT}/channel/c-1`, { listed: "acme", ...INBOX }],
+  ["the Inbox's link narrowed to a task", `${ACME_AT}/inbox/task/alerts`, NARROWED],
+  ["the Inbox's link narrowed to a task under /plan/", `${ACME_AT}/inbox/plan/alerts`, NARROWED],
+  ["an Inbox item's link by its id alone", `${ACME_AT}/inbox/${ITEM_ID}`, BY_ID],
+  ["a picture in an Inbox item by its id alone", `${ACME_AT}/inbox/${ITEM_ID}/${PICTURE}`, BY_ID],
+  ["an Inbox item's link under its task", `${ACME_AT}/task/alerts/inbox/${ITEM_ID}`, UNDER_TASK],
+  ["an Inbox item's link under /plan/", `${ACME_AT}/plan/alerts/inbox/${ITEM_ID}`, UNDER_TASK],
+  [
+    "a picture in an Inbox item under its task",
+    `${ACME_AT}/task/alerts/inbox/${ITEM_ID}/${PICTURE}`,
+    UNDER_TASK,
+  ],
+  ["an Inbox item's link under its agent", `${ACME_AT}/agent/${AGENT_ID}/inbox/${ITEM_ID}`, BY_ID],
+  [
+    "a picture in an Inbox item under its agent",
+    `${ACME_AT}/agent/${AGENT_ID}/inbox/${ITEM_ID}/${PICTURE}`,
+    BY_ID,
+  ],
+  [
+    "the Automations link",
+    `${ACME_AT}/automations`,
+    { automations: { kind: AUTOMATIONS_PAGE.LIST } },
+  ],
+  ["an automation's link", `${ACME_AT}/automation/a1`, { automations: EDIT }],
+  [
+    "an automation run's link",
+    `${ACME_AT}/automation/a1/run/r1`,
+    { automations: { ...EDIT, runId: "r1" } },
+  ],
+  ["Admin's link", `${ACME_AT}/admin`, { admin: [undefined] }],
+  ["an Admin section's link", `${ACME_AT}/admin/cost`, { admin: [{ kind: ADMIN_TAB.COST }] }],
+  [
+    "an Admin account's link",
+    `${ACME_AT}/admin/user/user-charles`,
+    { admin: [{ kind: ADMIN_PAGE.ACCOUNT, id: "user-charles" }] },
+  ],
+  [
+    "an Admin workspace's link",
+    `${ACME_AT}/admin/workspace/w1`,
+    { admin: [{ kind: ADMIN_PAGE.WORKSPACE, id: "w1" }] },
+  ],
+  [
+    "an Admin day's link",
+    `${ACME_AT}/admin/day/2026-11-06`,
+    { admin: [{ kind: ADMIN_PAGE.DAY, day: "2026-11-06" }] },
+  ],
+  [
+    "Settings' link, which the window opens rather than the tab",
+    `${ACME_AT}/settings`,
+    { task: undefined, inbox: undefined, admin: [] },
+  ],
+] as const)(
+  "%s opens what it names, matched on the route tree",
+  async (_spelling, href, expected) => {
+    const opened = await placeOpenedBy(href);
     const read = Object.fromEntries(
       Object.keys(expected).map((key) => [key, opened[key as keyof typeof opened]]),
     );
@@ -2057,23 +2206,6 @@ test("a task's Inbox door and its link narrow the Inbox to the task, an agent's 
     taskId: "alerts",
   });
   assert.deepEqual(narrowedTo(), { open: true, chosen: undefined, taskId: undefined });
-});
-
-test("a Vespin link to an automation's run opens its editor naming the run, which its runs mark", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId: "a1", runId: "r1" },
-    }),
-  );
-
-  assert.deepEqual(tab.control().automationsView.place, {
-    kind: AUTOMATIONS_PAGE.EDIT,
-    automationId: "a1",
-    runId: "r1",
-  });
 });
 
 test("a Vespin link to a person opens their page in the workspace its slug names, in the place of the Inbox", () => {
@@ -2481,13 +2613,6 @@ test("the Inbox opens on nothing chosen, from its row and from a link, whatever 
 
   assert.equal(fromRow, undefined);
   assert.equal(fromLink, undefined);
-});
-
-test("a workspace's Board link opens in the workspace its step names", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.BOARD } }));
-
-  assert.deepEqual([tab.control().workspace?.id, tab.control().boardView.open], [ACME.id, true]);
 });
 
 test("a start refused after another agent's page was opened leaves that page standing rather than the one the start was pressed on", async () => {
@@ -4578,16 +4703,4 @@ test("New task over Home under Admin opens its dialog, since Home's composer is 
   const tab = mount({ shown: true, admin: true });
   act(() => tab.control().onNewTask());
   assert.equal(tab.control().newTask.open, true);
-});
-
-test("a link to Admin opens it through the router's door on the view it names, and its Overview where it names none", () => {
-  const tab = mount({ shown: true });
-  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.ADMIN } }));
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.ADMIN, userId: "user-charles" },
-    }),
-  );
-  assert.deepEqual(tab.adminOpens, [undefined, { kind: ADMIN_PAGE.ACCOUNT, id: "user-charles" }]);
 });
