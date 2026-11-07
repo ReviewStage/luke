@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ORPCError } from "@orpc/client";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
@@ -23,7 +24,7 @@ import type { TerminalStripTab } from "@repo/ui/tab-strip-model";
 import { terminalTab } from "@repo/ui/tab-strip-model";
 import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Clock, Context, Effect } from "effect";
+import { Clock, Context, Effect, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,13 +32,16 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handHostReads } from "../testing/app-state.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
 import { TerminalTab } from "./terminal-tab.js";
-import { useEndTerminalTab } from "./use-terminal-session.js";
+import { useEndTerminalTab, useTerminalsOwner } from "./use-terminal-session.js";
+import { WindowAccountContext } from "./window-account.js";
 
 /**
  * One of an agent's cloud terminal tabs as the developer meets it: a shell
@@ -73,20 +77,30 @@ const TAB: TerminalStripTab = terminalTab(
   "Cloud 1",
 );
 
-/** Keeps the window's cloud terminals for the agent, as a page before a reload left them in session storage. */
-function keep(shells: readonly HeldShell[]): void {
+/** One account's terminals as the window keeps them. */
+type KeptLists = { cloud: Record<string, readonly HeldShell[]>; local: object };
+
+/** The window's terminals as it keeps them in its session storage: the account on top's, and every other's under its key. */
+type Kept = KeptLists & { account?: string; accounts?: Record<string, KeptLists> };
+
+/** What the window keeps in its session storage. */
+function keptValue(): Kept {
+  return JSON.parse(window.sessionStorage.getItem("vespin.terminals") ?? "{}");
+}
+
+/** Keeps the window's cloud terminals for the agent, of the account or of none, as a page before a reload left them in session storage. */
+function keep(shells: readonly HeldShell[], account?: string): void {
   window.sessionStorage.setItem(
     "vespin.terminals",
-    JSON.stringify({ cloud: { [AGENT.id]: shells }, local: {} }),
+    JSON.stringify({ account, cloud: { [AGENT.id]: shells }, local: {}, accounts: {} }),
   );
 }
 
-/** The agent's cloud terminals as the window keeps them in its session storage. */
-function kept(): readonly HeldShell[] {
-  const all: { cloud?: Record<string, readonly HeldShell[]> } = JSON.parse(
-    window.sessionStorage.getItem("vespin.terminals") ?? "{}",
-  );
-  return all.cloud?.[AGENT.id] ?? [];
+/** The agent's cloud terminals of the account, or of none, as the window keeps them in its session storage. */
+function kept(account?: string): readonly HeldShell[] {
+  const all = keptValue();
+  const lists = all.account === account ? all : all.accounts?.[account ?? ""];
+  return lists?.cloud[AGENT.id] ?? [];
 }
 
 /** A shell as the sandbox answers it. */
@@ -259,7 +273,7 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted, shown or not, with what it draws, and the door that ends it as its × does. */
-async function mount(shown = true, still = true) {
+async function mount(shown = true, still = true, account?: string) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -278,7 +292,13 @@ async function mount(shown = true, still = true) {
     end = useEndTerminalTab();
     return null;
   };
-  const render = (on: boolean) => {
+  // The account signed in, as the window's root hands it on.
+  const Owner = ({ of }: { of: string | undefined }) => {
+    useTerminalsOwner(of);
+    return null;
+  };
+  let signedIn = account;
+  const render = (on: boolean, drawn = true) => {
     const tab = createElement(TerminalTab, {
       tab: TAB,
       agents,
@@ -294,7 +314,20 @@ async function mount(shown = true, still = true) {
           registry,
           onTerminals(
             terminals,
-            onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+            createElement(
+              WindowAccountContext.Provider,
+              { value: signedIn },
+              onSideBundles(
+                FITTED,
+                createElement(
+                  Fragment,
+                  null,
+                  createElement(Owner, { of: signedIn }),
+                  drawn ? tab : null,
+                  createElement(Ender),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -309,8 +342,15 @@ async function mount(shown = true, still = true) {
   };
   return {
     container,
+    terminals,
     render: async (on: boolean) => {
       render(on);
+      await settle();
+    },
+    /** Another account signs in, the tab drawn for it or not, as a strip that held it would. */
+    signIn: async (next: string, drawn: boolean) => {
+      signedIn = next;
+      render(true, drawn);
       await settle();
     },
     /** Closes the tab, as its × does. */
@@ -390,6 +430,143 @@ test("closing the tab ends its shell in the sandbox, its port closed and its ter
   assert.deepEqual(kept(), []);
 });
 
+test("another account signing in detaches the tab's shell and ends none: its port closes, and that account holds none of the first's terminals", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+
+  await tab.signIn("grace", false);
+
+  assert.equal(port.closed(), true, "the window let go of the shell's port");
+  assert.deepEqual(tab.kinds(before), [], "no shell was ended, and none started");
+  assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
+  assert.deepEqual(kept("ada"), [{ shell: TAB.shell, title: "Cloud 1", terminal: MADE }]);
+});
+
+test("what the window keeps reads, through the shape the build before this one reads, as the signed-in account's terminals", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  await mount(true, true, "ada");
+  // The shape a build that held one list for every account reads, as that build declares it.
+  const shell = Schema.Struct({
+    shell: Schema.String,
+    title: Schema.String,
+    terminal: Schema.optional(Schema.String),
+  });
+  const byAgent = Schema.Record(Schema.String, Schema.Array(shell));
+  const before = Schema.fromJsonString(Schema.Struct({ cloud: byAgent, local: byAgent }));
+
+  const read = Schema.decodeUnknownSync(before)(window.sessionStorage.getItem("vespin.terminals"));
+
+  assert.deepEqual(read.cloud[AGENT.id], [{ shell: TAB.shell, title: "Cloud 1", terminal: MADE }]);
+});
+
+test("a switch moves the last account's terminals under its own key before the next one's take the top", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+
+  await tab.signIn("grace", false);
+
+  const value = keptValue();
+  assert.equal(value.account, "grace");
+  assert.deepEqual(value.cloud, {});
+  assert.deepEqual(value.accounts?.ada?.cloud[AGENT.id], [
+    { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
+  ]);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
+});
+
+test("the terminals a build before this one kept are the signed-in account's, and no other's", async () => {
+  window.sessionStorage.setItem(
+    "vespin.terminals",
+    JSON.stringify({
+      cloud: { [AGENT.id]: [{ shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON }] },
+      local: {},
+    }),
+  );
+  const tab = await mount(true, true, "ada");
+  assert.deepEqual(tab.kinds(), ["terminal.attach"]);
+  assert.equal(
+    (lastPayload(ACT_KIND.TERMINAL_ATTACH) as { terminalId: string }).terminalId,
+    RUNNING_ON,
+  );
+
+  await tab.signIn("grace", false);
+
+  assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
+});
+
+test("the terminals a build before this one kept wait, through a window signed out, for the account that signs in", async () => {
+  window.sessionStorage.setItem(
+    "vespin.terminals",
+    JSON.stringify({
+      cloud: { [AGENT.id]: [{ shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON }] },
+      local: {},
+    }),
+  );
+  const tab = await mount(true, true, undefined);
+
+  await tab.signIn("ada", true);
+
+  assert.deepEqual(tab.terminals.held.of("ada", TERMINAL_KIND.CLOUD, AGENT.id), [
+    { shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON },
+  ]);
+});
+
+test("while another account is signed in, nothing the first's shell says reaches the window, and nothing typed reaches that shell", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "attached" });
+
+  // Note that the tab stays drawn, as a strip that still held it would draw it.
+  await tab.signIn("grace", true);
+  const ada = tab.terminals.sessions.session("ada", TERMINAL_KIND.CLOUD, AGENT.id, TAB.shell, () =>
+    assert.fail("the first account's session stands"),
+  );
+  const detached = ada.state;
+  await tab.type("a", 65);
+  port.say({ type: "state", state: "exited", code: 0 });
+  await settle();
+
+  assert.deepEqual(
+    port.posted.filter((message) => message.type === "input"),
+    [],
+  );
+  assert.notEqual(tab.standing(), "· exited", "the first account's shell said nothing here");
+  assert.deepEqual(ada.state, detached, "nor to its own detached session");
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
+});
+
+test("a port that arrives after another account signed in is let go, so its shell is held by no connection", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  await tab.signIn("grace", false);
+
+  const port = main.post(MADE);
+
+  assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
+});
+
+test("the first account signing in again finds its terminal, which attaches to the same shell, starting none", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  main.post(MADE).say({ type: "state", state: "attached" });
+  await tab.signIn("grace", false);
+  const before = main.sent.length;
+
+  await tab.signIn("ada", true);
+
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+  assert.equal((lastPayload(ACT_KIND.TERMINAL_ATTACH) as { terminalId: string }).terminalId, MADE);
+  assert.deepEqual(tab.terminals.held.of("ada", TERMINAL_KIND.CLOUD, AGENT.id), [
+    { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
+  ]);
+});
+
 test("a tab shown over a stopped sandbox resumes it, saying it is connecting, and one that stops while the tab is hidden waits until it is shown", async () => {
   main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
   const tab = await mount();
@@ -444,28 +621,65 @@ test("a resume whose snapshot is gone says the sandbox shut down and how to star
   );
 });
 
-test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again a few seconds on", async () => {
+/** The task list as the host lays it, the tab's agent's sandbox open or not. */
+function listedWithSandbox(open: boolean): TasksView {
+  return {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    taskAgents: [{ ...AGENT, workspaceId: "workspace-1", repository: null, sandboxOpen: open }],
+  };
+}
+
+test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again as the task list says it opened", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
-  vi.useFakeTimers();
-  const tab = await mount(true, false);
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
   assert.equal(tab.standing(), "· waiting for sandbox");
   assert.equal(tab.bar(), "Waiting for the agent to open its sandbox…");
   assert.equal(tab.action(), null);
   main.createRefused = undefined;
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
-  await settle();
-  assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]);
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the shell it asks for, then the attach to it.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
 });
 
-test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown", async () => {
+test("a shell its connection says is starting attaches again as the sandbox opens, its port before let go", async () => {
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "starting" });
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the attach it asks for.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.attach", "terminal.attach"]),
+  );
+  assert.equal(port.closed(), true);
+});
+
+test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown, though the list says it opened", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
-  vi.useFakeTimers();
-  const tab = await mount(true, false);
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
   main.createRefused = undefined;
   await tab.render(false);
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
-  await settle();
+
+  deliverTasks(listedWithSandbox(true));
+  await settleQueries(settle);
+
   assert.deepEqual(tab.kinds(), ["terminal.create"]);
+  await tab.render(true);
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
 });
 
 /** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */

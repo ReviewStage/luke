@@ -15,9 +15,10 @@ import { user } from "./auth.js";
  * session is, naming the agent, with the swaps as the service sealed them
  * under the deployment's key ring, bound to that account and session
  * (`../models/sandbox-firewall-store.ts`, `@repo/service`'s
- * `agents/sandbox-firewall.ts`). The scheduled sweep drops a row left past
- * the longest a session can run. Every row goes with its agent and its
- * account.
+ * `agents/sandbox-firewall.ts`). Nothing reads a row past its session, and
+ * an agent's next launch deletes its rows for other sessions, so at most
+ * one row an agent outlives its session. Every row goes with its agent and
+ * its account.
  */
 export const sandboxFirewall = pgTable(
   "sandbox_firewall",
@@ -43,9 +44,9 @@ export const sandboxFirewall = pgTable(
     primaryKey({ columns: [table.userId, table.sandboxSessionId] }),
     // Nothing reads by the session alone now; the index stays until a migration drops it.
     index("sandbox_firewall_session").on(table.sandboxSessionId),
-    // An agent's deletion finds its rows by it.
+    // An agent's deletion, and its next launch, find its rows by it.
     index("sandbox_firewall_agent").on(table.agentId),
-    // The sweep drops the rows of sessions long gone by age.
+    // Nothing reads by age now; the index stays until a migration drops it.
     index("sandbox_firewall_updated").on(table.updatedAt),
   ],
 );

@@ -43,7 +43,16 @@ import {
 import { HOST_TARGET, hostTarballUrl } from "@repo/features/host-release";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
+import {
+  Clock,
+  ConfigProvider,
+  Deferred,
+  Duration,
+  Effect,
+  Layer,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
@@ -143,8 +152,8 @@ const followingDevice = (
     readonly writingTakes?: Duration.Input;
     /** The box's own GitHub sign-in does not reach the repository, as a box signed in to nothing does. */
     readonly signInUnreached?: boolean;
-    /** Whether the device's switch is on, read at each look; on where not given. */
-    readonly switchedOn?: () => boolean;
+    /** Whether the device's switch is on, as it stands and each time it changes; on where not given. */
+    readonly switchedOn?: Stream.Stream<boolean>;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -310,7 +319,7 @@ const followingDevice = (
         createId: () => `claim-${++minted}`,
       },
       deviceId: "device-1",
-      switchedOn: Effect.sync(() => options.switchedOn?.() ?? true),
+      switchedOn: options.switchedOn ?? Stream.make(true),
       client,
       update: options.update,
     }).pipe(Effect.provide(services), Effect.provideService(Clock.Clock, clock));
@@ -586,19 +595,19 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        // Note that the line is claimed at the fourth second and its answer lost, and the switch goes off at once, so the follow ends at the fifth, before its re-ask at the sixth; the service reads no line again.
-        let on = true;
+        // Note that the line is claimed at the fourth second and its answer lost, and the switch goes off at once, so the follow ends before its re-ask at the fifth; the service reads no line again.
+        const on = yield* SubscriptionRef.make(true);
         let landed: string | undefined;
         const claims: (string | undefined)[] = [];
         const { spawned, settled, beats } = yield* followingDevice(() => Effect.void, {
           linesAfter: Duration.seconds(4),
-          switchedOn: () => on,
+          switchedOn: SubscriptionRef.changes(on),
           claim: (token) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               claims.push(token);
               if (landed === undefined) {
                 landed = token;
-                on = false;
+                yield* SubscriptionRef.set(on, false);
                 return undefined;
               }
               return token === landed ? LAUNCH : { claimed: false as const };
@@ -608,7 +617,7 @@ it.effect(
         yield* TestClock.adjust(Duration.seconds(4));
         yield* until(() => landed !== undefined);
         yield* TestClock.adjust(Duration.seconds(5));
-        on = true;
+        yield* SubscriptionRef.set(on, true);
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));

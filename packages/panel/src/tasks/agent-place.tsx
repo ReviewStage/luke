@@ -1,24 +1,45 @@
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_MACHINE,
   type AgentSummary,
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@repo/features/agent-wire";
+import { RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
 import {
+  MAC_COMMAND_MODE_LABEL,
+  MAC_COMMAND_MODE_LIST,
+  MAC_COMMANDS_LABEL,
+  type MacCommandMode,
+} from "@repo/settings";
+import {
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
   ChipName,
+  ChoiceBar,
+  type ChoiceItem,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  HoverCardRow,
+  HoverCardRule,
   STATUS_TONE,
   StaticChip,
+  StatusGlyph,
   Tooltip,
   useSecond,
   VisuallyHidden,
 } from "@repo/ui";
+import { type Actor, actorName, personActor } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
+import { useMutation } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { settingMutation } from "../act-mutations.js";
+import { ActorLine, ActorRef } from "../actor-ref.js";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
+import { useMemberDirectory } from "../member-directory.js";
+import { type RunOnMacRead, useRunOnMac } from "./run-on-mac.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
 /**
@@ -32,7 +53,11 @@ import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
  * takes no press (`StaticChip`); a rest on it, or a tap under a finger,
  * hangs a card saying where the agent runs and whether the
  * device is online, and a reader hears "Runs on:" before its words. An
- * agent in a sandbox says "Cloud" beside the cloud glyph.
+ * agent in a sandbox says "Cloud" beside the cloud glyph, and its card names
+ * under a rule whose Mac its `run_on_mac` runs shell commands on, the task's
+ * assignee's or else its starter's, by their person chip, its glyph wearing
+ * a dot for how it stands: online, offline, or off in this
+ * Mac's Settings (`run-on-mac.ts`), which a reader hears after "Cloud".
  *
  * While a device has not beaten lately, asleep or with the app closed,
  * judged from how long ago the service says it last beat, the label adds
@@ -62,30 +87,115 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
+/** This Mac's command setting's choices, as Settings › This Mac words them. */
+const MAC_COMMAND_CHOICES: readonly ChoiceItem<MacCommandMode>[] = MAC_COMMAND_MODE_LIST.map(
+  (mode) => ({ value: mode, label: MAC_COMMAND_MODE_LABEL[mode] }),
+);
+
 /** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
   CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
   DEVICE: "This agent runs on this device. Set when it was started.",
 } as const;
 
+/** How the Mac the agent's `run_on_mac` runs on stands, in the words its dot says: Online, Offline, or Off in Settings. */
+function runOnMacStands(read: RunOnMacRead): string {
+  return read.reason === undefined ? RUNS_ON_WORDS.ONLINE : RUN_ON_MAC_REASON_WORDS[read.reason];
+}
+
+/**
+ * A cloud agent's chip, whose card names under a rule the Mac its
+ * `run_on_mac` runs shell commands on, drawn as the Runs on menu draws a
+ * device: the Mac's glyph wearing its standing's dot, green while it
+ * listens and gray while it is offline or off in Settings, beside
+ * "run_on_mac" and its owner's person chip, "You" for the reader. Where it
+ * is the reader's own Mac and the window reads on one, this Mac's command
+ * setting stands under it as Settings › This Mac offers it (Ask every time,
+ * Always allow, Never), changed there and then. The chip takes no focus, so
+ * a reader hears the same after "Cloud". Note that the
+ * Mac is named by its owner, since any of their Macs that listens runs the
+ * commands; nothing is said while it is read, or for an agent offered none.
+ */
+function CloudChip({
+  agentId,
+  readerId,
+  narrow,
+}: {
+  agentId: string;
+  readerId: string | undefined;
+  narrow: boolean;
+}): React.JSX.Element {
+  const read = useRunOnMac(agentId, (userId) => userId === readerId);
+  const { members, former } = useMemberDirectory();
+  const { mutate: writeSetting } = useMutation(settingMutation());
+  const owner: Actor | undefined =
+    read.standing === undefined
+      ? undefined
+      : personActor(read.standing.owner, members, readerId, former);
+  const stands = runOnMacStands(read);
+  return (
+    <PlaceChip
+      glyph={<GLYPH.CLOUD aria-hidden="true" />}
+      words={RUNS_ON_WORDS.CLOUD}
+      sub={undefined}
+      note={SHARED_NOTE.CLOUD}
+      said={
+        owner === undefined
+          ? undefined
+          : `, ${AGENT_TOOL.RUN_ON_MAC} on ${actorName(owner, { sentence: true, possessive: true })} Mac, ${stands}`
+      }
+      more={
+        owner === undefined ? undefined : (
+          <>
+            <HoverCardRule />
+            <HoverCardRow
+              glyph={
+                <StatusGlyph
+                  tone={read.reason === undefined ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
+                  label={stands}
+                >
+                  <DeviceGlyph device={undefined} />
+                </StatusGlyph>
+              }
+              label={
+                <ActorLine>
+                  {`${AGENT_TOOL.RUN_ON_MAC} `}
+                  <ActorRef actor={owner} />
+                </ActorLine>
+              }
+            />
+            {read.mode !== undefined && read.standing?.owner.userId === readerId ? (
+              <ChoiceBar<MacCommandMode>
+                label={MAC_COMMANDS_LABEL}
+                items={MAC_COMMAND_CHOICES}
+                value={read.mode}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
+                size={CHOICE_BAR_SIZE.COMPACT}
+                stretch
+                onChange={(mode) => writeSetting({ field: "macCommands", value: mode })}
+              />
+            ) : null}
+          </>
+        )
+      }
+      narrow={narrow}
+    />
+  );
+}
+
 export function AgentPlace({
   agent,
+  readerId,
   narrow = false,
 }: {
-  agent: Pick<AgentSummary, "mac" | "machine">;
+  agent: Pick<AgentSummary, "id" | "mac" | "machine">;
+  /** The reader's account, whose own Mac the card calls "Your Mac". */
+  readerId: string | undefined;
   /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
   narrow?: boolean;
 }): React.JSX.Element | null {
   if (agent.machine !== AGENT_MACHINE.DEVICE) {
-    return (
-      <PlaceChip
-        glyph={<GLYPH.CLOUD aria-hidden="true" />}
-        words={RUNS_ON_WORDS.CLOUD}
-        sub={undefined}
-        note={SHARED_NOTE.CLOUD}
-        narrow={narrow}
-      />
-    );
+    return <CloudChip agentId={agent.id} readerId={readerId} narrow={narrow} />;
   }
   if (agent.mac === undefined) return null;
   return <MacChip mac={agent.mac} narrow={narrow} />;
@@ -97,6 +207,8 @@ function PlaceChip({
   words,
   sub,
   note,
+  said,
+  more,
   quiet = true,
   narrow,
 }: {
@@ -104,6 +216,10 @@ function PlaceChip({
   words: string;
   sub: string | undefined;
   note: string;
+  /** What a reader hears after the words, which the card says to the eye; none where it says nothing more. */
+  said?: string | undefined;
+  /** What the card lists after its note, where it lists anything. */
+  more?: ReactNode;
   quiet?: boolean;
   narrow: boolean;
 }): React.JSX.Element {
@@ -114,6 +230,7 @@ function PlaceChip({
         <HoverCard>
           <HoverCardHead glyph={glyph} name={words} sub={sub} />
           <HoverCardNote>{note}</HoverCardNote>
+          {more}
         </HoverCard>
       }
     >
@@ -121,6 +238,7 @@ function PlaceChip({
         {glyph}
         <VisuallyHidden>{RUNS_ON}</VisuallyHidden>
         <ChipName>{words}</ChipName>
+        {said === undefined ? null : <VisuallyHidden>{said}</VisuallyHidden>}
       </StaticChip>
     </Tooltip>
   );

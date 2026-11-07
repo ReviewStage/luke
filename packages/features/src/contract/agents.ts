@@ -92,7 +92,7 @@ const shellProcedure = sandboxProcedure.errors(
  * `failedCallRefusal`), its session ended, its host removed or away, or its
  * harness not reached from here.
  */
-const STOP_REFUSALS = [
+export const STOP_REFUSALS = [
   HOSTED_API_ERROR.NOT_FOUND,
   HOSTED_API_ERROR.NOT_PERMITTED,
   HOSTED_API_ERROR.AGENT_NOT_READY,
@@ -301,7 +301,7 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Whether one agent's `run_on_mac` would run now, as its MCP popover reads it. */
+  /** Whose Mac one agent's `run_on_mac` runs on, and whether it would run there now, as its composer reads it. */
   workspaceTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)

@@ -23,7 +23,7 @@ import { Effect, Schema } from "effect";
 import { act } from "react";
 import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
-import { sideBundles } from "../bundle-loader.js";
+
 import { descriptionEditor } from "../description-editor/index.js";
 import {
   type AnyAct,
@@ -104,6 +104,7 @@ import {
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
+import { standInBundles } from "../testing/side-bundles.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -261,7 +262,7 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     descriptionEditor: () => {
       if (failed) return Promise.resolve(descriptionEditor);
       failed = true;

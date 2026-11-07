@@ -44,7 +44,6 @@ import {
 } from "@repo/database/models/provider-key-store";
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
-import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -87,6 +86,7 @@ import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
+import { sentryReportingLayer } from "../../observability/sentry.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_APP_WITH_TOKENS,
@@ -102,12 +102,13 @@ import {
   runnerTook,
   swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
+import { recordingSentry, sentOfType } from "../../testing/sentry-transport.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_SNAPSHOT } from "../base-snapshot.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
-import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import { type SandboxRunner, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import {
@@ -175,12 +176,12 @@ const NO_KEYS: HostedEnvironmentValues = {
   previewApiKeys: {},
 };
 
-/** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
-function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
-  return vercelMachineLayer({
-    readToken: deploymentOidcToken,
-    run: (effect) => Effect.runPromise(effect),
-  }).pipe(Layer.provide(http));
+/** This test's own edge runner: each effect run as a root of its own, with none of its caller's context. */
+const rootRunner: SandboxRunner = (effect) => Effect.runPromise(effect);
+
+/** The agent's machine over the fake Vercel the client given answers as, its checkout run on the runner given, this test's own by default. */
+function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>, run = rootRunner) {
+  return vercelMachineLayer({ readToken: deploymentOidcToken, run }).pipe(Layer.provide(http));
 }
 
 /** The script root readied the sandbox with before the runner started, as `sudo -n bash -c` ran it. */
@@ -401,6 +402,8 @@ afterEach(() => {
 /** What a repository agent's sessions are composed with beside the fake Vercel: what a test does as each request reaches GitHub. */
 interface RepositoryAgentSeams {
   readonly onGitHub?: (sent: SentToGitHub) => void;
+  /** The edge runner the machine's checkout runs on, where not this test's own. */
+  readonly run?: SandboxRunner;
 }
 
 /** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
@@ -446,7 +449,7 @@ const repositoryAgent = (
       Effect.provide(
         Layer.mergeAll(
           http,
-          machineOver(http),
+          machineOver(http, seams.run),
           Layer.succeed(HostedEnvironment, NO_KEYS),
           FIXTURE_IMAGE,
         ),
@@ -527,9 +530,6 @@ const isRefresh = (run: { readonly env: Readonly<Record<string, string>> }) =>
 /** Whether a run in the sandbox was the install. */
 const isInstall = (run: { readonly args: readonly string[] }) =>
   run.args.some((arg) => arg.includes("pnpm install"));
-
-/** How much of the sandbox delete queue a test reads, the store's other sessions among it. */
-const QUEUE_READ = 1_000;
 
 /** The base snapshot's sandbox standing, where one does. */
 const baseSandbox = (api: ReturnType<typeof runnerSandboxApi>) =>
@@ -1634,6 +1634,39 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect("a halt waits out a runner that exits within its bound rather than killing it", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+      const runner = api.commands[0];
+      assert.ok(runner !== undefined);
+      // A read that waits for the running command's exit is held until it exits or its reader gives up.
+      api.waits.hold = true;
+
+      const halting = yield* Effect.forkChild(
+        sessions.halt(opened.sessionId, agent.conversationId),
+      );
+      // The liveness read gives up on the running runner at the sandbox's own two-second wait, and the runner is written its Stop.
+      yield* turnsPass;
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* turnsPass;
+      assert.deepEqual((yield* launchLines(runner)).at(-1), { type: INPUT_LINE.STOP, launch: 0 });
+      assert.equal(runner.exitCode, null);
+      // The runner exits five seconds after its Stop, past the machine's own wait and well within the halt's bound.
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* turnsPass;
+      api.exit(runner, 0);
+      const halted = yield* Fiber.join(halting);
+
+      assert.equal(halted, true);
+      assert.equal(runner.exitCode, 0);
+    }),
+  );
+
   it.effect("a sandbox opens on the short timeout", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2266,6 +2299,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
   it.effect(
+    "a repository agent's launch keeps every span it opens in the trace it was asked under, its checkout's on the edge's runner among them",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const sentry = recordingSentry();
+        // The edge runner traces as the web's runtime does, its root fiber handed nothing of the caller's.
+        const traced: SandboxRunner = (effect) =>
+          Effect.runPromise(effect.pipe(Effect.provide(sentryReportingLayer)));
+        const asked = yield* Effect.gen(function* () {
+          const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+            run: traced,
+          });
+          const opened = yield* sessions.open(message(agent, "Push a branch."));
+          assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+          assert.ok(api.runs.some(isClone));
+          return yield* Effect.currentSpan;
+        }).pipe(Effect.withSpan("web/startAgent"), Effect.provide(sentry.layer));
+        const traces = new Set(
+          sentOfType(sentry.sent, "span").flatMap((item) =>
+            JSON.parse(item.text).items.map((span: { trace_id: string }) => span.trace_id),
+          ),
+        );
+        assert.deepEqual([...traces], [asked.traceId]);
+      }),
+  );
+
+  it.effect(
     "a launch's end leaves the sandbox up while a developer's Terminal holds it, its credentials still on its firewall",
     () =>
       Effect.gen(function* () {
@@ -2393,7 +2454,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "reset deletes the sandbox, queues the session for the delete sweep, and retires the runner's bearer; a session gone answers retired",
+    "reset deletes the sandbox and retires the runner's bearer; a session gone answers retired",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2409,7 +2470,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, SESSION_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        assert.ok((yield* nextSessionSandboxes(QUEUE_READ)).includes(opened.sessionId));
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
@@ -2806,7 +2866,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "the next agent on the repository is created from the base snapshot, makes its user, fetches only its branch, installs, clones nothing, and launches with its write token standing",
+    "the next agent on the repository is created from the base snapshot, makes its user, fetches only its branch, installs nothing, clones nothing, and launches with its write token standing",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2838,7 +2898,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ownRuns[refresh]?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.REPOSITORY],
           RELAY_FULL_NAME,
         );
-        assert.ok(ownRuns.findIndex(isInstall) > refresh);
+        assert.equal(ownRuns.filter(isInstall).length, 0);
         assert.equal(api.commands.length, 2);
         assert.equal(api.snapshots.length, 1, "the base was not filled again");
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;

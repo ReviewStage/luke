@@ -1,18 +1,10 @@
-import {
-  type LiveStatement,
-  liveSelection,
-  liveStatementOf,
-} from "@repo/database/core/live-statement";
 import { Database, queryBuilder } from "@repo/database/core/query";
-import {
-  type WorkspaceStoreEffect,
-  workspaceReachableBy,
-} from "@repo/database/models/workspace-store";
+import type { WorkspaceStoreEffect } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, user } from "@repo/database/schemas/auth";
 import { automation } from "@repo/database/schemas/automation";
-import { inboxItem } from "@repo/database/schemas/inbox";
 import { descriptionRevision } from "@repo/database/schemas/description-revision";
+import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
 import { pinnedPictureUrl } from "@repo/features/account-picture";
 import { AUTOMATION_SCOPE } from "@repo/features/automation-wire";
@@ -83,7 +75,7 @@ const findMembers = SqlSchema.findAll({
  * tasks, started one of its agents, made one of its workspace automations,
  * saved a version of one of its tasks, or answered one of its Inbox items.
  */
-function formerOf(organizationId: string): SQL | undefined {
+export function formerOf(organizationId: string): SQL | undefined {
   const tasks = queryBuilder
     .select({ id: task.id })
     .from(task)
@@ -212,40 +204,4 @@ export function memberIdOf(
     findMemberId({ userId, organizationId }),
     Option.map((row) => row.id),
   );
-}
-
-/** The statements a workspace's people are followed by live: its members, and who its work names but left. */
-export type WorkspaceMembersLiveStatements = Readonly<Record<"members" | "former", LiveStatement>>;
-
-/**
- * A workspace's people written for Neon Realtime, read for `readerId`: the
- * same rows and columns as `listMembers` and `listFormerMembers`, each under
- * the key `live-wire.ts` reads it by, and none at all once the reader is no
- * longer a member, so a subscription stays bound to the rule its endpoint
- * checked. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
- */
-export function workspaceMembersLiveStatements(
-  readerId: string,
-  organizationId: string,
-): Option.Option<WorkspaceMembersLiveStatements> {
-  const reached = workspaceReachableBy(readerId, organizationId);
-  const members = queryBuilder
-    .select(
-      liveSelection({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        role: member.role,
-        image: user.image,
-      }),
-    )
-    .from(member)
-    .innerJoin(user, eq(user.id, member.userId))
-    .where(and(eq(member.organizationId, organizationId), reached));
-  const former = queryBuilder
-    .select(liveSelection({ userId: user.id, name: user.name, image: user.image }))
-    .from(user)
-    .where(and(formerOf(organizationId), reached));
-  return Option.all({ members: liveStatementOf(members), former: liveStatementOf(former) });
 }

@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { TranscriptWords } from "./tasks/transcript-blocks.js";
-import { withQueryClient } from "./testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "./testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
@@ -30,6 +30,7 @@ test("a reply is drawn only once the parser has landed, its HTML parsed", async 
   );
   assert.equal(container.textContent, "");
   await act(() => Effect.runPromise(markdownHtmlParserLanded));
+  await settleQueries();
   assert.equal(container.querySelector("kbd")?.textContent, "K");
   assert.equal(container.textContent, "Press K to search.");
   act(() => root.unmount());

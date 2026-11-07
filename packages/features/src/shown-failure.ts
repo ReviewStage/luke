@@ -198,6 +198,7 @@ export const FAILURE_SURFACE = {
   WINDOW_ZOOM: "window.zoom",
   WORKSPACES_READ: "workspaces.read",
   WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_ENVIRONMENT_READ: "workspace_environment.read",
   WORKSPACE_GITHUB: "workspace.github",
   WORKSPACE_GITHUB_DISCONNECT: "workspace_github.disconnect",
   WORKSPACE_INVITATIONS_READ: "workspace_invitations.read",
@@ -218,6 +219,8 @@ export const FAILURE_SURFACE = {
   WORKSPACE_SLACK_BOT_READ: "workspace_slack_bot.read",
   WORKSPACE_SLACK_BOT_REPOSITORY: "workspace_slack_bot.repository",
   WORKSPACE_TRANSFER: "workspace.transfer",
+  WORKSPACE_VARIABLE_DELETE: "workspace_variable.delete",
+  WORKSPACE_VARIABLE_SAVE: "workspace_variable.save",
   WORKSPACE_WRITE: "workspace.write",
 } as const;
 export type FailureSurface = (typeof FAILURE_SURFACE)[keyof typeof FAILURE_SURFACE];

@@ -32,6 +32,7 @@ export {
   MAC_COMMAND_MODE,
   MAC_COMMAND_MODE_LABEL,
   MAC_COMMAND_MODE_LIST,
+  MAC_COMMANDS_LABEL,
   type MacCommandMode,
 } from "./mac-commands.js";
 export {

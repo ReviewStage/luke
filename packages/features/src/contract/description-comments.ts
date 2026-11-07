@@ -8,10 +8,14 @@
  * answers in band (a key another thread holds, say), so its output is
  * detailed: the status beside the body. The ids travel in the path, and the
  * body of each write is exactly its wire request, read apart from them.
+ *
+ * Each declares the one refusal its handler answers
+ * (`packages/service/src/tasks/description-comments-procedures.ts`) beyond
+ * those any procedure may: a plan or a thread out of reach as not found.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";
 import {
@@ -23,8 +27,9 @@ import {
   descriptionCommentThreadAnswerSchema,
 } from "../description-comment-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import { TASK_BOUNDS } from "../task-wire.js";
-import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, refuses } from "./base.js";
 
 /** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds, and the comment's files. */
 const START_BODY_BYTES =
@@ -58,7 +63,8 @@ const descriptionCommentStartAnswerSchema = EffectSchema.Struct({
 
 export const descriptionCommentsContract = {
   /** The plan's threads, or the threads of the task's page `page` names, past the cursor `after` names, held while nothing moved; the start where it names none. */
-  read: hostedProcedure
+  read: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: COMMENTS_PATH }))
     .input(
       EffectSchema.Struct({
@@ -69,7 +75,8 @@ export const descriptionCommentsContract = {
     )
     .output(EffectSchema.flip(descriptionCommentsAnswerSchema)),
   /** A thread started with its first comment. */
-  start: hostedProcedure
+  start: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(START_BODY_BYTES))
     .meta(
       openapi({
@@ -82,7 +89,8 @@ export const descriptionCommentsContract = {
     .input(exactBodyInput(EffectSchema.Struct(taskIdField), descriptionCommentStartRequestSchema))
     .output(EffectSchema.flip(descriptionCommentStartAnswerSchema)),
   /** One thing done to one thread of the plan. */
-  act: hostedProcedure
+  act: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(ACTION_BODY_BYTES))
     .meta(
       openapi({

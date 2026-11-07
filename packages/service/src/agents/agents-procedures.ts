@@ -298,14 +298,15 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
-  // Whether the agent's `run_on_mac` would run now.
+  // Whose Mac the agent's `run_on_mac` runs on, and whether it would run there now.
   const workspaceToolsOf = (userId: string, agentId: string) =>
     Effect.gen(function* () {
       const { agent, target } = yield* reachedAgentById(userId, agentId);
       // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
       const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
       if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)) };
+      const runOnMac = yield* hostedStoreOrUnavailable(runOnMacStanding(agent, target));
+      return runOnMac === undefined ? {} : { runOnMac };
     });
   return {
     /**

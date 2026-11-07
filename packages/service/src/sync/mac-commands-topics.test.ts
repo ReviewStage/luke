@@ -13,10 +13,10 @@ import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { expectTopicsFire, getTestDB } from "@repo/database/testing";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
-import { macCommandsLive } from "./live-queries.js";
+import { macCommandsRead } from "../live/reads/mac-commands.js";
 
 /**
- * The Mac's live read of the commands it may claim (`macCommandsLive`) on
+ * The Mac's live read of the commands it may claim (`macCommandsRead`) on
  * the migrated capture: a command queued, claimed, settled, and withdrawn,
  * each through its real writer, notifies the account's topic, which the
  * read is woken on, so a Mac holding the read hears an agent's command
@@ -40,7 +40,7 @@ const wakesTheMac = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const fired = yield* expectTopicsFire(write, topics);
-    const woken = macCommandsLive.topics({ userId, kinds: MAC_COMMAND_KIND.SHELL });
+    const woken = macCommandsRead.topics({ userId, kinds: MAC_COMMAND_KIND.SHELL });
     assert.ok(
       topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id)),
       "the Mac's read is woken by a topic the write notifies",

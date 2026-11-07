@@ -1,9 +1,12 @@
 import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
 import {
   ATTACHMENT_VIEW,
+  attachmentText,
   attachmentView,
   chipBase64,
   type FileChip,
+  linesLabel,
+  peekOf,
   sizeLabel,
 } from "@repo/features/attachment-model";
 import { keptPictureIdOf } from "@repo/features/conversation-picture-wire";
@@ -19,7 +22,7 @@ import {
   useLeaving,
 } from "@repo/ui";
 import { isRecord, isWireString } from "@repo/wire";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
@@ -28,7 +31,8 @@ import { FileTypeIcon } from "./file-type-icon.js";
  *
  * An image is its thumbnail; any other file is its type's icon as the file
  * tree draws it (`file-type-icon.tsx`), its name, and its size, as every
- * chat app draws one. Both read the file's bytes from a `data:` URL, the one the
+ * chat app draws one, a text file its count of lines instead, with the head
+ * of its words in the card its chip hangs. Both read the file's bytes from a `data:` URL, the one the
  * message box made or the one the service kept on the developer's row, so a
  * transcript read back after a restart draws the same row. A press on a chip
  * opens its file over the window (`attachment-viewer.tsx`), walking the
@@ -93,6 +97,15 @@ export function messageFileChips(message: AgentTranscriptMessage): MessageFileCh
   });
 }
 
+/** A text file's words, or nothing where its bytes spell no base64, so a row read back with a damaged file still draws, its chip saying its size. */
+function wordsOf(base64: string): string | undefined {
+  try {
+    return attachmentText(base64);
+  } catch {
+    return undefined;
+  }
+}
+
 /** One file's chip in a row: its thumbnail or its type's icon, its name and size, its open, and its way off where the row has one. */
 function FileChipOf({
   file,
@@ -109,13 +122,20 @@ function FileChipOf({
   uploading?: boolean;
 }): React.JSX.Element {
   const base64 = chipBase64(file);
-  const thumbnail = base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  const view = base64 === "" ? ATTACHMENT_VIEW.OTHER : attachmentView(file);
+  const thumbnail = view === ATTACHMENT_VIEW.IMAGE;
+  // Note that a text file's words are read once for its file, since a chip draws again on every keystroke of the box it stands in.
+  const text = useMemo(
+    () => (view === ATTACHMENT_VIEW.TEXT ? wordsOf(base64) : undefined),
+    [view, base64],
+  );
   return (
     <AttachmentChip
       name={file.name}
       image={thumbnail ? file.url : undefined}
       icon={<FileTypeIcon name={file.name} />}
-      detail={base64 === "" ? undefined : sizeLabel(base64)}
+      detail={base64 === "" ? undefined : text === undefined ? sizeLabel(base64) : linesLabel(text)}
+      peek={text === undefined ? undefined : peekOf(text)}
       onOpen={base64 === "" ? undefined : onOpen}
       onRemove={onRemove}
       motionKey={motionKey}

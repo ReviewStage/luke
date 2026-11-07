@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { CheckIcon, RemoveIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
 import { HoverCard, HoverCardHead } from "../hover-card/hover-card.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
@@ -43,8 +44,9 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A file that is here hangs its card while the pointer rests on the chip: its
  * glyph, its whole name, and what more the chip says of it, as every other
- * chip hangs its kind's card. A file not here yet, or gone, hangs its name in
- * a pill instead, since there is no more to say.
+ * chip hangs its kind's card, and under them the head of a text file's words
+ * where the caller hands them (`peek`), faded at the card's foot. A file not
+ * here yet, or gone, hangs its name in a pill instead, since there is no more to say.
  *
  * A chip is one item of a list its caller draws and names, so the caller
  * owns the row's layout; the chip takes no class or style.
@@ -225,6 +227,7 @@ export function AttachmentChip({
   progress,
   failure,
   motionKey,
+  peek,
 }: {
   /** The file's name, which names the chip, its open, and its way off. */
   name: string;
@@ -248,6 +251,8 @@ export function AttachmentChip({
   failure?: string | undefined;
   /** The key a `ListMotion` around its list follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
+  /** The head of a text file's words, which its card shows under its name; none for a file with no words to show. */
+  peek?: string | undefined;
 }): React.JSX.Element {
   const ready = state === ATTACHMENT_CHIP_STATE.READY;
   const uploading = state === ATTACHMENT_CHIP_STATE.UPLOADING;
@@ -274,6 +279,9 @@ export function AttachmentChip({
   const card = ready ? (
     <HoverCard data-attachment-card="">
       <HoverCardHead glyph={glyph} name={name} sub={detail} />
+      {peek === undefined ? null : (
+        <FileText text={peek} label={name} extent={FILE_TEXT_EXTENT.PEEK} />
+      )}
     </HoverCard>
   ) : undefined;
   return (

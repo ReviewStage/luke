@@ -9,11 +9,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AppPlatform } from "./app-platform.js";
 import { installAppPlatform } from "./app-platform.js";
-import { SideBundlesContext, sideBundles } from "./bundle-loader.js";
-import { markdownHtmlParserAtom } from "./markdown-html-parser.js";
-import { rendererRegistry } from "./renderer-runtime.js";
+import { SideBundlesContext } from "./bundle-loader.js";
+import { markdownHtmlParserQuery } from "./markdown-html-parser.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { standInBundles } from "./testing/side-bundles.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 
 /**
@@ -77,7 +77,7 @@ function Startup(props: { readonly state: AppStateSnapshot }): null {
 function draw(first: AppStateSnapshot): (next: AppStateSnapshot) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     descriptionEditor: () => {
       editorImports += 1;
       return new Promise(() => undefined);
@@ -114,7 +114,7 @@ test("session replay and the prefetches start once the renderer is idle, not on 
 
   assert.deepEqual(heard, []);
   assert.equal(editorImports, 0);
-  assert.equal(rendererRegistry.getNodes().has(markdownHtmlParserAtom), false);
+  assert.equal(testQueryClientNow().getQueryState(markdownHtmlParserQuery.queryKey), undefined);
 
   goIdle();
 
@@ -122,7 +122,7 @@ test("session replay and the prefetches start once the renderer is idle, not on 
     { permitted: true, appVersion: "1.0.0", packaged: true, accountId: "user-1" },
   ]);
   assert.equal(editorImports, 1);
-  assert.equal(rendererRegistry.getNodes().has(markdownHtmlParserAtom), true);
+  assert.notEqual(testQueryClientNow().getQueryState(markdownHtmlParserQuery.queryKey), undefined);
 });
 
 test("a renderer that never goes idle still starts session replay within a few seconds", () => {

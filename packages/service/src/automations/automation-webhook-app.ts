@@ -1,11 +1,11 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readWebhookAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
+import { readWebhookAutomation } from "@repo/database/models/automation-store";
 import { wireUuidSchema } from "@repo/features";
 import { AUTOMATION_FIRING, AUTOMATION_WEBHOOK } from "@repo/features/automation-wire";
 import { HTTP_METHOD, unparsedWire } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { DateTime, Effect, Layer, Option, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -18,9 +18,10 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { AutomationCadence, cadenceOrUnavailable } from "./automation-cadence.js";
 
 /**
- * automation-webhook-app.ts -- an automation's webhook address: a call under the trigger's secret queues one run, its body kept for the agent's prompt.
+ * automation-webhook-app.ts -- an automation's webhook address: a call under the trigger's secret fires one run, its body kept for the agent's prompt.
  *
  * The caller is whatever the developer handed the address to, Sentry, a CI
  * job, a script, so it carries no account bearer: it is admitted by the
@@ -34,8 +35,11 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * a sender does not retry. The run is queued under the caller's
  * `Idempotency-Key` where it sends one, so a retry is the same run, with
  * the body as it came, UTF-8 up to its bound and holding no NUL, which a
- * text column cannot keep, beside it; the minute sweep starts the agent,
- * which is handed the body fenced as the caller's own text. Nothing of the
+ * text column cannot keep, beside it. The call is answered once its firing
+ * is published to the automation-runs queue, whose consumer records the
+ * run and starts the agent (`automation-run-consumer.ts`), which is handed
+ * the body fenced as the caller's own text; a publish refused answers
+ * unavailable, so the caller sends it again under the same key. Nothing of the
  * body or the secret is logged.
  */
 
@@ -75,7 +79,7 @@ function dedupeKeyOf(request: Request): string {
   return createHash("sha256").update(sent).digest("hex");
 }
 
-/** POST: one call, admitted by the trigger's secret, queuing one run. */
+/** POST: one call, admitted by the trigger's secret, publishing one firing. */
 const webhookEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookEndpoint")(
   function* (): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
@@ -109,18 +113,17 @@ const webhookEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookEndpoint
     ).pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
     // A NUL is UTF-8 but no text a column keeps, so a body holding one is refused rather than lost.
     if (text.includes("\u0000")) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const firedAt = yield* DateTime.nowAsDate;
-    const recorded = yield* hostedStoreOrUnavailable(
-      recordAutomationRun(automation.value, {
+    const cadence = yield* AutomationCadence;
+    yield* cadenceOrUnavailable(
+      cadence.publish({
+        automationId: automation.value.id,
         dedupeKey: dedupeKeyOf(request),
         firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: body.byteLength },
         payload: text,
-        firedAt,
+        firedAt: yield* Clock.currentTimeMillis,
       }),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-      queued: Option.isSome(recorded) ? 1 : 0,
-    });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { queued: 1 });
   },
 );
 

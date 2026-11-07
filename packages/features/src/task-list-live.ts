@@ -194,6 +194,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   /** The Mac a local agent runs on, by its id and its name; null for an agent in a sandbox, or whose Mac is gone. */
   deviceId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   deviceName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** Whether the agent's conversation records its sandbox's session; absent from a statement before it was carried. */
+  sandboxOpen: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -488,6 +490,7 @@ function agentSummaryOf(
     ...(continuedBy === undefined ? undefined : { continuedBy }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
     ...(stoppable ? undefined : { stoppable: false }),
+    ...(row.sandboxOpen === undefined ? undefined : { sandboxOpen: row.sandboxOpen }),
   };
 }
 

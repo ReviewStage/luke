@@ -16,8 +16,8 @@
  * ring for that account and session alone (`provider-key-seal.ts`), and
  * every write sends them beside what it gathered. A launch keeps them before
  * it writes, and nothing else changes them; they stand on the firewall until
- * the sandbox stops, and the scheduled sweep drops the row once its session
- * is long gone. With nothing to carry, the policy is the open internet.
+ * the sandbox stops, and the agent's next launch in another session deletes
+ * the row. With nothing to carry, the policy is the open internet.
  *
  * Two writers that compose from the same sources send the same policy, so
  * whichever lands last is right; a GitHub credential minted twice is two
@@ -414,7 +414,7 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           storeUnavailable("the firewall's launch could not be read"),
         );
         yield* sent(session, sources, launch?.swaps ?? NO_SWAPS);
-      }),
+      }).pipe(Effect.withSpan("web/writeSandboxFirewall")),
     keepLaunch: (session, launch) =>
       Effect.gen(function* () {
         const ring = yield* keyRing;
@@ -427,6 +427,9 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           },
           yield* DateTime.nowAsDate,
         );
-      }).pipe(storeUnavailable("the firewall's launch could not be kept")),
+      }).pipe(
+        storeUnavailable("the firewall's launch could not be kept"),
+        Effect.withSpan("web/keepFirewallLaunch"),
+      ),
   };
 }

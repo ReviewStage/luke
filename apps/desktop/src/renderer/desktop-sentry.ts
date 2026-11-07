@@ -23,6 +23,7 @@ import type { ShownFailureSent } from "@repo/features/shown-failure";
 import type { ShownFailureReporter } from "@repo/panel/failure-report";
 import type { PanelSpanRecorder } from "@repo/panel/panel-spans";
 import { queryClient } from "@repo/panel/query-client";
+import type { SendTracer } from "@repo/panel/send-traces";
 
 /** Why a window drew nothing: its state could not be read, or its surface failed to render. */
 export const BLANK_WINDOW = { FIRST_READ: "first_read", RENDER: "render" } as const;
@@ -34,6 +35,8 @@ export interface DesktopSentry {
   readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
   /** Records one span the panel timed, sampled as the window's traces are. */
   readonly recordSpan: PanelSpanRecorder;
+  /** Runs a send the panel was pressed for under a span of its own, handed its trace. */
+  readonly traceSend: SendTracer;
   /** Reports a failure the panel showed: a log line, and an issue besides where nothing named it. */
   readonly reportShownFailure: ShownFailureReporter;
 }
@@ -44,6 +47,8 @@ export interface DesktopSentryReports {
   readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
   /** Records one span the panel timed, kept for the SDK where it does not stand yet. */
   readonly recordSpan: PanelSpanRecorder;
+  /** Runs a send under a span of its own where the SDK stands, and untraced where it does not yet. */
+  readonly traceSend: SendTracer;
   /** Reports a failure the panel showed, kept for the SDK where it does not stand yet. */
   readonly reportShownFailure: ShownFailureReporter;
   /** Loads and starts the SDK, once however often it is asked. */
@@ -76,7 +81,13 @@ async function loadedSentry(): Promise<DesktopSentry | undefined> {
  */
 export function startDesktopSentry(): DesktopSentryReports {
   const asked = Promise.withResolvers<void>();
-  const { say, settled } = reportsOnceStarted(asked.promise.then(loadedSentry), EARLY_REPORTS_KEPT);
+  // The SDK once it stands, which a send is traced through; a send pressed before then waits on nothing.
+  let standing: DesktopSentry | undefined;
+  const started = asked.promise.then(loadedSentry).then((sentry) => {
+    standing = sentry;
+    return sentry;
+  });
+  const { say, settled } = reportsOnceStarted(started, EARLY_REPORTS_KEPT);
   return {
     reportBlankWindow: (error, why) => {
       say((sentry) => sentry.reportBlankWindow(error, why));
@@ -84,6 +95,8 @@ export function startDesktopSentry(): DesktopSentryReports {
     recordSpan: (span) => {
       say((sentry) => sentry.recordSpan(span));
     },
+    traceSend: (name, send) =>
+      standing === undefined ? send(undefined) : standing.traceSend(name, send),
     // Note that what Sentry answered is known only where the SDK already stands,
     // because a report kept for it is sent once it does, long after this answers.
     reportShownFailure: (report) => {

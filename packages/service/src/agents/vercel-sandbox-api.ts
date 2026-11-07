@@ -42,6 +42,7 @@ import {
 import { Context, Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
+import { sentryStep } from "../observability/sentry.js";
 
 /** The tag every session's sandbox carries, its value the session's id. */
 export const SESSION_TAG = "sessionId";
@@ -148,6 +149,27 @@ export const SANDBOX_CALL = {
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
+
+/** The span each call is traced under, named for the call alone, never for what it was asked. */
+const SANDBOX_CALL_SPAN = {
+  [SANDBOX_CALL.CREATE]: "web/sandboxCreate",
+  [SANDBOX_CALL.GET_OR_CREATE]: "web/sandboxGetOrCreate",
+  [SANDBOX_CALL.FS_WRITE]: "web/sandboxWriteFiles",
+  [SANDBOX_CALL.CMD]: "web/sandboxCommand",
+  [SANDBOX_CALL.STDIN]: "web/sandboxWriteStdin",
+  [SANDBOX_CALL.LOGS]: "web/sandboxCommandLogs",
+  [SANDBOX_CALL.KILL]: "web/sandboxKill",
+  [SANDBOX_CALL.TAGS]: "web/sandboxUpdateTags",
+  [SANDBOX_CALL.GET]: "web/sandboxGet",
+  [SANDBOX_CALL.LIST]: "web/sandboxList",
+  [SANDBOX_CALL.DELETE]: "web/sandboxDelete",
+  [SANDBOX_CALL.STOP]: "web/sandboxStop",
+  [SANDBOX_CALL.SESSION]: "web/sandboxSession",
+  [SANDBOX_CALL.EXTEND]: "web/sandboxExtend",
+  [SANDBOX_CALL.NETWORK_POLICY]: "web/sandboxNetworkPolicy",
+  [SANDBOX_CALL.INTERACTIVE]: "web/sandboxInteractive",
+  [SANDBOX_CALL.SNAPSHOT]: "web/sandboxSnapshot",
+} as const satisfies Record<SandboxCall, string>;
 
 /**
  * Vercel could not be asked, or did not confirm what was asked: the call
@@ -661,12 +683,14 @@ function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
   return new SandboxUnavailable({ call, detail: causeDetail(cause) });
 }
 
-/** One SDK call as an effect, its failure read as the call's; interrupting it aborts the SDK's request. */
+/** One SDK call as an effect under the call's span, its failure read as the call's; interrupting it aborts the SDK's request. */
 function sdkCall<A>(
   call: SandboxCall,
   run: (signal: AbortSignal) => Promise<A>,
 ): Effect.Effect<A, SandboxUnavailable> {
-  return Effect.tryPromise({ try: run, catch: (cause) => sdkFailure(call, cause) });
+  return Effect.tryPromise({ try: run, catch: (cause) => sdkFailure(call, cause) }).pipe(
+    Effect.withSpan(SANDBOX_CALL_SPAN[call]),
+  );
 }
 
 /** Whether a failure is Vercel's answer that what was named is already gone. */
@@ -699,13 +723,27 @@ function sdkPolicyOf(policy: NetworkPolicy): SdkNetworkPolicy {
   };
 }
 
-/** The user made in the sandbox as the SDK makes one, its home's folders made and the home closed (`SandboxUser`). */
+/**
+ * The user made in the sandbox as the SDK makes one, its home's folders made
+ * and the home closed (`SandboxUser`), each call a span of its own under the
+ * create's (`sentryStep`), since they run inside the SDK's own `onCreate`.
+ */
 async function madeUser(sandbox: Sandbox, made: SandboxUser, signal: AbortSignal): Promise<void> {
-  const user = await sandbox.createUser(made.name, { signal });
-  const { group } = await sandbox.getDefaultUser({ signal });
-  await sandbox.addUserToGroup(made.name, group, { signal });
-  for (const folder of made.homeFolders) await user.mkDir(folder, { signal });
-  const closed = await user.runCommand("chmod", ["700", user.homeDir], { signal });
+  const user = await sentryStep("web/sandboxCreateUser", () =>
+    sandbox.createUser(made.name, { signal }),
+  );
+  const { group } = await sentryStep("web/sandboxDefaultUser", () =>
+    sandbox.getDefaultUser({ signal }),
+  );
+  await sentryStep("web/sandboxAddUserToGroup", () =>
+    sandbox.addUserToGroup(made.name, group, { signal }),
+  );
+  for (const folder of made.homeFolders) {
+    await sentryStep("web/sandboxMakeDirectory", () => user.mkDir(folder, { signal }));
+  }
+  const closed = await sentryStep("web/sandboxCloseHome", () =>
+    user.runCommand("chmod", ["700", user.homeDir], { signal }),
+  );
   if (closed.exitCode !== 0) throw new Error(`${user.homeDir} could not be closed`);
 }
 
@@ -1014,7 +1052,7 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           Sandbox.get({ ...under, name, resume: true, signal }),
         ),
         openedOf,
-      );
+      ).pipe(Effect.withSpan("web/sandboxResume"));
 
     return {
       listTagged: (sessionId) =>

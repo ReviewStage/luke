@@ -17,7 +17,7 @@ import { handHostReads, handState, holdBrowserTabs } from "../testing/app-state.
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
@@ -126,10 +126,7 @@ async function mount(
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
+      onRegistry(AtomRegistry.make(), createElement(DesktopTasks, { looks: NO_LOOKS, tasks })),
     ),
   );
   await settle();

@@ -22,7 +22,6 @@ import {
   stripTabLink,
   stripTabLook,
   stripTabPin,
-  stripTabPreviews,
   stripTabReopens,
   stripTabStays,
   stripTabSurface,
@@ -71,11 +70,10 @@ const HOLDER = { taskId: TASK };
  * the tabs below, so a kind that checks what the task draws answers no, and
  * one that draws again whatever the task draws answers yes.
  */
-const DRAWS_NOTHING: TaskDraws = { agents: [], openAgents: [], taskAgents: [], pages: [] };
+const DRAWS_NOTHING: TaskDraws = { openAgents: [], taskAgents: [], pages: [] };
 
 /** A task none of whose agents, open agent tabs, or pages are read yet. */
 const DRAWS_UNREAD: TaskDraws = {
-  agents: undefined,
   openAgents: undefined,
   taskAgents: undefined,
   pages: undefined,
@@ -101,7 +99,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.NONE,
       kept: { column: true, sidePanel: true },
-      previews: false,
       takesFind: true,
       stays: true,
     },
@@ -120,7 +117,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.SIDEBAR,
       kept: { column: true, sidePanel: true },
-      previews: false,
       takesFind: true,
       stays: false,
     },
@@ -139,7 +135,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.ACCOUNT,
       kept: { column: true, sidePanel: false },
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -158,7 +153,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -177,7 +171,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -196,7 +189,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -215,7 +207,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.SIDEBAR,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -234,7 +225,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.SIDEBAR,
       kept: { column: false, sidePanel: true },
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -253,7 +243,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.SIDEBAR,
       kept: { column: false, sidePanel: true },
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -272,7 +261,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -291,7 +279,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: true,
       stays: false,
     },
@@ -310,7 +297,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: true,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: false,
       stays: false,
     },
@@ -329,7 +315,6 @@ describe("a strip tab's kind answers", () => {
       closesIdle: false,
       pin: TAB_PIN.NONE,
       kept: NOWHERE,
-      previews: true,
       takesFind: false,
       stays: false,
     },
@@ -352,7 +337,6 @@ describe("a strip tab's kind answers", () => {
           closesIdle: stripTabClosesIdle(tab),
           pin: stripTabPin(tab),
           kept: stripTabKept(tab),
-          previews: stripTabPreviews(tab),
           takesFind: stripTabTakesFind(tab),
           stays: stripTabStays(tab),
         },
@@ -363,7 +347,7 @@ describe("a strip tab's kind answers", () => {
 
   // Note that each row names its tab in its own list alone, so a kind that reads another list draws nothing.
   it.each([
-    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, agents: [AGENT] } },
+    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, taskAgents: [AGENT] } },
     {
       kind: "subagent",
       tab: subagentTab(CALL, { agent: AGENT, task: "Read the logs" }),

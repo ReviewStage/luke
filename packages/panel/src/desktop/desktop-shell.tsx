@@ -32,7 +32,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatch } from "@tanstack/react-router";
 import {
   Activity,
   createContext,
@@ -76,7 +76,7 @@ import {
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { backPlaceOf } from "./back-place.js";
-import { DesktopAgentPage } from "./desktop-agent-page.js";
+import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -95,7 +95,6 @@ import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-pane
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
-import { useSummaryPin } from "./task-summary.js";
 import { TasksPagesHeld } from "./tasks-page-held.js";
 import { useWindowTitle } from "./window-title.js";
 
@@ -693,7 +692,6 @@ interface ShellPlacesInput {
   readonly settings: SettingsPanelProps;
   readonly shell: RefObject<HTMLDivElement | null>;
   readonly keepOverlay: ReturnType<typeof useFloatDismiss>;
-  readonly summary: ReturnType<typeof useSummaryPin>;
   readonly looks: ReturnType<typeof useTaskLooks>;
   readonly mentionedAgents: React.ComponentProps<typeof MentionedAgents>["value"];
   readonly chipCards: React.ComponentProps<typeof ChipCards>["value"];
@@ -735,9 +733,8 @@ export function useShellPlaces(): ShellPlacesInput {
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the task's page (`use-task-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or the task's summary pinned
- * or folded to its rail, by a press or by its column's room
- * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
+ * opening, shutting, or growing the side panel glides the work beside them
+ * (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
  * press outside it and its toggle. A stage as narrow as a phone's stands the
@@ -797,8 +794,6 @@ export function DesktopShell({
     onOpen: () => sidebar.onOverlay(SIDEBAR_OVERLAY.OPEN),
     onClose: () => sidebar.onOverlay(SIDEBAR_OVERLAY.CLOSED),
   });
-  // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
-  const summary = useSummaryPin(sidebar.staged);
   // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
   const setToggleRoom = usePanelToggleRoom();
   // Note that setup standing before the app holds the places' chords too, so none lands behind it, as New workspace's cards do.
@@ -968,7 +963,6 @@ export function DesktopShell({
     settings,
     shell,
     keepOverlay,
-    summary,
     looks,
     mentionedAgents,
     chipCards,
@@ -1008,7 +1002,6 @@ export function ShellPlaces(): React.JSX.Element {
     settings,
     shell,
     keepOverlay,
-    summary,
     mentionedAgents,
     chipCards,
     newTaskDialog,
@@ -1140,7 +1133,6 @@ export function ShellPlaces(): React.JSX.Element {
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: tasks.sidePanel.open,
           panelFullScreen: tasks.sidePanel.fullScreen,
-          summaryPinned: summary.pinned && summary.wide,
         }}
       />
     </div>
@@ -1157,25 +1149,29 @@ export function InboxPlace(): null {
 }
 
 /**
+ * What an agent's addresses draw in the places' content slot: the page of
+ * the agent its address names, at the page's own address, and the place the
+ * window's state says under any address beneath it, a worker's, its
+ * Changes', or a message's, which a step on a task's tab is written at.
+ */
+export function AgentPlace(): React.JSX.Element {
+  const { tasks, room, away } = useShellPlaces();
+  const ownPage = useMatch({ from: "/places/$workspace/agent/$agentId/", shouldThrow: false });
+  if (ownPage === undefined) return <StatePlace />;
+  return <AgentRoutePage tasks={tasks} away={room === SHELL_ROOM.NARROW ? away : undefined} />;
+}
+
+/**
  * What a place the window's state says draws in the places' content slot:
- * a task, an agent's page, or a workspace not there for the reader. Every
- * route not yet moved onto the router draws this one component, so moving
- * between them keeps it drawn.
+ * a task, or a workspace not there for the reader. Every route not yet
+ * moved onto the router draws this one component, so moving between them
+ * keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
-  const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
+  const { tasks, room, sidebar, settings, looks, away } = useShellPlaces();
   const { account } = settings;
-  const pageAgent = tasks.agentView.agentId;
   const unknownWorkspace = tasks.unknownWorkspace.open;
-  return pageAgent !== undefined ? (
-    // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-    <DesktopAgentPage
-      key={pageAgent}
-      tasks={tasks}
-      agentId={pageAgent}
-      away={room === SHELL_ROOM.NARROW ? away : undefined}
-    />
-  ) : unknownWorkspace ? (
+  return unknownWorkspace ? (
     // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
     <ReplayUnmask>
       <NotFound
@@ -1193,7 +1189,6 @@ export function StatePlace(): React.JSX.Element {
     <DesktopTasks
       tasks={tasks}
       looks={looks}
-      summary={summary}
       room={room}
       away={away}
       accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}

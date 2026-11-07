@@ -25,7 +25,7 @@ import { CatalogSection } from "../section";
 /**
  * tabs.tsx -- a strip of tabs to choose, close, and drag along, the chosen
  * one raised: one with a count after its name, one marked failed, one that
- * something arrived on, and a preview; the same strip on the frame, led by
+ * something arrived on; the same strip on the frame, led by
  * the task it heads, its status mark and name, anchored where no drag or
  * close reaches it; the same strip in a narrow row, where
  * it scrolls along with the chosen tab pinned; and a switcher's row of recent
@@ -41,7 +41,6 @@ interface SampleTab {
   readonly detailTone?: StatusTone;
   readonly failed?: boolean;
   readonly unread?: boolean;
-  readonly preview?: boolean;
   /** Leads the strip and never moves or closes: the task the strip heads. */
   readonly anchored?: boolean;
 }
@@ -59,7 +58,7 @@ const SAMPLE_TABS: readonly SampleTab[] = [
   { id: "failed", icon: <UserIcon />, label: "Migrate the sessions table", failed: true },
   { id: "changes", icon: <CodeIcon />, label: "Changes", unread: true },
   { id: "terminal", icon: <TerminalIcon />, label: "Terminal" },
-  { id: "board", icon: <BoardIcon />, label: "token-refresh.ts", preview: true },
+  { id: "board", icon: <BoardIcon />, label: "token-refresh.ts" },
 ];
 
 /** The frame's strip: the task it heads first, by its status mark and name, then its tabs. */
@@ -120,18 +119,12 @@ function Strip({
               ) : undefined
             }
             unread={tab.unread === true && !seen.has(tab.id)}
-            preview={tab.preview === true}
             anchored={tab.anchored === true}
             selected={tab.id === chosen}
             onSelect={() => {
               setChosen(tab.id);
               setSeen((was) => new Set([...was, tab.id]));
             }}
-            onKeep={() =>
-              setTabs((was) =>
-                was.map((each) => (each.id === tab.id ? { ...each, preview: false } : each)),
-              )
-            }
             onClose={
               tab.anchored === true
                 ? undefined
@@ -201,7 +194,7 @@ function Cards(): React.JSX.Element {
 function TabsExamples(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="tabs-strip" title="A strip: choose, close, double-click a preview, drag">
+      <CatalogSection id="tabs-strip" title="A strip: choose, close, drag">
         <Strip />
       </CatalogSection>
       <CatalogSection

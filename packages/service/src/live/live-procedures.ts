@@ -49,11 +49,11 @@
  *
  * `GET /api/live/sidebar` answers the account's sidebar sections, the tasks
  * and agents in them, and its pinned repositories as four, woken by a write
- * to any of them (`sidebarLive`).
+ * to any of them (`sidebarRead`).
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
- * to them, woken as the task list is (`workspacesLive`). `GET /api/live/workspace-members?workspaceId=` answers one
+ * to them, woken as the task list is (`workspacesRead`). `GET /api/live/workspace-members?workspaceId=` answers one
  * workspace's people as two, its members and who its work names but left,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found, as its held read answers.
@@ -66,7 +66,7 @@
  * one, each with its keeper's name and whether the reader may forget it,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found; woken by a memory kept, corrected, or forgotten, and by the
- * reader's own membership moving (`workspaceMemoriesLive`).
+ * reader's own membership moving (`workspaceMemoriesRead`).
  * `GET /api/live/hosts` answers the account's hosts as one, with the install
  * script's address on the origin the request reached; woken by a host
  * enrolled, approved, renamed, removed, or moving through an update
@@ -75,23 +75,23 @@
  * account sees there, the workspace's and its own, each with whether it may
  * manage it, on the same membership check; woken by one of them installed,
  * changed, shared, or removed, and by the reader's membership moving
- * (`installedSkillsLive`).
+ * (`installedSkillsRead`).
  * `GET /api/live/workspace-integrations?workspaceId=` answers its active
  * Sentry installations, its Slack bot, and each Slack channel's repository
  * as three, to a member of it, so a workspace it is not in is not found,
  * with whether this deployment holds each integration beside them, which no
  * statement reads; woken by an install, a disconnect, Sentry's uninstall, a
  * repository named, and the reader's own membership moving
- * (`workspaceIntegrationsLive`).
+ * (`workspaceIntegrationsRead`).
  *
  * `GET /api/live/automations?workspaceId=` answers a workspace's automations
  * the account reads, each with its newest run, and
  * `GET /api/live/automation-workspace-runs?workspaceId=` their newest runs,
- * one statement each (`automation-live.ts`); `GET /api/live/automation-runs?id=`
- * answers one automation's newest runs, after the automation is read as the
- * account, so one it does not read is not found. Each is woken by a write
- * that names the automation's workspace (`automationsLive`,
- * `automationWorkspaceRunsLive`, `automationRunsLive`).
+ * one statement each; `GET /api/live/automation-runs?id=` answers one
+ * automation's newest runs, after the automation is read as the account,
+ * so one it does not read is not found. Each is woken by a write that names
+ * the automation's workspace (`automationsRead`,
+ * `automationWorkspaceRunsRead`, `automationRunsRead`).
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -130,10 +130,10 @@
  * agent's pull request's newest chapters as one statement, after the agent
  * is read as the account and a token minted for its repository confirms its
  * workspace still reaches it, as the agent's own read of them admits a
- * reader (`agentChaptersAdmission`), so an agent it does not reach is not
+ * reader, so an agent it does not reach is not
  * found; with whether the reader can generate them on a key of their own
  * beside it, which no statement can read. It is woken by a claim, finish,
- * or failure in the agent's workspace (`pullRequestChaptersLive`), so
+ * or failure in the agent's workspace (`pullRequestChaptersRead`), so
  * another member's Generate reaches an open view without a Refresh.
  *
  * `GET /api/live/integration-statuses` answers every integration row the
@@ -142,7 +142,7 @@
  * providers the deployment offers the account and those that take several
  * accounts beside them, which no statement can read. It is woken by a
  * sign-in begun, completed, or ended, a label, an expiry, or a disconnect
- * (`integrationStatusesLive`), so a sign-in finished in the browser reaches
+ * (`integrationStatusesRead`), so a sign-in finished in the browser reaches
  * an open view with no focus. GitHub's standing is
  * `/api/account/integrations/github`'s, read beside it.
  *
@@ -150,27 +150,21 @@
  * as one statement, its default agent, chapters model, and Slack
  * notifications as stored, none for an account that stored nothing, woken
  * by a write to any of them or to another column a view reads
- * (`accountPreferencesLive`), so a default chosen on another device reaches
+ * (`accountPreferencesRead`), so a default chosen on another device reaches
  * an open window within one coalesce window.
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readVisibleAgent } from "@repo/database/models/agent-store";
-import { readAutomation } from "@repo/database/models/automation-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
-import {
-  ensurePersonalWorkspace,
-  isWorkspaceMember,
-  workspaceOf as workspaceOfAccount,
-} from "@repo/database/models/workspace-store";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
-import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   type AnyLiveRead,
   LIVE_PARAM,
@@ -186,14 +180,11 @@ import {
   liveDigestOn,
   type SealedLiveQueryWire,
 } from "@repo/features/live-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
-import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -203,31 +194,14 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountIntegrationConnect } from "../integrations/integration-connect.js";
-import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { SlackBot } from "../slack/slack-bot.js";
 import {
-  accountPreferencesLive,
   agentInboxLive,
   agentTranscriptLive,
-  automationRunsLive,
-  automationsLive,
-  automationWorkspaceRunsLive,
   inboxItemsLive,
   inboxLive,
-  installedSkillsLive,
-  integrationStatusesLive,
-  macCommandsLive,
-  pullRequestChaptersLive,
-  sidebarLive,
   taskInboxLive,
   tasksLive,
-  workspaceIntegrationsLive,
-  workspaceInvitationsLive,
-  workspaceMembersLive,
-  workspaceMemoriesLive,
-  workspacesLive,
 } from "../sync/live-queries.js";
 import {
   type LiveParams,
@@ -237,16 +211,31 @@ import {
   syncMovedOf,
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { agentOriginRead } from "./reads/agent-origin.js";
+import {
+  automationRunsRead,
+  automationsRead,
+  automationWorkspaceRunsRead,
+} from "./reads/automations.js";
 import { agentBrowserTabsRead, taskBrowserTabsRead } from "./reads/browser-tabs.js";
 import { hostsRead } from "./reads/hosts.js";
+import { installedSkillsRead } from "./reads/installed-skills.js";
+import { integrationStatusesRead } from "./reads/integration-statuses.js";
+import { macCommandsRead } from "./reads/mac-commands.js";
 import { agentPagesRead, taskPagesRead } from "./reads/pages.js";
+import { pullRequestChaptersRead } from "./reads/pull-request-chapters.js";
+import { sidebarRead } from "./reads/sidebar.js";
 import { taskCommentsRead } from "./reads/task-comments.js";
 import { taskHistoryRead } from "./reads/task-history.js";
 import { taskRecordRead } from "./reads/task-record.js";
+import { workspaceIntegrationsRead } from "./reads/workspace-integrations.js";
+import { workspaceInvitationsRead } from "./reads/workspace-invitations.js";
+import { workspaceMembersRead } from "./reads/workspace-members.js";
+import { workspaceMemoriesRead } from "./reads/workspace-memories.js";
+import { workspacesRead } from "./reads/workspaces.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -887,11 +876,10 @@ function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
 }
 
 /** The live reads, each to a signed-in caller who is the account it names. */
-/** The roles that read and manage a workspace's invitations, as its held read admits them. */
-const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
+  const answerWorkspaces = answerBoundRead(workspacesRead);
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -928,44 +916,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         ? liveQueryParts(tasksLive, { userId: context.userId }, input)
         : liveDeltaParts(tasksLive, { userId: context.userId }, sync);
     }),
-    automations: signedIn.automations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      return yield* liveQueryParts(
-        automationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(function* ({
-      input,
-      context,
-    }) {
-      yield* sameUser(input, context.userId);
-      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      return yield* liveQueryParts(
-        automationWorkspaceRunsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const automationId = yield* pathUuid(input.id);
-      const automation = yield* hostedStoreOrUnavailable(
-        readAutomation(context.userId, automationId),
-      );
-      if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        automationRunsLive,
-        {
-          userId: context.userId,
-          automationId,
-          workspaceId: automation.value.organizationId,
-        },
-        input,
-      );
-    }),
+    automations: signedIn.automations.effect(answerBoundRead(automationsRead)),
+    automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(
+      answerBoundRead(automationWorkspaceRunsRead),
+    ),
+    automationRuns: signedIn.automationRuns.effect(answerBoundRead(automationRunsRead)),
     taskRecord: signedIn.taskRecord.effect(answerBoundRead(taskRecordRead)),
     taskPages: signedIn.taskPages.effect(answerBoundRead(taskPagesRead)),
     agentPages: signedIn.agentPages.effect(answerBoundRead(agentPagesRead)),
@@ -974,15 +929,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskComments: signedIn.taskComments.effect(answerBoundRead(taskCommentsRead)),
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(answerBoundRead(taskBrowserTabsRead)),
     agentBrowserTabs: signedIn.agentBrowserTabs.effect(answerBoundRead(agentBrowserTabsRead)),
-    macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(
-        macCommandsLive,
-        { userId: context.userId, kinds: input.kinds ?? "" },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
+    macCommands: signedIn.macCommands.effect(answerBoundRead(macCommandsRead)),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
@@ -1033,127 +980,38 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
     }),
-    sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(sidebarLive, { userId: context.userId }, input);
-    }),
-    workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
+    sidebar: signedIn.sidebar.effect(answerBoundRead(sidebarRead)),
+
+    workspaces: signedIn.workspaces.effect(function* (asked) {
+      yield* sameUser(asked.input, asked.context.userId);
       // Note that this read is the only one a client makes of the account's workspaces, so it makes the first.
-      yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(context.userId, seams.workspaces));
-      return yield* liveQueryParts(workspacesLive, { userId: context.userId }, input);
+      yield* pluginWriteOrUnavailable(
+        ensurePersonalWorkspace(asked.context.userId, seams.workspaces),
+      );
+      return yield* answerWorkspaces(asked);
     }),
-    workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        workspaceMembersLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    workspaceInvitations: signedIn.workspaceInvitations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const workspace = yield* hostedStoreOrUnavailable(
-        workspaceOfAccount(context.userId, input.workspaceId),
-      );
-      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (!MANAGING_ROLES.has(workspace.value.role)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      }
-      const sealed = yield* liveQueryParts(
-        workspaceInvitationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-      return { ...sealed, origin: new URL(context.request.url).origin };
-    }),
+
+    workspaceMembers: signedIn.workspaceMembers.effect(answerBoundRead(workspaceMembersRead)),
+
+    workspaceInvitations: signedIn.workspaceInvitations.effect(
+      answerBoundRead(workspaceInvitationsRead),
+    ),
+
     hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
-    workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        workspaceMemoriesLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    installedSkills: signedIn.installedSkills.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        installedSkillsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    workspaceIntegrations: signedIn.workspaceIntegrations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const sealed = yield* liveQueryParts(
-        workspaceIntegrationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-      const sentry = yield* SentryApp;
-      const { configured: slackConfigured } = yield* SlackBot;
-      return {
-        ...sealed,
-        sentryConfigured: Result.isSuccess(yield* Effect.result(sentry.settings)),
-        slackConfigured,
-      };
-    }),
-    pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const number = yield* pullRequestNumberOf([input.number]);
-      // One number named always reads as one or is refused.
-      if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const { agent } = yield* reachedAgentById(context.userId, input.id);
-      // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
-      const { generator } = yield* agentChaptersAdmission(context.userId, agent);
-      const sealed = yield* liveQueryParts(
-        pullRequestChaptersLive,
-        {
-          userId: context.userId,
-          agentId: agent.id,
-          number: String(number),
-          workspaceId: agent.organizationId,
-        },
-        input,
-      );
-      return { ...sealed, ...generator };
-    }),
-    integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(context.userId));
-      const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
-      const now = yield* Clock.currentTimeMillis;
-      const sealed = yield* liveQueryParts(
-        integrationStatusesLive,
-        { userId: context.userId, issuedSince: String(signInIssuedSince(now)) },
-        input,
-      );
-      return {
-        ...sealed,
-        offered,
-        multiple: offered.filter((provider) => connect[provider].multipleAccounts),
-      };
-    }),
-    accountPreferences: signedIn.accountPreferences.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(accountPreferencesLive, { userId: context.userId }, input);
-    }),
+    workspaceMemories: signedIn.workspaceMemories.effect(answerBoundRead(workspaceMemoriesRead)),
+    installedSkills: signedIn.installedSkills.effect(answerBoundRead(installedSkillsRead)),
+
+    workspaceIntegrations: signedIn.workspaceIntegrations.effect(
+      answerBoundRead(workspaceIntegrationsRead),
+    ),
+
+    pullRequestChapters: signedIn.pullRequestChapters.effect(
+      answerBoundRead(pullRequestChaptersRead),
+    ),
+    integrationStatuses: signedIn.integrationStatuses.effect(
+      answerBoundRead(integrationStatusesRead),
+    ),
+
+    accountPreferences: signedIn.accountPreferences.effect(answerBoundRead(accountPreferencesRead)),
   };
 }

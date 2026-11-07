@@ -12,8 +12,7 @@ import {
 import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, queryBuilder } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { user } from "../schemas/auth.js";
 import { task } from "../schemas/task.js";
@@ -82,7 +81,7 @@ const AGENT_ENTRY_COLUMNS = {
 };
 
 /** The condition that the account's agent entry a statement reads stands: its agent, on no task, is one the account reaches in its section's own workspace. */
-function agentEntryStands(userId: string) {
+export function agentEntryStands(userId: string) {
   return and(
     eq(agentSectionEntry.userId, userId),
     eq(AGENT_WORKSPACE, taskSection.organizationId),
@@ -569,81 +568,6 @@ export function listTaskSections(userId: string): TaskStoreEffect<TaskSections> 
       entries: entries.map(entryOf),
       agentEntries: agentEntries.map(agentEntryOf),
     };
-  });
-}
-
-/** The statements the account's sections are followed by live: the sections, and the tasks and agents it keeps in them. */
-export type TaskSectionsLiveStatements = Readonly<
-  Record<"sections" | "entries" | "agentEntries", LiveStatement>
->;
-
-/**
- * The account's sections written for Neon Realtime: the same rows and rule
- * of who may read them as `listTaskSections`, each column under the key
- * `live-wire.ts` reads it by and each instant in epoch milliseconds. The
- * order is the reader's to keep, since Realtime keeps none. None where a
- * statement names a value Realtime cannot carry.
- */
-export function taskSectionsLiveStatements(
-  userId: string,
-): Option.Option<TaskSectionsLiveStatements> {
-  const sections = queryBuilder
-    .select(
-      liveSelection(
-        {
-          id: taskSection.id,
-          workspaceId: taskSection.organizationId,
-          title: taskSection.title,
-          icon: taskSection.icon,
-          position: taskSection.position,
-        },
-        { createdAt: taskSection.createdAt },
-      ),
-    )
-    .from(taskSection)
-    .where(
-      and(eq(taskSection.userId, userId), workspaceReachableBy(userId, taskSection.organizationId)),
-    );
-  const entries = queryBuilder
-    .select(
-      liveSelection(
-        {
-          taskId: taskSectionEntry.taskId,
-          sectionId: taskSectionEntry.sectionId,
-          position: taskSectionEntry.position,
-        },
-        { addedAt: taskSectionEntry.addedAt },
-      ),
-    )
-    .from(taskSectionEntry)
-    .innerJoin(taskSection, eq(taskSection.id, taskSectionEntry.sectionId))
-    .innerJoin(task, eq(task.id, taskSectionEntry.taskId))
-    .where(
-      and(
-        eq(taskSectionEntry.userId, userId),
-        eq(task.organizationId, taskSection.organizationId),
-        taskReachableBy(userId),
-      ),
-    );
-  const agentEntries = queryBuilder
-    .select(
-      liveSelection(
-        {
-          agentId: agentSectionEntry.agentId,
-          sectionId: agentSectionEntry.sectionId,
-          position: agentSectionEntry.position,
-        },
-        { addedAt: agentSectionEntry.addedAt },
-      ),
-    )
-    .from(agentSectionEntry)
-    .innerJoin(taskSection, eq(taskSection.id, agentSectionEntry.sectionId))
-    .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.agentId))
-    .where(agentEntryStands(userId));
-  return Option.all({
-    sections: liveStatementOf(sections),
-    entries: liveStatementOf(entries),
-    agentEntries: liveStatementOf(agentEntries),
   });
 }
 

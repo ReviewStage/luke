@@ -212,6 +212,7 @@ import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
+import { useWindowAccount } from "../tasks/window-account.js";
 import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
@@ -937,6 +938,8 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 
 /** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
+  /** The account signed in, whose cloud Browser draft a row starts. */
+  readonly account: string | undefined;
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
   readonly onNewLocal: ((agentId: string) => void) | undefined;
 }
@@ -999,6 +1002,7 @@ function agentRows(
         panel: tasks.sidePanel,
         agents: tasks.agents,
         pages,
+        account: doors.account,
         onNewTerminal: doors.onNewTerminal,
         onNewLocal: doors.onNewLocal,
         viewedAgent: undefined,
@@ -1050,9 +1054,8 @@ function agentRows(
 /**
  * The open plan's archived agents, in the order started, each in its tab's
  * look and found by its name as a standing one is, its detail saying it is
- * archived before the plan's name, and hanging its card. Note that one opens
- * on its own page, as an archived agent the sidebar lists does, because its
- * tab is gone from the plan's column and its page is where it is read and
+ * archived before the plan's name, and hanging its card. One opens its tab
+ * in the plan's column, as a standing one does, where it is read and
  * brought back.
  */
 function archivedAgentRows(
@@ -1079,7 +1082,12 @@ function archivedAgentRows(
         />
       ),
       terms: [look.label, ...(taskName === undefined ? [] : [taskName])],
-      onChoose: () => show(() => tasks.agentView.onOpen(agent.id)),
+      onChoose: () =>
+        show(() =>
+          agent.planId === null
+            ? tasks.agentView.onOpen(agent.id)
+            : tasks.onShowAgent(agent.planId, agent.id),
+        ),
     };
   });
 }
@@ -2165,6 +2173,7 @@ export function CommandPalette({
     useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
   );
   const offerDoors: PanelOfferDoors = {
+    account: useWindowAccount(),
     onNewTerminal:
       useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
       true

@@ -120,15 +120,20 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
       ),
     );
   const client: InstalledSkillsClient = {
-    installedSkillsLive: (workspaceId, userId, poll, after) => {
+    // SAFETY: the skills' read is the one live read the client is asked for, answering its own script's rows.
+    liveRead: ((
+      _read: unknown,
+      { userId, workspaceId }: { readonly userId: string; readonly workspaceId: string },
+      poll?: { readonly after?: string | undefined },
+    ) => {
       const read = live[workspaceId] ?? assert.fail(`no live read of ${workspaceId}`);
-      return poll
-        ? read.poll(after)
+      return poll !== undefined
+        ? read.poll(poll.after)
         : Effect.sync(() => {
             asked.push(`live:${workspaceId}:${userId}`);
             return read.first();
           });
-    },
+    }) as InstalledSkillsClient["liveRead"],
     read: (skillId) =>
       Effect.sync(() => {
         asked.push(`read:${skillId}`);

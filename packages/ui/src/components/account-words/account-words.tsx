@@ -10,10 +10,7 @@ import { OneLine } from "../one-line/one-line.js";
  * beside it: a settings row's `adornment`, or after a server's name in a
  * popover's row. The words take a zero basis, so a long address fades on
  * the name's line rather than wrapping onto one of its own, and the hint
- * `OneLine` hangs over them reads them whole while they are cut. A list
- * row they stand in draws its chevron in its metadata's place
- * (`LIST_ROW_CHEVRON.META`), so their fade runs to the metadata rather than
- * stopping short of room kept for an unseen glyph.
+ * `OneLine` hangs over them reads them whole while they are cut.
  */
 
 /** An account's name beside its provider's; `words` says them as one string where `children` draws them as a tree (a search's marks). */

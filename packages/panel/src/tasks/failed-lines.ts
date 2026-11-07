@@ -9,14 +9,13 @@
  * refused is (`heldLines`), so a tab closed, or a task left, while the
  * refusal landed draws the line again on its return, and the task's row,
  * the agent's row, and its tab wear the failed mark in the draft pencil's
- * place while one waits (`draft-mark.tsx`). Note that each window's
- * registry holds its own, so a relaunch lets them go.
+ * place while one waits (`draft-mark.tsx`). Note that each window holds
+ * its own, so a relaunch lets them go.
  */
 
-import { useAtomValue } from "@effect/atom-react";
 import type { Failure } from "@repo/features/failure-remedy";
+import { useSelector } from "@tanstack/react-store";
 import { Equal } from "effect";
-import { Atom } from "effect/reactivity";
 import { heldLines } from "../composer-drafts.js";
 import type { SentLine } from "./agent-model.js";
 
@@ -31,35 +30,24 @@ export interface FailedLine {
 }
 
 /** Every message not delivered in this window, for the account signed in, in the order they failed. */
-export const failedLinesAtom = heldLines<FailedLine>();
+export const failedLines = heldLines<FailedLine>();
 
-/** The agents holding a message not delivered, compared by their ids, so a tab draws again only as one comes or goes. */
-const failedAgentsAtom = Atom.withEquality(
-  Atom.make((get): readonly string[] => [
-    ...new Set(get(failedLinesAtom).map((failed) => failed.agentId)),
-  ]),
-  Equal.equals,
-);
-
-/** The tasks holding a message not delivered, compared as the agents are. */
-const failedTasksAtom = Atom.withEquality(
-  Atom.make((get): readonly (string | null)[] => [
-    ...new Set(get(failedLinesAtom).map((failed) => failed.taskId)),
-  ]),
-  Equal.equals,
-);
+/** The agents holding a message not delivered. */
+function failedAgents(all: readonly FailedLine[]): readonly string[] {
+  return [...new Set(all.map((failed) => failed.agentId))];
+}
 
 /** The messages not delivered to `agentId`, in the order they failed. */
 export function failedLinesOf(all: readonly FailedLine[], agentId: string): readonly FailedLine[] {
   return all.filter((failed) => failed.agentId === agentId);
 }
 
-/** The agents holding a message not delivered, which their tabs and rows mark. */
+/** The agents holding a message not delivered, which their tabs and rows mark, compared by their ids, so a tab draws again only as one comes or goes. */
 export function useFailedAgents(): readonly string[] {
-  return useAtomValue(failedAgentsAtom);
+  return useSelector(failedLines.store, failedAgents, { compare: Equal.equals });
 }
 
 /** Whether a task holds a message not delivered to one of its agents, which its row marks. */
 export function useTaskSendFailed(taskId: string): boolean {
-  return useAtomValue(failedTasksAtom, (tasks) => tasks.includes(taskId));
+  return useSelector(failedLines.store, (all) => all.some((failed) => failed.taskId === taskId));
 }

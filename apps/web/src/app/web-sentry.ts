@@ -25,6 +25,7 @@ import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-r
 import type { ShownFailureSent } from "@repo/features/shown-failure";
 import type { ShownFailureReporter } from "@repo/panel/failure-report";
 import { queryClient } from "@repo/panel/query-client";
+import type { SendTracer } from "@repo/panel/send-traces";
 import type { Layer } from "effect";
 
 /** What the build says about where the tab reports. */
@@ -47,12 +48,16 @@ export interface WebSentry {
   readonly reportRefusal: (directive: string, origin: string) => void;
   /** Reports a failure the panel showed: a log line, and an issue besides where nothing named it. */
   readonly reportShownFailure: ShownFailureReporter;
+  /** Runs a send the panel was pressed for under a span of its own, handed its trace. */
+  readonly traceSend: SendTracer;
 }
 
 /** What the root reports through from the moment it starts, whether the SDK stands yet or not. */
 export interface WebSentryReports {
   /** Reports a tab that could draw nothing. */
   readonly reportBlankTab: (error: Error) => void;
+  /** Runs a send under a span of its own where the SDK stands, and untraced where it does not yet. */
+  readonly traceSend: SendTracer;
   /** Reports a failure the panel showed, kept for the SDK where it does not stand yet. */
   readonly reportShownFailure: ShownFailureReporter;
   /** Effect's reporters with Sentry's beside them, for the tab's runtime to stand on. */
@@ -198,13 +203,21 @@ function listenForRefusals(say: EarlyReports<WebSentry>["say"]): void {
  * not load, drops them all and sends nothing.
  */
 export function startWebSentry(build: WebSentryBuild): WebSentryReports {
+  // The SDK once it stands, which a send is traced through; a send pressed before then waits on nothing.
+  let standing: WebSentry | undefined;
+  const started = build.dsn ? loadedSentry(build) : Promise.resolve(undefined);
   const { say, settled } = reportsOnceStarted(
-    build.dsn ? loadedSentry(build) : Promise.resolve(undefined),
+    started.then((sentry) => {
+      standing = sentry;
+      return sentry;
+    }),
     EARLY_REPORTS_KEPT,
   );
   if (build.dsn) listenForRefusals(say);
   return {
     reportBlankTab: (error) => say((sentry) => sentry.reportBlankTab(error)),
+    traceSend: (name, send) =>
+      standing === undefined ? send(undefined) : standing.traceSend(name, send),
     // Note that what Sentry answered is known only where the SDK already stands,
     // because a report kept for it is sent once it does, long after this answers.
     reportShownFailure: (report) => {

@@ -7,8 +7,8 @@ import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   type MemoryLiveRow,
   memoriesOfLiveRows,
+  WORKSPACE_MEMORIES_READ,
   type WorkspaceMemoriesLiveAnswer,
-  workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
 import {
   type EntityPool,
@@ -87,7 +87,7 @@ export function heldMemories(
             userId === undefined
               ? Effect.succeed(LIVE_SIGNED_OUT)
               : dependencies.seal(workspaceId, userId, poll, after),
-          rows: workspaceMemoriesLiveRowsSchema,
+          rows: WORKSPACE_MEMORIES_READ.rows,
           part: "memories",
           pool: dependencies.pool,
           kind: MEMORY,

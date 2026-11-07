@@ -37,7 +37,7 @@ import {
   type TerminalsAnswer,
 } from "@repo/features/terminal-wire";
 import { Context, Effect, Layer, Result } from "effect";
-import { agentSandboxName, openAgentSandbox } from "../agent-sandbox-open.js";
+import { agentSandboxName, openAgentSandboxPromptly } from "../agent-sandbox-open.js";
 import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js";
 import {
   type FirewallSession,
@@ -46,6 +46,7 @@ import {
 } from "../sandbox-firewall.js";
 import {
   deploymentOidcToken,
+  IMAGE_NOT_READY,
   type InteractiveShell,
   type ListedSandbox,
   SANDBOX_STATUS,
@@ -121,7 +122,7 @@ export interface AgentSandboxService {
   readonly rename: (sessionId: string, terminalId: string, title: string) => ShellEffect<void>;
   /** A shell ended, with whatever it ran. */
   readonly kill: (sessionId: string, terminalId: string) => ShellEffect<void>;
-  /** The agent's sandbox opened again, as its next turn opens it, answering where it stands after; one never opened stays starting. */
+  /** The agent's sandbox opened again, as its next turn opens it, answering where it stands after; one never opened stays starting, as does one made again on an image still being prepared, opened after the answer. */
   readonly resume: (sessionId: string) => Effect.Effect<SandboxState, SandboxUnavailable>;
   /** A connection to the running sandbox's PTY, or where the sandbox stands; a stopped sandbox is never woken here. */
   readonly attach: (
@@ -276,12 +277,19 @@ function agentSandboxOver(
         if (sandbox.name !== agentSandboxName(sessionId)) {
           return stateOf(yield* api.resume(sandbox.name));
         }
-        const opened = yield* openAgentSandbox(api, {
+        // A sandbox made again on an image still being prepared is opened after the answer, which says it is starting.
+        const opened = yield* openAgentSandboxPromptly(api, {
           sessionId,
           tags: { ...sandbox.tags },
           vcpus: sandbox.vcpus,
-        }).pipe(Effect.provideService(AgentImage, image));
-        return stateOf(opened.sandbox);
+        }).pipe(
+          Effect.provideService(AgentImage, image),
+          Effect.catchIf(
+            (failure) => failure.code === IMAGE_NOT_READY,
+            () => Effect.succeed(undefined),
+          ),
+        );
+        return opened === undefined ? SANDBOX_STATE.STARTING : stateOf(opened.sandbox);
       }),
   };
 }

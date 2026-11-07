@@ -82,6 +82,23 @@ type MonitorConfig = NonNullable<Parameters<typeof Sentry.captureCheckIn>[1]>;
 /** The share of requests traced, in every process of this deployment. */
 const TRACES_SAMPLE_RATE = 0.1;
 
+/**
+ * The roots of an agent's start or a send, by the names their spans carry:
+ * the oRPC procedures that start an agent, a task with its agent, or send or
+ * queue a message, and the two host steps that run without a request.
+ */
+const SEND_ROOT_SPAN = {
+  AGENTS_START: "agents.start",
+  AGENTS_START_FROM: "agents.startFrom",
+  PLANS_CREATE: "plans.create",
+  MESSAGES_SEND: "messages.send",
+  MESSAGES_QUEUE: "messages.queue",
+  START_AGENT: "web/startAgent",
+  STEER_AGENT: "web/steerAgent",
+} as const;
+
+const SEND_ROOT_SPAN_NAMES: ReadonlySet<string> = new Set(Object.values(SEND_ROOT_SPAN));
+
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
 
@@ -278,9 +295,17 @@ export function sentryOptions(): SentryOptions {
     environment: process.env[SENTRY_ENVIRONMENT.DEPLOYMENT] ?? UNNAMED_DEPLOYMENT,
     // Note that one in ten requests is traced, because each request carries
     // several Effect spans and every request came to about 140,000 spans an
-    // hour in production, which a plan's span quota does not hold. Errors,
-    // logs, and check-ins are not sampled by this.
-    tracesSampleRate: TRACES_SAMPLE_RATE,
+    // hour in production, which a plan's span quota does not hold. A call
+    // with a parent follows the parent's decision, so a send the client
+    // sampled is traced through here. A start or send with no parent (an
+    // automation, a Slack start, a comment's ask, an agent's `start_agent`,
+    // a request naming no trace) is always traced, because it is rare and
+    // the trace is what it is for. Errors, logs, and check-ins are not
+    // sampled by this.
+    tracesSampler: ({ name, parentSampled, inheritOrSampleWith }) =>
+      parentSampled === undefined && SEND_ROOT_SPAN_NAMES.has(name)
+        ? 1
+        : inheritOrSampleWith(TRACES_SAMPLE_RATE),
     // Note that this outranks a model call's own telemetry asking to record,
     // and is read by every AI integration Sentry ships (the AI SDK's, MCP's, OpenAI's, Anthropic's).
     // Note that no request body is kept either, because what is posted to an agent is a
@@ -489,6 +514,25 @@ export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Lay
 /** How long an instance is kept awake after an answer for Sentry to send what it queued. */
 const REQUEST_FLUSH_MS = 2_000;
 
+/**
+ * What Sentry queued, sent within the bound an instance is kept awake for:
+ * at an answer, and as work a request ran past its answer ends, which the
+ * answer's own sending never waited for.
+ */
+export function sentryQueueSent(): Promise<boolean> {
+  return Sentry.flush(REQUEST_FLUSH_MS);
+}
+
+/**
+ * A step of a promise a library calls back into, where no Effect runs to
+ * span it, traced as Sentry's custom instrumentation traces one: a span
+ * under whichever is active, which is the Effect span whose fiber started
+ * the call, as Sentry's tracer makes it active while the fiber runs.
+ */
+export function sentryStep<A>(name: string, step: () => Promise<A>): Promise<A> {
+  return Sentry.startSpan({ name }, step);
+}
+
 /** A web function's handler, as the platform calls it. */
 type WebFetch = (request: Request) => Promise<Response>;
 
@@ -513,7 +557,7 @@ export function sentryReportedFetch(
       });
       throw failure;
     } finally {
-      keepAwake(Sentry.flush(REQUEST_FLUSH_MS));
+      keepAwake(sentryQueueSent());
     }
   };
 }

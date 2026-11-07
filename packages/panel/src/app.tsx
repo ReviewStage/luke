@@ -38,6 +38,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState 
 import { actMutation } from "./act-mutations.js";
 import { useAdminRoute } from "./admin/admin-route.js";
 import { adminViewOfLink } from "./admin/routing.js";
+import { useAgentRoute } from "./agent-route.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -97,7 +98,9 @@ import {
 } from "./tasks/use-description-editing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
-import { ToastHost } from "./toast.js";
+import { useTerminalsOwner } from "./tasks/use-terminal-session.js";
+import { WindowAccountContext, windowAccountOf } from "./tasks/window-account.js";
+import { ToastHost, useToastsOwner } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
@@ -231,13 +234,16 @@ export function App(): React.JSX.Element {
   const fixtureMode = useQuery({ ...appStateQuery, select: selectFixtureMode }).data === true;
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
-  const accountKey =
-    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
-  // Note that the account's key is read above the window, because every message box's Dictate reads it.
+  const accountKey = windowAccountOf(account);
+  // Note that the account's key is read above the window, because every message box's Dictate reads it, and every terminal and cloud Browser tab is held under it.
   // The window's ticks run here, once, for as long as it stands.
   return (
     <TimeTicks>
-      <OpenAiKeyProvider account={accountKey}>{landed ? <AppWindow /> : null}</OpenAiKeyProvider>
+      <OpenAiKeyProvider account={accountKey}>
+        <WindowAccountContext.Provider value={accountKey}>
+          {landed ? <AppWindow /> : null}
+        </WindowAccountContext.Provider>
+      </OpenAiKeyProvider>
     </TimeTicks>
   );
 }
@@ -260,14 +266,17 @@ function AppWindow(): React.JSX.Element {
     useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
   const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   // A picture, and each read keyed by no account, is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
-  const accountKey =
-    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  const accountKey = windowAccountOf(account);
   const queryClient = useQueryClient();
   useEffect(() => {
     void forgetPictures(queryClient);
     void forgetAccountReads(queryClient);
     forgetUndo();
   }, [queryClient, accountKey]);
+  // A terminal is its account's: another account signing in detaches the last one's, whose shells run on, and that account finds them again.
+  useTerminalsOwner(accountKey);
+  // So are the toasts: another account signing in empties the stack.
+  useToastsOwner(accountKey);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // So are the description words a task was left with: another account signing in lets go of them.
@@ -421,6 +430,10 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
   });
+  const agentView = useAgentRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const automationsView = useAutomationsRoute({
     narrow: room === SHELL_ROOM.NARROW,
     onClose: () => leaveRouted.current(),
@@ -456,6 +469,7 @@ function AppWindow(): React.JSX.Element {
     adminView,
     boardView,
     personView,
+    agentView,
     automationsView,
     versionHistoryView,
     inboxView,
@@ -558,8 +572,12 @@ function AppWindow(): React.JSX.Element {
       // Admin is the router's place, which its link opens as a navigation from wherever the window stands.
       guardLeave(() => adminView.onOpen(adminViewOfLink(place)))();
     } else {
+      // Note that the Inbox and an agent's page are left by the door the link opens, as it stands what the link names, rather than up front,
+      // because an agent's link reads where its agent stands first, and a leave before that read lands would write a step of the place under it.
+      const leftByDoor =
+        routedHere?.place === ROUTED_PLACE.INBOX || routedHere?.place === ROUTED_PLACE.AGENT;
       guardLeave(() => {
-        changeTab(PANEL_TAB.TASKS);
+        if (!leftByDoor) changeTab(PANEL_TAB.TASKS);
         tasks.onOpenLink(link);
       })();
     }
