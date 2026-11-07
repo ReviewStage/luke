@@ -13,7 +13,7 @@ import {
   spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
-import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@repo/features/sentry-tracing";
+import { sentryTracesRequest, sentryTracesSampler } from "@repo/features/sentry-tracing";
 import { sendShownFailure } from "@repo/features/shown-failure";
 import { sentrySendTracer } from "@repo/panel/send-traces";
 import { appStateQuery } from "@repo/panel/use-app-state";
@@ -89,7 +89,7 @@ export function initDesktopSentry(queryClient: QueryClient): DesktopSentry {
       }),
       browserProfilingIntegration(),
     ],
-    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    tracesSampler: sentryTracesSampler,
     profileLifecycle: "manual",
     profileSessionSampleRate: 1,
     beforeBreadcrumb: withoutAccessTokens,
