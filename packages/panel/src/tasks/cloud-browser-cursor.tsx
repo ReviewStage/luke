@@ -24,14 +24,12 @@
  * and a kind are no page content.
  */
 
-import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTabCursor } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
-import { useMotionHeld } from "@repo/ui";
+import { forkEffect, useMotionHeld } from "@repo/ui";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Clock, Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type CSSProperties, useMemo } from "react";
-import { rendererRuntime } from "../renderer-runtime.js";
+import { type CSSProperties, useEffect } from "react";
 
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
@@ -77,10 +75,25 @@ function idleSince(activeAt: number): Effect.Effect<void> {
   });
 }
 
-/** Whether the agent has stood idle on the tab past the bound since `activeAt`, in epoch milliseconds. */
+/**
+ * Whether the agent has stood idle on the tab past the bound since
+ * `activeAt`, in epoch milliseconds. Note that the store holds the moment
+ * the wait settled for, so a newer act reads as active at once, before its
+ * own wait is forked.
+ */
 function useIdle(activeAt: number): boolean {
-  const idle = useMemo(() => rendererRuntime.atom(idleSince(activeAt)), [activeAt]);
-  return AsyncResult.isSuccess(useAtomValue(idle));
+  const idleFor = useCreateStore<number | undefined>(undefined);
+  useEffect(
+    () =>
+      forkEffect(
+        Effect.andThen(
+          idleSince(activeAt),
+          Effect.sync(() => idleFor.setState(() => activeAt)),
+        ),
+      ),
+    [activeAt, idleFor],
+  );
+  return useSelector(idleFor) === activeAt;
 }
 
 /** The agent's pointer, drawn over the page, hidden where `hidden`: while a member drives the tab, or no page stands. */

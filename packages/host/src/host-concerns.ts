@@ -113,9 +113,10 @@ export function hostCapabilities(
 
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
-  [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that This Mac's host tells the windows itself, and is asked only to turn on or off.
-  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [GATEWAY_METHOD.HOSTS_THIS_MAC_SET],
+  // Note that the Mac commands are answered only as a declared act (`MAC_COMMAND_ANSWER`), as This Mac's host is.
+  [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [],
+  // Note that This Mac's host tells the windows itself, and is asked only to turn on or off, a declared act (`HOSTS_THIS_MAC_SET`).
+  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
     GATEWAY_METHOD.TERMINALS_LIST,
     GATEWAY_METHOD.TERMINALS_CREATE,
@@ -133,7 +134,8 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
   ],
-  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [GATEWAY_METHOD.PORT_FORWARDS_SET],
+  // Note that forwarding is turned on or off only as a declared act (`PORT_FORWARD_SET`).
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [],
   [HOST_PLATFORM_CONCERN.MIRRORS]: [GATEWAY_METHOD.MIRRORS_ENSURE],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 

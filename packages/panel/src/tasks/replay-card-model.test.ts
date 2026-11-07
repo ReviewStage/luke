@@ -367,7 +367,7 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(failed.view.output, undefined);
 });
 
-test("a native harness's call in a replay is drawn as the eve call that draws it, as the live transcript draws it", () => {
+test("a native harness's call in a replay is drawn as the call of the same kind, as the live transcript draws it", () => {
   const read = stepView(
     toolStep({
       summary: "Read: src/a.ts",

@@ -11,7 +11,10 @@
  * does (checked against codex 0.163.0, which echoes it), a `userMessage` item
  * in a turn's reply carries the `clientUserMessageId` the runner sent with
  * that `turn/start` or `turn/steer` as its `clientId`; P16's recording was
- * made without one, so its items say `null`.
+ * made without one, so its items say `null`. A reply may hold a request of
+ * app-server's own, such as a refresh of host-supplied tokens; the runner's
+ * answer to it is kept apart (`answers`), read as it comes even while an
+ * exchange waits, and matched against no exchange.
  */
 
 import { readFileSync } from "node:fs";
@@ -74,6 +77,8 @@ export interface Spawned {
   readonly received: RecordedMessage[];
   /** A message the script did not expect, by its method, where one came. */
   readonly unexpected: string[];
+  /** The runner's answers to app-server's own requests, as they came. */
+  readonly answers: Queue.Queue<RecordedMessage>;
   ended: boolean;
 }
 
@@ -165,6 +170,7 @@ export function fakeAppServer(scripts: readonly Script[]) {
         env: command.options.env ?? {},
         received: [],
         unexpected: [],
+        answers: yield* Queue.unbounded<RecordedMessage>(),
         ended: false,
       };
       spawned.push(record);
@@ -207,13 +213,22 @@ export function fakeAppServer(scripts: readonly Script[]) {
         yield* Queue.end(stderr);
         yield* Queue.end(stdout);
       }
+      // Note that the runner's requests are played in a fiber of their own, so an answer it writes is read while an exchange waits.
+      const requests = yield* Queue.unbounded<RecordedMessage>();
+      yield* Stream.fromQueue(requests).pipe(Stream.runForEach(take), Effect.forkScoped);
       const input = command.options.stdin;
       if (Predicate.hasProperty(input, "stream") && Stream.isStream(input.stream)) {
         yield* input.stream.pipe(
           Stream.decodeText(),
           Stream.splitLines,
           Stream.runForEach((line) =>
-            Option.match(decodeReceived(line), { onNone: () => Effect.void, onSome: take }),
+            Option.match(decodeReceived(line), {
+              onNone: () => Effect.void,
+              onSome: (message) =>
+                message.method === undefined
+                  ? Queue.offer(record.answers, message)
+                  : Queue.offer(requests, message),
+            }),
           ),
           Effect.ignore,
           Effect.forkScoped,

@@ -164,8 +164,12 @@ function issuesStatement() {
  * Every agent of a plan the account reaches, and every agent with no plan
  * in its workspaces, archived ones among them, each with its newest turn by
  * the order turns were queued, as `findLatestTurns` reads it, the harness
- * its conversation runs on, and the Mac it runs on by its name, as
- * `devicesNamed` reads them. Note that the Mac's last beat is not read,
+ * its conversation runs on, the Mac it runs on by its name, as
+ * `devicesNamed` reads them, and whether its sandbox stands open: its
+ * conversation records the session its sandbox is tagged with, which the
+ * claim writes on the conversation's row, so a delta read takes the flip
+ * from the log (`movedAgents`) and a pane waiting on the sandbox connects
+ * as it lands. Note that the Mac's last beat is not read,
  * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
  * its own presence read. Note too that a pilot is said by a column of its own.
  */
@@ -209,6 +213,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
+          sandboxOpen: sql<boolean>`${conversations.runtimeSessionId} is not null and ${conversations.deletedAt} is null`,
           pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
           markedUnread: sql<boolean>`coalesce(${agentRead.markedUnread}, false)`,
         },

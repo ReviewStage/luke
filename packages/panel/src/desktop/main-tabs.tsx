@@ -28,12 +28,13 @@ import {
   agentTab,
   draftTab,
   inTaskOrder,
-  isDraftTab,
+  STRIP_TAB_KIND,
   type StripTab,
   sameTab,
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
+import { absurd } from "effect";
 import { memo, useEffect, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
@@ -297,7 +298,10 @@ function agentTabs(input: {
     selected: chosen(tab),
     onSelect: () => main.onChoose(tab),
   });
-  const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
+  // An archived agent's tab stands once opened, drawn as a live one's is.
+  const open = [...(agents.agents ?? []), ...(agents.archived ?? [])].filter((agent) =>
+    main.openAgents?.includes(agent.id),
+  );
   const own = open.map((agent) => {
     const tab = agentTab(agent.id);
     const label = agentName(agent, agents.models);
@@ -367,8 +371,8 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the task's agents in the order started, as History lists a closed
- * one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
+ * Each of the task's agents in the order started, or of those given (`listed`), as History lists a closed
+ * or an archived one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
  * tab's look: its harness's mark wearing where it stands, and, where the
  * row draws one, a failure at its end, as its tab does. Picking an agent
  * whose tab is open chooses that tab rather than opening another, as a
@@ -378,8 +382,9 @@ export function agentEntries(
   main: Pick<MainTabsControl, "tab" | "onChoose">,
   agents: AgentsControl,
   held?: HeldTranscripts,
+  listed: readonly AgentSummary[] = agents.agents ?? [],
 ): AddEntry[] {
-  return (agents.agents ?? []).map((agent) => {
+  return listed.map((agent) => {
     const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab(agentTab(agent.id), main.tab);
     return {
@@ -767,7 +772,9 @@ export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | unde
   return stripTabTitle(tab, {
     ...UNREAD_TAB_NAMES,
     agent: (agentId) => {
-      const agent = agents.agents?.find((each) => each.id === agentId);
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
       return agent === undefined ? undefined : agentName(agent, agents.models);
     },
   });
@@ -816,57 +823,67 @@ export function MainTabContent({
   /** The threads the agent posted that wait on the developer, docked over its box; none where nothing waits. */
   threads?: AgentThreads | undefined;
 }): React.JSX.Element {
-  if (isDraftTab(tab)) {
-    // The tab stands for a draft the task no longer holds only until the
-    // column moves back to the task, a render away.
-    return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
-    ) : (
-      <AgentTabSkeleton />
-    );
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.DRAFT:
+      // The tab stands for a draft the task no longer holds only until the
+      // column moves back to the task, a render away.
+      return agents.draft?.id === tab.draft ? (
+        <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
+      ) : (
+        <AgentTabSkeleton />
+      );
+    case STRIP_TAB_KIND.AGENT: {
+      const agentId = tab.agent;
+      // A Start still making its agent draws the agent's tab as it will land, saying it is starting.
+      if (agents.start.pending?.key === agentId) return <StartingAgentTab key={agentId} />;
+      // The tab follows its agent's transcript by the id alone, so a task opened
+      // on an agent reads it beside the task's list of agents rather than after
+      // it; what needs the agent itself waits for the list in the tab's shape.
+      // Note that the tab stands for an agent the list no longer holds only until
+      // the column moves back to the task, a render away; an archived agent's
+      // stands while it is opened.
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
+      return (
+        <ForkProvider
+          key={agentId}
+          value={
+            agent === undefined
+              ? undefined
+              : agentForkDoors({
+                  agent,
+                  control: agents,
+                  onFork,
+                  onContinue,
+                  cards: cards.agent(agentId),
+                  onOpenTarget,
+                })
+          }
+        >
+          <AgentTab
+            agentId={agentId}
+            agent={agent}
+            control={agents}
+            shown={shown}
+            onOpenSubagent={(callId, task, status) =>
+              onOpenDelegation(agentId, callId, task, status)
+            }
+            onOpenPullRequest={
+              onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agentId)
+            }
+            onOpenTarget={onOpenTarget}
+            cards={cards.agent(agentId)}
+            onHeld={views.onAgentHeld}
+            run={agents.origin}
+            threads={threads}
+          />
+        </ForkProvider>
+      );
+    }
+    default:
+      return absurd(tab);
   }
-  const agentId = tab.agent;
-  // A Start still making its agent draws the agent's tab as it will land, saying it is starting.
-  if (agents.start.pending?.key === agentId) return <StartingAgentTab key={agentId} />;
-  // The tab follows its agent's transcript by the id alone, so a task opened
-  // on an agent reads it beside the task's list of agents rather than after
-  // it; what needs the agent itself waits for the list in the tab's shape.
-  // Note that the tab stands for an agent the list no longer holds only until
-  // the column moves back to the task, a render away.
-  const agent = agents.agents?.find((each) => each.id === agentId);
-  return (
-    <ForkProvider
-      key={agentId}
-      value={
-        agent === undefined
-          ? undefined
-          : agentForkDoors({
-              agent,
-              control: agents,
-              onFork,
-              onContinue,
-              cards: cards.agent(agentId),
-              onOpenTarget,
-            })
-      }
-    >
-      <AgentTab
-        agentId={agentId}
-        agent={agent}
-        control={agents}
-        shown={shown}
-        onOpenSubagent={(callId, task, status) => onOpenDelegation(agentId, callId, task, status)}
-        onOpenPullRequest={
-          onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agentId)
-        }
-        onOpenTarget={onOpenTarget}
-        cards={cards.agent(agentId)}
-        onHeld={views.onAgentHeld}
-        run={agents.origin}
-        threads={threads}
-      />
-    </ForkProvider>
-  );
 }
 
 /**

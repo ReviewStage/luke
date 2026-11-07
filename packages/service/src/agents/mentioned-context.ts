@@ -1,5 +1,7 @@
 import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { descriptionSections } from "@repo/features/description-document";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
@@ -14,6 +16,7 @@ import {
 } from "@repo/features/link-grammar";
 import { LINK_SITE, type LinkSite } from "@repo/features/link-site";
 import {
+  type DescriptionMention,
   handedMentionsIn,
   linkMention,
   MENTION_KIND,
@@ -21,14 +24,11 @@ import {
   mentionName,
   type NumberedTaskIdOf,
   type PersonMention,
-  type DescriptionMention,
   type ServerMention,
   sectionAnchors,
   type TaskMention,
 } from "@repo/features/mention-link";
 import { PAGE_OWNER, type PageLine, type PageOwner } from "@repo/features/page-wire";
-import { descriptionSections } from "@repo/features/description-document";
-import { descriptionMarkdown } from "@repo/features/description-markdown";
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 
@@ -49,7 +49,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
  * one of its sections, is not: a coding agent has no tool to read the description
  * again, and one started on a prompt never saw it. So the message carries one
  * more part after its words, the description or each section it named as it stood
- * at the send, under a heading eve's receipt is read back by
+ * at the send, under a heading a receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own description is read, the description the
  * send already read as its sender; a mention of another task adds nothing,
  * but where its link names it by its number, `…/task/42`, which spells

@@ -1481,6 +1481,7 @@ export function useWindowHistory(input: {
     | "mainTabs"
     | "activeTaskId"
     | "agents"
+    | "liveAgents"
     | "pages"
     | "workspaces"
   >;
@@ -1652,7 +1653,9 @@ export function useWindowHistory(input: {
       // An Inbox item's step and an agent page's stand the side panel beside them as it stood, on the item's own task or agent, or the page's agent.
       const { itemId, agentId } = placeParamsOf(matches);
       const chosen = itemId === undefined ? undefined : inbox.choiceOf(itemId);
-      standSide(chosen === undefined ? agentId : choiceHolder(chosen), to.side);
+      // Note that the panel's stop is the item standing, or the page's agent, as `standSide` shuts it on the stop standing alone.
+      const holder = chosen === undefined ? agentId : choiceHolder(chosen);
+      standSide(holder, itemId ?? agentId, to.side);
       return;
     }
     if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
@@ -1660,19 +1663,22 @@ export function useWindowHistory(input: {
       tasks.mainTabs.onShow(to.taskId, to.column);
     }
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
-    else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.side);
+    else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.taskId, to.side);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
   };
   // The side panel as a wide step, an Inbox item's, or an agent page's held it: shut, or open on its tab, on the stop's own task or agent; one not yet known is left as it stands.
-  const standSide = (holder: string | undefined, side: SideStep) => {
-    if (side === null) tasks.sidePanel.onSetOpen(false);
-    else if (side !== undefined && holder !== undefined) tasks.sidePanel.onShow(holder, side);
+  // Note that it is shut only where the step is the stop standing, because another stop starts with it shut, and
+  // shutting it here first would slide it out over the place the window is leaving.
+  const standSide = (holder: string | undefined, stop: string | undefined, side: SideStep) => {
+    if (side === null) {
+      if (stop === tasks.sidePanel.stop) tasks.sidePanel.onSetOpen(false);
+    } else if (side !== undefined && holder !== undefined) tasks.sidePanel.onShow(holder, side);
   };
-  // The side panel as a narrow room's step held it: shut, or open on its tab.
+  // The side panel as a narrow room's step held it: shut, or open on its tab, shut or shown without a tab only on the stop standing, as `standSide` shuts it.
   const standPanel = (taskId: string, panel: PanelStep) => {
     const { sidePanel } = tasks;
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
-    else sidePanel.onSetOpen(panel.open);
+    else if (taskId === sidePanel.stop) sidePanel.onSetOpen(panel.open);
   };
   // The workspace's members, read only while a person's page stands on the trail.
   // Note that the place standing counts as on the trail already, so its visit, written after it draws, draws the window no second time.

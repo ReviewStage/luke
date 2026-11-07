@@ -5,15 +5,7 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import {
-  agentTab,
-  fileTab,
-  isAgentTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  pageTab,
-} from "@repo/ui/tab-strip-model";
+import { agentTab, fileTab, pageTab, STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { createMemoryHistory } from "@tanstack/react-router";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -40,6 +32,7 @@ import {
 } from "./navigation-history.js";
 import type { RoutedPlace } from "./places/routed-places.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import { isOverviewTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   type AdminViewControl,
@@ -53,7 +46,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platfor
 import { handHostReads } from "./testing/app-state.js";
 import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { agentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 import { useVersionHistoryRoute, type VersionHistoryRoute } from "./version-history-route.js";
 import {
@@ -863,15 +856,19 @@ function onTabs(input: {
       openAgents: agents.map((tab) => tab.agent),
       onShow: (_taskId, tab) =>
         input.shown?.push(
-          `column:${isAgentTab(tab) ? tab.agent : isDraftTab(tab) ? tab.draft : tab}`,
+          `column:${isOverviewTab(tab) ? tab : tab.kind === STRIP_TAB_KIND.AGENT ? tab.agent : tab.draft}`,
         ),
     },
     sidePanel: {
       ...base.sidePanel,
       open: input.side !== undefined,
+      stop: TASK_ID,
       tab: input.side ?? SIDE_PANEL_TAB.INBOX,
       opened: input.opened ?? 0,
-      onShow: (_taskId, tab) => input.shown?.push(`side:${isFileTab(tab) ? tab.file : tab}`),
+      onShow: (_taskId, tab) =>
+        input.shown?.push(
+          `side:${typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE ? tab.file : tab}`,
+        ),
       onSetOpen: (open) => {
         if (!open) input.shown?.push("side:shut");
       },
@@ -883,9 +880,9 @@ function onTabs(input: {
 const namedAsShown = (tasks: TasksControl, place: RoutedPlace | undefined): StepTitle | undefined =>
   stepTitle(place, tasks);
 
-/** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
-function listedTask(name: string, agentTitle?: string): TaskSummary {
-  const task: TaskSummary = {
+/** The task the window lists, under `name`. */
+function listedTask(name: string): TaskSummary {
+  return {
     id: TASK_ID,
     workspaceId: "workspace",
     name,
@@ -893,16 +890,6 @@ function listedTask(name: string, agentTitle?: string): TaskSummary {
     updatedAt: 2,
     repository: "acme/relay",
   };
-  if (agentTitle === undefined) return task;
-  const line = {
-    id: AGENT_A.agent,
-    title: agentTitle,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    status: AGENT_STATUS.COMPLETED,
-  };
-  const agents = { total: 1, working: 0, agents: [line], pullRequestTotal: 0, pullRequests: [] };
-  return { ...task, agents };
 }
 
 /** Agent A as the open task's agents read it, under `title`. */
@@ -931,13 +918,18 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
     namedAsShown,
   );
   press();
-  window.stand(tasksControl({ tasks: [listedTask("Auth rewrite", "Token renewal")] }));
+  window.stand(
+    tasksControl({
+      tasks: [listedTask("Auth rewrite")],
+      liveAgents: [listedAgent(openAgent("Token renewal"))],
+    }),
+  );
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth rewrite",
     detail: "Token renewal",
   });
 
-  // The task's row no longer names the agent: its tab keeps the name it had.
+  // The list followed live no longer holds the agent: its tab keeps the name it had.
   window.stand(tasksControl({ tasks: [listedTask("Auth rewrite")] }));
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth rewrite",
@@ -960,7 +952,12 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
     namedAsShown,
   );
   press();
-  window.stand(tasksControl({ tasks: [listedTask("Auth refactor", "Token renewal")] }));
+  window.stand(
+    tasksControl({
+      tasks: [listedTask("Auth refactor")],
+      liveAgents: [listedAgent(openAgent("Token renewal"))],
+    }),
+  );
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth refactor",
     detail: "Token renewal · Notes",
@@ -1055,9 +1052,13 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
       sidePanel: {
         ...base.sidePanel,
         open: side !== undefined,
+        stop: itemId,
         tab: side,
         opened,
-        onShow: (holder, tab) => done.push(`side:${holder}:${isPageTab(tab) ? tab.page : tab}`),
+        onShow: (holder, tab) =>
+          done.push(
+            `side:${holder}:${typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.PAGE ? tab.page : tab}`,
+          ),
         onSetOpen: (open) => done.push(open ? "side:open" : "side:shut"),
       },
     });
@@ -1080,6 +1081,34 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
   act(() => window.history().onBack());
   assert.equal(window.at(), "/acme/inbox/item-a");
   assert.deepEqual(done.slice(1), ["side:shut"]);
+});
+
+test("Back to another task whose panel stood shut leaves the panel to shut as that task arrives, rather than shutting it over the task the window is leaving", () => {
+  const OTHER_TASK = "7e8f9a0b-0000-4000-8000-0000000000c4";
+  const done: string[] = [];
+  const notes = fileTab("docs/notes.md");
+  const onTask = (taskId: string, side: SidePanelTab | undefined) => {
+    const base = tasksControl();
+    return tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: taskId,
+      boundFor: taskId,
+      onRestoreTask: (id) => done.push(`task:${id}`),
+      sidePanel: {
+        ...base.sidePanel,
+        open: side !== undefined,
+        stop: taskId,
+        tab: side,
+        onSetOpen: (open) => done.push(open ? "side:open" : "side:shut"),
+      },
+    });
+  };
+  const window = mount(onTask(OTHER_TASK, undefined));
+  press();
+  window.stand(onTask(TASK_ID, notes));
+
+  act(() => window.history().onBack());
+  assert.deepEqual(done, [`task:${OTHER_TASK}`]);
 });
 
 test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
@@ -1186,7 +1215,9 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
   const shown: string[] = [];
   const titled = (tasks: TasksControl): StepTitle | undefined => {
     const column = tasks.mainTabs.tab;
-    return column === undefined || !isAgentTab(column)
+    return column === undefined ||
+      typeof column === "string" ||
+      column.kind !== STRIP_TAB_KIND.AGENT
       ? { label: "Home" }
       : { label: "Auth refactor", detail: column.agent };
   };

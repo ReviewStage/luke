@@ -192,7 +192,8 @@ function dest(definition: FunctionDefinition, route: string, query?: string): st
 
 /**
  * Every public path a function answers by its own name rather than through
- * a dispatcher: each standalone function and each hand-written one, at its
+ * a dispatcher: each standalone function but a queue's consumer, which the
+ * queue alone reaches, and each hand-written one, at its
  * file's name and at the extensionless alias the Build Output serves it at.
  * Vercel runs the web service's `routes` before it looks at the filesystem
  * and stops at the first that matches, so without a rule of its own each
@@ -202,7 +203,7 @@ function dest(definition: FunctionDefinition, route: string, query?: string): st
 function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly string[] {
   const own = [
     ...definitions
-      .filter((definition) => !definition.dispatches)
+      .filter((definition) => !definition.dispatches && definition.queueTopic === undefined)
       .map((definition) => functionPublicPath(definition)),
     ...HAND_WRITTEN_FUNCTIONS.map((fn) => fn.path),
   ];

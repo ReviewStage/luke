@@ -1,7 +1,19 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema } from "effect";
 import { pinnedPictureUrl } from "./account-picture.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
-import { countedNumber } from "./service-wire.js";
+import { refuses } from "./contract/base.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+  orderedLiveRows,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { countedNumber, HOSTED_API_ERROR } from "./service-wire.js";
 import {
   INVITATION_ROLE,
   invitationAcceptUrl,
@@ -17,7 +29,7 @@ import {
 } from "./workspace-wire.js";
 
 /**
- * workspace-live.ts -- the account's workspaces, and one workspace's people and pending invitations, as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
+ * workspace-live.ts -- the account's workspaces, and one workspace's people and pending invitations, as the desktop follows them over Neon Realtime: the reads declared, and what the desktop reads of their rows.
  *
  * Neon's guide is followed as `live-wire.ts` follows it: the service builds
  * each statement with the account's id in it and seals it, and the desktop
@@ -28,64 +40,70 @@ import {
  */
 
 /**
- * The account's workspaces sealed for following: the address, and two
- * statements, its workspaces and the GitHub installations connected to
- * them, which the held read reads apart too, since a workspace holding
- * several would otherwise be a row for each. Asked to poll, or where
- * Realtime cannot seal them, the service answers each statement's rows
- * inline instead (`LIVE_POLL`).
+ * The account's workspaces as the desktop follows them: two parts, its
+ * workspaces and the GitHub installations connected to them, which the
+ * held read reads apart too, since a workspace holding several would
+ * otherwise be a row for each. Its own first workspace stands first, the
+ * rest by name, then by id; a workspace's installations by when they were
+ * first linked, then by id.
  */
-export const workspacesLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    workspaces: sealedLiveQuerySchema,
-    installations: sealedLiveQuerySchema,
-  }),
+export const WORKSPACES_READ = liveRead({
+  name: "workspaces",
+  path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    workspaces: liveRows({
+      row: Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+        slug: Schema.String,
+        /** Whether it is the reader's own first workspace. */
+        own: Schema.Boolean,
+        /** Whether it is anyone's first workspace. */
+        personal: Schema.Boolean,
+        /** The plugin's role text, which may list several roles comma-separated. */
+        role: Schema.String,
+        /** Always null: no workspace connects Linear any more, but a desktop from v0.22.0 fails its follow on a row without it, so the service still answers it and this build reads a row without it too. The key goes with the minimum supported desktop version. */
+        linearActive: Schema.optionalKey(Schema.Null),
+        memberCount: countedNumber,
+        photoVersion: Schema.NullOr(Schema.String),
+        /** The reader's own sign-in picture on their own first workspace, else null. */
+        ownerImage: Schema.NullOr(Schema.String),
+        /** The slugs it stood under before, a space between each, empty for none; absent from a service before slugs could change. */
+        formerSlugs: Schema.optionalKey(Schema.String),
+      }),
+      key: "id",
+      order: [
+        ["own", ORDER.DESC],
+        ["name", ORDER.ASC],
+        ["id", ORDER.ASC],
+      ],
+    }),
+    installations: liveRows({
+      row: Schema.Struct({
+        workspaceId: Schema.String,
+        installationId: countedNumber,
+        login: Schema.String,
+        active: Schema.Boolean,
+        /** When it was first linked, which orders a workspace's installations. */
+        linkedAt: countedNumber,
+      }),
+      key: "installationId",
+      order: [
+        ["linkedAt", ORDER.ASC],
+        ["installationId", ORDER.ASC],
+      ],
+    }),
+  },
 });
 
-export type WorkspacesLiveAnswer = typeof workspacesLiveAnswerSchema.Type;
+export type WorkspacesLiveAnswer = LiveReadAnswer<typeof WORKSPACES_READ>;
 
-/** One workspace as its row delivers it: what the wire leaves out where it holds nothing is null. */
-const workspaceLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  name: EffectSchema.String,
-  slug: EffectSchema.String,
-  /** Whether it is the reader's own first workspace. */
-  own: EffectSchema.Boolean,
-  /** Whether it is anyone's first workspace. */
-  personal: EffectSchema.Boolean,
-  /** The plugin's role text, which may list several roles comma-separated. */
-  role: EffectSchema.String,
-  memberCount: countedNumber,
-  photoVersion: EffectSchema.NullOr(EffectSchema.String),
-  /** The reader's own sign-in picture on their own first workspace, else null. */
-  ownerImage: EffectSchema.NullOr(EffectSchema.String),
-  /** The slugs it stood under before, a space between each, empty for none; absent from a service before slugs could change. */
-  formerSlugs: EffectSchema.optionalKey(EffectSchema.String),
-});
+/** The workspaces' rows as Realtime delivers them. */
+type WorkspacesLiveRows = typeof WORKSPACES_READ.rows.Type;
 
-/** One installation connected to a workspace the reader is a member of, as its row delivers it. */
-const workspaceInstallationLiveRowSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.String,
-  installationId: countedNumber,
-  login: EffectSchema.String,
-  active: EffectSchema.Boolean,
-  /** When it was first linked, which orders a workspace's installations. */
-  linkedAt: countedNumber,
-});
-
-/** The workspaces' rows as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const workspacesLiveRowsSchema = EffectSchema.Struct({
-  workspaces: EffectSchema.Array(workspaceLiveRowSchema),
-  installations: EffectSchema.Array(workspaceInstallationLiveRowSchema),
-});
-
-type WorkspaceInstallationLiveRow = typeof workspaceInstallationLiveRowSchema.Type;
-
-/** By code unit, as a comparator answers. */
-function byText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
+type WorkspaceInstallationLiveRow = LiveRowOf<typeof WORKSPACES_READ.parts.installations>;
 
 /**
  * A row as the wire carries its workspace, as the held read writes it: every
@@ -93,12 +111,13 @@ function byText(a: string, b: string): number {
  * else the first, as the one a desktop from before several reads.
  */
 function workspaceOfLiveRow(
-  row: typeof workspaceLiveRowSchema.Type,
+  row: LiveRowOf<typeof WORKSPACES_READ.parts.workspaces>,
   installations: readonly WorkspaceInstallationLiveRow[],
 ): Workspace {
-  const githubInstallations = installations
-    .toSorted((a, b) => a.linkedAt - b.linkedAt || a.installationId - b.installationId)
-    .map(({ installationId, login, active }) => ({ installationId, login, active }));
+  const githubInstallations = orderedLiveRows(
+    WORKSPACES_READ.parts.installations,
+    installations,
+  ).map(({ installationId, login, active }) => ({ installationId, login, active }));
   const first = githubInstallations.find((one) => one.active) ?? githubInstallations[0];
   const pictureUrl =
     row.photoVersion === null && row.own ? pinnedPictureUrl(row.ownerImage) : undefined;
@@ -118,57 +137,61 @@ function workspaceOfLiveRow(
 }
 
 /** The account's workspaces as the held read answers them: its own first one first, the rest by name, then by id. */
-export function workspacesOfLiveRows(
-  rows: typeof workspacesLiveRowsSchema.Type,
-): readonly Workspace[] {
+export function workspacesOfLiveRows(rows: WorkspacesLiveRows): readonly Workspace[] {
   const installations = new Map<string, WorkspaceInstallationLiveRow[]>();
   for (const row of rows.installations) {
     installations.set(row.workspaceId, [...(installations.get(row.workspaceId) ?? []), row]);
   }
-  return rows.workspaces
-    .toSorted(
-      (a, b) => Number(b.own) - Number(a.own) || byText(a.name, b.name) || byText(a.id, b.id),
-    )
-    .map((row) => workspaceOfLiveRow(row, installations.get(row.id) ?? []));
+  return orderedLiveRows(WORKSPACES_READ.parts.workspaces, rows.workspaces).map((row) =>
+    workspaceOfLiveRow(row, installations.get(row.id) ?? []),
+  );
 }
 
 /**
- * One workspace's people sealed for following, read for the account asking:
- * the address, and two statements, its members and who its work names but
- * left. The service answers `not-found` for a workspace the account is not
- * a member of; asked to poll, or where Realtime cannot seal them, it answers
- * each statement's rows inline instead (`LIVE_POLL`).
+ * One workspace's people as the desktop follows them, read for the account
+ * asking: two parts, its members and who its work names but left, each by
+ * name, then by id. The service answers `not-found` for a workspace the
+ * account is not a member of.
  */
-export const workspaceMembersLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    members: sealedLiveQuerySchema,
-    former: sealedLiveQuerySchema,
-  }),
+export const WORKSPACE_MEMBERS_READ = liveRead({
+  name: LIVE_READ.WORKSPACE_MEMBERS,
+  path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMBERS,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER, workspaceId: LIVE_PARAM.TEXT },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    members: liveRows({
+      row: Schema.Struct({
+        userId: Schema.String,
+        name: Schema.String,
+        email: Schema.String,
+        /** The plugin's role text, which may list several roles comma-separated. */
+        role: Schema.String,
+        /** The sign-in picture as the account holds it, null for none. */
+        image: Schema.NullOr(Schema.String),
+      }),
+      key: "userId",
+      order: [
+        ["name", ORDER.ASC],
+        ["userId", ORDER.ASC],
+      ],
+    }),
+    former: liveRows({
+      row: Schema.Struct({
+        userId: Schema.String,
+        name: Schema.String,
+        image: Schema.NullOr(Schema.String),
+      }),
+      key: "userId",
+      order: [
+        ["name", ORDER.ASC],
+        ["userId", ORDER.ASC],
+      ],
+    }),
+  },
+  refuses: refuses(HOSTED_API_ERROR.NOT_FOUND),
 });
 
-export type WorkspaceMembersLiveAnswer = typeof workspaceMembersLiveAnswerSchema.Type;
-
-/** A workspace's people as their rows deliver them: each sign-in picture as the account holds it, null for none. */
-export const workspaceMembersLiveRowsSchema = EffectSchema.Struct({
-  members: EffectSchema.Array(
-    EffectSchema.Struct({
-      userId: EffectSchema.String,
-      name: EffectSchema.String,
-      email: EffectSchema.String,
-      /** The plugin's role text, which may list several roles comma-separated. */
-      role: EffectSchema.String,
-      image: EffectSchema.NullOr(EffectSchema.String),
-    }),
-  ),
-  former: EffectSchema.Array(
-    EffectSchema.Struct({
-      userId: EffectSchema.String,
-      name: EffectSchema.String,
-      image: EffectSchema.NullOr(EffectSchema.String),
-    }),
-  ),
-});
+export type WorkspaceMembersLiveAnswer = LiveReadAnswer<typeof WORKSPACE_MEMBERS_READ>;
 
 /** The order roles are listed in: owners, then admins, then members. */
 const ROLE_ORDER: readonly WorkspaceRole[] = [
@@ -176,14 +199,6 @@ const ROLE_ORDER: readonly WorkspaceRole[] = [
   WORKSPACE_ROLE.ADMIN,
   WORKSPACE_ROLE.MEMBER,
 ];
-
-/** By name, then by id, as the held read orders people. */
-function byName(
-  a: { readonly name: string; readonly userId: string },
-  b: { readonly name: string; readonly userId: string },
-): number {
-  return byText(a.name, b.name) || byText(a.userId, b.userId);
-}
 
 /** A picture the renderer may draw, under the key the wire carries it by; nothing for any other. */
 function pictureOf(image: string | null): { readonly pictureUrl?: string } {
@@ -197,14 +212,14 @@ function pictureOf(image: string | null): { readonly pictureUrl?: string } {
  * absent where nobody did.
  */
 export function workspaceMembersOfLiveRows(
-  rows: typeof workspaceMembersLiveRowsSchema.Type,
+  rows: typeof WORKSPACE_MEMBERS_READ.rows.Type,
 ): WorkspaceMembersAnswer {
-  const members = rows.members
-    .toSorted(byName)
-    .map(({ image, role, ...member }) => ({ ...member, role: roleOf(role), ...pictureOf(image) }));
-  const former = rows.former
-    .toSorted(byName)
-    .map(({ image, ...person }) => ({ ...person, ...pictureOf(image) }));
+  const members = orderedLiveRows(WORKSPACE_MEMBERS_READ.parts.members, rows.members).map(
+    ({ image, role, ...member }) => ({ ...member, role: roleOf(role), ...pictureOf(image) }),
+  );
+  const former = orderedLiveRows(WORKSPACE_MEMBERS_READ.parts.former, rows.former).map(
+    ({ image, ...person }) => ({ ...person, ...pictureOf(image) }),
+  );
   return {
     members: ROLE_ORDER.flatMap((role) => members.filter((one) => one.role === role)),
     ...(former.length === 0 ? undefined : { former }),
@@ -212,33 +227,39 @@ export function workspaceMembersOfLiveRows(
 }
 
 /**
- * One workspace's pending invitations sealed for following, for an owner or
- * an admin of it: the address, the service's own origin each accept link is
- * built on, and one statement. The service answers `not-found` for a
+ * One workspace's pending invitations as the desktop follows them, for an
+ * owner or an admin of it: one part, its pending invitations, expired ones
+ * among them, soonest to expire first, and the service's own origin each
+ * accept link is built on beside it. The service answers `not-found` for a
  * workspace the account is not in and `not-permitted` for one it neither
- * owns nor administers; asked to poll, or where Realtime cannot seal it, it
- * answers the statement's rows inline instead (`LIVE_POLL`).
+ * owns nor administers.
  */
-export const workspaceInvitationsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  origin: EffectSchema.String,
-  queries: EffectSchema.Struct({ invitations: sealedLiveQuerySchema }),
-});
-
-export type WorkspaceInvitationsLiveAnswer = typeof workspaceInvitationsLiveAnswerSchema.Type;
-
-/** A workspace's pending invitations as their rows deliver them, expired ones among them. */
-export const workspaceInvitationsLiveRowsSchema = EffectSchema.Struct({
-  invitations: EffectSchema.Array(
-    EffectSchema.Struct({
-      id: EffectSchema.String,
-      email: EffectSchema.String,
-      /** The plugin's role text, null where it holds none. */
-      role: EffectSchema.NullOr(EffectSchema.String),
-      expiresAt: countedNumber,
+export const WORKSPACE_INVITATIONS_READ = liveRead({
+  name: LIVE_READ.WORKSPACE_INVITATIONS,
+  path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INVITATIONS,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER, workspaceId: LIVE_PARAM.TEXT },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    invitations: liveRows({
+      row: Schema.Struct({
+        id: Schema.String,
+        email: Schema.String,
+        /** The plugin's role text, null where it holds none. */
+        role: Schema.NullOr(Schema.String),
+        expiresAt: countedNumber,
+      }),
+      key: "id",
+      order: [["expiresAt", ORDER.ASC]],
     }),
-  ),
+  },
+  beside: { origin: Schema.String },
+  refuses: refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED),
 });
+
+export type WorkspaceInvitationsLiveAnswer = LiveReadAnswer<typeof WORKSPACE_INVITATIONS_READ>;
+
+/** A workspace's pending invitations as their rows deliver them. */
+type WorkspaceInvitationsLiveRows = typeof WORKSPACE_INVITATIONS_READ.rows.Type;
 
 /**
  * The pending invitations as the held read answers them at `now`: those not
@@ -247,13 +268,12 @@ export const workspaceInvitationsLiveRowsSchema = EffectSchema.Struct({
  * on the service's `origin`.
  */
 export function workspaceInvitationsOfLiveRows(
-  rows: typeof workspaceInvitationsLiveRowsSchema.Type,
+  rows: WorkspaceInvitationsLiveRows,
   origin: string,
   now: number,
 ): readonly WorkspaceInvitation[] {
-  return rows.invitations
+  return orderedLiveRows(WORKSPACE_INVITATIONS_READ.parts.invitations, rows.invitations)
     .filter((one) => one.expiresAt > now)
-    .toSorted((first, second) => first.expiresAt - second.expiresAt)
     .flatMap((one) => {
       const role = Object.values(INVITATION_ROLE).find((each) => each === one.role);
       if (role === undefined) return [];
@@ -275,7 +295,7 @@ export function workspaceInvitationsOfLiveRows(
  * out with no row moving; none where every one has expired.
  */
 export function nextInvitationExpiry(
-  rows: typeof workspaceInvitationsLiveRowsSchema.Type,
+  rows: WorkspaceInvitationsLiveRows,
   now: number,
 ): number | undefined {
   const pending = rows.invitations.map((one) => one.expiresAt).filter((at) => at > now);

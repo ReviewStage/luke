@@ -24,7 +24,7 @@ import {
 } from "@repo/gateway";
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { entityPool } from "@repo/sync";
-import { Effect, Exit, Layer, Option, Scope } from "effect";
+import { Effect, Exit, Layer, Option, Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -57,12 +57,14 @@ import {
   type ThisMacHost,
 } from "./effect/seams.js";
 import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
+import { ActRefused } from "./host-acts.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
   type HostConcern,
   type HostPlatformConcern,
   isPlatformConcern,
+  NOT_ON_THIS_PLATFORM,
   unavailableConcern,
 } from "./host-concerns.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
@@ -195,14 +197,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * that may wait for the service is sent under a key of the host's own
      * minting and waits while the service does not answer: kept on disk
      * beside the lists where they are kept (`openEntities`), and in a
-     * browser tab for the tab's life alone. A fixture run keeps none
-     * waiting.
+     * browser tab for the tab's life alone, and sent again only as the
+     * account that asked it. A fixture run keeps none waiting.
      */
     const pool = yield* entityPool(
       kernel.runMode.requiresAccount
         ? {
             mintKey: kernel.createId,
             replayRefused: Effect.sync(() => offlineRefused.raise()),
+            holder: accountId,
           }
         : undefined,
     );
@@ -335,6 +338,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
               Effect.orDie(settings.store.snapshot()),
               (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
             ),
+            changed: Effect.zipWith(settings.told, account.session.changes, (written, signed) =>
+              Stream.merge(written, signed),
+            ),
             allowAlways: Effect.map(
               settings.settingsWrite(
                 () =>
@@ -351,7 +357,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS),
+          // Note that a host without the Mac commands holds no ask, so an answer finds none waiting and is answered all the same, as the Gateway's refusal of its method was.
+          acts: { MAC_COMMAND_ANSWER: () => Effect.void },
+        };
     const thisMacHost = platform.has(HOST_PLATFORM_CONCERN.THIS_MAC_HOST)
       ? yield* served(
           composeThisMacHost({
@@ -365,6 +375,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
                 })),
                 (snapshot) => experimentOn(snapshot.experiments, experiment),
               ),
+            settingsTold: settings.told,
             hostListed: (deviceId) =>
               Effect.map(agentClient.hosts(), (answer) =>
                 "failure" in answer
@@ -377,7 +388,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST),
+          // Note that a host without This Mac refuses its set, which the act draws as unanswered, as the Gateway's refusal of its method was.
+          acts: { HOSTS_THIS_MAC_SET: () => Effect.fail(new Error(NOT_ON_THIS_PLATFORM)) },
+        };
     const terminals: TerminalsComposer =
       openSocket !== undefined
         ? yield* served(
@@ -415,7 +430,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             listen: yield* LoopbackListener,
           }),
         )
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS), reset: Effect.void };
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS),
+          // Note that a host without the port forwards refuses its set in the act's own sentence, as the platform's refusal of its kind was.
+          acts: { PORT_FORWARD_SET: () => Effect.fail(new ActRefused({})) },
+          reset: Effect.void,
+        };
 
     /**
      * The signed-in account's store opened where none stands: only where the
@@ -435,6 +455,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         cipher: tokenCipher,
         accountId: signedInId,
         queued: pool.queued,
+        queueMoves: pool.queueMoves,
       }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
@@ -499,6 +520,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
+      settleHeld: agents.letGoHeldCloses,
     });
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
@@ -572,7 +594,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const assembly: HostAssembly = {
       gateway: service.gateway,
       // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
-      acts: { ...agents.acts },
+      acts: {
+        ...account.acts,
+        ...agents.acts,
+        ...settings.acts,
+        ...thisMacHost.acts,
+        ...automations.acts,
+        ...installedSkills.acts,
+        ...integrations.acts,
+        ...macCommands.acts,
+        ...portForwards.acts,
+        ...tasks.acts,
+      },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),

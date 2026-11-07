@@ -16,6 +16,7 @@ import {
 } from "@repo/database/models/agent-store";
 import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
 import { devicesNamed, registerDevice } from "@repo/database/models/device-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { addTaskBlock } from "@repo/database/models/task-block-store";
 import {
   assignUnassignedTaskCommitted,
@@ -58,6 +59,7 @@ import {
   AUTOMATION_TRIGGER,
 } from "@repo/features/automation-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { agentsOfTask, pullRequestsOfTask } from "@repo/features/task-agents-model";
 import {
   agentPullRequestsOfLiveRows,
   taskAgentPinsOfLiveRows,
@@ -66,7 +68,12 @@ import {
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
 } from "@repo/features/task-list-live";
-import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  type HeldTaskSummary,
+  TASK_STATUS,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -210,8 +217,18 @@ const liveRowsOf = (userId: string) =>
   });
 
 /** An agent on a plan as the plan's own list names it, the workspace and repository the live list keeps beside it left out. */
-const summaryOf = ({ workspaceId: _workspaceId, repository: _repository, ...agent }: ListedAgent) =>
-  agent;
+const summaryOf = ({
+  workspaceId: _workspaceId,
+  repository: _repository,
+  settledAt: _settledAt,
+  ...agent
+}: ListedAgent) => agent;
+
+/** The statuses of a plan's agents as the desktop reads them from the live rows at `now`, the archived left out, those at work first. */
+const liveStatusesOf = (userId: string, taskId: string, now: number) =>
+  Effect.map(liveRowsOf(userId), (rows) =>
+    agentsOfTask(taskAgentsOfLiveRows(rows, now), taskId).map((agent) => agent.status),
+  );
 
 /** The list as the desktop builds it from the live rows, at `now`. */
 const liveListOf = (userId: string, now: number) =>
@@ -268,11 +285,19 @@ const heldListOf = (userId: string, now: number) =>
     return yield* Effect.provideService(heldList(userId), Clock.Clock, clock);
   });
 
+/** A plan as the held read answers it, counted as the live list counts it: the lines it keeps for released clients left out. */
+function countedOf(plan: HeldTaskSummary): TaskSummary {
+  const { agents, ...rest } = plan;
+  if (agents === undefined) return rest;
+  const { agents: _agents, pullRequests: _pullRequests, ...counts } = agents;
+  return { ...rest, agents: counts };
+}
+
 const heldList = (userId: string) =>
   Effect.gen(function* () {
     const tasks = yield* listTasks(userId);
     return {
-      plans: yield* withTaskAgents(userId, tasks),
+      plans: (yield* withTaskAgents(userId, tasks)).map(countedOf),
       planlessAgents: yield* listTasklessAgents(userId, { includeArchived: true }),
     };
   });
@@ -566,10 +591,12 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           [8, 2, 1, 1],
         );
         assert.equal(read.plans.find((each) => each.id === shelved.id)?.agents?.failed, 0);
-        assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
-        assert.equal(agents?.pullRequests[0]?.author, "octo-dev", "it names who opened it");
+        const rows = yield* liveRowsOf(owner);
+        const pullRequests = pullRequestsOfTask(taskPullRequestsOfLiveRows(rows), plan.id);
+        assert.equal(pullRequests[0]?.queued, true, "a queued pull request says so");
+        assert.equal(pullRequests[0]?.author, "octo-dev", "it names who opened it");
         assert.ok(
-          (agents?.agents ?? []).every(
+          agentsOfTask(taskAgentsOfLiveRows(rows, NOW), plan.id).every(
             (line) =>
               ![unanswered.id, orphaned.id].includes(line.id) ||
               line.status === AGENT_STATUS.FAILED,
@@ -618,7 +645,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a plan's row names its first few pull requests and counts them all, every one stands beside the list in the row's order, and each agent's own beside it, an archived agent's among them",
+    "a plan's row counts its pull requests, every one stands beside the list in the order its readers name them, and each agent's own beside it, an archived agent's among them",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -649,11 +676,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           every?.pullRequests.map((each) => each.number),
           [41, 42, 43, 44, 45],
           "every pull request, the newest agent's first",
-        );
-        assert.deepEqual(
-          row?.agents?.pullRequests,
-          every?.pullRequests.slice(0, 3),
-          "the row names the first few of them",
         );
         assert.deepEqual(
           agentPullRequestsOfLiveRows(rows)
@@ -705,6 +727,36 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
+    "an agent's sandbox reads open once its conversation claims a session, as the held read reads it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const workspace = yield* openWorkspace(owner);
+        const agent = yield* openAgent(owner, { workspaceId: workspace }, 60_000);
+        const sandboxOf = (read: {
+          readonly planlessAgents?: readonly {
+            readonly id: string;
+            readonly sandboxOpen?: boolean;
+          }[];
+        }) => read.planlessAgents?.find((each) => each.id === agent.id)?.sandboxOpen;
+
+        const starting = yield* liveListOf(owner, NOW);
+        assert.deepEqual(starting, yield* heldListOf(owner, NOW));
+        assert.equal(sandboxOf(starting), false);
+
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          "session-1",
+          new Date(NOW),
+        );
+
+        const opened = yield* liveListOf(owner, NOW);
+        assert.deepEqual(opened, yield* heldListOf(owner, NOW));
+        assert.equal(sandboxOf(opened), true);
+      }),
+  );
+
+  it.effect(
     "an agent with no turn reads failed once its grace ends, as the held read reads it then",
     () =>
       Effect.gen(function* () {
@@ -716,10 +768,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const read = yield* liveListOf(owner, later);
 
         assert.deepEqual(read, yield* heldListOf(owner, later));
-        assert.deepEqual(
-          read.plans[0]?.agents?.agents.map((line) => line.status),
-          [AGENT_STATUS.FAILED],
-        );
+        assert.deepEqual(yield* liveStatusesOf(owner, plan.id, later), [AGENT_STATUS.FAILED]);
       }),
   );
 
@@ -740,10 +789,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         ] as const) {
           const read = yield* liveListOf(owner, at);
           assert.deepEqual(read, yield* heldListOf(owner, at));
-          assert.deepEqual(
-            read.plans[0]?.agents?.agents.map((line) => line.status),
-            [status],
-          );
+          assert.deepEqual(yield* liveStatusesOf(owner, plan.id, at), [status]);
         }
       }),
   );
@@ -820,15 +866,15 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.equal(byId.get(loose.id)?.pullRequest?.queued, true);
         assert.equal(byId.get(continued.id)?.from?.agentId, loose.id);
         assert.equal(byId.get(continued.id)?.archivedBy?.withTask, true);
-        const lines = read.plans.find((each) => each.id === plan.id)?.agents?.agents ?? [];
+        const lines = agentsOfTask(taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW), plan.id);
         assert.equal(
           lines.find((line) => line.id === spoken.id)?.status,
           AGENT_STATUS.COMPLETED,
           "a line a call spoke or took typed leaves a settled agent completed",
         );
-        const seen = (yield* liveListOf(teammate, NOW)).plans.find((each) => each.id === plan.id);
+        const seen = taskAgentsOfLiveRows(yield* liveRowsOf(teammate), NOW);
         assert.ok(
-          !(seen?.agents?.agents ?? []).some((line) => line.id === hidden.id),
+          !seen.some((line) => line.id === hidden.id),
           "the teammate's list leaves out the agent they do not see",
         );
       }),

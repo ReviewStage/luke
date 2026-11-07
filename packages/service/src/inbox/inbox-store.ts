@@ -1180,9 +1180,14 @@ function repositoryCarried(repositoryless: boolean): SQL | undefined {
   return repositoryless ? undefined : isNotNull(agentTable.repository);
 }
 
-/** How many of a group's items are questions waiting on the reader (`askingReader`), as a number rather than a `bigint`. */
+/**
+ * How many of a group's items wait on the reader (`waitingOnReader`), as a
+ * number rather than a `bigint`. Note that an item whose reminder the reader
+ * set for later still counts, because a live read cannot read the clock
+ * (`live-statement.ts`), so the reader leaves those out on its own side.
+ */
 function toDoCount(userId: string): SQL<number> {
-  return sql<number>`(count(*) filter (where ${askingReader(userId)}))::int`;
+  return sql<number>`(count(*) filter (where ${waitingOnReader(userId)}))::int`;
 }
 
 /**
@@ -1351,7 +1356,7 @@ const LATEST_ITEM = max(inboxItem.updatedAt);
 /**
  * Every task of the account's workspaces that holds an item, open or
  * settled, whichever member's agent posted it, with how many of them are
- * questions waiting on the reader (`askingReader`), the task whose item
+ * waiting on the reader (`waitingOnReader`), the task whose item
  * changed latest first.
  */
 const findTasksWithItems = SqlSchema.findAll({
@@ -1434,8 +1439,8 @@ const AgentItemsRowSchema = Schema.Struct({
 /**
  * Every agent with no task of the account's workspaces that holds an item
  * the reader may read (`itemVisibleTo`), open or settled, whichever
- * member's agent posted it, with how many of them are questions waiting on
- * the reader (`askingReader`), the agent whose item changed latest first,
+ * member's agent posted it, with how many of them are waiting on the
+ * reader (`waitingOnReader`), the agent whose item changed latest first,
  * as `findTasksWithItems` lists the tasks; those of agents with no
  * repository only where `repositoryless` asks (`repositoryCarried`). Note
  * that it groups by the agent's and the automation's own keys, which every
@@ -2076,15 +2081,13 @@ const upsertUnread = SqlSchema.findOneOption({
 
 /**
  * The member's marker on the item reminding them at the instant over its
- * last change, or, where none is named, its reminder canceled now, where
+ * last change, or, where none is named, its reminder canceled, where
  * the account reaches the item. Note that it leaves whether the item is
  * read alone: a marker it makes reads through no change and is marked
  * unread by no one, which reads the item as having none does
  * (`unreadFor`). A change after it ends the reminder (`remindAtFor`). A
- * reminder canceled is one that came due now rather than none, because the
- * item came back then, which keeps a
- * settled one carried as long as it would have been had it come due
- * (`accountItemsOf`); one already past stands as it came due.
+ * reminder canceled is none, so the item stands where it stood before it
+ * was set, never as come due.
  */
 const upsertReminder = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -2116,16 +2119,10 @@ const upsertReminder = SqlSchema.findOneOption({
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
-          set:
-            until === null
-              ? // Note that `least` passes over a null, so a marker with no reminder keeps none.
-                {
-                  remindAt: sql`case when ${inboxItemRead.remindAt} is null then null else least(${inboxItemRead.remindAt}, now()) end`,
-                }
-              : {
-                  remindAt: excluded(inboxItemRead.remindAt),
-                  remindThrough: excluded(inboxItemRead.remindThrough),
-                },
+          set: {
+            remindAt: excluded(inboxItemRead.remindAt),
+            remindThrough: excluded(inboxItemRead.remindThrough),
+          },
         })
         .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
     ),
@@ -2819,9 +2816,9 @@ function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]>
   );
 }
 
-/** Whether the item holds an ask open that waits on the reader: what a to-do count counts. */
-function askingReader(userId: string): SQL<boolean> {
-  return sql<boolean>`(${ASKING} and ${WAITS_ON} = ${userId})`;
+/** Whether the item is open, an ask not answered or a notice not acknowledged, and waits on the reader: what a to-do count counts. */
+function waitingOnReader(userId: string): SQL<boolean> {
+  return sql<boolean>`(${inboxItem.status} = ${INBOX_STATUS.OPEN} and ${WAITS_ON} = ${userId})`;
 }
 
 /** The item, with the key its answer was taken under; nothing for one of a workspace the account is not in. */
@@ -2881,7 +2878,7 @@ export function markInboxItemUnread(
 }
 
 /**
- * The item's reminder set for the member for `until`, or canceled now
+ * The item's reminder set for the member for `until`, or canceled
  * where `until` is null, leaving whether it is read alone; the transaction that
  * wrote it and whether the item is unread for them, or false where the
  * account reaches no such item. Another member's marker is never touched.

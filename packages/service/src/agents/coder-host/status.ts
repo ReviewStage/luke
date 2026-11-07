@@ -49,13 +49,13 @@ import { CODER_REFUSAL } from "./bounds.js";
  *
  * An agent's status is its conversation's newest turn row and the one
  * thing beside it, a message of the developer's still awaiting its turn:
- * `starting` before the first turn is queued, `running` while eve runs a
+ * `starting` before the first turn is queued, `running` while its harness runs a
  * turn or a line waits for the turn it will open, and how the newest turn
  * ended after. A turn still running that carries a Stop stamp
- * reads as canceled already, since the Stop is on its way to eve and
+ * reads as canceled already, since the Stop is on its way to its harness and
  * nothing the turn still does changes where it ends. An agent with no turn
  * row long past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather
- * than starting forever, as one that never started: eve took the session,
+ * than starting forever, as one that never started: its harness took the session,
  * and its first turn lands in seconds or not at all. A line that awaits its
  * turn reads as running whatever the newest turn says, because the session
  * took the message and the turn it opens is on its way
@@ -72,7 +72,7 @@ import { CODER_REFUSAL } from "./bounds.js";
  * word for a turn it settled, else the host's refusal sentences where the
  * turn's detail carries one, GitHub's or the sandbox's, else a provider's
  * refusal of a prompt longer than the model's window, else the model
- * call, which is what every other eve failure of a coding turn is. An
+ * call, which is what every other failure of a coding turn is. An
  * unanswered line after a turn that did not fail has no word, and its end
  * line says Failed alone. Nothing of the detail itself leaves here.
  */
@@ -157,7 +157,7 @@ export function statusClockEdge(
 }
 
 /**
- * What a provider says, in the error eve keeps in a failed turn's detail,
+ * What a provider says, in the error a failed turn's detail keeps,
  * when the prompt is longer than the model's window: Anthropic's
  * "prompt is too long: 1368155 tokens > 1000000 maximum", and OpenAI's
  * error code and words for the same.
@@ -321,11 +321,13 @@ export function agentFailureOf(
 export interface AgentTurnStanding {
   readonly turn: AgentLatestTurn | undefined;
   readonly awaitingLineAt: Date | undefined;
-  /** The provider's own harness its conversation runs on; none on eve, and where the read named none. */
+  /** The provider's own harness its conversation runs on; none on the retired runtime, and where the read named none. */
   readonly runtime?: NativeAgentRuntime | undefined;
+  /** Whether its sandbox stands open (`openSandboxesOfReached`); none where the read named none. */
+  readonly sandboxOpen?: boolean | undefined;
 }
 
-/** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
+/** When the run the status is read from began: the newest turn's start, or its queueing before its harness starts it, the agent's own before any turn, and none while a line awaits its turn. */
 export function agentRunStartedAt(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
@@ -469,6 +471,7 @@ function summaryFields(
     ...summary,
     ...(started === undefined ? undefined : { runStartedAt: started }),
     ...(stoppable ? undefined : { stoppable: false }),
+    ...(standing.sandboxOpen === undefined ? undefined : { sandboxOpen: standing.sandboxOpen }),
   };
 }
 

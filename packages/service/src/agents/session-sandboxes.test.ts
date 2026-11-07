@@ -4,7 +4,6 @@ import { getTestDB } from "@repo/database/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
 import {
   fixtureToken,
   sandboxesListed,
@@ -14,10 +13,9 @@ import {
   sandboxStopRefusal,
   sessionAnswered,
 } from "../testing/vercel-sandbox-fake.js";
-import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { CODER } from "./coder-host/bounds.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
-import { SANDBOX_CALL, SandboxUnavailable, vercelSandboxApi } from "./vercel-sandbox-api.js";
+import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 /**
  * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
@@ -67,9 +65,6 @@ function vercel(sandboxes: readonly NamedSandbox[], stopStatus = 200) {
       const parsed = new URL(url);
       asked.push({ method: init.method ?? "GET", url: parsed });
       const session = /\/sessions\/([^/]+)\//u.exec(parsed.pathname)?.[1] ?? "";
-      if (parsed.pathname.endsWith("/network-policy")) {
-        return Response.json(sessionAnswered({ id: session, status: "running" }));
-      }
       if (parsed.pathname.endsWith("/stop")) {
         return (
           sandboxStopRefusal(init) ??
@@ -97,7 +92,7 @@ const stopFor = (sessionId: string) =>
   );
 
 it.effect(
-  "the session's sandbox that is up has its credential taken off its firewall and then its running session stopped, in the token's project and team, and one already stopped is left",
+  "the session's sandbox that is up has its running session stopped, in the token's project and team, and one already stopped is left",
   () =>
     Effect.gen(function* () {
       const api = vercel([
@@ -114,52 +109,8 @@ it.effect(
       assert.equal(list?.url.searchParams.get("teamId"), TEAM);
       assert.deepEqual(
         api.asked.filter((asked) => asked.method !== "GET").map((asked) => asked.url.pathname),
-        [
-          "/api/v2/sandboxes/sessions/sbs_up/network-policy",
-          "/api/v2/sandboxes/sessions/sbs_up/stop",
-        ],
+        ["/api/v2/sandboxes/sessions/sbs_up/stop"],
       );
-    }),
-);
-
-it.effect(
-  "a retired session's running sandbox is deleted, and the drive it mounted on the queue's next pass, once the sandbox has let go of it",
-  () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const fake = runnerSandboxApi();
-      const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(
-        Effect.provide(fake.layer),
-      );
-      const drive = agentDriveName(SESSION);
-      yield* api.getOrCreateDrive(drive);
-      yield* api.create({
-        name: "agent-sandbox-fixture",
-        image: "agent-image:fixture",
-        tags: { sessionId: SESSION },
-        timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-        vcpus: 2,
-        keepLastSnapshots: { count: 1, deleteEvicted: true },
-        env: {},
-        mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive },
-      });
-
-      const deleteFor = Effect.flatMap(SessionSandboxes, (sandboxes) =>
-        sandboxes.deleteFor(SESSION),
-      ).pipe(Effect.provide(Layer.provide(sessionSandboxesLayer, fake.layer)));
-
-      const first = yield* Effect.flip(deleteFor);
-      const afterFirst = [...fake.drives];
-      const next = yield* deleteFor;
-
-      assert.deepEqual(
-        [first.call, first.status, first.code],
-        [SANDBOX_CALL.DRIVE_DELETE, 409, "drive_attached"],
-      );
-      assert.equal(fake.sandboxes[0]?.deleted, true);
-      assert.deepEqual(afterFirst, [drive]);
-      assert.equal(next, 0);
-      assert.deepEqual([...fake.drives], []);
     }),
 );
 

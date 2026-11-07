@@ -25,8 +25,8 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * chip widens nor once the resize is measured. On an agent that runs on
  * Claude Code it offers Claude models alone, with Fast and no Context row,
  * on Codex GPT models alone with neither, the list `list_models` answers
- * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
- * offers all of it. A model whose plan runs no fast mode draws no Fast.
+ * for the same catalog (`coder-agent-tools.test.ts`), while the menu of an
+ * agent on the retired runtime offers all of it. A model whose plan runs no fast mode draws no Fast.
  * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
  * manage its usage; no other agent's says what pays. An automation's chip
  * says a choice nothing of the reader's pays for cannot run; a running
@@ -237,7 +237,7 @@ function openMenuOn(
   return { models: listed, foot, line, menu };
 }
 
-test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither but a Speed choice of Standard, Fast, and Ultrafast in Fast's place where its API key pays, while an eve agent's offers every model with both", () => {
+test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither but a Speed choice of Standard, Fast, and Ultrafast in Fast's place where its API key pays, while on an agent on the retired runtime it offers every model with both", () => {
   const claudeCode = openMenuOn(AGENT_RUNTIME.CLAUDE_CODE);
   const codex = openMenuOn(AGENT_RUNTIME.CODEX);
   const codexOnApiKey = openMenuOn(
@@ -247,7 +247,7 @@ test("on a Claude Code agent the menu offers Claude models alone with Fast and n
     undefined,
     AGENT_PAYER.API_KEY,
   );
-  const eve = openMenuOn(undefined);
+  const retired = openMenuOn(undefined);
 
   assert.equal(claudeCode.models.length, 2, claudeCode.models.join(" | "));
   assert.match(claudeCode.models[0] ?? "", /Opus 5\.5/u);
@@ -264,14 +264,14 @@ test("on a Claude Code agent the menu offers Claude models alone with Fast and n
   assert.match(codexOnApiKey.foot, /Speed\s*Standard/u);
   assert.doesNotMatch(codexOnApiKey.foot, /Fast|Context/u);
 
-  assert.equal(eve.models.length, 3, eve.models.join(" | "));
-  assert.match(eve.models[2] ?? "", /GPT-6\.1 Sol/u);
-  assert.match(eve.foot, /Effort/u);
-  assert.match(eve.foot, /Context/u);
-  assert.match(eve.foot, /Fast/u);
+  assert.equal(retired.models.length, 3, retired.models.join(" | "));
+  assert.match(retired.models[2] ?? "", /GPT-6\.1 Sol/u);
+  assert.match(retired.foot, /Effort/u);
+  assert.match(retired.foot, /Context/u);
+  assert.match(retired.foot, /Fast/u);
 });
 
-test("a Codex agent's menu ends on \"Using ChatGPT plan\" and Manage usage, before its first turn settles too, the link opening ChatGPT's usage settings, while a Claude Code agent's says its Claude plan and an eve agent's names no payer", () => {
+test("a Codex agent's menu ends on \"Using ChatGPT plan\" and Manage usage, before its first turn settles too, the link opening ChatGPT's usage settings, while a Claude Code agent's says its Claude plan and the menu of an agent on the retired runtime names no payer", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://app.test/", openWeb: (href) => opened.push(href) });
   const codex = openMenuOn(AGENT_RUNTIME.CODEX, {

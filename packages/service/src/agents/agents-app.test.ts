@@ -70,7 +70,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   AGENT,
   AGENT_STARTS,
-  fakeEve,
+  fakeAgentSessions,
   LONG_TURNS,
   openedParts,
   openTask,
@@ -98,18 +98,18 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../testing/source-sandbox.js";
-import { agentDriveName } from "./agent-drive.js";
+import { agentSandboxName } from "./agent-sandbox-open.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
- * them, over a real dialect: a Start is one agent whose eve session opens
+ * them, over a real dialect: a Start is one agent whose harness session opens
  * with the description as its first message, a retry under the same key is that
  * agent and opens nothing again, the list reads each agent's status from its
  * newest turn, the transcript answers the conversation's rows past a cursor,
- * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
+ * and a Stop is the harness's cancel of the turn under way and the row's stamp. The harness
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
  * and the store PGlite. Synthetic accounts, bearers, tasks, and words
  * throughout.
@@ -117,11 +117,14 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 it.layer(getTestDB())("starting an agent from another", (it) => {
   /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
-  const sourceAgentOn = (github?: RepositoryScript, eve?: ReturnType<typeof fakeEve>) =>
+  const sourceAgentOn = (
+    github?: RepositoryScript,
+    agentSessions?: ReturnType<typeof fakeAgentSessions>,
+  ) =>
     Effect.gen(function* () {
       const opened = yield* openTask({
         ...(github === undefined ? undefined : { github }),
-        ...(eve === undefined ? undefined : { eve }),
+        ...(agentSessions === undefined ? undefined : { agentSessions }),
       });
       const source = readAnswer(
         agentAnswerSchema,
@@ -175,7 +178,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue is handed the description as it stands now and every step after the source's brief, its reasoning left out, on the source's choice and servers, and names where it came from",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source } = yield* sourceAgent;
         yield* saveDescriptionText(owner, task.id, "## Goal\n\nInvite by link.\n");
 
         const started = readAnswer(
@@ -185,7 +188,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
           ),
         ).agent;
-        const { text: handed, parts } = openedParts(eve);
+        const { text: handed, parts } = openedParts(agentSessions);
 
         assert.deepEqual(started.from, { agentId: source.id, steps: 5, totalSteps: 5 });
         assert.deepEqual(
@@ -246,15 +249,19 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A source whose session eve opened is claimed, with a turn under way eve knows as `turn_0`; answers the session. */
-  const sourceRunning = (stored: Agent, eve: ReturnType<typeof fakeEve>) =>
+  /** A source whose session its harness opened is claimed, with a turn under way its harness knows as `turn_0`; answers the session. */
+  const sourceRunning = (stored: Agent, agentSessions: ReturnType<typeof fakeAgentSessions>) =>
     Effect.gen(function* () {
       const target = { userId: stored.userId, conversationId: stored.conversationId };
-      const sessionId = eve.opened[0]?.sessionId ?? "";
+      const sessionId = agentSessions.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const turnId = randomUUID();
-      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        runtimeTurnId: "turn_0",
+      });
       yield* writer.consume(target, {
         kind: RUN_EVENT.TURN_STARTED,
         conversationId: sessionKey(target.conversationId),
@@ -278,12 +285,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue stops its source's turn still running, once however many continue it, and a fork leaves its source running",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgentOn(
           undefined,
-          eve,
+          agentSessions,
         );
-        const sessionId = yield* sourceRunning(stored, eve);
+        const sessionId = yield* sourceRunning(stored, agentSessions);
         const startFrom = (from: { agentId: string; messageId?: string }) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
@@ -296,16 +303,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
 
         yield* startFrom({ agentId: source.id, messageId: firstTurn });
-        assert.deepEqual(eve.canceled, [], "a fork stops nothing");
+        assert.deepEqual(agentSessions.canceled, [], "a fork stops nothing");
         assert.equal(yield* sourceStatus, AGENT_STATUS.RUNNING);
 
         yield* startFrom({ agentId: source.id });
-        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(agentSessions.canceled, [[sessionId, "turn_0"]]);
         assert.equal(yield* sourceStatus, AGENT_STATUS.CANCELED);
 
         yield* startFrom({ agentId: source.id });
         assert.deepEqual(
-          eve.canceled,
+          agentSessions.canceled,
           [[sessionId, "turn_0"]],
           "a source stopped is not stopped again",
         );
@@ -404,12 +411,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a source eve refuses to stop still has its continue started, and runs on, a pilot unarchived",
+    "a source whose harness refuses to stop still has its continue started, and runs on, a pilot unarchived",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve({ cancels: false });
-        const { owner, task, ask, source, stored } = yield* sourceAgentOn(undefined, eve);
-        const sessionId = yield* sourceRunning(stored, eve);
+        const agentSessions = fakeAgentSessions({ cancels: false });
+        const { owner, task, ask, source, stored } = yield* sourceAgentOn(undefined, agentSessions);
+        const sessionId = yield* sourceRunning(stored, agentSessions);
         yield* Database.use((db) =>
           db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, source.id)),
         );
@@ -423,7 +430,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
 
         assert.deepEqual(started.from?.agentId, source.id);
-        assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(agentSessions.canceled, [[sessionId, "turn_0"]]);
         const page = readAnswer(
           agentPageAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -466,12 +473,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a source names the agents that continued and forked it, in its task's list, on its own page, and once archived",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const agentSessions = fakeAgentSessions();
         const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgentOn(
           undefined,
-          eve,
+          agentSessions,
         );
-        yield* sourceRunning(stored, eve);
+        yield* sourceRunning(stored, agentSessions);
         const startFrom = (from: { agentId: string; messageId?: string }) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
@@ -514,7 +521,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it; GitHub answers its pull request's reads as `pull` does, where given. */
-  const copyScenario = (t: TestContext, pull?: RepositoryScript, onDrive = false) =>
+  const copyScenario = (t: TestContext, pull?: RepositoryScript, snapshotted = false) =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
       const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
@@ -522,7 +529,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const sandbox = sourceSandbox(
         checkout,
         "stopped",
-        onDrive ? agentDriveName("wrun_source") : undefined,
+        snapshotted ? agentSandboxName("wrun_source") : undefined,
       );
       const opened = yield* sourceAgentOn(
         pull === undefined ? sandbox.answer : (sent) => sandbox.answer(sent) ?? pull(sent),
@@ -539,7 +546,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             }),
           ),
         ).agent;
-        return { started, preamble: openedParts(opened.eve).parts.replay?.preamble ?? "" };
+        return {
+          started,
+          preamble: openedParts(opened.agentSessions).parts.replay?.preamble ?? "",
+        };
       });
       return { ...opened, checkout, sandbox, continued };
     });
@@ -593,7 +603,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a continue of a source on a drive of its own wakes nothing and copies nothing, and tells the new agent its checkout is the source's own",
+    "a continue of a source whose sandbox stopped on a snapshot wakes nothing and copies nothing, and tells the new agent its checkout is the source's own",
     (t) =>
       Effect.gen(function* () {
         const { sandbox, continued } = yield* copyScenario(t, undefined, true);
@@ -609,7 +619,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             .from(agentTable)
             .where(eq(agentTable.id, started.id)),
         );
-        assert.equal(row[0]?.startedFrom?.drive, agentDriveName("wrun_source"));
+        assert.equal(row[0]?.startedFrom?.sandbox, agentSandboxName("wrun_source"));
       }),
   );
 
@@ -617,7 +627,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of a source on no task, keyed by that source, copies its checkout to a branch of its own as a task's continue does, checked against the repository the source's own place clones",
     (t) =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, checkout } = yield* copyScenario(t);
+        const { owner, task, ask, agentSessions, source, checkout } = yield* copyScenario(t);
         // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
         yield* Database.use((db) =>
           db
@@ -642,7 +652,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             }),
           ),
         ).agent;
-        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+        const preamble = openedParts(agentSessions).parts.replay?.preamble ?? "";
 
         assert.equal(started.planId, null);
         const branch = started.from?.branch ?? "";
@@ -765,7 +775,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a fork is cut at the source's message, its turn included, warned of the files the source edited after it, and a message that is none of the source's journals is refused",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, stored, firstTurn, laterLine } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source, stored, firstTurn, laterLine } =
+          yield* sourceAgent;
         const patch = (files: readonly string[]) => ({
           patchText: `*** Begin Patch\n${files.map((file) => `*** Update File: ${file}\n@@\n-a\n+b`).join("\n")}\n*** End Patch`,
         });
@@ -837,7 +848,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* fork(firstTurn),
         ).agent;
-        const { parts } = openedParts(eve);
+        const { parts } = openedParts(agentSessions);
 
         assert.deepEqual(started.from, {
           agentId: source.id,
@@ -867,7 +878,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of a source whose turn failed part way replays the words that turn formed before it failed",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source, stored } = yield* sourceAgent;
         const target = { userId: owner, conversationId: stored.conversationId };
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const turnId = randomUUID();
@@ -875,7 +886,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_1",
+          runtimeTurnId: "turn_1",
         });
         const bodies = [
           {
@@ -909,7 +920,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
 
         assert.equal(
-          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          openedParts(agentSessions).parts.replay?.steps.at(-1)?.summary,
           "Said: Halfway through the mailer.",
         );
       }),
@@ -919,7 +930,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a fork of a reply still being written keeps the steps, and the words and calls of the last of them, seen as Fork was pressed, nothing written after, and names the files the rest of that reply edited; a fork naming no steps keeps the reply whole",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source, stored } = yield* sourceAgent;
         const write = (callId: string, filePath: string) => ({
           type: "tool-write_file",
           toolCallId: callId,
@@ -952,7 +963,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
                 }),
               ),
             ).agent;
-            return { started, replay: openedParts(eve).parts.replay };
+            return { started, replay: openedParts(agentSessions).parts.replay };
           });
 
         const pinned = yield* fork(1);
@@ -1008,7 +1019,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a source on another plan, or one the account does not reach, is refused as naming nothing, and a prompt beside a source as invalid",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, ask, eve, source } = yield* sourceAgent;
+        const { owner, other, task, ask, agentSessions, source } = yield* sourceAgent;
         const elsewhere = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
         const away = Option.getOrThrow(
           yield* createAgent(owner, {
@@ -1022,7 +1033,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
-        const opened = eve.opened.length;
+        const opened = agentSessions.opened.length;
 
         assert.deepEqual(
           yield* ask(
@@ -1046,7 +1057,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.equal(eve.opened.length, opened);
+        assert.equal(agentSessions.opened.length, opened);
       }),
   );
 
@@ -1054,7 +1065,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, and a task's Start naming it start nothing; a source in no repository is continued in none; and one keyed by an agent on a task starts on that task",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, ask, eve } = yield* openTask();
+        const { owner, other, task, ask, agentSessions } = yield* openTask();
         const BRIEF = "Sweep the flaky tests.";
         const made = yield* createAgent(owner, {
           taskId: null,
@@ -1077,7 +1088,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const startFromAs = (bearer: string, agentId: string, body: WireBoundaryInput) =>
           ask(request(AGENT_STARTS, bearer, { method: "POST", id: agentId, body }));
         const replayed = () =>
-          (openedParts(eve).parts.replay?.steps ?? []).map((step) => step.summary);
+          (openedParts(agentSessions).parts.replay?.steps ?? []).map((step) => step.summary);
 
         const key = randomUUID();
         const continueBody = { idempotencyKey: key, from: { agentId: source.id } };
@@ -1091,22 +1102,26 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           [stored.taskId, stored.organizationId, stored.repository, stored.descriptionSnapshot],
           [null, task.workspaceId, RELAY_FULL_NAME, null],
         );
-        assert.equal(openedParts(eve).parts.brief, BRIEF);
+        assert.equal(openedParts(agentSessions).parts.brief, BRIEF);
         assert.deepEqual(replayed(), [
           "Said: Fixed the shared temp dir.",
           "The developer: Now the clock.",
           "Said: Fixed the clock read.",
         ]);
-        assert.equal(stored.prompt, openedParts(eve).text, "it keeps the message it was handed");
+        assert.equal(
+          stored.prompt,
+          openedParts(agentSessions).text,
+          "it keeps the message it was handed",
+        );
         assert.deepEqual(continued.from, { agentId: source.id, steps: 3, totalSteps: 3 });
-        const opened = eve.opened.length;
+        const opened = agentSessions.opened.length;
         const again = readAnswer(
           agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* startFromAs(owner, source.id, continueBody),
         ).agent;
         assert.equal(again.id, continued.id);
-        assert.equal(eve.opened.length, opened, "a retry opens no session");
+        assert.equal(agentSessions.opened.length, opened, "a retry opens no session");
         assert.deepEqual(
           yield* startFromAs(owner, source.id, {
             idempotencyKey: key,
@@ -1132,7 +1147,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.equal(forked.planId, null);
         assert.deepEqual(replayed(), ["Said: Fixed the shared temp dir."]);
 
-        const before = eve.opened.length;
+        const before = agentSessions.opened.length;
         assert.deepEqual(
           yield* startFromAs(owner, continued.id, {
             idempotencyKey: randomUUID(),
@@ -1154,7 +1169,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
           "a task's Start refuses a source on no task rather than starting afresh",
         );
-        assert.equal(eve.opened.length, before);
+        assert.equal(agentSessions.opened.length, before);
 
         // A source on no task and in no repository is continued in its workspace, in none.
         const bare = yield* createAgent(owner, {
@@ -1219,8 +1234,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     });
 
   /** The words and files the session opened on, its first part's words read back as a first message. */
-  const openedWithFiles = (eve: ReturnType<typeof fakeEve>) => {
-    const message = eve.opened.at(-1)?.message.message;
+  const openedWithFiles = (agentSessions: ReturnType<typeof fakeAgentSessions>) => {
+    const message = agentSessions.opened.at(-1)?.message.message;
     assert.ok(Array.isArray(message), "the session opened on parts");
     const [first] = message;
     assert.ok(first?.type === "text", "the first part is the words");
@@ -1234,7 +1249,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a note beside a source is written after the replay as the developer's with its files, and the first turn's servers are read from the note, never the replay",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source, stored } = yield* sourceAgent;
         yield* transcriptRow(stored, 6, MESSAGE_ROLE.USER, [
           text(`Look in ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")} too.`),
         ]);
@@ -1257,7 +1272,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             }),
           ),
         ).agent;
-        const { parts, files } = openedWithFiles(eve);
+        const { parts, files } = openedWithFiles(agentSessions);
 
         assert.deepEqual(parts.note, {
           heading: START_NOTE_HEADING.DEVELOPER,
@@ -1277,7 +1292,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "the source's files are attached again only as far as they fit beside the note's within one message's bounds, and the rest are named as not passed on",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
+        const { owner, task, ask, agentSessions } = yield* openTask();
         const data = Buffer.from(PNG).toString("base64");
         const source = Option.getOrThrow(
           yield* createAgent(owner, {
@@ -1313,7 +1328,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             attachments: [{ name: "new.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data }],
           }),
         );
-        const { parts, files } = openedWithFiles(eve);
+        const { parts, files } = openedWithFiles(agentSessions);
 
         assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
         assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
@@ -1324,7 +1339,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a source's first row, the line its Start wrote, keeps no bytes of the image its prompt carried, naming the picture kept beside its conversation by id, and a continue attaches the image again from that picture",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
+        const { owner, task, ask, agentSessions } = yield* openTask();
         const data = Buffer.from(SIZED_PNG).toString("base64");
         const source = readAnswer(
           agentAnswerSchema,
@@ -1356,7 +1371,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         yield* ask(
           startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
         );
-        const opened = eve.opened.at(-1)?.message.message;
+        const opened = agentSessions.opened.at(-1)?.message.message;
         assert.ok(Array.isArray(opened));
 
         assert.deepEqual(
@@ -1364,7 +1379,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           [["flow.png", `data:${AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
         );
         assert.doesNotMatch(
-          openedWithFiles(eve).parts.replay?.preamble ?? "",
+          openedWithFiles(agentSessions).parts.replay?.preamble ?? "",
           /could not be passed on/u,
         );
       }),
@@ -1418,13 +1433,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a note without a source, files beside a source with no note, a prompt beside a source and a note, and a branch beside a source are refused as invalid",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source } = yield* sourceAgent;
         const png = {
           name: "flow.png",
           mediaType: AGENT_ATTACHMENT_TYPE.PNG,
           data: Buffer.from(PNG).toString("base64"),
         };
-        const opened = eve.opened.length;
+        const opened = agentSessions.opened.length;
         for (const body of [
           { note: "Carry on." },
           { from: { agentId: source.id }, attachments: [png] },
@@ -1438,7 +1453,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             JSON.stringify(Object.keys(body)),
           );
         }
-        assert.equal(eve.opened.length, opened);
+        assert.equal(agentSessions.opened.length, opened);
       }),
   );
 
@@ -1450,7 +1465,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           sent.url.endsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/luke/stacked`)
             ? Response.json({ object: { type: "commit", sha: "a".repeat(40) } })
             : undefined;
-        const { owner, task, ask, eve } = yield* openTask({ github: held });
+        const { owner, task, ask, agentSessions } = yield* openTask({ github: held });
 
         const started = readAnswer(
           agentAnswerSchema,
@@ -1463,7 +1478,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             }),
           ),
         ).agent;
-        const opened = eve.opened.length;
+        const opened = agentSessions.opened.length;
         const missing = yield* ask(
           startAs(owner, task.id, { idempotencyKey: randomUUID(), branch: "luke/gone" }),
         );
@@ -1477,7 +1492,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           missing,
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.BRANCH_NOT_FOUND),
         );
-        assert.equal(eve.opened.length, opened);
+        assert.equal(agentSessions.opened.length, opened);
       }),
   );
 
@@ -1485,7 +1500,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a retry from another agent answers the agent its key made though the source has gone since, and a source whose transcript does not read is answered as unavailable rather than as an empty replay",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, source, stored } = yield* sourceAgent;
         const body = { idempotencyKey: randomUUID(), from: { agentId: source.id } };
         const first = readAnswer(
           agentAnswerSchema,
@@ -1494,14 +1509,14 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
 
         yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
-        const opened = eve.opened.length;
+        const opened = agentSessions.opened.length;
         assert.deepEqual(
           yield* ask(
             startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
           ),
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
-        assert.equal(eve.opened.length, opened);
+        assert.equal(agentSessions.opened.length, opened);
 
         yield* discardAgent(owner, source.id);
         const again = readAnswer(
@@ -1510,7 +1525,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           yield* ask(startAs(owner, task.id, body)),
         ).agent;
         assert.equal(again.id, first.id);
-        assert.equal(eve.opened.length, opened);
+        assert.equal(agentSessions.opened.length, opened);
       }),
   );
 
@@ -1518,7 +1533,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a source whose prompt holds a note's heading in its prose hands on its brief whole, and a note it was handed behind its marker becomes its first step",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
+        const { owner, task, ask, agentSessions } = yield* openTask();
         const prose = `Write the guide.\n\n${START_NOTE_HEADING.DEVELOPER}\n\nExplain this heading in the guide.`;
         const sourceOf = (handed: string) =>
           Effect.gen(function* () {
@@ -1541,13 +1556,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } }));
 
         yield* continueFrom((yield* sourceOf(prose)).id);
-        assert.equal(openedParts(eve).parts.brief, prose);
-        assert.deepEqual(openedParts(eve).parts.replay?.steps, []);
+        assert.equal(openedParts(agentSessions).parts.brief, prose);
+        assert.deepEqual(openedParts(agentSessions).parts.replay?.steps, []);
 
         yield* continueFrom(
           (yield* sourceOf(firstMessageText(prose, undefined, "Keep it short."))).id,
         );
-        const read = openedParts(eve).parts;
+        const read = openedParts(agentSessions).parts;
         assert.equal(read.brief, prose);
         assert.deepEqual(
           read.replay?.steps.map((step) => step.summary),
@@ -1560,7 +1575,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a transcript of more rows than are read keeps its newest rows, so a continue replays where it ended and a fork at a late message is found, and an unreadable row past a fork's cut refuses only a continue",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
+        const { owner, task, ask, agentSessions } = yield* openTask();
         const source = readAnswer(
           agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -1595,17 +1610,20 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         yield* startFrom({ agentId: source.id });
         assert.equal(
-          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          openedParts(agentSessions).parts.replay?.steps.at(-1)?.summary,
           `Said: Step ${turns - 1}.`,
         );
         const late = turns - 10;
         yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
-        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+        assert.equal(
+          openedParts(agentSessions).parts.replay?.steps.at(-1)?.summary,
+          `Said: Step ${late}.`,
+        );
 
         // A fork with more rows after it than are read names no files as if they were all it edited.
         yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
         assert.match(
-          openedParts(eve).parts.replay?.preamble ?? "",
+          openedParts(agentSessions).parts.replay?.preamble ?? "",
           /Which files it edited after that message could not all be read/u,
         );
 
@@ -1615,7 +1633,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
         });
         assert.match(
-          openedParts(eve).parts.replay?.preamble ?? "",
+          openedParts(agentSessions).parts.replay?.preamble ?? "",
           /Its file tools edited no file after that message/u,
         );
 
@@ -1628,10 +1646,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         const fork = yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
-        assert.equal(fork.from?.steps, openedParts(eve).parts.replay?.steps.length);
-        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+        assert.equal(fork.from?.steps, openedParts(agentSessions).parts.replay?.steps.length);
+        assert.equal(
+          openedParts(agentSessions).parts.replay?.steps.at(-1)?.summary,
+          `Said: Step ${late}.`,
+        );
         assert.match(
-          openedParts(eve).parts.replay?.preamble ?? "",
+          openedParts(agentSessions).parts.replay?.preamble ?? "",
           /Which files it edited after that message could not all be read/u,
         );
       }),
@@ -1679,7 +1700,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a source whose transcript fits the new agent's window replays whole, every tool call's input and result in full",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, stored, source } = yield* sourceAgent;
+        const { owner, task, ask, agentSessions, stored, source } = yield* sourceAgent;
         // A result that reads like a failure and a subject that reads like a running call are neither.
         const output = `Failed: nothing, this is what it printed\n${"line of output\n".repeat(400)}the end`;
         yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
@@ -1699,7 +1720,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
           ),
         ).agent;
-        const steps = openedParts(eve).parts.replay?.steps ?? [];
+        const steps = openedParts(agentSessions).parts.replay?.steps ?? [];
 
         assert.deepEqual(started.from, { agentId: source.id, steps: 6, totalSteps: 6 });
         assert.ok(steps.at(-1)?.words.endsWith(`Result: ${output}`));
@@ -1720,10 +1741,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a smaller window keeps the newest steps that fit it and says how many were left out, where a larger one replays the same transcript whole",
     () =>
       Effect.gen(function* () {
-        const { eve, first, continueFrom } = yield* longSource();
+        const { agentSessions, first, continueFrom } = yield* longSource();
 
         const small = yield* continueFrom(first.id);
-        const kept = openedParts(eve).parts.replay;
+        const kept = openedParts(agentSessions).parts.replay;
         assert.equal(small.from?.totalSteps, LONG_TURNS);
         assert.ok(
           (small.from?.steps ?? LONG_TURNS) < LONG_TURNS,
@@ -1778,13 +1799,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           efforts.push(effort);
           return Effect.succeed({ model, providerOptions: {}, counted: Effect.void });
         };
-        const { eve, first, continueFrom } = yield* longSource({ summaryModel });
+        const { agentSessions, first, continueFrom } = yield* longSource({ summaryModel });
         const unsummarized = yield* longSource();
         yield* unsummarized.continueFrom(unsummarized.first.id);
-        const alone = openedParts(unsummarized.eve).parts.replay?.steps.length ?? 0;
+        const alone = openedParts(unsummarized.agentSessions).parts.replay?.steps.length ?? 0;
 
         const started = yield* continueFrom(first.id);
-        const replay = openedParts(eve).parts.replay;
+        const replay = openedParts(agentSessions).parts.replay;
 
         assert.deepEqual(efforts, ["low"]);
         assert.deepEqual(replay?.summary, {
@@ -1822,13 +1843,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         const summaryModel: SummaryModelOf = () =>
           Effect.succeed({ model, providerOptions: {}, counted: Effect.void });
-        const { eve, first, continueFrom } = yield* longSource({ summaryModel });
+        const { agentSessions, first, continueFrom } = yield* longSource({ summaryModel });
         const second = yield* continueFrom(first.id);
-        const carried = openedParts(eve).parts.replay;
+        const carried = openedParts(agentSessions).parts.replay;
         assert.ok(carried?.summary !== undefined);
 
         yield* continueFrom(second.id, { model: SOL, effort: "low" });
-        const third = openedParts(eve).parts.replay;
+        const third = openedParts(agentSessions).parts.replay;
 
         assert.deepEqual(third?.summary, carried.summary);
         assert.deepEqual(
@@ -1843,9 +1864,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "the files a Start's note carries are counted against the window before the steps are chosen",
     () =>
       Effect.gen(function* () {
-        const { eve, first, continueFrom } = yield* longSource();
+        const { agentSessions, first, continueFrom } = yield* longSource();
         yield* continueFrom(first.id, { note: "Look at this." });
-        const without = openedParts(eve).parts.replay?.steps.length ?? 0;
+        const without = openedParts(agentSessions).parts.replay?.steps.length ?? 0;
 
         const notes = {
           name: "notes.txt",
@@ -1866,7 +1887,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     () =>
       Effect.gen(function* () {
         // GitHub holds the source's pull request open, as its row says, when the first continue reads it again.
-        const { owner, task, ask, eve, source } = yield* sourceAgentOn(publishedPullRequest);
+        const { owner, task, ask, agentSessions, source } =
+          yield* sourceAgentOn(publishedPullRequest);
         const continueFrom = (agentId: string) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
@@ -1875,7 +1897,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         // The middle agent's session never ran a turn: it has no rows, no branch, and no sandbox.
         const never = yield* continueFrom(source.id);
         yield* continueFrom(never.id);
-        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+        const preamble = openedParts(agentSessions).parts.replay?.preamble ?? "";
 
         assert.match(
           preamble,
@@ -1894,17 +1916,17 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             .where(eq(agentTable.id, source.id)),
         );
         yield* continueFrom(never.id);
-        const moved = openedParts(eve).parts.replay?.preamble ?? "";
+        const moved = openedParts(agentSessions).parts.replay?.preamble ?? "";
         assert.match(moved, /start from the repository's default branch/u);
         assert.ok(!moved.includes(PUBLISHED.branch));
       }),
   );
 
   it.effect(
-    "a source eve compacted replays verbatim no more than the context it last measured, where the same source uncompacted replays whole",
+    "a source its harness compacted replays verbatim no more than the context it last measured, where the same source uncompacted replays whole",
     () =>
       Effect.gen(function* () {
-        const { owner, eve, first, continueFrom } = yield* longSource();
+        const { owner, agentSessions, first, continueFrom } = yield* longSource();
         const stepAt = (inputTokens: number, at: number) =>
           recordAgentStep(owner, first.id, {
             inputTokens,
@@ -1919,12 +1941,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const whole = yield* continueFrom(first.id, { model: SOL, effort: "low" });
         assert.equal(whole.from?.steps, LONG_TURNS, "a source that never compacted replays whole");
 
-        // eve folded all but the newest into a summary, and the next step read far less.
+        // Its harness folded all but the newest into a summary, and the next step read far less.
         const measured = 6_000;
         yield* recordAgentCompaction(owner, first.id, new Date(2_000));
         yield* stepAt(measured, 3_000);
         const bounded = yield* continueFrom(first.id, { model: SOL, effort: "low" });
-        const replay = openedParts(eve).parts.replay;
+        const replay = openedParts(agentSessions).parts.replay;
 
         assert.equal(bounded.from?.totalSteps, LONG_TURNS);
         assert.ok((bounded.from?.steps ?? LONG_TURNS) < LONG_TURNS);
@@ -1962,16 +1984,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of a continue carries the first source's kept steps ahead of its own within the new agent's window",
     () =>
       Effect.gen(function* () {
-        const { owner, eve, first, continueFrom } = yield* longSource();
+        const { owner, agentSessions, first, continueFrom } = yield* longSource();
         const second = yield* continueFrom(first.id);
-        const secondSteps = openedParts(eve).parts.replay?.steps ?? [];
+        const secondSteps = openedParts(agentSessions).parts.replay?.steps ?? [];
 
         const secondStored = Option.getOrThrow(yield* readAgent(owner, second.id));
         yield* transcriptRow(secondStored, 2, MESSAGE_ROLE.ASSISTANT, [
           text(`Picked it up. ${"y".repeat(5_000)}`),
         ]);
         const third = yield* continueFrom(second.id);
-        const thirdSteps = openedParts(eve).parts.replay?.steps ?? [];
+        const thirdSteps = openedParts(agentSessions).parts.replay?.steps ?? [];
 
         assert.equal(third.from?.totalSteps, LONG_TURNS + 1);
         assert.equal(third.from?.steps, thirdSteps.length);

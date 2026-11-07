@@ -42,7 +42,6 @@ import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect, type Redacted } from "effect";
 import type { AgentImage, AgentImageMissing } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
-import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type {
   FirewallLaunch,
   FirewallSources,
@@ -50,6 +49,7 @@ import type {
   LaunchSwaps,
   PlaceholderSwap,
 } from "../sandbox-firewall.js";
+import type { KeyRefusal, PlanRefusal } from "../sessions/agent-sessions.js";
 import type { CommandExit, SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
@@ -74,8 +74,9 @@ export interface MachinePlace {
  * a launch names them before the machine is asked anything: its checkout,
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
- * folder a message's files are written under, and the Claude Code CLI and
- * the Codex a launch runs, none where the harness's own default stands.
+ * folder a message's files are written under, the Claude Code CLI and the
+ * Codex a launch runs, none where the harness's own default stands, and the
+ * home Codex keeps its threads in.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -85,8 +86,10 @@ export interface MachineLayout {
   /** Where the agent saves a file the service reads back, a screenshot it shows or a page it posts: a folder the service's reads reach on that machine. */
   readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
-  /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
+  /** The image's Codex in a sandbox, and on a Mac the one it checked against the pin; none on a Mac that checked none yet, which runs no Codex agent. */
   readonly codexExecutable: string | undefined;
+  /** Where Codex keeps its threads (`CODEX_HOME`): a sandbox's home on its persisted disk; none on a Mac, whose Codex keeps its default under the agent's own home. */
+  readonly codexHome: string | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
    * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
@@ -156,7 +159,7 @@ export const PLACE_RESUME = { GONE: "gone" } as const;
 /**
  * A found place running again: where it runs now, and whether it was made
  * anew in place of one whose disk was lost (`created`), which holds nothing
- * the place kept off its drive, the harness's own session among it.
+ * the place kept on its disk, the harness's own session among it.
  */
 export interface ResumedPlace {
   readonly place: MachinePlace;
@@ -166,10 +169,8 @@ export interface ResumedPlace {
 /**
  * A running place's firewall, the account whose agent it is named beside
  * it: the whole policy written from the sources given and the swaps of the
- * launch kept for it; a launch's swaps kept ahead of its first write; that
- * launch let go and the policy written without it; or every credential
- * cleared ahead of a stop (`../sandbox-firewall.ts`). A machine with no
- * firewall of ours does nothing.
+ * launch kept for it; or a launch's swaps kept ahead of its first write
+ * (`../sandbox-firewall.ts`). A machine with no firewall of ours does nothing.
  */
 interface MachineFirewall {
   readonly write: (
@@ -182,33 +183,16 @@ interface MachineFirewall {
     userId: string,
     launch: FirewallLaunch,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly endLaunch: (
-    place: MachinePlace,
-    userId: string,
-    sources: FirewallSources,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly clear: (
-    place: MachinePlace,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
-
-/** Whether the service renews a runner's credential while its launch stands. */
-export const CREDENTIAL_RENEWAL = {
-  /** Fixed for its launch: a Mac hands it to the runner, and a sandbox holds it at its firewall. */
-  FIXED: "fixed",
-  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall, which the sweep renews. */
-  RENEWED: "renewed",
-} as const;
-
-export type CredentialRenewal = (typeof CREDENTIAL_RENEWAL)[keyof typeof CREDENTIAL_RENEWAL];
 
 /**
  * A credential a launch declares for its runner, which the machine decides
  * how to hand over (`deliverCredentials`): the variable the runner reads it
  * in, its value, without its scheme, where the runner sends it (the domain,
  * and the path prefix where one is named), in which header, named in lower
- * case, behind which scheme (`Bearer ` or nothing), the slot a firewall
- * holds it in, and whether the service renews it.
+ * case, behind which scheme (`Bearer ` or nothing), and the slot a
+ * firewall holds it in. Each is fixed for its launch: a Mac hands it to the
+ * runner, and a sandbox holds it at its firewall.
  */
 export interface RunnerCredential {
   readonly variable: string;
@@ -217,7 +201,6 @@ export interface RunnerCredential {
   readonly header: string;
   readonly scheme: string;
   readonly slot: LaunchSwapKind;
-  readonly renewal: CredentialRenewal;
 }
 
 /** Credentials as a machine hands them over: the variables the runner is started with, every one secret, and the swaps its place's firewall keeps for the launch, none on a machine with no firewall of ours. */
@@ -376,14 +359,16 @@ export interface AgentMachineService {
     files: readonly SandboxFile[],
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /**
-   * The repositories the agent works in beside its own that the running
-   * place does not hold yet cloned into their folders, on the token minted
-   * for each, the ones it holds left as they stand; where the runner already
-   * runs (`shared`), each folder is then shared with the runner's user as a
-   * launch shares it, which a launch to come does itself. Nothing on a
-   * machine that clones no extras, a device's, nor for an agent with none.
+   * What the running place does not hold yet of the agent's repositories
+   * cloned: before a relaunch (not `shared`), its own checkout where the
+   * place holds none; then the repositories it works in beside its own,
+   * into their folders, on the token minted for each, the ones it holds
+   * left as they stand; where the runner already runs (`shared`), each
+   * folder is then shared with the runner's user as a launch shares it,
+   * which a launch to come does itself. Nothing on a machine that clones
+   * nothing for a launch, a device's, nor for an agent with no repository.
    */
-  readonly checkOutExtras: (
+  readonly checkOutMissing: (
     place: MachinePlace,
     target: ConversationTarget,
     agent: Agent,
@@ -444,10 +429,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, handing a runner its credentials, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what the place does not hold yet, handing a runner its credentials, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "resume" | "checkOutExtras" | "deliverCredentials" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutMissing" | "deliverCredentials" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

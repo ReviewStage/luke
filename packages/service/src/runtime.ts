@@ -3,7 +3,7 @@
  *
  * This module builds nothing and runs nothing: each edge that runs an effect
  * against the deployment's services (`apps/web/server/runtime.ts` for the web
- * functions, each eve root's own `runtime.ts` for its agent) builds its one
+ * functions) builds its one
  * `ManagedRuntime` over this layer.
  */
 
@@ -14,6 +14,7 @@ import { onboardingEventsFromEnvironment } from "./accounts/onboarding-events.js
 import { welcomeMailFromEnvironment } from "./accounts/welcome-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
+import { automationCadenceFromEnvironment } from "./automations/automation-cadence.js";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
@@ -48,8 +49,7 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * tracer's logger is named beside the JSON one: it is what puts a line on the
  * span it was written under. The third sends every line to Sentry's logs
  * with its annotations (`observability/sentry.ts`), which the runtime's edge
- * starts. An eve root's runtime is built over these services too, so its lines
- * reach Sentry through the same logger.
+ * starts.
  */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
@@ -116,6 +116,12 @@ const slackBot = slackBotFromEnvironment.pipe(
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
  * auth service once a minute per bearer rather than on every request.
  *
+ * `AutomationCadence` is Vercel Schedules and Queues on production alone,
+ * where an automation's schedule is kept and its firings published
+ * (`automations/automation-cadence.ts`); anywhere else it keeps no schedule
+ * and records a firing for nothing to start, since a Preview's database is a
+ * branch of production's and holds production's automations.
+ *
  * `PageLinks` is the one place the sandbox agents' pages are drawn from on
  * the web is read, with the key their links are signed with
  * (`pages/page-links.ts`), for the frame that mints a link and the page
@@ -143,6 +149,7 @@ export const webServices = Layer.mergeAll(
   syncFromEnvironment,
   bearerCallersLayer,
   pageLinksFromEnvironment,
+  automationCadenceFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(

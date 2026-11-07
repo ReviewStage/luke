@@ -1,6 +1,11 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
-import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
+import type {
+  AgentAttachment,
+  AgentSummary,
+  ListedAgent,
+  TasklessAgent,
+} from "@repo/features/agent-wire";
 import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
@@ -20,6 +25,7 @@ import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-li
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { agentMovedAt, agentsOfTask } from "@repo/features/task-agents-model";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
   type CodeRef,
@@ -67,18 +73,9 @@ import {
   agentTab,
   changesTab,
   draftTab,
-  isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
-  isDraftTab,
-  isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
   pageTab,
   pullRequestLabelOf,
+  STRIP_TAB_KIND,
   type StripTab,
   sameTab,
   subagentTab,
@@ -120,6 +117,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { absurd } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
@@ -197,6 +195,14 @@ import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 import type { RepositoryChooser } from "./repository-chip.js";
+import {
+  stripTabClosesIdle,
+  stripTabDrawsAgain,
+  stripTabEndsSession,
+  stripTabPin,
+  stripTabReopens,
+  TAB_PIN,
+} from "./strip-tab-kinds.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { ComposerNote } from "./use-agent-composer.js";
@@ -220,14 +226,10 @@ import {
   MAIN_TAB,
   type MainTab,
   type MainTabsControl,
-  type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
 import {
   DRAWN_KINDS,
-  drawsChanges,
-  drawsSubagent,
-  isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
   type SidePanelControl,
@@ -236,6 +238,7 @@ import {
   useSidePanel,
 } from "./use-side-panel.js";
 import { useEndTerminalTab } from "./use-terminal-session.js";
+import { listedAgentIn } from "./use-workspace-agents.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -374,17 +377,6 @@ type AgentPlaceKind =
 type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
 type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
-
-/**
- * The places an agent's transcript draws, which an archived agent's own page
- * draws in place of its tab, never drawn; its changes and pull request still
- * stand in its task's side panel.
- */
-const TRANSCRIPT_PLACES: ReadonlySet<AgentPlaceKind> = new Set([
-  LINK_PLACE.AGENT,
-  LINK_PLACE.MESSAGE,
-  LINK_PLACE.WORKER,
-]);
 
 /** A place of a task's own that its side panel draws as a tab, named under the task. */
 type TaskTabPlace =
@@ -1059,25 +1051,28 @@ function pinOnTask(pin: SidebarPin, taskId: string): boolean {
 /**
  * The agent a task the developer goes back to work on lands on, so they
  * arrive in the conversation: one with a thread waiting on them, a question
- * before a notice, as the Inbox lists what waits; else the agent its row
- * names that was last active, one at work counting as active now; none where
- * its row names none, so it opens on its description. Note that the row names a few
- * of its agents, archived ones left out and those at work first
- * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
+ * before a notice, as the Inbox lists what waits; else the task's agent
+ * that was last active, one at work counting as active now, archived ones
+ * left out (`agentsOfTask`); none where it has none, so it opens on its
+ * description.
  */
 function resumingAgentOf(
   taskId: string,
-  tasks: readonly TaskSummary[],
+  agents: readonly ListedAgent[] | undefined,
   waiting: readonly AppInboxTask[],
 ): string | undefined {
   const items = waiting.find((each) => each.taskId === taskId)?.items ?? [];
   const waitingOn = items.find(holdsAsk) ?? items[0];
   if (waitingOn !== undefined) return waitingOn.agentId;
-  const lines = tasks.find((task) => task.id === taskId)?.agents?.agents ?? [];
+  const lines = agentsOfTask(agents, taskId);
   const working = lines.find((line) => agentStillWriting(line.status));
   if (working !== undefined) return working.id;
   let latest = lines[0];
-  for (const line of lines) if ((line.at ?? 0) > (latest?.at ?? 0)) latest = line;
+  for (const line of lines) {
+    if ((agentMovedAt(line) ?? 0) > (latest === undefined ? 0 : (agentMovedAt(latest) ?? 0))) {
+      latest = line;
+    }
+  }
   return latest?.id;
 }
 
@@ -1729,22 +1724,13 @@ export function useTasksTab(input: {
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
   }, [tasklessAgents, listedWorkspaceId]);
-  // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
-  const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
-  const rowAgents = openRow?.agents;
-  const rowListed = openRow !== undefined;
-  const named = useMemo<NamedAgents | undefined>(() => {
-    if (!rowListed) return undefined;
-    // Note that a row names agents only for a task with one, so a row with none names a task with none.
-    if (rowAgents === undefined) return { ids: [], total: 0 };
-    const { agents: lines, total } = rowAgents;
-    return { ids: lines.map((line) => line.id), total };
-  }, [rowListed, rowAgents]);
+  // The task's archived agents, whose tabs stand once opened (`use-main-tabs.ts`).
+  const archivedIds = useMemo(() => agents.archived?.map((agent) => agent.id), [agents.archived]);
   const mainTabs = useMainTabs(
     fixture === undefined ? undefined : { tab: tasksFixture?.fixtureColumnTab(input.run) },
     viewed.activeTaskId,
     agents.agentIds,
-    named,
+    archivedIds,
     agents.draft?.id,
     input.room === SHELL_ROOM.NARROW,
   );
@@ -1991,7 +1977,12 @@ export function useTasksTab(input: {
   // stood in view, because by the render that leaves it the open task's draft may be another's.
   const shownTab = mainTabs.tab;
   const draftInView =
-    columnInView && shownTab !== undefined && isDraftTab(shownTab) ? shownTab.draft : undefined;
+    columnInView &&
+    shownTab !== undefined &&
+    !isOverviewTab(shownTab) &&
+    shownTab.kind === STRIP_TAB_KIND.DRAFT
+      ? shownTab.draft
+      : undefined;
   const blankDraft =
     agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
   const columnSettled = shownTab !== undefined;
@@ -2017,7 +2008,8 @@ export function useTasksTab(input: {
     inboxView !== undefined &&
     sidePanel.open &&
     sidePanel.tab !== undefined &&
-    isTranscriptTab(sidePanel.tab)
+    typeof sidePanel.tab !== "string" &&
+    sidePanel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
       ? sidePanel.tab.transcript
       : undefined;
   // Note that an agent's card showing its threads keeps its transcript out of sight, so its end is still unseen.
@@ -2028,7 +2020,8 @@ export function useTasksTab(input: {
         ? inboxTranscript
         : columnShown &&
             mainTabs.tab !== undefined &&
-            isAgentTab(mainTabs.tab) &&
+            !isOverviewTab(mainTabs.tab) &&
+            mainTabs.tab.kind === STRIP_TAB_KIND.AGENT &&
             mainTabs.tab.agent !== threadsShown
           ? mainTabs.tab.agent
           : null;
@@ -2936,7 +2929,7 @@ export function useTasksTab(input: {
     openUnpinned(taskId);
     const narrow = input.room === SHELL_ROOM.NARROW;
     if (narrow) sidePanel.onSetOpen(false);
-    const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
+    const agentId = resumingAgentOf(taskId, tasks.taskAgents, input.inboxWaiting);
     if (agentId !== undefined) mainTabs.onShow(taskId, agentTab(agentId));
     else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
@@ -3368,11 +3361,6 @@ export function useTasksTab(input: {
   };
   showMissingTask.current = (taskId) => showMention({ kind: MENTION_KIND.TASK, taskId });
 
-  // Whether the agent is archived, as the open task's list or the list followed live carries it.
-  const archivedAgent = (agentId: string) =>
-    agents.archived?.some((agent) => agent.id === agentId) === true ||
-    liveAgents?.some((agent) => agent.id === agentId && agent.archivedAt !== undefined) === true;
-
   // A workspace not there for the reader, standing in the plan's place for a link, a version history or a routed place over the plan giving way.
   const standUnknown = () => {
     closeHistory();
@@ -3428,40 +3416,13 @@ export function useTasksTab(input: {
   };
 
   /**
-   * An agent's place on its task: the agent's tab, and the tab of the side
-   * panel that shows what the place names. Note that an agent's worker is
-   * drawn only while its agent's tab is open, so the agent's tab opens with
-   * it, and that its tab is opened with no task words, since a link carries
-   * none; its own rows name its task once they land.
+   * An agent's place on its task: the agent's tab, an archived agent's among
+   * them, and the tab of the side panel that shows what the place names. Note
+   * that an agent's worker is drawn only while its agent's tab is open, so
+   * the agent's tab opens with it, and that its tab is opened with no task
+   * words, since a link carries none; its own rows name its task once they land.
    */
-  const openOnTask = (planId: string, place: AgentPlace, home?: string) => {
-    // Note that an archived agent's tab is never drawn, so a place in its transcript opens on its own page.
-    if (!TRANSCRIPT_PLACES.has(place.kind) || agents.agentIds?.includes(place.agentId) === true) {
-      showOnTask(planId, place);
-    } else if (archivedAgent(place.agentId)) {
-      openArchived(place, home);
-    } else if (liveAgents !== undefined) {
-      showOnTask(planId, place);
-    } else {
-      // Before the list followed live lands, an agent of another task may yet be archived, so it is read first.
-      const mine = navigations.current;
-      readAgentById(queryClient, place.agentId).then((agent) => {
-        if (navigations.current !== mine) return;
-        if (agent?.archivedAt === undefined) showOnTask(planId, place);
-        else openArchived(place, home);
-      });
-    }
-  };
-
-  // An archived agent's transcript place on its own page, a side panel filling the window giving way, as a column tab shown has it give way.
-  // Note that a read answering late calls it too, so it is a steady door reading the panel as it stands then.
-  const openArchived = useSteadyDoor((place: AgentPlace, home: string | undefined) => {
-    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    openOnAgentPage(place, home);
-  });
-
-  // An agent's place on its task, its tab among the column's, read as standing.
-  const showOnTask = (planId: string, place: AgentPlace) => {
+  const openOnTask = (planId: string, place: AgentPlace) => {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
         showColumnTab(planId, agentTab(place.agentId));
@@ -3550,30 +3511,34 @@ export function useTasksTab(input: {
     );
   };
 
+  // An agent's place opened by the agent as the list or the service has it: on its page where it is on no task, else on its task, an archived agent's tab among its tabs.
+  const openFoundAgent = (agent: AgentSummary, place: AgentPlace, home?: string) => {
+    if (agent.planId === null) openOnAgentPage(place, home);
+    else openOnTask(agent.planId, place);
+  };
+
   /**
    * An agent's place opened on its task where it has one, else on its page.
    * Note that a link names the task only where it was written under it, so
    * one naming none finds the task by the agent: at once where the agent is
-   * the open task's or one on no task the window lists, else by reading the
-   * agent, which opens nothing where the window moved on before it answered.
+   * the open task's or one the list followed live carries, else by reading
+   * the agent, which opens nothing where the window moved on before it
+   * answered.
    */
   const openAgentPlace = (place: AgentPlace, home: string) => {
     const open = tasks.activeTaskId;
-    if (place.planId !== undefined) openOnTask(place.planId, place, home);
+    const listed = listedAgentIn(tasks, place.agentId);
+    if (place.planId !== undefined) openOnTask(place.planId, place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
-      openOnTask(open, place, home);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId))
-      openOnAgentPage(place, home);
+      openOnTask(open, place);
+    else if (listed !== undefined) openFoundAgent(listed, place, home);
     else {
       const mine = navigations.current;
       readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) openAgentPage(place.agentId, home);
-        else if (agent.planId === null) openOnAgentPage(place, home);
-        else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
-          openArchived(place, home);
-        else showOnTask(agent.planId, place);
+        else openFoundAgent(agent, place, home);
       });
     }
   };
@@ -3612,15 +3577,16 @@ export function useTasksTab(input: {
    * slug, which may name a workspace by a slug it has since given up.
    */
   const openInboxItemById = (place: InboxItemPlace) => {
-    // Note that the item the Inbox already stands on, once found, opens at once, so the door keeps it standing rather than waiting on the service while the window leaves it.
+    // Note that the item the Inbox already stands on, once asked after, stands again at once, so the door keeps it standing rather than waiting on the service while the window leaves it;
+    // one the service did not find is asked after again below, as a link to it always asks.
     const standing = inboxView?.chosen;
-    const found =
+    const asked =
       standing !== undefined &&
       ("taskId" in standing || "agentId" in standing || standing.opened === true);
-    if (inboxView?.standingIn !== undefined && found && standing.itemId === place.itemId) {
+    if (inboxView?.standingIn !== undefined && asked && standing.itemId === place.itemId) {
       const at = { workspace: inboxView.standingIn, narrowed: inboxView.narrowed };
       standInbox(at, { ...standing, opened: true });
-      return;
+      if ("taskId" in standing || "agentId" in standing) return;
     }
     const mine = navigations.current;
     readInboxItemHome(queryClient, place.itemId).then((home) => {
@@ -3637,18 +3603,18 @@ export function useTasksTab(input: {
   /**
    * An Inbox item opened by its task, which a link under its agent leaves
    * the reader to find by the agent, as an agent's place is found
-   * (`openAgentPlace`): at once where the agent is the open task's or one on
-   * no task the window lists, else by reading the agent, which opens nothing
-   * where the window moved on before it answered.
+   * (`openAgentPlace`): at once where the agent is the open task's or one
+   * the list followed live carries, else by reading the agent, which opens
+   * nothing where the window moved on before it answered.
    */
   const openInboxItem = (workspace: string, place: InboxItemPlace) => {
     const open = tasks.activeTaskId;
+    const listed = "agentId" in place ? listedAgentIn(tasks, place.agentId) : undefined;
     if ("planId" in place) openInboxItemOn(workspace, place, place.planId);
     else if (!("agentId" in place)) openInboxItemById(place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openInboxItemOn(workspace, place, open);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId))
-      openInboxItemOn(workspace, place, null);
+    else if (listed !== undefined) openInboxItemOn(workspace, place, listed.planId);
     else {
       const mine = navigations.current;
       readAgentById(queryClient, place.agentId).then((agent) => {
@@ -3851,7 +3817,7 @@ export function useTasksTab(input: {
         .filter((each) => !isOverviewTab(each))
         .findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
@@ -3869,8 +3835,20 @@ export function useTasksTab(input: {
   const dozeColumnTab = useCallback(
     (tab: MainTab) => {
       keepColumnClosed(tab);
-      if (isAgentTab(tab)) dozeMainTab(tab);
-      else closeMainTab(tab);
+      if (isOverviewTab(tab)) {
+        closeMainTab(tab);
+        return;
+      }
+      switch (tab.kind) {
+        case STRIP_TAB_KIND.AGENT:
+          dozeMainTab(tab);
+          return;
+        case STRIP_TAB_KIND.DRAFT:
+          closeMainTab(tab);
+          return;
+        default:
+          absurd(tab);
+      }
     },
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
@@ -3880,12 +3858,14 @@ export function useTasksTab(input: {
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
-      const terminal = isTerminalTab(tab) || isLocalTab(tab);
-      if (terminal) endTerminal(tab);
+      if (stripTabEndsSession(tab)) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !terminal) {
-        const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
+        const file =
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE
+            ? panelFiles.find((each) => each.path === tab.file)
+            : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
@@ -3902,7 +3882,7 @@ export function useTasksTab(input: {
     ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
-  // while the agent is not archived, never the Inbox, which the panel
+  // while the agent is the task's, archived or not, never the Inbox, which the panel
   // draws no more, a Changes tab while its agent is the task's, archived or not,
   // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
@@ -3913,20 +3893,12 @@ export function useTasksTab(input: {
     closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
     typeof closed.tab !== "string" ||
     DRAWN_KINDS.some((kind) => kind === closed.tab);
-  const drawsAgain = (closed: ClosedTab): boolean => {
-    const { tab } = closed;
-    const agentIds = agents.agentIds;
-    if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
-      return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
-    }
-    if (typeof tab === "string") return drawsOnAnyTask(closed);
-    if (isSubagentTab(tab))
-      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
-    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
-    // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
-    if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    return true;
-  };
+  const drawsAgain = (closed: ClosedTab): boolean =>
+    stripTabDrawsAgain(closed.tab, {
+      openAgents: mainTabs.openAgents,
+      taskAgents: agents.heldIds,
+      pages: taskPages === undefined ? undefined : pages,
+    });
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
 
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
@@ -3950,14 +3922,18 @@ export function useTasksTab(input: {
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
     stateShown && page === TASKS_PAGE.DOCUMENT && !overPlan && !historyRoute.open;
-  const pinnedHere = (tab: StripTab) =>
-    isAgentTab(tab)
-      ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
-      : isPinnable(tab) &&
-        viewed.activeTaskId !== undefined &&
-        sidePanel.pins.some(
-          (pin) => "task" in pin && pin.task === viewed.activeTaskId && sameTab(pin.tab, tab),
-        );
+  const pinnedHere = (tab: StripTab) => {
+    const pin = stripTabPin(tab);
+    if (pin === TAB_PIN.ACCOUNT)
+      return taskAgentPins.some((each) => sameTab(agentTab(each.agentId), tab));
+    return (
+      pin === TAB_PIN.SIDEBAR &&
+      viewed.activeTaskId !== undefined &&
+      sidePanel.pins.some(
+        (each) => "task" in each && each.task === viewed.activeTaskId && sameTab(each.tab, tab),
+      )
+    );
+  };
   useIdleTabs({
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     column:
@@ -3970,11 +3946,11 @@ export function useTasksTab(input: {
             onViewedAt: mainTabs.onViewedAt,
             onIdle: dozeColumnTab,
             keeps: (tab) =>
-              isOverviewTab(tab) ||
-              isDraftTab(tab) ||
+              !stripTabClosesIdle(tab) ||
               pinnedHere(tab) ||
-              awakeAgents.includes(tab.agent) ||
-              input.unseenAgents.includes(tab.agent),
+              (!isOverviewTab(tab) &&
+                tab.kind === STRIP_TAB_KIND.AGENT &&
+                (awakeAgents.includes(tab.agent) || input.unseenAgents.includes(tab.agent))),
           },
     panel:
       inboxView !== undefined || pageAgents !== undefined
@@ -3985,12 +3961,7 @@ export function useTasksTab(input: {
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
-            keeps: (tab) =>
-              typeof tab === "string" ||
-              isCloudBrowserTab(tab) ||
-              isTerminalTab(tab) ||
-              isLocalTab(tab) ||
-              pinnedHere(tab),
+            keeps: (tab) => !stripTabClosesIdle(tab) || pinnedHere(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,
@@ -4314,7 +4285,7 @@ export function useTasksTab(input: {
       }
       if (pin.task !== tasks.activeTaskId) select(pin.task);
       clearStandIn();
-      if (!isAgentTab(tab)) {
+      if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.AGENT) {
         sidePanel.onShow(pin.task, tab);
         return;
       }

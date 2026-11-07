@@ -4,7 +4,8 @@
  * The composer runs over a real state folder of its own, a fake service
  * that enrolls the Mac, lists the account's hosts, and serves the install
  * script, and a fake launchd and installer that each say what they were
- * asked, on the test's clock. Synthetic ids and secrets throughout.
+ * asked, on the test's clock; the state folder is watched as the app watches it,
+ * and the settings are told again by the test. Synthetic ids and secrets throughout.
  */
 
 import assert from "node:assert/strict";
@@ -12,15 +13,15 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
+import type { OwnEnrollOutcome } from "@repo/features";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
+import { GATEWAY_EVENT } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
-import { Duration, Effect, Layer, Option, Result } from "effect";
+import { Duration, Effect, Layer, Option, PubSub, Result, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
@@ -42,7 +43,6 @@ const SCRIPT = "#!/bin/sh\necho install\n";
 const ENROLL_URL = `${SERVICE}/enroll`;
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 /** The desktop's own window, as the Gateway hands a method its caller. */
-const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const BRING_YOUR_OWN_HOST_ON = {
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
@@ -90,8 +90,10 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     const asked: string[] = [];
     const enrolled: { deviceId: string; version: string | null }[] = [];
     let failedInstalls = options.failedInstalls ?? 0;
-    const experiments: Partial<Record<Experiment, boolean>> =
-      options.experiments ?? BRING_YOUR_OWN_HOST_ON;
+    const experiments: Partial<Record<Experiment, boolean>> = {
+      ...(options.experiments ?? BRING_YOUR_OWN_HOST_ON),
+    };
+    const settingsTold = yield* PubSub.unbounded<void>();
     const listed = new Set(options.listed ?? []);
     let version: string | null = null;
     let told: AppThisMacHosts | undefined;
@@ -103,7 +105,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
             enrolled.push({ deviceId, version });
             asked.push("enroll");
             listed.add(deviceId);
-            return { outcome: OWN_ENROLL_OUTCOME.ENROLLED, deviceSecret: SECRET };
+            return { deviceId, deviceSecret: SECRET };
           }),
         ),
     };
@@ -120,6 +122,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
       experimentOn: (experiment) => Effect.succeed(experiments[experiment] === true),
+      settingsTold: Effect.map(PubSub.subscribe(settingsTold), Stream.fromSubscription),
       hostListed: (deviceId) => Effect.succeed(Option.some(listed.has(deviceId))),
       client,
     }).pipe(
@@ -170,12 +173,18 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     );
     yield* composer.lifetime;
     const held = (): AppThisMacHost | undefined => told?.[USER_ID]?.rows;
-    const set = composer.methods[GATEWAY_METHOD.HOSTS_THIS_MAC_SET];
-    assert.ok(set !== undefined, "This Mac answers being turned on and off");
     /** Run agents on this Mac turned on or off, as its switch turns it; what it answered. */
     const turn = (on: boolean, deleteFolders?: boolean) =>
-      Effect.orDie(set(deleteFolders === undefined ? { on } : { on, deleteFolders }, CONTEXT));
-    return { asked, enrolled, held, turn };
+      composer.acts.HOSTS_THIS_MAC_SET(
+        deleteFolders === undefined ? { on } : { on, deleteFolders },
+      );
+    /** The experiment given turned on or off, and the settings told again, as a switch in Settings does. */
+    const flip = (experiment: Experiment, on: boolean) =>
+      Effect.suspend(() => {
+        experiments[experiment] = on;
+        return PubSub.publish(settingsTold, undefined);
+      });
+    return { asked, enrolled, held, turn, flip };
   });
 
 /** The state folder with the record given written, as the install's host would have left it. */
@@ -222,7 +231,7 @@ it.effect(
 );
 
 it.effect(
-  "a record the install's own host writes reaches the windows on the loop's next pass, with no window asking",
+  "a record the install's own host writes reaches the windows as its state folder moves, with no window asking",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -250,6 +259,24 @@ it.effect(
           0,
           "nothing of the host is kept with Bring your own host off",
         );
+      }).pipe(Effect.provide(FILES)),
+    ),
+);
+
+it.effect(
+  "Bring your own host turned on starts the account's stopped host as the settings are told, with no relaunch",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+        const mac = yield* thisMac(yield* recorded(record), { experiments: {}, listed: [KEPT_ID] });
+        yield* until(() => mac.asked.length > 0);
+        assert.deepEqual(mac.asked, ["stop"]);
+
+        yield* mac.flip(EXPERIMENT.BRING_YOUR_OWN_HOST, true);
+        yield* until(() => mac.asked.length > 1);
+
+        assert.deepEqual(mac.asked, ["stop", "install"]);
       }).pipe(Effect.provide(FILES)),
     ),
 );
@@ -310,6 +337,9 @@ it.effect(
       Effect.gen(function* () {
         const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot, { failedInstalls: 1 });
+        // Note that the launch's read and the keep it began settle first, so the install counted is the turn's alone.
+        yield* until(() => mac.held() !== undefined);
+        yield* nudged(Duration.minutes(1));
         yield* mac.turn(true);
         yield* until(() => mac.asked.length >= 2);
         yield* nudged(Duration.seconds(5));

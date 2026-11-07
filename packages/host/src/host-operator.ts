@@ -1,282 +1,42 @@
-import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import {
-  ADMIN_UNANSWERED,
-  type AdminFavoriteParams,
-  type AdminReadAnswer,
-  type AdminReadParams,
-  adminReadAnswerSchema,
-} from "@repo/features/admin-wire";
-import {
-  AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
-  type AgentAddRepositoryParams,
-  type AgentAgentAnswer,
-  type AgentArchiveParams,
-  type AgentChangesAnswerView,
-  type AgentChooseParams,
-  type AgentDefaultAnswer,
-  type AgentDeleteAnswerView,
-  type AgentGitHubImageParams,
-  type AgentGitHubImageView,
-  type AgentInboxAnsweredView,
-  type AgentInboxAnswerParams,
-  type AgentInboxAttachmentParams,
-  type AgentInboxAttachmentView,
-  type AgentInboxCloseParams,
-  type AgentInboxCloseReleasedView,
-  type AgentInboxCloseReleaseParams,
-  type AgentInboxItemHomeParams,
-  type AgentInboxItemHomeView,
-  type AgentInboxMessagedView,
-  type AgentInboxMessageParams,
-  type AgentInboxReadAllParams,
-  type AgentInboxReadAllView,
-  type AgentInboxReadStateParams,
-  type AgentInboxReadStateView,
-  type AgentInboxRemindParams,
   type AgentInboxScope,
-  type AgentInboxStartParams,
-  type AgentListAnswer,
-  type AgentListParams,
-  type AgentMarkReadParams,
-  type AgentMessageParams,
-  type AgentMessagesAnswerView,
-  type AgentMessagesParams,
-  type AgentPageAnswerView,
   type AgentPageParams,
-  type AgentPartParams,
-  type AgentPartView,
-  type AgentPictureParams,
-  type AgentPinParams,
-  type AgentPullRequestActionParams,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
-  type AgentPullRequestWriteAnswerView,
-  type AgentQueueAnswerView,
-  type AgentQueueParams,
-  type AgentRenameParams,
-  type AgentRewindParams,
-  type AgentServersParams,
-  type AgentStartParams,
-  type AgentStopParams,
   type AgentTranscriptKey,
-  type AgentTranscriptOlderAnswer,
-  type AgentTranscriptOlderParams,
-  type AgentWorkspaceListParams,
   agentAccountInboxAnswerViewSchema,
-  agentAgentAnswerSchema,
-  agentChangesAnswerViewSchema,
-  agentDefaultAnswerViewSchema,
-  agentDeleteAnswerViewSchema,
-  agentGitHubImageViewSchema,
-  agentInboxAnsweredViewSchema,
-  agentInboxAttachmentViewSchema,
-  agentInboxCloseReleasedViewSchema,
-  agentInboxItemHomeViewSchema,
-  agentInboxMessagedViewSchema,
-  agentInboxReadAllViewSchema,
-  agentInboxReadStateViewSchema,
-  agentListAnswerViewSchema,
-  agentMessagesAnswerViewSchema,
-  agentPageAnswerViewSchema,
-  agentPartViewSchema,
-  agentPullRequestWriteAnswerViewSchema,
-  agentQueueAnswerViewSchema,
-  agentTranscriptOlderAnswerSchema,
-  type HostDoneAnswerView,
-  hostDoneAnswerViewSchema,
   type MemoriesFollowParams,
   type PullRequestPartParams,
-  type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
-import {
-  AUTOMATION_CALL_FAILURE,
-  type AutomationChangeParams,
-  type AutomationCreateParams,
-  type AutomationDeletedView,
-  type AutomationFollow,
-  type AutomationIdParams,
-  type AutomationRunParams,
-  type AutomationRunView,
-  type AutomationView,
-  automationDeletedViewSchema,
-  automationRunViewSchema,
-  automationViewSchema,
-} from "@repo/features/automation-view";
+import type { AutomationFollow } from "@repo/features/automation-view";
 import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
   browserLiveClosedEventSchema,
   browserLiveMessageEventSchema,
 } from "@repo/features/browser-live-acts";
+import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
+import { type PortForwarding, portForwardingSchema } from "@repo/features/port-forward-acts";
+import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import {
-  HOST_PAIRING_CALL_FAILURE,
-  type HostPairingApproveView,
-  type HostPairingDenyView,
-  type HostPairingView,
-  hostPairingApproveViewSchema,
-  hostPairingDenyViewSchema,
-  hostPairingViewSchema,
-} from "@repo/features/host-pairing-view";
-import {
-  INSTALLED_SKILL_CALL_FAILURE,
-  type InstalledSkillContentView,
-  type InstalledSkillFollowParams,
-  type InstalledSkillIdParams,
-  type InstalledSkillInstallParams,
-  type InstalledSkillInstallView,
-  type InstalledSkillPreviewParams,
-  type InstalledSkillPreviewView,
-  type InstalledSkillRemovedView,
-  installedSkillContentViewSchema,
-  installedSkillInstallViewSchema,
-  installedSkillPreviewViewSchema,
-  installedSkillRemovedViewSchema,
-} from "@repo/features/installed-skill-view";
-import {
-  INTEGRATION_CALL_FAILURE,
-  type IntegrationAccountView,
-  type IntegrationConnectView,
-  type IntegrationProviderParams,
-  type IntegrationRenameParams,
-  type IntegrationStatusView,
-  integrationAccountViewSchema,
-  integrationConnectViewSchema,
-  integrationStatusViewSchema,
-} from "@repo/features/integration-view";
-import {
-  MCP_CLIENTS_CALL_FAILURE,
-  type McpClientRevokeParams,
-  type McpClientsView,
-  mcpClientsViewSchema,
-} from "@repo/features/mcp-client-view";
-import type { ModelChoice } from "@repo/features/models-wire";
-import {
-  type PortForwarding,
-  type PortForwardingAnswer,
-  portForwardingAnswerSchema,
-  portForwardingSchema,
-} from "@repo/features/port-forward-acts";
-import {
-  type PullRequestChaptersAnswerView,
-  type PullRequestChaptersParams,
-  type PullRequestChaptersReadParams,
-  pullRequestChaptersAnswerViewSchema,
-} from "@repo/features/pull-request-chapters-view";
-import {
-  GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
   type TaskDocumentFollow,
   type TaskHistoryFollow,
   type TaskPagesFollow,
-  type TasksBlockAnswer,
-  type TasksBlockParams,
-  type TasksBrowserTabOpenAnswer,
-  type TasksBrowserTabOpenParams,
-  type TasksChangeRelationAnswer,
-  type TasksChangeRelationParams,
-  type TasksCommentActParams,
-  type TasksCommentAnswer,
-  type TasksCommentStartParams,
   type TasksCommentsFollow,
-  type TasksEditAnswer,
-  type TasksEditParams,
-  type TasksFileAnswer,
-  type TasksFileParams,
-  type TasksFindAnswer,
-  type TasksFindParams,
-  type TasksGitHubDisconnectAnswer,
-  type TasksGitHubPageAnswer,
   type TasksLinkStandingParams,
-  type TasksMarkReadParams,
-  type TasksMoveAnswer,
-  type TasksMoveParams,
   type TasksPageAnswer,
   type TasksPageParams,
-  type TasksPictureAnswer,
-  type TasksPictureKeepAnswer,
-  type TasksPictureKeepParams,
-  type TasksPictureParams,
-  type TasksPinParams,
-  type TasksPinRepositoryParams,
-  type TasksRenameParams,
   type TasksRepositoriesParams,
-  type TasksRevisionAnswer,
-  type TasksRevisionParams,
-  type TasksRevisionsAnswer,
-  type TasksRevisionsParams,
-  type TasksSetParentAnswer,
-  type TasksSetParentParams,
-  type TasksSetRepositoryAnswer,
-  type TasksSetRepositoryParams,
-  type TasksSetStandingParams,
-  type TasksSkillsAnswer,
-  type TasksSkillsParams,
-  type TasksStartAnswer,
-  type TasksStartRequest,
-  type TasksTreeAnswer,
-  type TasksTreeParams,
   type TasksView,
-  type TasksWorkspaceAnswer,
-  type TasksWorkspaceCreateParams,
-  type TasksWorkspaceGitHubConnectAnswer,
-  type TasksWorkspaceInvitationAnswer,
-  type TasksWorkspaceInvitationCancelParams,
-  type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceInviteParams,
-  type TasksWorkspaceLeaveAnswer,
-  type TasksWorkspaceLeaveParams,
-  type TasksWorkspaceMemberRemoveParams,
-  type TasksWorkspaceMemberRoleParams,
-  type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceParams,
-  type TasksWorkspacePhotoSetParams,
-  type TasksWorkspaceRenameParams,
-  type TasksWorkspaceSentryAnswer,
-  type TasksWorkspaceSentryDisconnectParams,
-  type TasksWorkspaceSlackBotAnswer,
-  type TasksWorkspaceSlackBotChannelParams,
-  type TasksWorkspaceSlackBotNotificationsParams,
-  type TasksWorkspaceSlackBotRepositoryParams,
-  type TasksWorkspaceSlugSetParams,
-  type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
-  type TasksWorkspaceTokenRepositorySetParams,
-  type TasksWorkspaceTransferParams,
-  type TasksWriteSectionParams,
-  tasksBlockAnswerSchema,
-  tasksBrowserTabOpenAnswerSchema,
-  tasksChangeRelationAnswerSchema,
-  tasksCommentAnswerSchema,
-  tasksEditAnswerSchema,
-  tasksFileAnswerSchema,
-  tasksFindAnswerSchema,
-  tasksGitHubDisconnectAnswerSchema,
-  tasksGitHubPageAnswerSchema,
-  tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
-  tasksPictureAnswerSchema,
-  tasksPictureKeepAnswerSchema,
-  tasksRevisionAnswerSchema,
-  tasksRevisionsAnswerSchema,
-  tasksSetParentAnswerSchema,
-  tasksSetRepositoryAnswerSchema,
-  tasksSkillsAnswerSchema,
-  tasksStartAnswerSchema,
-  tasksTreeAnswerSchema,
-  tasksWorkspaceAnswerSchema,
-  tasksWorkspaceGitHubConnectAnswerSchema,
-  tasksWorkspaceInvitationAnswerSchema,
-  tasksWorkspaceInvitationsAnswerSchema,
-  tasksWorkspaceLeaveAnswerSchema,
-  tasksWorkspaceMembersAnswerSchema,
-  tasksWorkspaceSentryAnswerSchema,
-  tasksWorkspaceSlackBotAnswerSchema,
-  tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
 import {
@@ -290,23 +50,15 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@repo/features/terminal-view";
-import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayCallResult,
   type GatewayClient,
-  type GatewayMethod,
   gatewayEventReader,
 } from "@repo/gateway";
-import type {
-  AppSettingField,
-  AppSettingValue,
-  Experiment,
-  SettingsResetScope,
-} from "@repo/settings";
-import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
+import type { AppSettings } from "@repo/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -317,7 +69,7 @@ import {
   type WireRecord,
 } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
@@ -357,23 +109,9 @@ import type {
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
-import {
-  type MacCommandAnswer,
-  type MacCommandAsk,
-  macCommandAsksSchema,
-} from "./mac-command-ask.js";
+import { type MacCommandAsk, macCommandAsksSchema } from "./mac-command-ask.js";
 
-/**
- * The desktop's client over the host's own vocabulary: the settings, account,
- * task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
- * composes one request and reads its answer, and nothing here runs it — the
- * act procedure that asked yields it, and the act port runs it once on the launch's
- * own runtime. The host is this same process, so an answer that is not the
- * shape the method documents is a defect of the build rather than a reachable
- * host state, and dies where it is read; the act port words a defect as the
- * kind's own refusal. Nothing here holds host state beyond the last settings
- * snapshot a refusal is answered with.
- */
+/** Everything a window's bootstrap reads of the host, in one answer. */
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
@@ -388,73 +126,41 @@ interface HostSettingsChange {
   reporter?: string;
 }
 
+/**
+ * The client's door to the host over the Gateway for what is not a declared
+ * act, which the act port answers from the composers directly
+ * (`act-port/declared-acts.ts`): the events the host pushes, each read by
+ * its `on*Changed` reader; the snapshots a window boots from; the live
+ * reads' follows, unfollows, and retries; and the calls the rest of the
+ * client makes of its own accord. Those callers are the client's state and
+ * notices (`client/operator-client.ts`, `client/client-notices.ts`), the
+ * desktop's window service and network watch, the web tab's host
+ * (`web-host.ts`), the desktop's mirror ensure (`register-desktop-ipc.ts`),
+ * and the terminal and browser-live procedures, whose platform work is
+ * their own.
+ *
+ * Every method answers an effect: it composes one request and reads its
+ * answer, and nothing here runs it; whoever asked yields it. The host is
+ * this same process, so an answer that is not the shape the method
+ * documents is a defect of the build rather than a reachable host state.
+ * Nothing here holds host state.
+ */
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
-  answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
   onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
-  updateSetting<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One group returned to its defaults, but for the fields `kept`, which the asking page does not draw. */
-  resetSettings(
-    scope: SettingsResetScope,
-    kept: readonly AppSettingField[],
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One experiment turned on or off for the signed-in account, on the service. */
-  setExperiment(
-    experiment: Experiment,
-    on: boolean,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  /** The account a sign-in settled on, or the key of why it ended without landing. */
-  beginSignIn(provider: AccountProvider): Effect.Effect<SignInAnswer>;
-  /** The sign-in taken again over the session that stands: whether a new session landed. */
-  signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
-  cancelSignIn(): Effect.Effect<void>;
-  signOut(): Effect.Effect<AccountSnapshot>;
-  deleteAccount(): Effect.Effect<AccountSnapshot>;
-  /** The member's grant of support access granted for seven days, or revoked: when it then runs out, or null. */
-  supportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
-  tasksRefresh(): Effect.Effect<void>;
   /** The Mac woke or unlocked: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
   /** The app reaches the service again: the host asks every read a window holds again, and follows the task list again from a fresh seal. */
   tasksRegained(): Effect.Effect<void>;
-  /** A window said the changes made offline the service refused: the host clears their count for every window. */
-  tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
-  /** One task made the active one, replacing whichever was; answers whether the host took it. */
-  tasksOpen(taskId: string): Effect.Effect<boolean>;
-  /** The developer left the open task: its call ends and no task is active. */
-  tasksClose(): Effect.Effect<void>;
-  /** A named task started on the repository it names, where it names one, and made the active one; or why none started. */
-  tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
-  /** One task deleted; answers whether the service deleted it. */
-  tasksDelete(taskId: string): Effect.Effect<boolean>;
-  /** One task renamed; answers whether the service renamed it. */
-  tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
-  tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
-  /** One task pinned or unpinned; answers whether the service changed it. */
-  tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
-  /** The reader's own read mark of one task moved; answers whether the service took it. */
-  tasksMarkRead(params: TasksMarkReadParams): Effect.Effect<boolean>;
-  /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
-  tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
-  tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
   /** The repositories the account reaches in one workspace, or in every one, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onRepositoryListsChanged`. */
   tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
   /** One workspace's repositories let go by the windows. */
@@ -463,39 +169,12 @@ export interface HostOperator {
   tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
   /** Every workspace's repositories the host holds for the windows, whole, each time any of them moves. */
   onRepositoryListsChanged(listener: (held: AppRepositoryLists) => void): () => void;
-  /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
-  tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
-  /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
-  tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
-  /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
-  tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
-  /** One task's parent set, or cleared with null; the parent as it then stands, or why it is unchanged. */
-  tasksSetParent(params: TasksSetParentParams): Effect.Effect<TasksSetParentAnswer>;
-  /** One relation of a task moved to another kind in one call; the task's relations as they then stand, or why they are unchanged. */
-  tasksChangeRelation(params: TasksChangeRelationParams): Effect.Effect<TasksChangeRelationAnswer>;
-  /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
-  tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** A window of a file of a task's repository, colored; or why it is not shown. */
-  tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
-  tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
-  /** The skills a developer may choose of a task's repository; or why they are not read. */
-  tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
   /** What GitHub holds of the page a link names, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onLinkStandingsChanged`. */
   tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
   /** One link's standing let go by the windows. */
   tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
   /** Every link's standing the host holds for the windows, whole, each time any of them moves. */
   onLinkStandingsChanged(listener: (held: AppLinkStandings) => void): () => void;
-  /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
-  tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
-  /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
-  tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
-  /** A page of a description's history; or that the service did not answer. */
-  tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
-  /** One revision of a description beside the one before it; or that the service did not answer. */
-  tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
-  /** One revision of a description restored as its content; answers whether the service restored it. */
-  tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately, the open task's among them; what they hold is heard through `onPagesChanged`. */
@@ -526,10 +205,6 @@ export interface HostOperator {
   tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** Every task's description history the host holds for the windows, whole, each time any of them moves. */
   onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
-  /** One picture of one description as its bytes in base64, or why there is none. */
-  tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
-  /** One picture kept on one description, answering the id its text names it by, or why it was not kept. */
-  tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
   /** One task's description's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
   tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** One description's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -538,10 +213,6 @@ export interface HostOperator {
   tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** Every description's or page's comments the host holds for the windows, whole, each time any of them moves. */
   onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
-  /** A comment thread started on one task's description, answered as it stands, or why not. */
-  tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
-  /** One thing done to one comment thread of one task's description, answered as it stands, or why not. */
-  tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
   integrationsFollow(): Effect.Effect<void>;
   /** The account's integrations let go by the windows. */
@@ -550,8 +221,6 @@ export interface HostOperator {
   integrationsRetry(): Effect.Effect<void>;
   /** The account's integrations the host holds for the windows, whole, each time they move. */
   onIntegrationsChanged(listener: (held: AppIntegrations) => void): () => void;
-  /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
-  integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
   /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
   integrationsToolsFollow(params: IntegrationProviderParams): Effect.Effect<void>;
   /** One server's tools let go by the windows. */
@@ -560,12 +229,6 @@ export interface HostOperator {
   integrationsToolsRetry(params: IntegrationProviderParams): Effect.Effect<void>;
   /** Every server's tools the host holds for the windows, whole, each time any of them moves. */
   onIntegrationToolsChanged(listener: (held: AppIntegrationTools) => void): () => void;
-  /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
-  integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
-  integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
-  integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
   /** The outside MCP clients the account allowed, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onMcpClientsChanged`. */
   mcpClientsFollow(): Effect.Effect<void>;
   /** The outside MCP clients let go by the windows. */
@@ -574,58 +237,6 @@ export interface HostOperator {
   mcpClientsRetry(): Effect.Effect<void>;
   /** The outside MCP clients the host holds for the windows, whole, each time they move. */
   onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
-  /** One outside MCP client revoked under the Mac's session; the clients as they then stand, or why the revoke did not finish. */
-  mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
-  /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
-  githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
-  /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
-  githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
-  /** One admin dashboard read under the account's session; the service's answer as it came, or why there is none. */
-  adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
-  /** The admin dashboard's star set or taken back on one account; whether it landed. */
-  adminFavorite(params: AdminFavoriteParams): Effect.Effect<boolean>;
-  /** A workspace made under a name, owned by the account; the workspace, or why none was. */
-  workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
-  workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
-  workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's slug changed by its owner; the workspace under its new slug, or why it was not. */
-  workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
-  workspaceGitHubConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
-  workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
-  workspaceSentryInstall(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** One of a workspace's Sentry installations disconnected, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands, or why it is not. */
-  workspaceSentryDisconnect(
-    params: TasksWorkspaceSentryDisconnectParams,
-  ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-  /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
-  workspaceSlackBotConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** A workspace's Slack bot disconnected; the bot as it then stands, or why it is not. */
-  workspaceSlackBotDisconnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** The reader's own Slack notifications turned on or off; the bot as it then stands, or why it is not. */
-  workspaceSlackBotNotifications(
-    params: TasksWorkspaceSlackBotNotificationsParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** The workspace's default repository for Slack starts named or cleared; the bot as it then stands, or why it is not. */
-  workspaceSlackBotRepository(
-    params: TasksWorkspaceSlackBotRepositoryParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** One channel's bot membership or default repository changed; the bot as it then stands, or why it is not. */
-  workspaceSlackBotChannel(
-    params: TasksWorkspaceSlackBotChannelParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's own integrations held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceIntegrationsChanged`. */
   workspaceIntegrationsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
   /** One workspace's integrations let go by the windows. */
@@ -674,33 +285,7 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
   onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
-  /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
-  workspaceTokenRepositorySet(
-    params: TasksWorkspaceTokenRepositorySetParams,
-  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
-  /** One member removed from a workspace; the members who remain, or why none was removed. */
-  workspaceMemberRemove(
-    params: TasksWorkspaceMemberRemoveParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** Another member of a workspace made an admin or an admin a member by the owner; the members as they then stand, or why no role changed. */
-  workspaceMemberRole(
-    params: TasksWorkspaceMemberRoleParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** A workspace handed by its owner to one of its admins, the owner becoming an admin; the members as they then stand, or why it was not handed over. */
-  workspaceTransfer(
-    params: TasksWorkspaceTransferParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** One workspace left; or why it was not. */
-  workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-  /** An invitation made; it with its accept link, or why none was. */
-  workspaceInvite(
-    params: TasksWorkspaceInviteParams,
-  ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
-  /** A pending invitation canceled; those still pending, or why it was not. */
-  workspaceInvitationCancel(
-    params: TasksWorkspaceInvitationCancelParams,
-  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
-  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, as the provider keys move, and every `MODEL_CATALOG_TTL`; what they hold is heard through `onModelsChanged`. */
+  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, and as the provider keys move; what they hold is heard through `onModelsChanged`. */
   agentModelsFollow(): Effect.Effect<void>;
   /** The models let go by the windows. */
   agentModelsUnfollow(): Effect.Effect<void>;
@@ -708,8 +293,6 @@ export interface HostOperator {
   agentModelsRetry(): Effect.Effect<void>;
   /** The models the host holds for the windows, whole, each time any of them moves. */
   onModelsChanged(listener: (held: AppModels) => void): () => void;
-  /** The default drawn over the account's preferences at once and written; the choice as kept, or why it is unchanged. */
-  agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts held for the windows from now until let go, followed live; what they hold is heard through `onHostsChanged`. */
   hostsFollow(): Effect.Effect<void>;
   /** The account's hosts let go by the windows. */
@@ -726,47 +309,6 @@ export interface HostOperator {
   hostsPresenceRefresh(): Effect.Effect<void>;
   /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
-  /** One of the account's hosts removed; done, or why not. */
-  hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
-  /** Run agents on this Mac turned on or off; done, or why not. Only the desktop's host answers it. */
-  hostsThisMacSet(asked: ThisMacHostSetParams): Effect.Effect<HostDoneAnswerView>;
-  /** A box's pending pairing read by the code its link named; the box, or why not. */
-  hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
-  /** A box's pending pairing approved by its code; the host it made, or why not. */
-  hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
-  /** A box's pending pairing denied by its code; done, or why not. */
-  hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
-  /** One task's coding agents with their status; or why there is no list. */
-  agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
-  /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
-  agentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
-  /** An agent started on a task under the press's own key; the agent, or why none started. */
-  agentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
-  agentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
-  /** One agent sent a message naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  agentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
-  agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
-  /** A repository added to one agent beside the ones it works in; the agent as it then stands, or why it was not added. */
-  agentAddRepository(params: AgentAddRepositoryParams): Effect.Effect<AgentAgentAnswer>;
-  agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
-  /** One agent stopped; the agent as it then stands, or why it was not. */
-  agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
-  agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
-  /** The reader's own read mark of one agent moved; the agent as it then stands, or why it is unchanged. */
-  agentMarkRead(params: AgentMarkReadParams): Effect.Effect<AgentAgentAnswer>;
-  /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
-  agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
   agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
   /** One agent's origin let go by the windows: it stays followed among those let go lately until later ones push it out. */
@@ -775,16 +317,6 @@ export interface HostOperator {
   agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
   /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
   onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
-  /** An automation made; the automation as the service kept it, or why it was not made. */
-  automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
-  /** One automation changed; the automation as it then stands, or why it is unchanged. */
-  automationChange(params: AutomationChangeParams): Effect.Effect<AutomationView>;
-  /** One automation deleted with its history; or why it stands. */
-  automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
-  /** One automation run now under the window's key; the run as it came out, or why there is none. */
-  automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
-  /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
-  automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
   /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
   automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
   /** A held list or history let go, kept followed a while among those let go lately. */
@@ -809,10 +341,6 @@ export interface HostOperator {
   chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
   /** Every agent's pull request's chapters the host holds for the windows, whole, each time any of them moves. */
   onChaptersChanged(listener: (held: AppChapters) => void): () => void;
-  /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
-  pullRequestChaptersGenerate(
-    params: PullRequestChaptersParams,
-  ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -821,26 +349,6 @@ export interface HostOperator {
   installedSkillsRetry(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** Every workspace's skills the host holds for the windows, whole, each time any of them moves. */
   onInstalledSkillsChanged(listener: (held: AppInstalledSkills) => void): () => void;
-  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
-  installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
-  /** What a paste would install, read by the service; or why it did not say. */
-  installedSkillsPreview(
-    params: InstalledSkillPreviewParams,
-  ): Effect.Effect<InstalledSkillPreviewView>;
-  /** The skills a paste makes, installed all or none; or why none were. */
-  installedSkillsInstall(
-    params: InstalledSkillInstallParams,
-  ): Effect.Effect<InstalledSkillInstallView>;
-  /** One installed skill removed; or why it stands. */
-  installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
-  /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
-  agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
-  /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
-  agentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
-  /** One change to an agent's pull request, made on GitHub as the account on its own GitHub sign-in; how GitHub took it, or why there is no answer. */
-  agentPullRequestAction(
-    params: AgentPullRequestActionParams,
-  ): Effect.Effect<AgentPullRequestWriteAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
   agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
   /** One agent's own tools let go by the windows. */
@@ -881,25 +389,6 @@ export interface HostOperator {
   agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
   /** Every task's or agent's inbox the host holds for the windows, whole, each time any of them moves. */
   onHolderInboxesChanged(listener: (held: AppHolderInboxes) => void): () => void;
-  /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
-  /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
-  agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
-  /** A held close let go by its key, sent or taken back as its Undo asks; whether it was still held, or not where there is no answer. */
-  agentInboxCloseRelease(
-    params: AgentInboxCloseReleaseParams,
-  ): Effect.Effect<AgentInboxCloseReleasedView>;
-  /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
-  /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
-  agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
-  /** One item marked read or unread for the account; its read state, or why there is no answer. */
-  agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
-  agentInboxRemind(params: AgentInboxRemindParams): Effect.Effect<AgentInboxReadStateView>;
-  /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
-  agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
-  /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   agentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
@@ -914,22 +403,14 @@ export interface HostOperator {
   agentPreferencesRetry(): Effect.Effect<void>;
   /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
   onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
-  /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's or worker's transcript held followed for the windows from now until let go, and kept a while after among those let go lately, following no longer; what it holds is heard through `onTranscriptsChanged`. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
   /** One held transcript let go by the window that held it. */
   transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
   /** One held transcript read again at once, as Try again asks. */
   transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** The page of a held transcript below the oldest message it holds, read at once and laid before them: whether it landed, or why it was not read. */
-  transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
   /** Every transcript the host holds for the windows, whole, each time any of them moves. */
   onTranscriptsChanged(listener: (held: AppTranscripts) => void): () => void;
-  agentInboxAttachment(params: AgentInboxAttachmentParams): Effect.Effect<AgentInboxAttachmentView>;
-  /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
-  agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
-  /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
-  agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -993,11 +474,6 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
-  /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
-  portForwardSet(params: {
-    agentId: string;
-    on: boolean;
-  }): Effect.Effect<PortForwardingAnswer | undefined>;
   /** The one agent forwarded to this Mac's localhost and how its forwarding stands, or none, each time it moves. */
   onPortForwardingChanged(listener: (forwarding: PortForwarding) => void): () => void;
 }
@@ -1033,26 +509,6 @@ function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
   return { part: params.part, ...pullRequestRead(params) };
 }
 
-/** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
-function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
-  return params.number === undefined
-    ? { agentId: params.agentId }
-    : { agentId: params.agentId, number: params.number };
-}
-
-/**
- * The host refused a call, or answered a shape its method does not document:
- * a defect of this build, worded by the router as the kind's refusal. Note
- * that only the shape is reported to Sentry, because a refusal is the host's
- * own answer, and a handler that died behind one was reported where it died
- * (`gatewayHost`).
- */
-function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
-  if (answer.ok) return Effect.die(new Error(`${method} answered a shape this client cannot read`));
-  const refusal = new Error(`${method} was refused: ${answer.error.message}`);
-  return Effect.die(Object.assign(refusal, { [ErrorReporter.ignore]: true }));
-}
-
 /**
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
@@ -1060,8 +516,6 @@ function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Ef
  * rest on to the act, whose own answer guard is checked in the router and
  * again in the window that asked.
  */
-const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
-
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
 }
@@ -1072,8 +526,6 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
   return value === undefined ? undefined : (value as unknown as Value);
 }
 
-/** What a coding-agent call the host could not answer is drawn as. */
-/** A followed transcript as the gateway's params carry it. */
 /** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
 function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
   return scope.pageId === undefined
@@ -1081,77 +533,26 @@ function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
     : { taskId: scope.taskId, pageId: scope.pageId };
 }
 
+/** A followed transcript as the gateway's params carry it. */
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
 
-const AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
-
-/** A pairing's read, approve, or deny that reached no answer, as each of them answers one. */
-const PAIRING_UNANSWERED = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED } as const;
-
-/** An automation call that reached no answer, as every automation method answers one. */
-const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
-
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** A GitHub disconnect that reached no answer. */
-const GITHUB_DISCONNECT_UNANSWERED = { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED } as const;
-
-/** An admin read that reached no answer. */
-const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
-
-/** What an integration call the host could not answer is drawn as. */
-const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
-
-/** An outside MCP clients call that reached no answer. */
-const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
-
-/** An installed skills call that reached no answer, as every installed skills method answers one. */
-const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
-
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
-
-  const settingsResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SettingsUpdateResult> =>
-    Effect.flatMap(result, (answer) => {
-      const parsed = answered<SettingsUpdateResult>(record(answer));
-      return parsed?.settings !== undefined ? Effect.succeed(parsed) : unanswered(method, answer);
-    });
-
-  const accountResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<AccountSnapshot> =>
-    Effect.flatMap(result, (answer) => {
-      const account = answered<AccountSnapshot>(record(answer)?.account);
-      return account ? Effect.succeed(account) : unanswered(method, answer);
-    });
 
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
     Effect.asVoid(result);
 
   const on = gatewayEventReader(client);
 
-  const wireReporter = (reporter: string) => ({ reporter });
-
   /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
   const repositoryScope = (params: TasksRepositoriesParams) =>
     params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
-
-  /**
-   * A setting's value as the method's own field, or no field for a cleared
-   * one. The envelope is JSON, and its encoder refuses a record holding
-   * `undefined` rather than dropping the key, so a clear carried as a value
-   * would never leave this process.
-   */
-  const wireValue = <Value>(value: Value | undefined) =>
-    value !== undefined ? { value: carried(value) } : undefined;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -1171,11 +572,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppIntegrations>(payload) : undefined),
         listener,
       ),
-    integrationsConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
-        answerOf(integrationConnectViewSchema, INTEGRATION_UNANSWERED),
-      ),
     integrationsToolsFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, integrationTarget(params))),
     integrationsToolsUnfollow: (params) =>
@@ -1189,25 +585,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppIntegrationTools>(payload) : undefined),
         listener,
       ),
-    integrationsCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, integrationTarget(params)),
-        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
-      ),
-    integrationsDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, integrationTarget(params)),
-        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
-      ),
-    integrationsRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_RENAME, {
-          provider: params.provider,
-          connection: params.connection,
-          label: params.label,
-        }),
-        answerOf(integrationAccountViewSchema, INTEGRATION_UNANSWERED),
-      ),
     mcpClientsFollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW, {})),
     mcpClientsUnfollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW, {})),
     mcpClientsRetry: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_RETRY, {})),
@@ -1217,11 +594,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held clients are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppMcpClients>(payload) : undefined),
         listener,
-      ),
-    mcpClientsRevoke: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: params.clientId }),
-        answerOf(mcpClientsViewSchema, MCP_CLIENTS_UNANSWERED),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -1234,80 +606,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppThisMacHosts>(payload) : undefined),
         listener,
       ),
-    answerMacCommand: (answer) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_COMMAND_ANSWER, {
-          id: answer.id,
-          decision: answer.decision,
-        }),
-        (result) => record(result)?.answered === true,
-      ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AppSettings>(record(answer)?.settings)),
-      ),
-    updateSetting: (field, value, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_UPDATE,
-        client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
-          field,
-          ...wireValue(value),
-          ...wireReporter(reporter),
-        }),
-      ),
-    resetSettings: (scope, kept, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_RESET,
-        client.call(GATEWAY_METHOD.SETTINGS_RESET, {
-          scope,
-          kept: [...kept],
-          ...wireReporter(reporter),
-        }),
-      ),
-    setExperiment: (experiment, on, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.EXPERIMENTS_SET,
-        client.call(GATEWAY_METHOD.EXPERIMENTS_SET, {
-          experiment,
-          on,
-          ...wireReporter(reporter),
-        }),
       ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
-    beginSignIn: (provider) =>
-      Effect.flatMap(
-        client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
-        (answer): Effect.Effect<SignInAnswer> => {
-          const failure = record(answer)?.failure;
-          if (isSignInFailure(failure)) return Effect.succeed({ failure });
-          return Effect.map(
-            accountResult(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, Effect.succeed(answer)),
-            (account) => ({ account }),
-          );
-        },
-      ),
-    signInAgain: (provider) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
-        const signedIn = record(answer)?.signedIn;
-        return isWireBoolean(signedIn)
-          ? Effect.succeed(signedIn)
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, answer);
-      }),
-    cancelSignIn: () => fire(client.call(GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN)),
-    signOut: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
-    deleteAccount: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    supportAccess: (grant) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, { grant }), (answer) => {
-        const until = record(answer)?.supportAccessUntil;
-        return until === null || isWireNumber(until)
-          ? Effect.succeed({ supportAccessUntil: until })
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, answer);
-      }),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -1317,62 +623,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           }),
         ),
       ),
-    tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
     tasksRegained: () => fire(client.call(GATEWAY_METHOD.TASKS_REGAINED)),
-    tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    tasksOpen: (taskId) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_OPEN, { taskId }),
-        (answer) => record(answer)?.opened === true,
-      ),
-    tasksClose: () => fire(client.call(GATEWAY_METHOD.TASKS_CLOSE)),
-    tasksDelete: (taskId) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_DELETE, { taskId }),
-        (answer) => record(answer)?.deleted === true,
-      ),
-    tasksRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_RENAME, { taskId: params.taskId, name: params.name }),
-        (answer) => record(answer)?.renamed === true,
-      ),
-    tasksSetStanding: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_STANDING, { ...params }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksPin: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN, {
-          taskId: params.taskId,
-          pinned: params.pinned,
-          ...(params.position === undefined ? undefined : { position: params.position }),
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksMarkRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MARK_READ, {
-          taskId: params.taskId,
-          readMark: params.readMark,
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksPinRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
-          repository: params.repository,
-          pinned: params.pinned,
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksWriteSection: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
-        (answer) => record(answer)?.changed === true,
-      ),
     tasksRepositoriesFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, repositoryScope(params))),
     tasksRepositoriesUnfollow: (params) =>
@@ -1385,46 +638,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held lists are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppRepositoryLists>(payload) : undefined),
         listener,
-      ),
-    tasksFile: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_FILE, {
-          ...("taskId" in params
-            ? { taskId: params.taskId }
-            : { workspaceId: params.workspaceId, repository: params.repository }),
-          path: params.path,
-          firstLine: params.firstLine,
-          lastLine: params.lastLine,
-          ...(params.raw === undefined ? undefined : { raw: params.raw }),
-          ...(params.ref === undefined ? undefined : { ref: params.ref }),
-        }),
-        answerOf(tasksFileAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksTree: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_TREE, {
-          ...("planId" in params
-            ? { planId: params.planId }
-            : { workspaceId: params.workspaceId, repository: params.repository }),
-          path: params.path,
-          ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
-        }),
-        answerOf(tasksTreeAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksSkills: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.TASKS_SKILLS,
-          "planId" in params
-            ? { planId: params.planId }
-            : {
-                workspaceId: params.workspaceId,
-                ...(params.repository === undefined
-                  ? undefined
-                  : { repository: params.repository }),
-              },
-        ),
-        answerOf(tasksSkillsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksLinkStandingFollow: (params) =>
       fire(
@@ -1447,35 +660,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppLinkStandings>(payload) : undefined),
         listener,
       ),
-    tasksBrowserTabOpen: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
-          agentId: params.agentId,
-          address: params.address,
-        }),
-        answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksFind: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_FIND, {
-          workspace: params.workspace,
-          number: params.number,
-        }),
-        answerOf(tasksFindAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksRevisions: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_REVISIONS, {
-          taskId: params.taskId,
-          ...(params.before === undefined ? undefined : { before: params.before }),
-        }),
-        answerOf(tasksRevisionsAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksRevision: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
-        answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
-      ),
     tasksCommentsFollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
     tasksCommentsUnfollow: (scope) =>
@@ -1488,39 +672,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
         listener,
-      ),
-    tasksCommentStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENT_START, {
-          planId: params.planId,
-          start: params.start,
-        }),
-        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksCommentAct: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
-          planId: params.planId,
-          threadId: params.threadId,
-          action: params.action,
-        }),
-        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksPictureKeep: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, {
-          planId: params.planId,
-          picture: params.picture,
-        }),
-        answerOf(tasksPictureKeepAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksPicture: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PICTURE, {
-          planId: params.planId,
-          attachmentId: params.attachmentId,
-        }),
-        answerOf(tasksPictureAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPage: (params) =>
       Effect.map(
@@ -1576,123 +727,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held descriptions are.
         (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
         listener,
-      ),
-    tasksRestore: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
-        (answer) => record(answer)?.restored === true,
-      ),
-    githubConnect: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_CONNECT),
-        answerOf(tasksGitHubPageAnswerSchema, TASK_UNANSWERED),
-      ),
-    githubDisconnect: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
-        answerOf(tasksGitHubDisconnectAnswerSchema, GITHUB_DISCONNECT_UNANSWERED),
-      ),
-    adminRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.ADMIN_READ, {
-          procedure: params.procedure,
-          query: params.query,
-        }),
-        answerOf(adminReadAnswerSchema, ADMIN_READ_UNANSWERED),
-      ),
-    adminFavorite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.ADMIN_FAVORITE, { id: params.id, favorite: params.favorite }),
-        (answer) => answer.ok && answer.result === true,
-      ),
-    workspaceCreate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_RENAME, {
-          workspaceId: params.workspaceId,
-          name: params.name,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlugSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, {
-          workspaceId: params.workspaceId,
-          slug: params.slug,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspacePhotoSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
-          workspaceId: params.workspaceId,
-          photo: params.photo,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceGitHubConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceGitHubDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSentryInstall: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSentryDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
-          workspaceId: params.workspaceId,
-          installationId: params.installationId,
-        }),
-        answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotNotifications: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS, {
-          workspaceId: params.workspaceId,
-          notifications: params.notifications,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY, {
-          workspaceId: params.workspaceId,
-          repository: params.repository,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotChannel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, { ...params }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceIntegrationsFollow: (params) =>
       fire(
@@ -1820,112 +854,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppTokenRepositories>(payload) : undefined),
         listener,
       ),
-    workspaceTokenRepositorySet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
-          workspaceId: params.workspaceId,
-          repository: params.repository,
-          added: params.added,
-        }),
-        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceMemberRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceMemberRole: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-          role: params.role,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceTransfer: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLeave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceLeaveAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITE, {
-          workspaceId: params.workspaceId,
-          email: params.email,
-          role: params.role,
-        }),
-        answerOf(tasksWorkspaceInvitationAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvitationCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
-          workspaceId: params.workspaceId,
-          invitationId: params.invitationId,
-        }),
-        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    tasksSetRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, {
-          taskId: params.taskId,
-          repository: params.repository,
-        }),
-        answerOf(tasksSetRepositoryAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksMove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MOVE, {
-          taskId: params.taskId,
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksMoveAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksBlock: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
-        answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksSetParent: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_PARENT, {
-          taskId: params.taskId,
-          parentTaskId: params.parentTaskId,
-        }),
-        answerOf(tasksSetParentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksChangeRelation: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
-          taskId: params.taskId,
-          relation: params.relation,
-        }),
-        answerOf(tasksChangeRelationAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksEdit: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
-        answerOf(tasksEditAnswerSchema, TASK_UNANSWERED),
-      ),
-    // Note that the request goes on whole, as the act port decoded it against the same schema the
-    // Gateway's method reads, because a field copied by name is one a later field is left out of,
-    // as Runs on was, which sent every task to the cloud.
-    tasksStart: (request) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_START, request),
-        answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
-      ),
     agentModelsFollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW, {})),
     agentModelsUnfollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW, {})),
     agentModelsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_RETRY, {})),
@@ -1935,17 +863,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held models are the host's own, handed over in this process, so they are passed on as built, as the held keys are.
         (payload) => (isRecord(payload) ? answered<AppModels>(payload) : undefined),
         listener,
-      ),
-    agentDefaultWrite: (choice) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_DEFAULT_WRITE, {
-          model: choice.model,
-          effort: choice.effort,
-          ...(choice.contextWindow === undefined
-            ? undefined
-            : { contextWindow: choice.contextWindow }),
-        }),
-        answerOf(agentDefaultAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_FOLLOW, {})),
     hostsUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_UNFOLLOW, {})),
@@ -1967,163 +884,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
         listener,
       ),
-    hostsRemove: (id) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
-        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    hostsThisMacSet: (asked) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_THIS_MAC_SET, { ...asked }),
-        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    hostsPairingRead: (code) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_PAIRING_READ, { code }),
-        answerOf(hostPairingViewSchema, PAIRING_UNANSWERED),
-      ),
-    hostsPairingApprove: (code) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_PAIRING_APPROVE, { code }),
-        answerOf(hostPairingApproveViewSchema, PAIRING_UNANSWERED),
-      ),
-    hostsPairingDeny: (code) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_PAIRING_DENY, { code }),
-        answerOf(hostPairingDenyViewSchema, PAIRING_UNANSWERED),
-      ),
-    agentWorkspaceList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_LIST, params),
-        answerOf(agentListAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_LIST, {
-          taskId: params.taskId,
-          ...(params.includeArchived === undefined
-            ? undefined
-            : { includeArchived: params.includeArchived }),
-        }),
-        answerOf(agentListAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    // Note that the Start goes on whole, as the act port decoded it against the same schema the
-    // Gateway's method reads, because a field copied by name is one a later field is left out of,
-    // as an empty draft's `blank` was, which handed its agent the description.
-    agentStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_START, params),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentMessages: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_MESSAGES, {
-          agentId: params.agentId,
-          after: params.after,
-          ...("callId" in params ? { callId: params.callId } : undefined),
-        }),
-        answerOf(agentMessagesAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentMessage: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_MESSAGE, {
-          agentId: params.agentId,
-          text: params.text,
-          clientKey: params.clientKey,
-          ...("attachments" in params ? { attachments: params.attachments } : undefined),
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentChoose: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHOOSE, {
-          agentId: params.agentId,
-          model: params.model,
-          effort: params.effort,
-          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_RENAME, {
-          agentId: params.agentId,
-          title: params.title,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentServers: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_SERVERS, {
-          agentId: params.agentId,
-          disabledServers: params.disabledServers,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentAddRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_ADD_REPOSITORY, {
-          agentId: params.agentId,
-          addRepository: params.addRepository,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentQueue: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_QUEUE, {
-          agentId: params.agentId,
-          change: params.change,
-        }),
-        answerOf(agentQueueAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentStop: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_STOP, { agentId: params.agentId }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentRewind: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_REWIND, {
-          agentId: params.agentId,
-          messageId: params.messageId,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentArchive: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
-          agentId: params.agentId,
-          archived: params.archived,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentDelete: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: params.agentId }),
-        answerOf(agentDeleteAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPin: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PIN, {
-          agentId: params.agentId,
-          pinned: params.pinned,
-          ...(params.position === undefined ? undefined : { position: params.position }),
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentMarkRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_MARK_READ, {
-          agentId: params.agentId,
-          readMark: params.readMark,
-        }),
-        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
-      ),
-    agentPage: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
-        answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     agentOriginFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, { agentId: params.agentId })),
     agentOriginUnfollow: (params) =>
@@ -2136,31 +896,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held chapters are.
         (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
         listener,
-      ),
-    automationCreate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationChange: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationDelete: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_DELETE, params),
-        answerOf(automationDeletedViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationRun: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
-        answerOf(automationRunViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationNewWebhookSecret: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
     automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
@@ -2215,11 +950,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppChapters>(payload) : undefined),
         listener,
       ),
-    pullRequestChaptersGenerate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
-        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     installedSkillsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
@@ -2236,44 +966,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held skills are the host's own, handed over in this process, so they are passed on as built, as the held memories are.
         (payload) => (isRecord(payload) ? answered<AppInstalledSkills>(payload) : undefined),
         listener,
-      ),
-    installedSkillsRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, params),
-        answerOf(installedSkillContentViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsPreview: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
-        answerOf(installedSkillPreviewViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsInstall: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
-        answerOf(installedSkillInstallViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
-        answerOf(installedSkillRemovedViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    agentChanges: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHANGES, pullRequestRead(params)),
-        answerOf(agentChangesAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentGitHubImage: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, params),
-        answerOf(agentGitHubImageViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPullRequestAction: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION, {
-          ...pullRequestRead(params),
-          request: params.request,
-        }),
-        answerOf(agentPullRequestWriteAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentWorkspaceToolsFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),
@@ -2341,88 +1033,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppHolderInboxes>(payload) : undefined),
         listener,
       ),
-    agentInboxAnswer: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ANSWER, {
-          itemId: params.itemId,
-          revision: params.revision,
-          reply: params.reply,
-          clientKey: params.clientKey,
-        }),
-        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxClose: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
-          itemId: params.itemId,
-          revision: params.revision,
-          clientKey: params.clientKey,
-          ...(params.text === undefined ? undefined : { text: params.text }),
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          ...(params.held === undefined ? undefined : { held: params.held }),
-        }),
-        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxCloseRelease: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
-          clientKey: params.clientKey,
-          send: params.send,
-        }),
-        answerOf(agentInboxCloseReleasedViewSchema, { held: false }),
-      ),
-    agentInboxMessage: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
-          itemId: params.itemId,
-          text: params.text,
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          clientKey: params.clientKey,
-          ...(params.answers === undefined ? undefined : { answers: params.answers }),
-          ...(params.revision === undefined ? undefined : { revision: params.revision }),
-        }),
-        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_START, {
-          agentId: params.agentId,
-          ...(params.title === undefined ? undefined : { title: params.title }),
-          text: params.text,
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          clientKey: params.clientKey,
-        }),
-        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxReadState: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
-          itemId: params.itemId,
-          unread: params.unread,
-        }),
-        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxRemind: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, {
-          itemId: params.itemId,
-          until: params.until,
-        }),
-        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxItemHome: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME, { itemId: params.itemId }),
-        answerOf(agentInboxItemHomeViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxReadAll: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
-          ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
-          itemIds: params.itemIds,
-        }),
-        answerOf(agentInboxReadAllViewSchema, AGENT_UNANSWERED),
-      ),
     agentAccountInboxFollow: () =>
       fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
     agentAccountInboxUnfollow: () =>
@@ -2455,14 +1065,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     transcriptFollow: (transcript) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript))),
-    transcriptOlder: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
-          ...transcriptParams(params),
-          before: params.before,
-        }),
-        answerOf(agentTranscriptOlderAnswerSchema, AGENT_UNANSWERED),
-      ),
     transcriptUnfollow: (transcript) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript))),
     transcriptRetry: (transcript) =>
@@ -2473,24 +1075,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held transcripts are the host's own, handed over in this process, so they are passed on as built, as the held origins are.
         (payload) => (isRecord(payload) ? answered<AppTranscripts>(payload) : undefined),
         listener,
-      ),
-    agentInboxAttachment: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
-          itemId: params.itemId,
-          attachmentId: params.attachmentId,
-        }),
-        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPicture: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PICTURE, params),
-        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PART, params),
-        answerOf(agentPartViewSchema, AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(
@@ -2682,11 +1266,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
-      ),
-    portForwardSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
-        answerOf(portForwardingAnswerSchema, undefined),
       ),
     onPortForwardingChanged: (listener) =>
       on(

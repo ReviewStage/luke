@@ -9,18 +9,11 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
-import { failureFactsSchema } from "./failure-facts.js";
-import {
-  githubRepositoryFullNameSchema,
-  workspaceTokenRepositoriesAnswerSchema,
-} from "./github-repositories-wire.js";
-import {
-  pagePlaceSchema,
-  pageVersionNumberSchema,
-  taskPageVersionAnswerSchema,
-} from "./page-wire.js";
-import { pictureDataUrlSchema } from "./picture-wire.js";
-import { pinPositionSchema } from "./pin-order.js";
+import { githubContract } from "./contract/github.js";
+import { repositoryPinsContract } from "./contract/repository-pins.js";
+import { taskFilesContract } from "./contract/task-files.js";
+import { taskSectionsContract } from "./contract/task-sections.js";
+import { tasksContract } from "./contract/tasks.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
   descriptionCommentActionRequestSchema,
@@ -32,12 +25,26 @@ import {
   descriptionEditConflictSchema,
   descriptionEditRequestSchema,
 } from "./description-edit.js";
+import { failureFactsSchema } from "./failure-facts.js";
+import { githubConnectionSchema } from "./github-connection-view.js";
+import {
+  githubRepositoryFullNameSchema,
+  workspaceTokenRepositoriesAnswerSchema,
+} from "./github-repositories-wire.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import {
+  pagePlaceSchema,
+  pageVersionNumberSchema,
+  taskPageVersionAnswerSchema,
+} from "./page-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import { wireUuidSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 import {
   workspaceSlackBotAnswerSchema,
   workspaceSlackBotChannelRequestSchema,
@@ -46,10 +53,10 @@ import {
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  listedPullRequestSchema,
   descriptionRevisionAnswerSchema,
   descriptionRevisionSeqSchema,
   descriptionRevisionsAnswerSchema,
+  listedPullRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,
@@ -161,18 +168,6 @@ export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSc
 
 export type CodeLines = typeof codeLinesSchema.Type;
 
-/**
- * Whether the account has a GitHub account linked, and its login where the
- * service holds one: the view's copy of the connection the service answers.
- * Note that it is declared here rather than in `github-connection-wire.ts`,
- * which takes it from here, because the window reads this module and that
- * one's claim vocabulary has no business in the window's bundle.
- */
-export const githubConnectionSchema = EffectSchema.Struct({
-  connected: EffectSchema.Boolean,
-  login: EffectSchema.NullOr(EffectSchema.String),
-});
-
 export const tasksViewSchema = EffectSchema.Struct({
   /** The account's tasks, newest started first, as the last list read answered. */
   tasks: EffectSchema.Array(taskSummarySchema),
@@ -188,9 +183,10 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
-   * Every pull request of each plan that has one, uncapped, as its row names
-   * the first few: present only while the list is followed live, when the
-   * Tasks page's cards name each one rather than a count of the rest.
+   * Every pull request of each plan that has one, those still open first:
+   * present only while the list is followed live, when it is what every
+   * reader of a task's pull requests reads, its row's mark and chips and its
+   * card among them, the row itself only counting them.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   /**
@@ -382,16 +378,61 @@ export const tasksChangeRelationParamsSchema = EffectSchema.Struct({
 
 export type TasksChangeRelationParams = typeof tasksChangeRelationParamsSchema.Type;
 
+/**
+ * The task domain's failures that shipped spelled otherwise than their
+ * refusal's slug: the tree's own rules, each named for the relation it
+ * guards, and a child held to its parent's repository as the parent's.
+ */
+export const TASK_RENAMES = {
+  [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: "parent-cycle",
+  [HOSTED_API_ERROR.TASK_PARENT_HELD]: "parent-held",
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: "parent-repository-differs",
+  [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: "block-cycle",
+} as const;
+
+/**
+ * The task domain's renames as a block's change and a relation's move read
+ * them: a block of a task on itself or across workspaces is refused as an
+ * invalid request, which the window has always drawn as the other task out
+ * of reach.
+ */
+export const TASK_BLOCK_RENAMES = {
+  ...TASK_RENAMES,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_API_ERROR.NOT_FOUND,
+} as const;
+
+/** The task procedures that declare their own refusals, read through `hostedCall`. */
+const declaredTaskCalls = {
+  list: tasksContract.list,
+  create: tasksContract.create,
+  update: tasksContract.update,
+  block: tasksContract.block,
+  parent: tasksContract.parent,
+  relation: tasksContract.relation,
+  files: taskFilesContract,
+  sections: taskSectionsContract,
+  pins: repositoryPinsContract,
+  repositories: githubContract.repositories,
+  repositoryFile: githubContract.repositoryFile,
+  repositoryTree: githubContract.repositoryTree,
+  repositorySkills: githubContract.repositorySkills,
+  repositoryPullRequest: githubContract.repositoryPullRequest,
+  repositoryIssue: githubContract.repositoryIssue,
+};
+
+/** Every failure those procedures may end with, as the domain spells it. */
+const TASK_FAILURE = failureSetOf(declaredTaskCalls, { as: TASK_RENAMES });
+
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
-  UNANSWERED: "unanswered",
+  UNANSWERED: TASK_FAILURE.UNANSWERED,
   /** The task is not one the account holds: deleted, or never the caller's. */
-  NOT_FOUND: "not-found",
+  NOT_FOUND: TASK_FAILURE.NOT_FOUND,
   /** The repository named is not one our GitHub App reaches for the account. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
-  LOCAL_AGENT_REFUSED: "local-agent-refused",
+  REPOSITORY_NOT_REACHABLE: TASK_FAILURE.REPOSITORY_NOT_REACHABLE,
+  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. No task procedure answers it now, since a start answers its agent's refusal beside the task it made, but the window still reads it. */
+  LOCAL_AGENT_REFUSED: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
 } as const;
 
 export type TaskCallFailure = (typeof TASK_CALL_FAILURE)[keyof typeof TASK_CALL_FAILURE];
@@ -408,9 +449,9 @@ const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILUR
 
 /** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, the parent works in another repository, or, for a start as a task's parent, that task has a parent already. */
 export const TASK_PARENT_FAILURE = {
-  CYCLE: "parent-cycle",
-  REPOSITORY_DIFFERS: "parent-repository-differs",
-  HELD: "parent-held",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_CYCLE],
+  REPOSITORY_DIFFERS: TASK_RENAMES[HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED],
+  HELD: TASK_RENAMES[HOSTED_API_ERROR.TASK_PARENT_HELD],
 } as const;
 
 /** Why a start answered no plan: a repository call's reasons, the workspace it was to start in or the task it was to relate to is none of the account's, the device it named would not take its agents, or the relation it named was refused by the tree's rules (`TASK_PARENT_FAILURE`). */
@@ -468,15 +509,13 @@ export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
 
 /** Why a block change wrote nothing a call's other reasons do not say: it would close a cycle. */
 export const TASK_BLOCK_FAILURE = {
-  CYCLE: "block-cycle",
+  CYCLE: TASK_RENAMES[HOSTED_API_ERROR.TASK_BLOCK_CYCLE],
 } as const;
 
 /** Why a block change wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or it would close a cycle. */
-const BLOCK_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_BLOCK_FAILURE.CYCLE,
-] as const;
+const BLOCK_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.block, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type BlockCallFailure = (typeof BLOCK_CALL_FAILURES)[number];
 
@@ -492,12 +531,9 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
 
 /** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
-const PARENT_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_PARENT_FAILURE.CYCLE,
-  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
-] as const;
+const PARENT_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.parent, { as: TASK_RENAMES }),
+);
 
 export type ParentCallFailure = (typeof PARENT_CALL_FAILURES)[number];
 
@@ -510,7 +546,9 @@ export const tasksSetParentAnswerSchema = EffectSchema.Union([
 export type TasksSetParentAnswer = typeof tasksSetParentAnswerSchema.Type;
 
 /** Why a relation's move wrote nothing: a block's reasons, or a parent's. */
-const RELATION_CALL_FAILURES = [...BLOCK_CALL_FAILURES, ...PARENT_CALL_FAILURES] as const;
+const RELATION_CALL_FAILURES = Object.values(
+  failureSetOf(tasksContract.relation, { as: TASK_BLOCK_RENAMES }),
+);
 
 export type RelationCallFailure = (typeof RELATION_CALL_FAILURES)[number];
 
@@ -782,12 +820,11 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the description holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the description holds its bound of pictures, or of videos, as the service answers in band, or how its procedure failed: the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
   TOO_MANY_VIDEOS: "too-many-videos",
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
+  ...failureSetOf(taskFilesContract.keepPicture),
 } as const;
 
 /** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
@@ -1016,25 +1053,21 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
-export const tasksGitHubPageAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ url: EffectSchema.String }),
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
+export const tasksGitHubPageAnswerSchema = answerView(githubContract.connect);
 
 export type TasksGitHubPageAnswer = typeof tasksGitHubPageAnswerSchema.Type;
 
 /** Why the account's GitHub was not disconnected: no answer, or GitHub is its only way to sign in. */
-export const GITHUB_DISCONNECT_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_PERMITTED: "not-permitted",
-} as const;
+export const GITHUB_DISCONNECT_FAILURE = failureSetOf(githubContract.disconnect);
 
-/** A disconnect of the account's GitHub, as the window's process hears it: the connection as it then stands, or why it is not. */
+/**
+ * A disconnect of the account's GitHub, as the window's process hears it:
+ * the connection as it then stands, under `connection` as it shipped, or
+ * how the disconnect failed, as its procedure's answer spells it.
+ */
 export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ connection: githubConnectionSchema }),
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(GITHUB_DISCONNECT_FAILURE)),
-  }),
+  answerView(githubContract.disconnect).members[1],
 ]);
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;

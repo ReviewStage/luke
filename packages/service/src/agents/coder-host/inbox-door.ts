@@ -3,8 +3,8 @@
  *
  * A native harness's runner reaches it through our MCP server
  * (`../tool-catalog/catalog.ts`). It imports no
- * eve runtime, because the web function that serves the MCP server bundles
- * no sandbox.
+ * sandbox, because the web function that serves the MCP server bundles
+ * none.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -13,7 +13,7 @@ import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { Effect, Option } from "effect";
 import type { UnparsedWireValue } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   INBOX_REFUSAL,
   type InboxToolResult,

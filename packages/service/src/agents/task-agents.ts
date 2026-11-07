@@ -10,6 +10,7 @@ import {
   listPublishedAgentsById,
   listTasklessAgentRows,
   nativeRuntimesOfReached,
+  openSandboxesOfReached,
   type PublishedAgentLine,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
@@ -24,9 +25,9 @@ import {
 } from "@repo/features/agent-wire";
 import { standingFailures } from "@repo/features/task-agents-model";
 import {
-  TASK_AGENTS_BOUNDS,
+  type HeldTaskSummary,
+  RELEASED_CLIENT_TASK_LINES,
   type TaskAgentLine,
-  type TaskAgentsSummary,
   type TaskPullRequestLine,
   type TaskSummary,
 } from "@repo/features/task-wire";
@@ -42,7 +43,7 @@ import {
 } from "./coder-host/status.js";
 
 /**
- * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
+ * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the held list (GET) the command line and released desktops read, and the agents with no plan the list carries beside the plans.
  *
  * Five statements answer the whole list however many tasks it holds: the
  * agents of every task named with the pull request each last published,
@@ -119,15 +120,18 @@ const PULL_REQUEST_RANK = {
  * newest started first within each; the pull requests each named once by
  * their page, since two agents on one branch share theirs and a task whose
  * repository changed may hold two of one number, those still open first, then
- * merged, then closed, newest agent's first within each, so the few a row
- * names always hold the one its mark is drawn for; and the latest settled
- * activity of every agent, named or not and archived or not, which the
- * plan's last update is read beside; and how many agents failed with no
- * agent started since (`standingFailures`). A plan
- * whose every agent is archived carries its activity alone, with no agent
- * and no pull request counted.
+ * merged, then closed, newest agent's first within each, so the few a released
+ * client's row names always hold the one its mark is drawn for; and the
+ * latest settled activity of every agent, named or not and archived or not,
+ * which the plan's last update is read beside; and how many agents failed
+ * with no agent started since (`standingFailures`). A
+ * plan whose every agent is archived carries its activity alone, with no
+ * agent and no pull request counted. Note that the agents and pull requests
+ * named stop at `RELEASED_CLIENT_TASK_LINES`, because a released client
+ * refuses a longer list; this build's window reads every one from the list
+ * it follows live instead.
  */
-function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
+function summaryOf(read: readonly ReadAgent[]): NonNullable<HeldTaskSummary["agents"]> {
   const agents = read.filter((agent) => !agent.archived);
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
@@ -152,17 +156,20 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
-    failed: standingFailures(agents, Math.max(...read.map((agent) => agent.createdAt))),
+    failed: standingFailures(
+      agents.map(({ createdAt, line }) => ({ createdAt, status: line.status, at: line.at })),
+      Math.max(...read.map((agent) => agent.createdAt)),
+    ),
     ...(read.length === 0
       ? undefined
       : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),
     agents: [...working, ...resting]
-      .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
+      .slice(0, RELEASED_CLIENT_TASK_LINES)
       .map((agent) => agent.line),
     pullRequestTotal: pullRequests.size,
     pullRequests: [...pullRequests.values()]
       .sort((a, b) => PULL_REQUEST_RANK[a.state] - PULL_REQUEST_RANK[b.state])
-      .slice(0, TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+      .slice(0, RELEASED_CLIENT_TASK_LINES),
   };
 }
 
@@ -185,8 +192,8 @@ function pullRequestOf(published: AgentPullRequest | null | undefined) {
 /** The account's listed tasks, each carrying its agents in brief, whichever member started each, where it has any; the tasks' order and every other field as listed. */
 export function withTaskAgents(
   userId: string,
-  tasks: readonly TaskSummary[],
-): AgentStoreEffect<readonly TaskSummary[]> {
+  tasks: readonly Omit<TaskSummary, "agents">[],
+): AgentStoreEffect<readonly HeldTaskSummary[]> {
   return Effect.gen(function* () {
     // Note that the archived agents are read too, because the work one did
     // is still the task's activity, though the row names it no more.
@@ -249,6 +256,7 @@ export function listTasklessAgents(
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const settled = yield* lastSettledTurnsOfReached(conversationIds);
     const runtimes = yield* nativeRuntimesOfReached(conversationIds);
+    const sandboxes = yield* openSandboxesOfReached(conversationIds);
     // The member each was archived by or for is named too, as the agent's own page names them,
     // and so are the agents continued from each, and the Mac a local one runs on.
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
@@ -263,10 +271,11 @@ export function listTasklessAgents(
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
       const runtime = runtimes.get(agent.conversationId);
+      const sandboxOpen = sandboxes.has(agent.conversationId);
       return {
         ...agentSummary(
           agent,
-          { turn, awaitingLineAt, runtime },
+          { turn, awaitingLineAt, runtime, sandboxOpen },
           now,
           names,
           owners,

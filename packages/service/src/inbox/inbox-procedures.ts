@@ -57,7 +57,8 @@ import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { agentTakingMessage, steerAgent } from "../agents/coder-host/steer.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
+import { reconsiderRunArchive } from "../automations/run-archive.js";
 import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
@@ -101,7 +102,7 @@ export type InboxTitleModelOf = () => Effect.Effect<
   HostedEnvironment
 >;
 
-/** What the inbox asks of the deployment: who the caller is, how eve is reached to hand an answer or a message to an agent, and, for a test, the model an untitled thread's title is generated on. */
+/** What the inbox asks of the deployment: who the caller is, how an agent's sessions are reached to hand it an answer or a message, and, for a test, the model an untitled thread's title is generated on. */
 export type InboxProcedureSeams = AccountResolving & {
   readonly titleModel?: InboxTitleModelOf | undefined;
 };
@@ -138,6 +139,16 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 
 /** The nod a member's Got it is, as the agent hears it where it waits on the notice. */
 const NOD: InboxReply = { reply: INBOX_REPLY.ACKNOWLEDGED };
+
+/**
+ * What an item of the agent's settling asks once it is: the agent's task
+ * settled done where its work is finished, and the automation run it
+ * belongs to archived where it finished well, since an item put away
+ * unanswered wakes no agent and so no settle of its turn would.
+ */
+function settledForAgent(userId: string, agentId: string) {
+  return Effect.andThen(settleAgentTaskIfFinished(userId, agentId), reconsiderRunArchive(agentId));
+}
 
 /** Whether the item holds an ask open on its thread, which a nod never settles. */
 function holdsAsk(item: InboxItem): boolean {
@@ -211,8 +222,8 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text,
       attachments,
       clientKey,
@@ -234,7 +245,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* afterResponse("an answered thread's Slack DM", settleThreadDms(itemId, chosen));
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
-  yield* settleAgentTaskIfFinished(userId, agentId);
+  yield* settledForAgent(userId, agentId);
 });
 
 /**
@@ -282,7 +293,7 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const writtenIn = txid === undefined ? {} : { txid };
   if (!inboxAnswerHeard(taken, NOD)) {
     yield* counted;
-    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    yield* settledForAgent(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
   yield* handedAnswer(
@@ -369,7 +380,7 @@ export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reply = inboxAnswersReply(answers, text);
   if (!inboxAnswerHeard(item, reply, attachments)) {
     yield* counted;
-    yield* settleAgentTaskIfFinished(userId, item.agentId);
+    yield* settledForAgent(userId, item.agentId);
     return { item, outcome, ...writtenIn };
   }
   const message = inboxAnswerMessage(
@@ -482,14 +493,14 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const dmSettled = afterResponse("a closed thread's Slack DM", settleThreadDms(itemId));
   if (!taken.needsReply && !noted) {
     yield* dmSettled;
-    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    yield* settledForAgent(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, taken.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text: inboxClosedMessage(taken, note.text),
       attachments: note.files,
       clientKey,
@@ -516,7 +527,7 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
   }
   yield* dmSettled;
-  yield* settleAgentTaskIfFinished(userId, taken.agentId);
+  yield* settledForAgent(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };
 });
 
@@ -587,8 +598,8 @@ export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* agentHearing(userId, item.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -664,8 +675,8 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       agentTakingMessage(userId, agentId, readVisibleAgent),
     );
     if (Option.isNone(hearing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, hearing.value, {
+    const agentSessions = yield* routedSessions<TypedTurn>(userId);
+    yield* steerAgent(agentSessions, writer, userId, hearing.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,

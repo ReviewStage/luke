@@ -1,5 +1,6 @@
+import type { ListedAgent } from "@repo/features/agent-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
-import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
+import type { TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
 import {
   AttentionMark,
@@ -16,7 +17,9 @@ import {
   linesCount,
   ProgressCount,
   RepositoryPicture,
+  TASK_AGENTS_MARK_SIZE,
   TaskAgentsMark,
+  type TaskAgentsMarkSize,
   TaskPriorityMark,
   TaskStatusMark,
   TIME_LOOK,
@@ -42,7 +45,7 @@ import {
 } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
-import { useTaskWork } from "../tasks/use-task-work.js";
+import { useTaskPullRequests, useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { priorityOf, statusOf } from "./task-row-parts.js";
@@ -53,8 +56,8 @@ import { WorkspaceRef } from "./workspace-ref.js";
  *
  * The icon is how the task's agents stand, most pressing first: a failure,
  * an agent at work, or the pull request they left, in `@repo/ui`'s
- * `TaskAgentsMark` (`task-agents-model.ts`); a question waiting on the reader
- * is no status there. The card leads, as the
+ * `TaskAgentsMark` (`task-agents-model.ts`). How many of its threads wait on
+ * the reader is no part of it, nor of the row. The card leads, as the
  * task board's card does, with its status's mark and its name, its key, its
  * repository, and how long ago it was updated under the name, and its
  * priority's mark and its assignee's face in the corner, icons alone, each
@@ -84,8 +87,8 @@ import { WorkspaceRef } from "./workspace-ref.js";
 
 /**
  * A sidebar row's end: its repository where its group does not say it, its
- * face, its draft's pencil, how many of its sub-tasks are finished, its one
- * icon, and its time, in the caption's muted figures, the time ending on
+ * face, its draft's pencil, how many of its sub-tasks are finished, how many
+ * of its threads wait on the reader, its one icon, and its time, in the caption's muted figures, the time ending on
  * its last letter in a slot as wide as its longest count ("59m"), so the
  * icon before it, a pull request's say, stands at the same place on every
  * row whatever the time says and whatever stands before it;
@@ -99,7 +102,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&>.ui-time]:min-w-sidebar-row-age";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&_.ui-row-count]:mr-tight-gap [&>.ui-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
@@ -111,13 +114,21 @@ export const TASK_MARK_GLYPH =
 
 /**
  * The one icon at a task row's end, before its time: how its agents stand
- * (`TaskAgentsMark`). Note that
+ * (`TaskAgentsMark`), after the count of what waits on the reader where a
+ * row draws one (`WaitingCount`). Note that
  * a task whose repository belongs to another of the account's workspaces
  * wears no mark of its own here, because its card and its banner name that
  * workspace, and the row's one icon stays how its agents stand.
  */
-export function TaskRowStatus({ task }: { task: TaskSummary }): React.JSX.Element | null {
-  return <TaskAgentsMark agents={task.agents} />;
+export function TaskRowStatus({
+  task,
+  size = TASK_AGENTS_MARK_SIZE.SMALL,
+}: {
+  task: TaskSummary;
+  size?: TaskAgentsMarkSize;
+}): React.JSX.Element | null {
+  const pullRequests = useTaskPullRequests(task.id);
+  return <TaskAgentsMark agents={task.agents} pullRequests={pullRequests} size={size} />;
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
@@ -196,7 +207,7 @@ function AgentLine({
   models,
   onShow,
 }: {
-  agent: TaskAgentLine;
+  agent: ListedAgent;
   models: readonly CatalogModel[];
   onShow: () => void;
 }): React.JSX.Element {
@@ -404,7 +415,7 @@ export function TaskCard({
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task);
+  const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task.id);
   const parent =
     task.parentTaskId === undefined || task.parentTaskId === task.id
       ? undefined

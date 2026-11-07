@@ -10,11 +10,9 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationFiring,
 } from "@repo/features/automation-wire";
-import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@repo/features/live-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
-  type MacCommandKind,
   type MacCommandResult,
 } from "@repo/features/mac-command-wire";
 import {
@@ -26,8 +24,7 @@ import {
   type SlackLineMetadata,
 } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
-import { Clock, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/sql";
+import { Clock, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
@@ -46,7 +43,6 @@ import {
   claimMacCommands,
   heardFromAnotherAccount,
   macCommandResult,
-  macCommandsLiveStatement,
   macCommandsWaiting,
   macListeningSince,
   macOwnerOf,
@@ -79,17 +75,6 @@ const RESULT: MacCommandResult = {
   truncated: false,
   timedOut: false,
 };
-
-/** The account's unclaimed commands of the kinds given as a Mac following them live decodes them, the statement run as Realtime runs it. */
-const liveCommandsOf = (userId: string, kinds: readonly MacCommandKind[]) =>
-  Effect.gen(function* () {
-    const statement = Option.getOrThrow(macCommandsLiveStatement(userId, kinds));
-    const sql = yield* SqlClient.SqlClient;
-    const commands = yield* sql.unsafe(statement.sql, [...statement.params]);
-    return macCommandsOfLiveRows(
-      yield* Schema.decodeUnknownEffect(macCommandsLiveRowsSchema)({ commands }),
-    );
-  });
 
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
@@ -212,60 +197,6 @@ it.layer(getTestDB())("the Mac command store", (it) => {
       assert.equal(before, false);
       assert.equal(after, true);
       assert.equal(forOther, false);
-    }),
-  );
-
-  it.effect(
-    "the live statement delivers the account's unclaimed commands of the kinds named, the earliest first, and one claimed by its id leaves it, claimed once and by its own account alone",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other } = yield* openAccounts;
-        const since = yield* now;
-        const [first, second] = [command(), command(30)];
-        yield* queueMacCommand(owner, first);
-        yield* queueMacCommand(owner, second);
-        yield* queueOtherKind(owner);
-        yield* queueMacCommand(other, command());
-
-        assert.deepEqual(
-          (yield* liveCommandsOf(owner, SHELL_ONLY)).map(({ id }) => id).toSorted(),
-          [first.id, second.id].toSorted(),
-          "a row of a kind not named is left out",
-        );
-        assert.equal(
-          (yield* liveCommandsOf(other, SHELL_ONLY)).length,
-          1,
-          "another's are their own",
-        );
-
-        assert.deepEqual(
-          yield* claimMacCommand(other, second.id, since, SHELL_ONLY),
-          Option.none(),
-        );
-        assert.deepEqual(
-          yield* claimMacCommand(owner, second.id, since, SHELL_ONLY),
-          Option.some(second),
-        );
-        assert.deepEqual(
-          yield* claimMacCommand(owner, second.id, since, SHELL_ONLY),
-          Option.none(),
-        );
-        assert.deepEqual(yield* liveCommandsOf(owner, SHELL_ONLY), [first]);
-      }),
-  );
-
-  it.effect("a command queued before the claim window began is never claimed by its id", () =>
-    Effect.gen(function* () {
-      const { owner } = yield* openAccounts;
-      const queued = command();
-      yield* queueMacCommand(owner, queued);
-      const later = new Date((yield* Clock.currentTimeMillis) + 1);
-
-      assert.deepEqual(
-        yield* claimMacCommand(owner, queued.id, later, [MAC_COMMAND_KIND.SHELL]),
-        Option.none(),
-      );
-      assert.deepEqual(yield* liveCommandsOf(owner, [MAC_COMMAND_KIND.SHELL]), [queued]);
     }),
   );
 });
@@ -510,7 +441,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           "a webhook's run whose send was refused",
         );
 
-        // An eve agent's opening from before the Start wrote it, untagged, as its relay wrote it.
+        // An agent's opening from before the Start wrote it, untagged, as the retired runtime's relay wrote it.
         const started = yield* openAgent(starter, workspace, "Triage what came in.");
         const db = yield* Database;
         yield* db

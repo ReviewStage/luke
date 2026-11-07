@@ -1,8 +1,7 @@
-import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@repo/features/mention-link";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ANNOUNCE, Checkbox } from "@repo/ui";
-import { AsyncResult } from "effect/reactivity";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ReactNode,
   type RefObject,
@@ -16,6 +15,10 @@ import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { DiagramPreview } from "../description-diagram.js";
 import {
+  type DescriptionEditorHandle,
+  type DescriptionEditorModule,
+  type DescriptionEditorPlacement,
+  type DescriptionEditorProps,
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
@@ -24,10 +27,6 @@ import {
   type HeadingsChange,
   type MentionNode,
   type MentionNodeDoors,
-  type DescriptionEditorHandle,
-  type DescriptionEditorModule,
-  type DescriptionEditorPlacement,
-  type DescriptionEditorProps,
   SLASH_INSERT,
   type SlashBlock,
 } from "../description-editor/contract.js";
@@ -248,7 +247,7 @@ export function MarkdownEditor({
   const handle = givenHandle ?? ownHandle;
   const ownRoom = useRef<HTMLElement>(null);
   const room = givenRoom ?? ownRoom;
-  const module = useAtomValue(useSideBundles().descriptionEditor);
+  const module = useQuery(useSideBundles().descriptionEditor);
   const chips = useEditorDrawings<DrawnMention>();
   const previews = useEditorDrawings<EditorDiagram>();
   const taskBoxes = useEditorDrawings<EditorTaskBox>();
@@ -304,14 +303,12 @@ export function MarkdownEditor({
     roomClassName === undefined
       ? `${ROOM_CLASS} ph-no-capture`
       : `${ROOM_CLASS} ${roomClassName} ph-no-capture`;
-  useAnnounceShown(ANNOUNCE.ALERT, AsyncResult.isFailure(module) ? EDITOR_LOAD_FAILED : "");
-  if (!AsyncResult.isSuccess(module)) {
+  useAnnounceShown(ANNOUNCE.ALERT, module.isError ? EDITOR_LOAD_FAILED : "");
+  if (!module.isSuccess) {
     return (
       <section ref={room} className={roomClass} aria-busy="true">
         {loading}
-        {AsyncResult.isFailure(module) ? (
-          <p className={EDITOR_NOTE_CLASS}>{EDITOR_LOAD_FAILED}</p>
-        ) : null}
+        {module.isError ? <p className={EDITOR_NOTE_CLASS}>{EDITOR_LOAD_FAILED}</p> : null}
       </section>
     );
   }
@@ -364,7 +361,7 @@ export function MarkdownEditor({
         once(onLeave);
       }}
     >
-      <MountedEditor module={module.value} props={props} handle={handle} />
+      <MountedEditor module={module.data} props={props} handle={handle} />
       {toolbar.drawn}
       {blocks.menu}
       {children}

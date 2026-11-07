@@ -15,6 +15,10 @@
  * takes the agent for good, as a task's delete takes a task. No path starts
  * a fresh agent on no task. Outputs are the
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
+ *
+ * The lists, the Starts, a change, a delete, and the sandbox's routes each
+ * declare their own refusals (`declaredProcedure`); the rest still declare
+ * every refusal (`hostedProcedure`).
  */
 
 import { openapi } from "@orpc/openapi";
@@ -42,6 +46,7 @@ import {
 } from "../agent-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import {
   sandboxResumedAnswerSchema,
   terminalCreatedAnswerSchema,
@@ -50,13 +55,97 @@ import {
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
 import { workspaceToolsAnswerSchema } from "../workspace-tools-wire.js";
-import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, hostedProcedure, refuses } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const CHOICE_BODY_BYTES = 4_096;
 
 /** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
 const TERMINAL_BODY_BYTES = 1_024;
+
+/**
+ * What every route in an agent's sandbox refuses (`sandbox-reach.ts`): an
+ * agent not found, not the caller's to reach, or archived, and a sandbox
+ * Vercel did not answer for or whose snapshot is gone.
+ */
+const SANDBOX_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE,
+  HOSTED_API_ERROR.UPSTREAM_ERROR,
+] as const;
+
+/** A route in an agent's sandbox, refusing as every one does. */
+const sandboxProcedure = declaredProcedure.errors(refuses(...SANDBOX_REFUSALS));
+
+/** A route that acts on a shell, refusing too as a sandbox not yet opened or stopped. */
+const shellProcedure = sandboxProcedure.errors(
+  refuses(HOSTED_API_ERROR.AGENT_NOT_READY, HOSTED_API_ERROR.SANDBOX_STOPPED),
+);
+
+/**
+ * What an agent stopped for good before an archive or a delete refuses
+ * (`coder-host/stop.ts`'s `stoppedForGood`): an agent not found or not the
+ * caller's to write, one still starting or running after the Stop, and
+ * why a harness's cancel failed (`runtime-sessions.ts`'s
+ * `failedCallRefusal`), its session ended, its host removed or away, or its
+ * harness not reached from here.
+ */
+const STOP_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.AGENT_NOT_READY,
+  HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.DEVICE_REMOVED,
+  HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+] as const;
+
+/**
+ * What one change of an agent refuses: an archive's Stop, a key already
+ * written under (`writeReceiptMiddleware`), and a repository added refused
+ * by why (`agent-repository-add.ts`), out of reach, unread off GitHub, or
+ * its branch gone. A choice the catalog refuses is an invalid request.
+ */
+const CHANGE_REFUSALS = [
+  ...STOP_REFUSALS,
+  HOSTED_API_ERROR.ALREADY_WRITTEN,
+  HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED,
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+  HOSTED_API_ERROR.GITHUB_UNANSWERED,
+  HOSTED_API_ERROR.BRANCH_NOT_FOUND,
+] as const;
+
+/**
+ * What a Start refuses, on a task or from an agent (`coder-host/start.ts`,
+ * `takeover.ts`): a task or a source agent not found or not the caller's to
+ * start from, no repository to check out, a branch gone, a repository out
+ * of reach or unread off GitHub, extras refused by why, and why the
+ * agent's sessions would not take it (`runtime-sessions.ts`'s
+ * `failedCallRefusal`): its device away or removed, a plan or a key that
+ * cannot pay, its harness not reached, or the agent gone from its routing.
+ * A choice the catalog refuses is an invalid request.
+ */
+const START_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.NO_REPOSITORY,
+  HOSTED_API_ERROR.BRANCH_NOT_FOUND,
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+  HOSTED_API_ERROR.GITHUB_UNANSWERED,
+  HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED,
+  HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+  HOSTED_API_ERROR.DEVICE_REMOVED,
+  HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING,
+  HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE,
+  HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT,
+  HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE,
+  HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED,
+  HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+] as const;
 
 /** One agent's path, its id the `{id}` segment. */
 const AGENT_PATH = `${HOSTED_SERVICE_PATH.AGENTS}/{id}` as const;
@@ -110,7 +199,8 @@ const startAnswerSchema = EffectSchema.Struct({
 
 export const agentsContract = {
   /** A page of a workspace's agents, newest started first, narrowed as the query asks, from its `offset`. */
-  listOfWorkspace: hostedProcedure
+  listOfWorkspace: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.AGENTS }))
     .input(
       EffectSchema.Struct({
@@ -123,7 +213,8 @@ export const agentsContract = {
     )
     .output(EffectSchema.flip(agentWorkspaceListAnswerSchema)),
   /** One task's agents with their status. */
-  listOfTask: hostedProcedure
+  listOfTask: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.TASKS}/{id}/agents` }))
     .input(
       EffectSchema.Struct({
@@ -133,7 +224,8 @@ export const agentsContract = {
     )
     .output(EffectSchema.flip(agentListAnswerSchema)),
   /** An agent started on the task, or the one a retry under the same key already started. */
-  start: hostedProcedure
+  start: declaredProcedure
+    .errors(refuses(...START_REFUSALS))
     .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
     .meta(
       openapi({
@@ -146,7 +238,8 @@ export const agentsContract = {
     .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
   /** An agent started from the one the path names, continuing it or forking it, in that agent's own place: its task, or its workspace and repository where it has no task. */
-  startFrom: hostedProcedure
+  startFrom: declaredProcedure
+    .errors(refuses(...START_REFUSALS))
     .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
     .meta(
       openapi({
@@ -164,13 +257,15 @@ export const agentsContract = {
     .input(idParams)
     .output(EffectSchema.flip(agentPageAnswerSchema)),
   /** One change of an agent, answering it as it then stands. */
-  change: hostedProcedure
+  change: declaredProcedure
+    .errors(refuses(...CHANGE_REFUSALS))
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, agentChangeRequestSchema))
     .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent deleted for good, stopped first where it still works. */
-  delete: hostedProcedure
+  delete: declaredProcedure
+    .errors(refuses(...STOP_REFUSALS))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AGENT_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(agentDeleteAnswerSchema)),
@@ -206,23 +301,23 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  /** Whether one agent's `run_on_mac` would run now, as its MCP popover reads it. */
   workspaceTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)
     .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
-  sandboxResume: hostedProcedure
+  sandboxResume: sandboxProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))
     .input(idParams)
     .output(EffectSchema.flip(sandboxResumedAnswerSchema)),
   /** One agent's shells and where its sandbox stands. */
-  terminals: hostedProcedure
+  terminals: sandboxProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: TERMINALS_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(terminalsAnswerSchema)),
   /** A shell started in one agent's sandbox. */
-  openTerminal: hostedProcedure
+  openTerminal: shellProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
@@ -235,7 +330,7 @@ export const agentsContract = {
     .input(exactBodyInput(idParams, terminalCreateRequestSchema))
     .output(EffectSchema.flip(terminalCreatedAnswerSchema)),
   /** One shell named anew, answering the shells as they stand after. */
-  renameTerminal: hostedProcedure
+  renameTerminal: shellProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
@@ -247,7 +342,7 @@ export const agentsContract = {
     .input(exactBodyInput(terminalParams, terminalRenameRequestSchema))
     .output(EffectSchema.flip(terminalsAnswerSchema)),
   /** One shell ended, answering the shells as they stand after. */
-  endTerminal: hostedProcedure
+  endTerminal: shellProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: `${TERMINALS_PATH}/{terminal}` }))
     .input(terminalParams)
     .output(EffectSchema.flip(terminalsAnswerSchema)),

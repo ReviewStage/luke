@@ -63,6 +63,7 @@ import {
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
+  type TaskPullRequestLine,
   type TaskSummary,
   type TaskTreeEntry,
 } from "@repo/features/task-wire";
@@ -840,7 +841,7 @@ function treeAt(path: string): readonly TaskTreeEntry[] {
 /** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
 
-/** How a profile stages the agent's cloud terminal: its sandbox stopped or starting, a shell it refuses, an attach no port answers, or a port that says how the connection stands. */
+/** How a profile stages the agent's cloud terminal: its sandbox not yet open, a shell it refuses, an attach no port answers, or a port that says how the connection stands. */
 const TERMINAL_STAGE = {
   SANDBOX: "sandbox",
   REFUSED: "refused",
@@ -903,10 +904,6 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [
     RUN_PROFILE.AGENT_TERMINAL_EXITED,
     { terminal: { kind: TERMINAL_STAGE.PORT, after: TERMINAL_CONNECTION.EXITED, code: 0 } },
-  ],
-  [
-    RUN_PROFILE.AGENT_TERMINAL_STOPPED,
-    { terminal: { kind: TERMINAL_STAGE.SANDBOX, sandbox: SANDBOX_STATE.STOPPED } },
   ],
   [
     RUN_PROFILE.AGENT_TERMINAL_STARTING,
@@ -1036,11 +1033,11 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.TERMINAL_CREATE]: (_payload, stage) => {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.REFUSED) {
-      return { refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
+      return { failure: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
     }
     if (terminal?.kind === TERMINAL_STAGE.SANDBOX) {
       return {
-        refused:
+        failure:
           terminal.sandbox === SANDBOX_STATE.STOPPED
             ? TERMINAL_REFUSAL.SANDBOX_STOPPED
             : TERMINAL_REFUSAL.AGENT_NOT_READY,
@@ -1068,30 +1065,18 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     total: 1,
     working: 0,
     activityAt: STARTED_AT + 23 * MINUTE,
-    agents: [
-      {
-        id: agent.id,
-        title: agent.title,
-        model: agent.model,
-        effort: agent.effort,
-        status: agent.status,
-        at: STARTED_AT,
-      },
-    ],
     pullRequestTotal: 1,
-    pullRequests: [
-      {
-        number: PULL_REQUEST.number,
-        title: PULL_REQUEST.title,
-        state: PULL_REQUEST_STATE.OPEN,
-        checks: CHECK_SUMMARY.PASSING,
-        additions: ADDITIONS,
-        deletions: DELETIONS,
-        url: PULL_REQUEST.url,
-        agentId: agent.id,
-        queued: true,
-      },
-    ],
+  };
+  const pullRequest: TaskPullRequestLine = {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: ADDITIONS,
+    deletions: DELETIONS,
+    url: PULL_REQUEST.url,
+    agentId: agent.id,
+    queued: true,
   };
   // Note that the agent works where its task does, as the task list carries its row.
   const task = open.tasks.find((each) => each.id === taskId);
@@ -1099,7 +1084,16 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     ...open,
     tasks: open.tasks.map((each) => (each.id === taskId ? { ...each, agents } : each)),
     taskAgents: [
-      { ...agent, workspaceId: task?.workspaceId ?? "", repository: task?.repository ?? null },
+      {
+        ...agent,
+        workspaceId: task?.workspaceId ?? "",
+        repository: task?.repository ?? null,
+        settledAt: STARTED_AT,
+      },
+    ],
+    taskPullRequests: [
+      ...(open.taskPullRequests ?? []).filter((each) => each.taskId !== taskId),
+      { taskId, pullRequests: [pullRequest] },
     ],
   };
 }

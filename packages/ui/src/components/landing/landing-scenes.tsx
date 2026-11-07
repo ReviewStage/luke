@@ -1,7 +1,7 @@
 import { AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
-import type { ReactNode } from "react";
+import { type ReactNode, type RefObject, useRef } from "react";
 import {
   ComposeIcon,
   MicrophoneIcon,
@@ -46,6 +46,7 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { GROUP_HEADING, GroupHeader } from "../group-header/group-header.js";
 import { INLINE_REF_LOOK, InlineRef } from "../inline-ref/inline-ref.js";
 import { LineRow } from "../line-button/line-button.js";
+import { LIST_MOTION_WAY, ListMotion } from "../list-motion/list-motion.js";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -88,8 +89,8 @@ import {
   MEMBER,
   SidePanelToggle,
 } from "./landing-desktop.js";
-import { LandingPhone, LandingWindow } from "./landing-devices.js";
-import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
+import { LandingPanel, LandingPhone, LandingWindow } from "./landing-devices.js";
+import { MINUTE, STORY_NOW, still, useNarrowPage, useStory } from "./landing-story.js";
 
 /**
  * landing-scenes.tsx -- the landing's moving screens: the app's own components, composed as the panel composes them, stepping through a short story each.
@@ -102,11 +103,32 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * with it, the plan's sub-tasks beside it; an automation's page fires a run;
  * the phone holds the same Inbox; and Settings › Agents connects Claude on
  * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
- * runs only while it is on screen (`landing-story.ts`).
+ * runs only while it is on screen (`landing-story.ts`). On a page too narrow
+ * for a whole window, the Inbox and the task play only from their telling
+ * moment, the ask and the hand-off, which is all their crop shows.
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+const BEAT = { HERO: 900, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+
+/**
+ * A window's story: how many steps it plays, the last it draws (held for the
+ * rest), and the step a narrow page's crop opens on.
+ */
+const STORY = {
+  INBOX: { STEPS: 7, LAST: 5, NARROW_FROM: 2 },
+  AGENTS: { STEPS: 7, LAST: 5, NARROW_FROM: 3 },
+} as const;
+
+/** The step a window's `story` draws: all of it on a wide page, from its telling moment on a narrow one. */
+function useWindowStory(
+  ref: RefObject<HTMLDivElement | null>,
+  story: (typeof STORY)[keyof typeof STORY],
+  beat: number,
+): number {
+  const from = useNarrowPage(ref) ? story.NARROW_FROM : 0;
+  return Math.min(useStory(ref, story.STEPS - from, beat) + from, story.LAST);
+}
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -512,11 +534,12 @@ function InboxPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function InboxScene(): React.JSX.Element {
-  const [ref, step] = useStory(7, BEAT.INBOX);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useWindowStory(ref, STORY.INBOX, BEAT.INBOX);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="The Inbox, where an agent's question is answered">
-        <InboxPage step={Math.min(step, 5)} />
+        <InboxPage step={step} />
       </DesktopWindow>
     </div>
   );
@@ -817,11 +840,12 @@ function TaskPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function AgentsScene(): React.JSX.Element {
-  const [ref, step] = useStory(7, BEAT.AGENTS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useWindowStory(ref, STORY.AGENTS, BEAT.AGENTS);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="A task's agent starting another agent, and the two trading messages">
-        <TaskPage step={Math.min(step, 5)} />
+        <TaskPage step={step} />
       </DesktopWindow>
     </div>
   );
@@ -999,7 +1023,8 @@ function AutomationPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function AutomationsScene(): React.JSX.Element {
-  const [ref, step] = useStory(5, BEAT.RUNS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, 5, BEAT.RUNS);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="An automation's page, a scheduled run firing and finishing">
@@ -1107,7 +1132,8 @@ const KEY_ROWS: readonly KeyRow[] = [
  * are inert, since none of them is ever pressed.
  */
 function KeysScene(): React.JSX.Element {
-  const [ref, step] = useStory(5, BEAT.KEYS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, 5, BEAT.KEYS);
   return (
     <div
       ref={ref}
@@ -1143,6 +1169,155 @@ function KeysScene(): React.JSX.Element {
           })}
         </SettingsSection>
       </div>
+    </div>
+  );
+}
+
+/** One of the posts the hero's Inbox turns through: its task, its title, what it asks, and its last line. */
+type HeroPost = {
+  readonly id: string;
+  readonly task: string;
+  readonly title: string;
+  readonly kind: Line;
+  readonly line: string;
+};
+
+/** What agents post to the hero's Inbox, in the order it arrives, round and round; asks among them, and news that asks nothing. */
+const HERO_POSTS: readonly HeroPost[] = [
+  {
+    id: "migration",
+    task: "Teammate invitations",
+    title: "Run the memberships migration on preview?",
+    kind: LINE.DECIDE,
+    line: "Approve (recommended) / Decline",
+  },
+  {
+    id: "merged",
+    task: "Pricing page",
+    title: "Merged #479 into main",
+    kind: LINE.SETTLED,
+    line: "Checks passed · Deployed to production",
+  },
+  {
+    id: "domain",
+    task: "Weekly digest email",
+    title: "Verify the digest's sender domain",
+    kind: LINE.DO,
+    line: "3 steps left · Open the mail provider's Domains page",
+  },
+  {
+    id: "flag",
+    task: "Search ranking",
+    title: "Ship the new ranking behind a flag?",
+    kind: LINE.DECIDE,
+    line: "Yes (recommended) / No",
+  },
+  {
+    id: "tests",
+    task: "Checkout redesign",
+    title: "Fixed the two flaky payment tests",
+    kind: LINE.SETTLED,
+    line: "Pushed to #482 · Checks passing",
+  },
+  {
+    id: "secret",
+    task: "Onboarding checklist",
+    title: "Add the email provider's API key",
+    kind: LINE.DO,
+    line: "1 step left · Add the secret in Vercel",
+  },
+  {
+    id: "review",
+    task: "Checkout redesign",
+    title: "Ready for review: #482",
+    kind: LINE.DECIDE,
+    line: "Merge / Request changes",
+  },
+  {
+    id: "currency",
+    task: "Billing export",
+    title: "Which currency goes in the CSV?",
+    kind: LINE.DECIDE,
+    line: "USD / The account's own (recommended)",
+  },
+];
+
+/** How many posts the hero's Inbox lists once the oldest is let go, the last below the panel's crop; fewer than there are posts less one, so the one arriving on top is never one still listed. */
+const HERO_LISTED = 6;
+
+/** Minutes between one post's arrival and the next's. */
+const HERO_SPACING = 9;
+
+/**
+ * The hero's Inbox at `step`, two steps to each post's arrival: on the first
+ * the newest post arrives on top and every other glides down to make room,
+ * and on the second the oldest, by then under the panel's faded foot, is let
+ * go. The one arriving unrolls from the list's top edge, its foot and the
+ * rows under it traveling as one edge. Note that a post arrives in a change
+ * of its own, because a list plays what leaves it before what moves, and a
+ * row leaving in the same change would hold every glide back for its exit. A post stands as it arrived,
+ * unread and asking what it asks, because nothing on screen reads or answers
+ * it. Its place in the story is its age alone, so the last step leads into
+ * the first with nothing reset.
+ */
+function heroItems(step: number): readonly InboxItem[] {
+  const count = HERO_POSTS.length;
+  const arrival = Math.floor(step / 2);
+  const listed = step % 2 === 0 ? HERO_LISTED + 1 : HERO_LISTED;
+  return Array.from({ length: listed }, (_, age) => {
+    const post = HERO_POSTS[(arrival - age + count) % count];
+    if (post === undefined) throw new Error("heroItems: a post out of range");
+    return {
+      id: post.id,
+      task: post.task,
+      status: TASK_STATUS.IN_PROGRESS,
+      title: post.title,
+      line: post.line,
+      kind: post.kind,
+      ago: 1 + age * HERO_SPACING,
+      unread: true,
+    };
+  });
+}
+
+/** The hero's moving screen: the Inbox's column alone, agents' posts arriving on top and carrying the older ones off its foot. */
+export function LandingHeroScene(): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, HERO_POSTS.length * 2, BEAT.HERO);
+  const rows = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={ref} className="ui-landing-scene">
+      <LandingPanel label="The Inbox, as agents post to it">
+        <div className="ui-landing-desktop ui-landing-hero-inbox" {...DESKTOP_SURFACE}>
+          <Toolbar
+            title="Inbox"
+            start={TOOLBAR_INSET.COLUMN}
+            end={TOOLBAR_INSET.COLUMN}
+            actions={
+              <IconButton icon={<SlidersHorizontalIcon />} label="View options" onClick={still} />
+            }
+          />
+          <div ref={rows} className="ui-landing-hero-sheet">
+            <search className="ui-landing-search">
+              <SearchField
+                label="Search inbox"
+                placeholder="Search inbox"
+                value=""
+                onChange={still}
+              />
+            </search>
+            <div className="ui-landing-rows">
+              <ListMotion root={rows} way={LIST_MOTION_WAY.UNROLL}>
+                <List label="Inbox items" moves>
+                  {heroItems(step).map((item) => (
+                    <InboxRow key={item.id} item={item} />
+                  ))}
+                </List>
+              </ListMotion>
+            </div>
+          </div>
+        </div>
+      </LandingPanel>
     </div>
   );
 }

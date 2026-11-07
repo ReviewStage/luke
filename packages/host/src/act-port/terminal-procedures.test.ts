@@ -84,7 +84,7 @@ function fixture(options: { connectTaken?: boolean } = {}) {
         asked.push(`list:${agentId}`);
         return { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
       }),
-    terminalCreate: () => Effect.succeed({ refused: TERMINAL_REFUSAL.SANDBOX_STOPPED }),
+    terminalCreate: () => Effect.succeed({ failure: TERMINAL_REFUSAL.SANDBOX_STOPPED }),
     terminalRename: () => Effect.succeed(undefined),
     terminalKill: () => Effect.succeed({ sandbox: SANDBOX_STATE.RUNNING, terminals: [] }),
     terminalResume: () => Effect.succeed({ sandbox: SANDBOX_STATE.RUNNING }),
@@ -204,7 +204,7 @@ it.effect(
         answer: { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] },
       });
       assert.deepEqual(created, {
-        answer: { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED },
+        answer: { failure: TERMINAL_REFUSAL.SANDBOX_STOPPED },
       });
       assert.deepEqual(renamed, refusedAs(ACT_KIND.TERMINAL_RENAME));
       assert.deepEqual(asked, [`list:${AGENT_ID}`]);

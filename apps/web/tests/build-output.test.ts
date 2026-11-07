@@ -22,8 +22,9 @@ import { apiRewrites } from "../server/function-rewrites";
  * The tree Vercel deploys is emitted here from the same plan the build step
  * uses, into a directory of its own, and read back as data. Two things are
  * asserted and they are different claims. Structure: every planned function
- * has a `.func`, and every `/api/` rewrite names a `.func` that exists, so a
- * route cannot point at nothing while the build stays green. Isolation: each
+ * has a `.func`, every `/api/` rewrite names a `.func` that exists, so a
+ * route cannot point at nothing while the build stays green, and a queue's
+ * consumer names its topic in its trigger. Isolation: each
  * `.func` loads with nothing above it on disk, which is how a function is
  * mounted on the platform; a bundle that reached a module it did not carry
  * loads in this checkout and fails on production, which is the shape of the
@@ -67,6 +68,7 @@ async function emitFromTask(): Promise<{
         path: functionPublicPath(definition),
         contents,
         maxDuration: definition.maxDuration,
+        queueTopic: definition.queueTopic,
       };
     }),
     ...(await Promise.all(
@@ -81,7 +83,7 @@ async function emitFromTask(): Promise<{
   return { outputDirectory, paths };
 }
 
-test("every planned function and every rewrite lands on a .func", {
+test("every planned function and every rewrite lands on a .func, and a queue's consumer carries its trigger", {
   timeout: 180_000,
 }, async () => {
   const { outputDirectory, paths } = await emitFromTask();
@@ -96,6 +98,21 @@ test("every planned function and every rewrite lands on a .func", {
       existsSync(functionDirectory(outputDirectory, destination.pathname.slice(1))),
       true,
       rewrite.dest,
+    );
+  }
+  // A consumer deployed without its trigger is never invoked, and nothing else would say so.
+  for (const consumer of functions.filter((definition) => definition.queueTopic !== undefined)) {
+    const path = functionPublicPath(consumer);
+    const config = JSON.parse(
+      await readFile(join(functionDirectory(outputDirectory, path), ".vc-config.json"), "utf8"),
+    );
+    assert.deepEqual(
+      config.experimentalTriggers?.map((trigger: { type: string; topic: string }) => [
+        trigger.type,
+        trigger.topic,
+      ]),
+      [["queue/v2beta", consumer.queueTopic]],
+      path,
     );
   }
 });

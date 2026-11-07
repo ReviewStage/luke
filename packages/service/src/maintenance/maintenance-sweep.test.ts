@@ -38,14 +38,7 @@ interface Recorded {
   sandboxed: number[];
   native: number[];
   wakeups: number[];
-  withdrawnLines: number[];
-  automated: number[];
-  pictures: number[];
-  tokenPullRequests: number[];
-  hostPairings: number[];
   syncLog: number[];
-  staleFirewalls: number[];
-  codexPlanSwaps: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -57,14 +50,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     native: [],
     wakeups: [],
-    withdrawnLines: [],
-    automated: [],
-    pictures: [],
-    tokenPullRequests: [],
-    hostPairings: [],
     syncLog: [],
-    staleFirewalls: [],
-    codexPlanSwaps: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -105,46 +91,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
       }),
-    purgeWithdrawnLines: (now) =>
-      Effect.sync(() => {
-        recorded.withdrawnLines.push(now);
-        return 2;
-      }),
-    sweepAutomations: (now) =>
-      Effect.sync(() => {
-        recorded.automated.push(now);
-        return { fired: 1, started: 1, skipped: 0, failed: 0, archived: 0 };
-      }),
-    purgeUnsavedPictures: (now) =>
-      Effect.sync(() => {
-        recorded.pictures.push(now);
-        return 4;
-      }),
-    sweepTokenPullRequests: (now) =>
-      Effect.sync(() => {
-        recorded.tokenPullRequests.push(now);
-        return { polled: 2, told: 1 };
-      }),
     sweepAgentQueues: () => Effect.succeed(0),
-    sweepHostPairings: (now) =>
-      Effect.sync(() => {
-        recorded.hostPairings.push(now);
-        return 3;
-      }),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
         recorded.syncLog.push(now);
         return 5;
-      }),
-    purgeStaleFirewalls: (now) =>
-      Effect.sync(() => {
-        recorded.staleFirewalls.push(now);
-        return 7;
-      }),
-    renewCodexPlanSwaps: (now) =>
-      Effect.sync(() => {
-        recorded.codexPlanSwaps.push(now);
-        return { renewed: 2, failed: 0 };
       }),
     ...overrides,
   };
@@ -173,14 +124,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
-      automated: [],
-      pictures: [],
-      tokenPullRequests: [],
-      hostPairings: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
@@ -203,14 +147,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
-      automated: [],
-      pictures: [],
-      tokenPullRequests: [],
-      hostPairings: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -220,20 +157,13 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
-      automated: [],
-      pictures: [],
-      tokenPullRequests: [],
-      hostPairings: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
 
 it.effect(
-  "an authorized sweep runs every sweep at one instant, the unsaved pictures, and the sync log among them, and answers what each did",
+  "an authorized sweep runs every sweep at one instant, the sync log among them, and answers what each did",
   () =>
     Effect.gen(function* () {
       const { options, recorded } = sweepOptions();
@@ -243,11 +173,7 @@ it.effect(
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.equal(answer.body.purgedPictures, 4);
-      assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.equal(answer.body.syncLog, 5);
-      assert.equal(answer.body.staleFirewalls, 7);
-      assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
       const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -258,14 +184,7 @@ it.effect(
         sandboxed: [instant],
         native: [instant],
         wakeups: [instant],
-        withdrawnLines: [instant],
-        automated: [instant],
-        pictures: [instant],
-        tokenPullRequests: [instant],
-        hostPairings: [instant],
         syncLog: [instant],
-        staleFirewalls: [instant],
-        codexPlanSwaps: [instant],
       });
     }),
 );
@@ -277,7 +196,7 @@ it.effect(
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
         sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
-        sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
+        sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
@@ -293,12 +212,8 @@ it.effect(
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
-      assert.deepEqual(answer.body.automations, SWEEP_FAILED);
+      assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
-      assert.equal(recorded.staleFirewalls.length, 1);
-      assert.equal(recorded.codexPlanSwaps.length, 1);
-      assert.equal(recorded.pictures.length, 1);
     }),
 );

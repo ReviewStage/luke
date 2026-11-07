@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
 import {
-  keepDescriptionAttachment,
   DESCRIPTION_ATTACHMENT_KEEP,
+  keepDescriptionAttachment,
 } from "@repo/database/models/description-attachments";
 import {
   readDescriptionCommentThreads,
@@ -19,8 +19,8 @@ import {
 } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
-import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
   DESCRIPTION_COMMENT_ACTOR,
@@ -28,6 +28,7 @@ import {
   DESCRIPTION_COMMENT_STATUS,
 } from "@repo/features/description-comment-wire";
 import { descriptionSections } from "@repo/features/description-document";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
@@ -37,18 +38,11 @@ import {
   PICTURE_LOOK_STATUS,
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
-import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
-import {
-  runAgentComment,
-  runAgentEditDescription,
-  runAgentLookAtPicture,
-  runAgentOpenPullRequest,
-} from "./agent-doors.js";
-import { CODER_REFUSAL } from "./bounds.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
+import { openGithubUser } from "../../testing/github-app-fake.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import { runAgentComment, runAgentEditDescription, runAgentLookAtPicture } from "./agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
-import { CODER_TOOL } from "./tool-set.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * agent-doors.test.ts -- the doors a coding agent's description, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
@@ -286,7 +280,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Descriptions off, are refused and save nothing, as is its look at a description's picture",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, are refused and save nothing",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();
@@ -321,24 +315,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         });
         const after = Option.getOrThrow(yield* readTask(userId, other.id));
         assert.equal(after.text, before.text);
-
-        // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
-        yield* descriptionsFor(userId, false);
-        const off = yield* runAgentEditDescription(
-          admitted,
-          unparsedWire({ taskId: other.id, notes }),
-          0,
-          noSandbox,
-        );
-        const looked = yield* runAgentLookAtPicture(
-          admitted,
-          unparsedWire({ taskId: other.id, attachmentId: randomUUID() }),
-        );
-        assert.deepEqual(off, {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: DESCRIPTION_EDIT_REFUSAL.OFF,
-        });
-        assert.deepEqual(looked, pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF));
       }),
   );
 
@@ -383,12 +359,12 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const call = (
           name: Parameters<typeof runAgentComment>[1],
           input: Readonly<Record<string, string | boolean>>,
-        ) => runAgentComment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }));
+        ) => runAgentComment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }), true);
 
-        const read = yield* call(CODER_TOOL.READ_COMMENTS, {});
-        const replied = yield* call(CODER_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
-        const resolved = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: true });
-        const reopened = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: false });
+        const read = yield* call(AGENT_TOOL.READ_COMMENTS, {});
+        const replied = yield* call(AGENT_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
+        const resolved = yield* call(AGENT_TOOL.UPDATE_COMMENT, { thread, resolved: true });
+        const reopened = yield* call(AGENT_TOOL.UPDATE_COMMENT, { thread, resolved: false });
 
         assert.deepEqual(
           [read, replied, resolved, reopened].map((answer) => answer.status),
@@ -428,14 +404,15 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const agent = yield* tasklessAgentOn(userId, own.workspaceId);
         const admitted = admittedOf(agent);
         const reply = (input: Readonly<Record<string, string>>) =>
-          runAgentComment(admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input));
+          runAgentComment(admitted, AGENT_TOOL.REPLY_TO_COMMENT, unparsedWire(input), true);
 
         const unnamed = yield* reply({ thread, words: "Done." });
         const outside = yield* reply({ taskId: elsewhere.id, thread: outsideThread, words: "x" });
         const read = yield* runAgentComment(
           admitted,
-          CODER_TOOL.READ_COMMENTS,
+          AGENT_TOOL.READ_COMMENTS,
           unparsedWire({ taskId: theirs.id }),
+          true,
         );
 
         assert.deepEqual(unnamed, {
@@ -454,26 +431,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           const [stored] = Option.getOrThrow(yield* readDescriptionCommentThreads(owner, taskId));
           assert.equal(stored?.entries.length, 1, taskId);
         }
-      }),
-  );
-
-  it.effect(
-    "an agent in no repository is refused its pull request by name, though its harness may call the tool",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openGithubUser();
-        const workspaceId = yield* openWorkspace(userId);
-        const agent = yield* tasklessAgentOn(userId, workspaceId);
-
-        const opened = yield* runAgentOpenPullRequest(
-          admittedOf(agent),
-          unparsedWire({ head: "luke/x", title: "x", body: "" }),
-        ).pipe(Effect.provide(githubReaching([]).layer));
-
-        assert.deepEqual(opened, {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: CODER_REFUSAL.NO_REPOSITORY,
-        });
       }),
   );
 });

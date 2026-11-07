@@ -5,6 +5,7 @@ import {
   pinPositionsForMove,
 } from "@repo/features/pin-order";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { pullRequestsOfTask } from "@repo/features/task-agents-model";
 import {
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
@@ -131,6 +132,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
+import { useListedTaskPullRequests } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -658,7 +660,7 @@ const TasksPageRow = memo(function TasksPageRow({
   workspaceName: string;
   /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  /** How many of its threads wait on the reader, questions and updates alike, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   properties: readonly TaskRowCell[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
@@ -1020,6 +1022,7 @@ export function TasksList({
     [groups],
   );
   const workspaceName = tasks.workspace?.name ?? "";
+  const pullRequests = useListedTaskPullRequests();
   // What every task listed says in the cells whose words differ row to row, which its columns stand as wide as (`taskRowFit`); read again only as those change, since it walks every task.
   const fit = useMemo(
     () =>
@@ -1030,7 +1033,9 @@ export function TasksList({
             const waiting = waitingOn.get(task.id) ?? 0;
             return {
               key: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
-              pullRequests: openPullRequests(task).map(pullRequestNumberLabel),
+              pullRequests: openPullRequests(pullRequestsOfTask(pullRequests, task.id)).map(
+                pullRequestNumberLabel,
+              ),
               subTasks:
                 subTasks === undefined || subTasks.total === 0
                   ? undefined
@@ -1044,7 +1049,7 @@ export function TasksList({
           }),
         ),
       ),
-    [groups, subTaskCounts, waitingOn, workspaceName, repositories],
+    [groups, subTaskCounts, waitingOn, workspaceName, repositories, pullRequests],
   );
   const listStyle = useMemo(
     () => ({

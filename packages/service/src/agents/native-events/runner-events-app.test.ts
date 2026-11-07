@@ -74,8 +74,8 @@ import {
 /**
  * The events route, answered by its group the way a function answers it,
  * over a real dialect: a runner's batches of Claude Code's SDK messages,
- * posted under its bearer, land in the agent's transcript as the eve relay
- * would write them, a batch posted again changes nothing, and a wrong or
+ * posted under its bearer, land in the agent's transcript as the retired
+ * runtime's relay wrote its own, a batch posted again changes nothing, and a wrong or
  * retired bearer is refused before anything is read. The stream is P00's
  * hermetic one, as the runner's own tests replay it
  * (`packages/agent-runner/src/testing/recorded-stream.ts`), numbered as the
@@ -2132,7 +2132,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid as eve's step marks it",
+    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -2219,7 +2219,7 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
-it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", (it) => {
+it.layer(getTestDB())("the runner events route, as it keeps an agent", (it) => {
   const top = { parent_tool_use_id: null, session_id: SESSION };
   const numbered = (messagesOfLaunch: readonly unknown[], from = 0) =>
     // SAFETY: each message is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.

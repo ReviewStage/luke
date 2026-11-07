@@ -1,17 +1,21 @@
 import {
+  ACCOUNT_PREFERENCES_READ,
   type AccountPreferencesLiveAnswer,
   type AccountPreferencesLiveRow,
-  accountPreferencesLiveRowsSchema,
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
-import type { AgentDefaultAnswer } from "@repo/features/agent-view";
+import type {
+  AgentDefaultAnswer,
+  ChaptersProviderAnswer,
+  ChaptersProviderWriteParams,
+} from "@repo/features/agent-view";
+import { CHAPTERS_MODEL, chaptersModelOn } from "@repo/features/chapters-model-choice";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import type {
   TasksWorkspaceSlackBotAnswer,
   TasksWorkspaceSlackBotNotificationsParams,
 } from "@repo/features/tasks-view";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -19,7 +23,6 @@ import {
   type HeldRows,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppAccountPreferences, type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -150,7 +153,7 @@ function followPreferences(
           },
         },
         first,
-        accountPreferencesLiveRowsSchema,
+        ACCOUNT_PREFERENCES_READ.rows,
         (rows) =>
           Effect.andThen(
             row.answer([poolRowOf(userId, rows.preferences)]),
@@ -197,7 +200,7 @@ function readerRow(readerId: () => string | undefined): readonly string[] {
 export function agentDefaultWritten(
   send: (choice: ModelChoice) => Effect.Effect<AgentDefaultAnswer>,
   readerId: () => string | undefined,
-): WriteDeclaration<AccountPreferencesPoolRow, PreferencesChange, ModelChoice, WireValue> {
+): WriteDeclaration<AccountPreferencesPoolRow, PreferencesChange, ModelChoice, AgentDefaultAnswer> {
   return {
     kind: ACCOUNT_PREFERENCES,
     keys: () => readerRow(readerId),
@@ -208,9 +211,32 @@ export function agentDefaultWritten(
     }),
     send: (choice) =>
       Effect.map(send(choice), (answer) =>
-        "choice" in answer
-          ? { answer: carried<AgentDefaultAnswer>(answer), txid: answer.txid }
-          : { refused: carried<AgentDefaultAnswer>(answer) },
+        "choice" in answer ? { answer, txid: answer.txid } : { refused: answer },
+      ),
+  };
+}
+
+/** Whose API key the account's chapters run on, kept as its chapters model, its provider's model of Haiku's tier, drawn at once over its row, sent as `send` asks, standing until the read carries the transaction it committed in. */
+export function chaptersProviderWritten(
+  send: (
+    provider: ChaptersProviderWriteParams["provider"],
+  ) => Effect.Effect<ChaptersProviderAnswer>,
+  readerId: () => string | undefined,
+): WriteDeclaration<
+  AccountPreferencesPoolRow,
+  PreferencesChange,
+  ChaptersProviderWriteParams,
+  ChaptersProviderAnswer
+> {
+  return {
+    kind: ACCOUNT_PREFERENCES,
+    keys: () => readerRow(readerId),
+    change: (write) => () => ({
+      chaptersModel: chaptersModelOn(write.provider, CHAPTERS_MODEL.HAIKU),
+    }),
+    send: (write) =>
+      Effect.map(send(write.provider), (answer) =>
+        "provider" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }
@@ -225,7 +251,7 @@ export function slackNotificationsWritten(
   AccountPreferencesPoolRow,
   PreferencesChange,
   TasksWorkspaceSlackBotNotificationsParams,
-  WireValue
+  TasksWorkspaceSlackBotAnswer
 > {
   return {
     kind: ACCOUNT_PREFERENCES,
@@ -233,9 +259,7 @@ export function slackNotificationsWritten(
     change: (write) => () => ({ slackNotifications: write.notifications }),
     send: (write) =>
       Effect.map(send(write), (answer) =>
-        "slackBot" in answer
-          ? { answer: carried<TasksWorkspaceSlackBotAnswer>(answer), txid: answer.slackBot.txid }
-          : { refused: carried<TasksWorkspaceSlackBotAnswer>(answer) },
+        "slackBot" in answer ? { answer, txid: answer.slackBot.txid } : { refused: answer },
       ),
   };
 }

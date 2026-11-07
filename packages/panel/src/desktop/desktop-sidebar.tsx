@@ -77,7 +77,7 @@ import {
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -151,6 +151,7 @@ import {
   samePin,
 } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
+import { useListedTaskPullRequests } from "../tasks/use-task-work.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectAdminAccess } from "../use-app-state.js";
 import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
@@ -1915,6 +1916,7 @@ function SidebarColumn({
     shared,
   });
   const unread = useUnreadTasks({ staged: sidebar.staged });
+  const listedPullRequests = useListedTaskPullRequests();
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
@@ -2040,7 +2042,10 @@ function SidebarColumn({
     },
     unread,
     unseenAgent: (agentId) =>
-      tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
+      tasks.unreadTabs.some(
+        (tab) =>
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.AGENT && tab.agent === agentId,
+      ),
     now,
     faces: { creator: true, assignee: assignedTo.kind !== ASSIGNED_TO.MEMBER },
     inSight: overlay.inSight,
@@ -2085,7 +2090,7 @@ function SidebarColumn({
     listedRows.tasks.filter(
       (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
     ),
-    { unread, inbox: tasks.listed.inbox, shown: current },
+    { unread, inbox: tasks.listed.inbox, shown: current, pullRequests: listedPullRequests },
   );
   // An automation's finished runs leave Tasks once they hold nothing of the reader's (`finished-runs.ts`).
   const unpinnedAgents = withoutFinishedRuns(

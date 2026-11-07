@@ -15,27 +15,20 @@
  * account whose agent the session is, sealed under the deployment's key
  * ring for that account and session alone (`provider-key-seal.ts`), and
  * every write sends them beside what it gathered. A launch keeps them before
- * it writes, its end lets them go, a stop's clear deletes them, and nothing
- * else changes them but the sweep's renewal of a ChatGPT plan's token
- * (`renew`), which writes over the row as it stands, the last write
- * winning. With nothing to carry, the policy is the open internet.
+ * it writes, and nothing else changes them; they stand on the firewall until
+ * the sandbox stops, and the agent's next launch in another session deletes
+ * the row. With nothing to carry, the policy is the open internet.
  *
  * Two writers that compose from the same sources send the same policy, so
  * whichever lands last is right; a GitHub credential minted twice is two
  * tokens of the same reach. Note that this holds only while the sources
  * stand still between a writer's read and its send: a writer that read the
- * launch before a relaunch kept its own, before a clear let it go, or
- * between an end's send and its let-go, may land after them and send what
- * it read until the session's next write; a renewal that read a launch before a relaunch replaced it writes
- * the ended launch's swaps over the new runner's, which every later write
- * sends until the next launch keeps its own; one that read the plan's swap
- * before a renewal sends the token it read, which still has the renewal's
- * margin left; and a clone's token
+ * launch before a relaunch kept its own may land after it and send what it
+ * read until the session's next write; and a clone's token
  * stands only in its own writes, so another writer landing during a clone
  * takes it off, though the clone goes on under the agent's own credential
  * that writer carries, minted afresh, which reaches every repository the
- * agent clones. A clear is made ahead of a stop, so whether to write is the
- * caller's to read. Every send reaches the session through its sandbox's
+ * agent clones. Every send reaches the session through its sandbox's
  * name (`VercelSandboxApi`'s `session`), so a write to a session its sandbox
  * no longer runs is refused, as Vercel refuses one to a session gone.
  *
@@ -62,11 +55,8 @@ import {
   sealFirewallEntries,
 } from "@repo/database/models/provider-key-seal";
 import {
-  clearStandingFirewall,
   keepFirewallLaunch,
-  letGoFirewallLaunch,
   readFirewallLaunch,
-  renewFirewallLaunch,
 } from "@repo/database/models/sandbox-firewall-store";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
@@ -94,8 +84,6 @@ export const LAUNCH_SWAP = {
   RUNNER: "runner",
   /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API. */
   OPENAI_KEY: "openai-key",
-  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on the plan's backend (OpenAI's API, or Codex's ChatGPT backend) and renewed by the sweep while it stands. */
-  OPENAI_PLAN: "openai-plan",
 } as const;
 
 export type LaunchSwapKind = (typeof LAUNCH_SWAP)[keyof typeof LAUNCH_SWAP];
@@ -150,9 +138,9 @@ export interface FirewallLaunch {
   readonly swaps: LaunchSwaps;
 }
 
-/** A launch as its session's row holds it: the agent, none in a row kept before agents were named, and its swaps. */
-export interface KeptLaunch {
-  readonly agentId: string | undefined;
+/** A launch as its session's row holds it: the agent and its swaps. */
+interface KeptLaunch {
+  readonly agentId: string;
   readonly swaps: LaunchSwaps;
 }
 
@@ -181,31 +169,6 @@ export interface SandboxFirewall {
   readonly keepLaunch: (
     session: FirewallSession,
     launch: FirewallLaunch,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** The launch kept for the session let go, and the policy sent from the sources given alone. */
-  readonly endLaunch: (
-    session: FirewallSession,
-    sources: FirewallSources,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** The launch kept for the account's session; none where none is. Note that the read is the store's alone, so it names no sandbox. */
-  readonly launchOf: (
-    owner: FirewallOwner,
-  ) => Effect.Effect<KeptLaunch | undefined, SandboxUnavailable, DatabaseServices>;
-  /**
-   * The swap given set in place of the launch's own of its kind, the swaps
-   * written over the session's row as it stands, the last write winning, and
-   * the policy sent with the sources given.
-   */
-  readonly renew: (
-    session: FirewallSession,
-    launch: KeptLaunch,
-    kind: LaunchSwapKind,
-    entry: FirewallEntry,
-    sources: FirewallSources,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** Every credential taken off the session's firewall ahead of its stop, which is left the open internet, its launch deleted. */
-  readonly clear: (
-    session: SessionRef,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
 
@@ -280,7 +243,7 @@ function gitBasic(token: Redacted.Redacted, access: GitHubTokenAccess): string {
 
 /**
  * The repository's credential at the firewall. An installation token is set
- * on GitHub's two hosts, as eve's own `authenticateGitHub` sets it. A
+ * on GitHub's two hosts. A
  * member's own classic token is set on the one repository's paths alone,
  * and nothing on any other path of GitHub's, GraphQL and every other
  * repository among them: git over HTTPS takes the member's login and the
@@ -346,41 +309,6 @@ export function placeholderSwap(swap: PlaceholderSwap): FirewallEntry {
       ],
     ],
   ]);
-}
-
-/**
- * The swap `placeholderSwap` made, renewed to set `value` in place of the
- * one it sets, its domain, header, and placeholder kept; none where it sets
- * `value` already, so a renewal that finds nothing new writes nothing.
- */
-export function renewedSwap(
-  entry: FirewallEntry,
-  value: Redacted.Redacted,
-): FirewallEntry | undefined {
-  const next = Redacted.value(value);
-  const standing = Redacted.value(entry.rules);
-  const sets = (headers: Readonly<Record<string, string>>) =>
-    Object.values(headers).every((held) => held === next);
-  if (
-    standing.every(([, rules]) =>
-      rules.every((rule) => rule.transform.every((each) => sets(each.headers))),
-    )
-  ) {
-    return undefined;
-  }
-  return entryOf(
-    standing.map(
-      ([host, rules]): HostRules => [
-        host,
-        rules.map((rule) => ({
-          ...rule,
-          transform: rule.transform.map((each) => ({
-            headers: Object.fromEntries(Object.keys(each.headers).map((name) => [name, next])),
-          })),
-        })),
-      ],
-    ),
-  );
 }
 
 /** A placeholder minted for one launch: random, and named nowhere but where its process reads it. */
@@ -459,7 +387,7 @@ const launchKept = (session: FirewallOwner) =>
       yield* Effect.logWarning("a sandbox firewall's launch would not open, and is sent as none");
       return undefined;
     }
-    return { agentId: row.agentId ?? undefined, swaps } satisfies KeptLaunch;
+    return { agentId: row.agentId, swaps } satisfies KeptLaunch;
   });
 
 /** A store failure as the policy write unavailable, in words naming no value. */
@@ -500,35 +428,5 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           yield* DateTime.nowAsDate,
         );
       }).pipe(storeUnavailable("the firewall's launch could not be kept")),
-    // Note that the policy goes first and the launch is let go once it landed, so an end whose send or
-    // let-go failed leaves the launch kept for the caller's retry to find (`launchOf`).
-    endLaunch: (session, sources) =>
-      Effect.andThen(
-        sent(session, sources, NO_SWAPS),
-        letGoFirewallLaunch(session).pipe(
-          storeUnavailable("the firewall's launch could not be let go"),
-        ),
-      ),
-    launchOf: (session) =>
-      launchKept(session).pipe(storeUnavailable("the firewall's launch could not be read")),
-    renew: (session, launch, kind, entry, sources) =>
-      Effect.gen(function* () {
-        const swaps = new Map(launch.swaps).set(kind, entry);
-        yield* renewFirewallLaunch(
-          session,
-          sealed(yield* keyRing, session, swaps),
-          yield* DateTime.nowAsDate,
-        ).pipe(storeUnavailable("the firewall's launch could not be renewed"));
-        yield* sent(session, sources, swaps);
-      }),
-    // Note that a launch that would not go is logged and the open internet sent anyway, because the
-    // stop it goes ahead of must not wait on the store, and the sweep drops the row once its session is gone.
-    clear: (session) =>
-      Effect.andThen(
-        clearStandingFirewall(session.sessionId).pipe(
-          Effect.catch(() => Effect.logWarning("a sandbox firewall's launch was not deleted")),
-        ),
-        policySent(session, OPEN_INTERNET_POLICY),
-      ),
   };
 }

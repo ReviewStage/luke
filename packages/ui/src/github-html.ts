@@ -28,10 +28,21 @@
  * the place's to open (the Pull request tab's viewer) rather than a link out
  * to the browser; a picture linked anywhere else keeps its link. Everything
  * else GitHub writes, a heading's permalink included, the sanitizer already
- * leaves harmless.
+ * leaves harmless. `inlinePictures` runs after the sanitizer and marks each
+ * picture that shares its line with words (`INLINE_PICTURE`), a bot's glyph
+ * in its bold lead or a folded section's summary, so the place draws it in
+ * that line as GitHub does rather than as a block of its own.
+ *
+ * Where a place reads the rendering rather than draws it, its words for a
+ * find (`renderingText`) or the pictures it opens (`renderingPictures`), the
+ * rendering is parsed here into the same tree, never into a document. Note
+ * that a document the window parses, even an inert one, is held to the
+ * window's policy, which refuses the `style` GitHub writes on every picture
+ * and logs each refusal.
  */
 
 import { githubImageOf } from "@repo/features/github-image";
+import { fromHtml } from "hast-util-from-html";
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
 type PropertyValue = string | number | boolean | readonly (string | number)[] | null | undefined;
@@ -121,7 +132,7 @@ function suggestion(blob: HtmlNode): HtmlNode {
 }
 
 /** Whether a link around a picture leads to the picture itself or to another of GitHub's own image addresses, as GitHub links every picture it renders. */
-export function linksToPicture(href: string, src: string): boolean {
+function linksToPicture(href: string, src: string): boolean {
   return href !== "" && (href === src || githubImageOf(href) !== undefined);
 }
 
@@ -143,6 +154,73 @@ function selfLinkedPicture(link: HtmlNode): HtmlNode | undefined {
   }
   const href = String(link.properties?.href ?? "");
   return linksToPicture(href, String(picture.properties?.src ?? "")) ? picture : undefined;
+}
+
+/**
+ * The property `inlinePictures` sets on a picture that shares its line with
+ * words. Note that it is set after the sanitizer, which would drop it.
+ */
+export const INLINE_PICTURE = "dataInlinePicture";
+
+/** The elements that stand in a line of words rather than breaking it, as HTML's phrasing content does. */
+const PHRASING_TAGS: ReadonlySet<string> = new Set([
+  "a",
+  "abbr",
+  "b",
+  "bdi",
+  "bdo",
+  "br",
+  "cite",
+  "code",
+  "del",
+  "dfn",
+  "em",
+  "g-emoji",
+  "i",
+  "img",
+  "ins",
+  "kbd",
+  "mark",
+  "picture",
+  "q",
+  "s",
+  "samp",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "u",
+  "var",
+]);
+
+/** A block's line, the nodes it holds outside any block nested in it, and the blocks nested in it. */
+function lineOf(block: HtmlNode): { line: HtmlNode[]; blocks: HtmlNode[] } {
+  const line: HtmlNode[] = [];
+  const blocks: HtmlNode[] = [];
+  for (const child of block.children ?? []) {
+    if (child.type === "element" && !PHRASING_TAGS.has(child.tagName ?? "")) {
+      blocks.push(child);
+      continue;
+    }
+    line.push(child);
+    const held = lineOf(child);
+    line.push(...held.line);
+    blocks.push(...held.blocks);
+  }
+  return { line, blocks };
+}
+
+/** Marks each picture in a block's line where that line holds words, then each block nested in it. */
+function markInlinePictures(block: HtmlNode): void {
+  const { line, blocks } = lineOf(block);
+  const worded = line.some((node) => node.type === "text" && !blank(node));
+  for (const node of line) {
+    if (worded && node.type === "element" && node.tagName === "img") {
+      node.properties = { ...node.properties, [INLINE_PICTURE]: true };
+    }
+  }
+  for (const nested of blocks) markInlinePictures(nested);
 }
 
 /** What one node of GitHub's rendering becomes: itself, nodes in its place, or nothing. */
@@ -170,6 +248,48 @@ function reshapeChildren(children: readonly HtmlNode[]): HtmlNode[] {
   return children.flatMap(reshaped);
 }
 
+/** GitHub's rendering as the parsed tree, apart from any document. */
+function renderingTree(html: string): HtmlNode {
+  return fromHtml(html, { fragment: true });
+}
+
+/** A picture GitHub's rendering names: its address, the address it opens on GitHub, and its words. */
+export interface RenderingPicture {
+  readonly src: string;
+  readonly original: string;
+  readonly alt: string;
+}
+
+/** The pictures under a node that stand in no link but the one `link` names, each beside where it opens. */
+function picturesUnder(node: HtmlNode, link: HtmlNode | undefined): readonly RenderingPicture[] {
+  if (node.type !== "element" && node.type !== "root") return [];
+  const within = node.tagName === "a" ? node : link;
+  return (node.children ?? []).flatMap((child) => {
+    if (child.type !== "element" || child.tagName !== "img") return picturesUnder(child, within);
+    const src = String(child.properties?.src ?? "");
+    const alt = String(child.properties?.alt ?? "");
+    if (within === undefined) return [{ src, original: src, alt }];
+    // A picture in a link stands alone in it, GitHub's own wrapping, or is the link's.
+    if (within !== node || selfLinkedPicture(node) !== child) return [];
+    return [{ src, original: String(node.properties?.href ?? ""), alt }];
+  });
+}
+
+/** All the words of GitHub's rendering, in order, as a document's text would read them. */
+export function renderingText(html: string): string {
+  return textOf(renderingTree(html));
+}
+
+/**
+ * The pictures GitHub's rendering names that a place opens itself, in the
+ * order they stand: each in no link, opening on its own address, or alone
+ * in the link GitHub wraps it in (`selfLinkedPicture`), opening where that
+ * link leads. A picture inside any other link is the link's.
+ */
+export function renderingPictures(html: string): readonly RenderingPicture[] {
+  return picturesUnder(renderingTree(html), undefined);
+}
+
 /** The step that hands the words to the HTML steps whole, as one HTML node, never read as markdown. */
 export function wholeRendering(): (tree: MarkdownRoot, file: { value: unknown }) => void {
   return (tree, file) => {
@@ -182,4 +302,9 @@ export function githubShapes(): (tree: HtmlNode) => void {
   return (tree) => {
     tree.children = reshapeChildren(tree.children ?? []);
   };
+}
+
+/** The step that marks each picture sharing its line with words (`INLINE_PICTURE`), run after the sanitizer. */
+export function inlinePictures(): (tree: HtmlNode) => void {
+  return (tree) => markInlinePictures(tree);
 }

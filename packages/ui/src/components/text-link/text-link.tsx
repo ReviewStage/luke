@@ -23,7 +23,9 @@
  * them, and lights under the pointer with the link; one that
  * opens in a `newTab` tells the page it opens nothing of the opener's. A
  * link with no `href` is the same words going nowhere, for a place that
- * opens no links or an address it refuses. A link takes no class or style:
+ * opens no links or an address it refuses. A middle-click is handed to the
+ * link's own press, as a click is (`middle-press.ts`), so a link the window
+ * opens itself opens there under the wheel's press too. A link takes no class or style:
  * its outer spacing is its container's.
  *
  * An app's hint wraps a link and hands it the pointer and focus handlers it
@@ -38,6 +40,7 @@
 
 import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
 import { ArrowUpRightIcon } from "../../face/glyphs.js";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { TEXT_FONT, type TextFont } from "../text/text.js";
 import { TEXT_ROLE_CLASS, TEXT_VARIANT, type TextVariant } from "../text/text-role.js";
@@ -193,7 +196,7 @@ export function TextLink({
   newTab?: boolean;
   /** A mark drawn before its words, inside the link, such as the brand of the site it opens. */
   lead?: React.JSX.Element | undefined;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
@@ -203,6 +206,7 @@ export function TextLink({
       {external ? outWords(children) : children}
     </>
   );
+  const press = pulseOnPress(onClick, PRESS_PULSE.WORDS);
   const face = {
     "data-look": look,
     "data-variant": variant,
@@ -225,7 +229,8 @@ export function TextLink({
       aria-current={current}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.WORDS)}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       {words}
     </a>

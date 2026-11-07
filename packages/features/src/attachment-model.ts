@@ -1,5 +1,6 @@
 import { base64Bytes } from "./agent-wire.js";
 import { formatBytes } from "./number-format.js";
+import { countWords } from "./words.js";
 
 /**
  * attachment-model.ts -- one file on a message as its chip and its viewer read it: its bytes from its `data:` URL, its size in words, and how it is shown.
@@ -8,6 +9,9 @@ import { formatBytes } from "./number-format.js";
  * the service kept on the developer's row; a file the service kept no bytes
  * of has an empty one, and there is nothing of it to show but its name.
  */
+
+/** The most characters of a text file's head its chip's card peeks at: more than the card shows, so its fade never ends on a short line. */
+const PEEK_CHARS = 1_000;
 
 /** One file as a chip draws it: its name, its type, and its bytes as a `data:` URL, empty where there are none. */
 export interface FileChip {
@@ -56,4 +60,15 @@ export function attachmentView(file: FileChip): AttachmentView {
 export function attachmentText(base64: string): string {
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+/** What a chip says of a text file: how many lines it runs to, a last line's newline closing it rather than opening another. */
+export function linesLabel(text: string): string {
+  const breaks = text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+  return countWords(Math.max(1, breaks), { one: "line", many: "lines" });
+}
+
+/** The head of a text file's words its chip's card peeks at. */
+export function peekOf(text: string): string {
+  return text.slice(0, PEEK_CHARS);
 }

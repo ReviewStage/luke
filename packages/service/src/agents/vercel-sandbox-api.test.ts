@@ -40,7 +40,7 @@ const RUNNING_SANDBOX = {
 /** A create of the fixture's sandbox, with a secret in its environment. */
 const CREATE_ASK = {
   name: NAME,
-  image: "agent-image:fixture",
+  from: { image: "agent-image:fixture" },
   tags: {},
   timeoutMs: 60_000,
   vcpus: 2,

@@ -31,6 +31,8 @@ import { agentRead } from "../schemas/agent-read.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
+import { descriptionComment, descriptionCommentThread } from "../schemas/description-comment.js";
+import { descriptionRevision } from "../schemas/description-revision.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -45,9 +47,6 @@ import { integrationInstallation } from "../schemas/integration-installation.js"
 import { macCommand } from "../schemas/mac-command.js";
 import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { descriptionComment, descriptionCommentThread } from "../schemas/description-comment.js";
-import { taskPageVersion } from "../schemas/task-page.js";
-import { descriptionRevision } from "../schemas/description-revision.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
@@ -56,6 +55,7 @@ import { slackChannelRepository, slackInstallation } from "../schemas/slack-inst
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
+import { taskPageVersion } from "../schemas/task-page.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskRead } from "../schemas/task-read.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
@@ -157,7 +157,7 @@ export const userSync = defineSyncTable(user, {
  * A member's device, on its account's topic and, through its memberships,
  * every workspace it is in, so a Mac's new name reaches the task lists that
  * name the local agents on it, and a host's platform, machine, model, and
- * update reach Settings › Hosts (`hostsLive`), as do its enrolling, which
+ * update reach Settings › Hosts (`hostsRead`), as do its enrolling, which
  * writes its version, and its removal. Note that every other column is
  * ignored, because the device beats and registers again often, rewriting
  * when it was last seen and what it runs, and no view the capture wakes
@@ -631,7 +631,8 @@ export const messagesSync = defineSyncTable(messages, {
  * hand-over and no view reads them; a message written beside them notifies
  * the conversation's topic itself. Its rows' arrival and removal alone are
  * logged, because every streamed step moves its journal's revision, and the
- * task list reads only the harness it opened on.
+ * task list reads only the harness it opened on and whether its sandbox
+ * stands open, so the claim of its runtime session logs an update too.
  */
 export const conversationsSync = defineSyncTable(conversations, {
   topics: [
@@ -648,6 +649,7 @@ export const conversationsSync = defineSyncTable(conversations, {
     conversations.dispatchLine,
   ],
   log: LOG.ROWS,
+  logUpdatesOf: [conversations.runtimeSessionId],
 });
 
 /**

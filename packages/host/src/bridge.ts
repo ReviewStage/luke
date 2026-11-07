@@ -75,6 +75,17 @@ export const BRIDGE = {
     result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
+  /**
+   * Whether this window's machine has a network, as Chromium's `online` and
+   * `offline` events tell the page and main is never told: said by the
+   * preload as the page loads and each time it moves. Every window shares
+   * the one machine's network, so any one of them saying it is enough.
+   */
+  reportOnline: entry({
+    kind: "send",
+    channel: "app:network-online",
+    args: args<[online: boolean]>((v) => v.length === 1 && typeof v[0] === "boolean"),
+  }),
   recordSurfaceEvent: entry({
     kind: "send",
     channel: "app:record-surface-event",
@@ -102,10 +113,11 @@ type DerivedAppBridge = {
 };
 
 /**
- * What the preload exposes as `window.appBridge`: the invokes and the sends. What
- * main pushes reaches the window on its act port instead (`contract/pushes.ts`).
+ * What the preload exposes as `window.appBridge`: the invokes and the sends,
+ * bar what the preload says itself (`reportOnline`). What main pushes
+ * reaches the window on its act port instead (`contract/pushes.ts`).
  */
-export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {
+export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent" | "reportOnline"> & {
   recordSurfaceEvent<Name extends ProductSurfaceEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,

@@ -80,7 +80,11 @@ it.layer(getTestDB())("a coding agent's transcript", (it) => {
             output: unparsedWire({ status: ACTION_RESULT_STATUS.ACCEPTED, inbox: [] }),
           });
         }
-        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: turnId });
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: turnId,
+        });
         yield* writer.consume(target, {
           ...turn,
           kind: RUN_EVENT.TURN_STARTED,

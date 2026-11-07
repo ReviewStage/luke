@@ -31,7 +31,7 @@ import {
  * then stand, whether or not the id named one, so a forget retried after it
  * landed answers the same; one that deleted the memory answers the
  * transaction it was deleted in beside them, which a desktop holding the
- * workspace's memories live waits for (`workspaceMemoriesLive`).
+ * workspace's memories live waits for (`workspaceMemoriesRead`).
  *
  * A member's own client keeps a memory in their words and searches them
  * (`saveMemory`, `searchMemories`), the member MCP server's `save_memory`

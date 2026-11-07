@@ -21,8 +21,8 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { readPageById } from "@repo/database/models/task-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
+import { readPageById } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   deleteTask,
@@ -42,6 +42,7 @@ import {
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@repo/features/agent-runtime-models";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   ADDED_REPOSITORY_CHECKOUT,
   AGENT_ARCHIVER,
@@ -113,7 +114,6 @@ import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "../tasks/
 import { createTaskAsked } from "../tasks/task-create-relation.js";
 import { archivedAgent, changedAgent } from "./agent-change.js";
 import { agentStarterName, controlsAgent } from "./agent-reach.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { addAgentRepository, addedRepositoryLine } from "./coder-host/agent-repository-add.js";
 import {
@@ -133,8 +133,8 @@ import {
 import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
 import { stoppedAgent, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import type { AgentSessions } from "./eve-host/eve-sessions.js";
 import { deploymentSandboxStops } from "./session-sandboxes.js";
+import type { AgentSessions } from "./sessions/agent-sessions.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -244,11 +244,11 @@ import {
  * agents, and an unarchive puts it back to work (`tasks/archive-settle.ts`);
  * a change already standing answers as done.
  * A stop takes the one path the Stop button's does (`coder-host/stop.ts`'s `stoppedAgent`):
- * eve's cancel of the turn under way, named by eve's own id for it, then the
+ * the harness's cancel of the turn under way, named by its own id for it, then the
  * row's stamp, which `list_agents` then reads as canceled. The agent stays
  * as it was, its transcript and branch kept, and a later message starts a
  * new turn. A Stop already standing on a turn still ending answers as done,
- * so a call eve runs again cancels nothing twice; an agent already idle is
+ * so a call run again cancels nothing twice; an agent already idle is
  * answered as it stands and nothing changes; the caller itself is never
  * stopped.
  * A page read finds a page an agent showed on any task of the caller's
@@ -579,10 +579,17 @@ export const AGENT_CALLER = {
  * said: a coding agent, acting for the member who started it, on its own
  * task; or a member, as an outside agent acts for them through the member
  * MCP server (`../member-mcp/`) on a token minted to an OAuth client, in the
- * one workspace the call is about, on no task and as no agent.
+ * one workspace the call is about, on no task and as no agent. A coding
+ * agent carries whether it reaches tasks' descriptions, read once with the
+ * rest of its standing by the catalog (`tool-catalog/gates.ts`); a member's
+ * own Task descriptions are read where a tool needs them.
  */
 export type AgentCaller =
-  | { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent }
+  | {
+      readonly kind: typeof AGENT_CALLER.AGENT;
+      readonly agent: Agent;
+      readonly descriptionsOn: boolean;
+    }
   | {
       readonly kind: typeof AGENT_CALLER.MEMBER;
       readonly userId: string;
@@ -594,11 +601,11 @@ export type AgentCaller =
 export interface AgentCall {
   readonly caller: AgentCaller;
   /** The agents' sessions as the deployment acting for the caller's member. */
-  readonly eve: AgentSessions;
+  readonly agentSessions: AgentSessions;
   /** The agents' sessions as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it. */
-  readonly eveAs: (account: string) => AgentSessions;
+  readonly agentSessionsAs: (account: string) => AgentSessions;
   readonly writer: Effect.Effect<StoreWriter>;
-  /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
+  /** The key a message or a start is made under: the call's key (`workspace-mcp/call-key.ts`), so a call run again sends or starts once. */
   readonly clientKey: string;
   /** How a start from another agent summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out unsummarized. */
   readonly summaryModel?: SummaryModelOf | undefined;
@@ -607,7 +614,7 @@ export interface AgentCall {
 /** What a read of the agent tools runs under: who calls, alone, since a read reaches no session, writes nothing, and keys nothing. */
 export type AgentReadCall = Pick<AgentCall, "caller">;
 
-/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
+/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to the agents' sessions, and the catalog a start's choice is checked against. */
 export type AgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 const AGENT_ID = describeWire(
@@ -1476,7 +1483,7 @@ export const callerWorkspace = (
         member ? Option.some(caller.workspaceId) : Option.none(),
       );
 
-/** The agent's native runtime and payer, which decide the models it may move to; none on eve. */
+/** The agent's native runtime and payer, which decide the models it may move to; none on the retired runtime. */
 const agentRouteOf = (agent: Agent) =>
   Effect.map(nativeRouteOfReached(agent.conversationId), Option.getOrUndefined);
 
@@ -2040,7 +2047,7 @@ const runsOnOfStart = Effect.fnUntraced(function* (
  * start did before `create_task` made tasks, is refused with where to go
  * now, rather than started on the caller's own task. Note that a start from another agent
  * can take tens of seconds, a copy of its work and a summary of its
- * transcript among them, which the call is let run: eve's workflow step runs
+ * transcript among them, which the call is let run: our MCP server's function runs
  * a tool to the function's own bound, and the copy and the summary each hold
  * to their own timeouts well inside it (`snapshot.ts`, `replay-summary.ts`).
  */
@@ -2060,7 +2067,7 @@ export function runStartAgent(
     return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NEW_TASK));
   }
   const { model, effort, from } = asked.success;
-  const { caller, eve } = call;
+  const { caller, agentSessions } = call;
   const refused = startInputRefusal(caller, asked.success);
   if (refused !== undefined) return Effect.succeed(agentToolRejected(refused));
   const prompt = asked.success.prompt ?? asked.success.task;
@@ -2123,7 +2130,7 @@ export function runStartAgent(
       const calling = callerAgent(caller);
       const note =
         calling === undefined ? asked.success.note : startedByNote(calling, asked.success.note);
-      const started = yield* startAgent(Effect.succeed(eve), userId, {
+      const started = yield* startAgent(Effect.succeed(agentSessions), userId, {
         ...place,
         idempotencyKey: call.clientKey,
         choice,
@@ -2491,7 +2498,7 @@ function stopStands(turn: AgentLatestTurn | undefined): boolean {
 /**
  * The agent stopped by the Stop every surface makes (`stoppedAgent`) under
  * the call's key, and where it stands: whether it was stopped, by this call
- * now or when it first ran, by eve taking its cancel, or by a Stop already
+ * now or when it first ran, by the harness taking its cancel, or by a Stop already
  * standing on the turn it stood on as the call began and still stands on,
  * and its status read after. A call run again finds the turn it stopped by
  * its key and cancels nothing, so a turn begun since, by a message the agent
@@ -2722,7 +2729,7 @@ function addedRepository(
       const calling = callerAgent(caller);
       const added = yield* Effect.result(
         addAgentRepository({ userId, agent: calling }, agent, asked, {
-          eve: call.eve,
+          agentSessions: call.agentSessions,
           writer: call.writer,
           clientKey: call.clientKey,
         }),

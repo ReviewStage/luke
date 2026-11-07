@@ -23,14 +23,15 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
+import { seedLanded } from "./landed-reads.js";
 
 /**
  * A client as the Testing guide makes one, a failed read not tried again,
  * sending as the window's does whatever the online mark says.
- * Note that the document's query is never fetched here, because its
- * `queryFn` reads the window's own registry rather than the test's: the
- * test's subscription (`AppStateSubscription`) writes it into this client
- * alone, as a test seeds a query with `setQueryData`.
+ * Note that no reader fetches the document's query here, because a case
+ * that seeds it with `setQueryData` draws on what it seeded until the test's
+ * subscription (`AppStateSubscription`) writes what it reads, and a case
+ * that waits on the window's first read asks for it itself (`readAppState`).
  */
 function freshQueryClient(): QueryClient {
   const client = new QueryClient({
@@ -41,6 +42,7 @@ function freshQueryClient(): QueryClient {
   });
   client.setQueryDefaults(appStateQuery.queryKey, { enabled: false });
   if (heldForFile !== undefined) client.setQueryData(appStateQuery.queryKey, heldForFile);
+  seedLanded(client);
   return client;
 }
 
@@ -62,8 +64,8 @@ const OnTestClient = createContext(false);
 
 /**
  * The document's one subscription for the tree, refused under another: two
- * would each write their own registry's document, and the later write would
- * stand over the one the test meant.
+ * would each write what they read, and the later write would stand over
+ * the one the test meant.
  */
 function TestAppStateSubscription(): ReactElement {
   if (useContext(OnTestClient)) {
@@ -74,8 +76,8 @@ function TestAppStateSubscription(): ReactElement {
 
 /**
  * `element` on the test's Query client, with the document's one subscription
- * (`AppStateSubscription`) writing each reading of the registry it stands
- * under into that client, and the live reads' (`LiveReadSubscription`)
+ * (`AppStateSubscription`) writing each reading of the bridge into that
+ * client, and the live reads' (`LiveReadSubscription`)
  * keeping them current and followed, as the window's root does: for a test drawing
  * under the registry React provides when none is given.
  */
@@ -122,6 +124,15 @@ export function testQueryClientNow(): QueryClient {
  */
 export function writeAppState(document: AppStateSnapshot): void {
   testQueryClient.setQueryData(appStateQuery.queryKey, document);
+}
+
+/**
+ * Reads the document into the test's Query client as the window's root does,
+ * with `ensureQueryData`: the bridge's document, staged in a fixture run. For
+ * a case that waits on the window's first read before it draws.
+ */
+export function readAppState(): Promise<AppStateSnapshot> {
+  return testQueryClient.ensureQueryData(appStateQuery);
 }
 
 /**

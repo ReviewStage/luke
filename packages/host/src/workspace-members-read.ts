@@ -24,8 +24,8 @@
 
 import type { LIVE_READ } from "@repo/features/live-wire";
 import {
+  WORKSPACE_MEMBERS_READ,
   type WorkspaceMembersLiveAnswer,
-  workspaceMembersLiveRowsSchema,
   workspaceMembersOfLiveRows,
 } from "@repo/features/workspace-live";
 import {
@@ -55,7 +55,7 @@ import {
 import { followTakingRows, restarting } from "./live-follow.js";
 
 /** The people's rows as the read's statement answers them: each member's, the plugin's role text among it, and who left. */
-type PeopleRows = typeof workspaceMembersLiveRowsSchema.Type;
+type PeopleRows = typeof WORKSPACE_MEMBERS_READ.rows.Type;
 
 /** A member's row as the read's statement answers it. */
 type MemberRow = PeopleRows["members"][number];
@@ -198,7 +198,7 @@ function followPeople(
         yield* followTakingRows(
           { poll: (after) => seal(true, after) },
           first,
-          workspaceMembersLiveRowsSchema,
+          WORKSPACE_MEMBERS_READ.rows,
           (rows) =>
             Effect.gen(function* () {
               yield* people.answer([{ workspaceId, ...rows }]);

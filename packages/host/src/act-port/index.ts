@@ -32,10 +32,6 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
-import {
-  type MacCommandProceduresDependencies,
-  macCommandProcedures,
-} from "./mac-command-procedures.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
@@ -60,7 +56,6 @@ export { browserLiveProcedures } from "./browser-live-procedures.js";
 export { declaredActProcedures, declaredAnswer } from "./declared-acts.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
-export { portForwardProcedures } from "./port-forward-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
@@ -111,12 +106,12 @@ export interface ActPortDependencies {
   /** Every declared act's handler, which the port answers directly (`HostAssembly`'s). */
   readonly acts: HostActTable;
   readonly agentInbox: AgentInboxProceduresDependencies;
-  readonly agents: AgentProceduresDependencies;
+  /** The agents' holds and notices; the acts they note are answered from `acts`. */
+  readonly agents: Omit<AgentProceduresDependencies, "acts">;
   readonly automations: AutomationProceduresDependencies;
   readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
-  readonly macCommands: MacCommandProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -144,15 +139,14 @@ export function createActPortHandler<Sender>(
     ...accountAskProcedures(dependencies.accountAsks),
     ...declaredActProcedures(HOST_ACTS, dependencies.acts),
     ...agentInboxProcedures(dependencies.agentInbox),
-    ...agentProcedures(dependencies.agents),
+    ...agentProcedures({ ...dependencies.agents, acts: dependencies.acts }),
     ...automationProcedures(dependencies.automations),
     ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
-    ...macCommandProcedures(dependencies.macCommands),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
-    ...workspaceProcedures(dependencies.workspaces),
+    ...workspaceProcedures(dependencies.workspaces, dependencies.acts),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });
 }

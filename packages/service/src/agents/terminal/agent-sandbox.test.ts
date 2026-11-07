@@ -19,7 +19,6 @@ import {
   sandboxListRefusal,
   sessionAnswered,
 } from "../../testing/vercel-sandbox-fake.js";
-import { agentDriveName } from "../agent-drive.js";
 import { openAgentSandbox } from "../agent-sandbox-open.js";
 import { AgentImage } from "../coder-host/agent-image.js";
 import { SandboxUnavailable, vercelSandboxApi } from "../vercel-sandbox-api.js";
@@ -299,7 +298,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
-    "a resume of a sandbox under its session's name whose snapshot is gone makes it again under that name on the session's drive, with its tags, the agent's user in it, and answers it running",
+    "a resume of a sandbox under its session's name whose snapshot is gone makes it again under that name, with its tags, the agent's user in it, and answers it running",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -308,7 +307,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const tags = { sessionId: SESSION, agentId: "agent-fixture" };
         const opened = yield* Effect.gen(function* () {
           const api = yield* vercelSandboxApi(async () => fixtureToken());
-          yield* api.getOrCreateDrive(agentDriveName(SESSION));
           return yield* openAgentSandbox(api, { sessionId: SESSION, tags, vcpus: undefined });
         }).pipe(Effect.provide(Layer.merge(fake.layer, image)));
         const [expired] = fake.sandboxes;
@@ -334,8 +332,8 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const remade = fake.sandboxes.at(-1);
         assert.ok(remade !== undefined && remade !== expired);
         assert.deepEqual(
-          [expired.deleted, remade.deleted, remade.name, remade.tags, remade.mounts],
-          [true, false, opened.sandbox.name, tags, expired.mounts],
+          [expired.deleted, remade.deleted, remade.name, remade.tags],
+          [true, false, opened.sandbox.name, tags],
         );
         assert.equal(fake.runs.filter(userMade).length, usersBefore + 1);
       }),
@@ -437,26 +435,23 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
-    "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else, then taken off whole",
+    "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else",
     () =>
       Effect.gen(function* () {
         const api = vercel("running");
         const session = yield* ownSession;
 
         yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-          Effect.andThen(
-            sandbox.setCredential(session, {
-              token: Redacted.make(MEMBER_TOKEN),
-              fullName: REPOSITORY,
-              access: {
-                kind: GITHUB_ACCESS.TOKEN,
-                githubLogin: "octo-member",
-                githubUserId: "4242",
-                markInvalid: Effect.void,
-              },
-            }),
-            sandbox.withdrawCredential(session),
-          ),
+          sandbox.setCredential(session, {
+            token: Redacted.make(MEMBER_TOKEN),
+            fullName: REPOSITORY,
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: "octo-member",
+              githubUserId: "4242",
+              markInvalid: Effect.void,
+            },
+          }),
         ).pipe(Effect.provide(api.layer));
 
         const basic = `Basic ${Buffer.from(`octo-member:${MEMBER_TOKEN}`).toString("base64")}`;
@@ -483,7 +478,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
               ],
             },
           },
-          { mode: "allow-all" },
         ]);
       }),
   );

@@ -40,7 +40,7 @@ import {
  * `read_inbox`, as is the `mcp__luke__` a transcript stored before the
  * server's rename names it by) and its answer read as the JSON that tool answers; a call
  * to an integration's own server (`mcp__linear__list_issues`) is stored as
- * eve's call of that integration's tool is, so it draws with the service's
+ * the retired runtime's call of that integration's tool is, so it draws with the service's
  * mark and the tool's own name; every other call keeps the CLI's own name,
  * and it and an integration's call keep as their answer the text the model
  * read. A turn also says how it found the plan that pays: a `result` that
@@ -209,7 +209,7 @@ const MCP_SERVER_SEPARATOR = "__";
 /**
  * The name and input a call is stored under: our tool's own for a call
  * to our MCP server; for a call to an integration's own server, its
- * integration's fixed name and envelope, as eve's nested call of the tool is
+ * integration's fixed name and envelope, as the retired runtime's nested call of the tool is
  * stored (`storedServerCall`); the CLI's otherwise.
  */
 function storedClaudeCodeCall(
@@ -254,9 +254,9 @@ function answerText(content: string | readonly WireValue[] | undefined, pictures
  * A tool's answer as the transcript settles its call: an error the CLI
  * flagged is a refusal carrying the text, and any other answer is available,
  * kept as the text a CLI tool answered, or read as the JSON a tool of our
- * MCP server answers, so its status word counts as the eve relay counts it.
+ * MCP server answers, so its status word counts as the retired runtime's relay counted it.
  * A CLI tool's pictures stand in as `[image]`; our tools' pictures are left
- * out, as eve's relay leaves out a look's picture, so its JSON still reads.
+ * out, as the retired runtime's relay left out a look's picture, so its JSON still reads.
  */
 function settlementOf(
   storedName: string,
@@ -274,7 +274,7 @@ function settlementOf(
 /**
  * What one model call read and wrote, as the context ring reads it. Note
  * that the input the provider counts excludes what the prefix cache read and
- * what was written to it, while the ring's input counts both, as eve's does.
+ * what was written to it, while the ring's input counts both.
  */
 function contextOf(usage: typeof MessageUsageSchema.Type): NativeContextUsage {
   const cachedInputTokens = counted(usage.cache_read_input_tokens);

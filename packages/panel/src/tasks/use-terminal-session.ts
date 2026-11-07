@@ -1,5 +1,3 @@
-import { useAtomSet } from "@effect/atom-react";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_REFUSAL,
@@ -12,39 +10,38 @@ import {
   type TerminalState,
 } from "@repo/features/terminal-model";
 import { ACT_KIND } from "@repo/host/acts";
+import { useWait } from "@repo/ui";
 import {
-  isTerminalTab,
   type LocalStripTab,
   localTab,
+  STRIP_TAB_KIND,
   sameTab,
   type TerminalStripTab,
   terminalTab,
 } from "@repo/ui/tab-strip-model";
-import { Duration, Effect } from "effect";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { absurd, Duration, Effect } from "effect";
 import {
+  createContext,
   useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { askAct, tellAct } from "../act.js";
-import { rendererRuntime } from "../renderer-runtime.js";
-import { type HeldShell, nextShellTitle, terminalsHeld } from "./terminal-held.js";
+import { type HeldShell, nextShellTitle, TerminalsHeld } from "./terminal-held.js";
 import {
-  endTerminalSessions,
   SERVICE_UNREACHED,
   type ShellLink,
   TERMINAL_KIND,
   type TerminalKind,
   TerminalSession,
-  terminalSession,
+  TerminalSessions,
 } from "./terminal-session.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
+import { useSandboxOpen } from "./use-workspace-agents.js";
 
 /**
  * use-terminal-session.ts -- one terminal tab's shell, in its agent's cloud sandbox or on this Mac in the agent's mirror: opened at the screen's first size and attached for the tab's life; and the doors that open such a tab and end its shell as it closes.
@@ -59,14 +56,51 @@ import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
  * with the page. Closing the tab ends its shell, wherever it runs.
  *
  * A shell that ended takes any key for a new one in the same tab. The bar's
- * action (its click, or Return) asks again for what could not be reached,
- * or resumes a stopped sandbox, which nothing but that resumes. While the
- * agent has not opened its sandbox, a shown cloud tab asks again every few
- * seconds.
+ * action (its click, or Return) asks again for what could not be reached. A
+ * cloud tab shown over a stopped sandbox resumes it, saying it is connecting
+ * meanwhile, and a hidden one waits until it is shown, so a reload never
+ * wakes every tab's sandbox. While the agent has not opened its sandbox, a
+ * shown cloud tab waits on the task list, which carries the agent's
+ * sandbox live (`AgentSummary.sandboxOpen`), and asks again as it opens;
+ * one the service still answers as starting after that, its sandbox
+ * tagged with the session but not yet running, asks again after a wait
+ * that doubles to thirty seconds, as a failed ask.
+ *
+ * A window holds its terminals in one `Terminals`, their lists and their
+ * sessions, which every door here reads through `TerminalsContext`: the
+ * window's own unless a provider above hands another, as a test does to
+ * stand as a window of its own.
  */
 
-/** How often a shown cloud tab waiting on an agent that has not opened its sandbox asks again. */
-const STARTING_RETRY = Duration.seconds(5);
+/** How long a shown cloud tab waits to ask again where the sandbox the list says opened still answers as starting. */
+const OPENING_RETRY = {
+  /** The first wait, doubling on each ask that still answers starting. */
+  FIRST: Duration.seconds(1),
+  /** The longest wait. */
+  LONGEST: Duration.seconds(30),
+} as const;
+
+/** The wait before the ask after `asked` asks that still answered starting, doubling to the longest. */
+function openingWait(asked: number): Duration.Duration {
+  return Duration.min(
+    Duration.times(OPENING_RETRY.FIRST, 2 ** Math.max(asked - 1, 0)),
+    OPENING_RETRY.LONGEST,
+  );
+}
+
+/** The terminals one window holds: their lists, kept across a reload, and their sessions, let go as the window closes. */
+export interface Terminals {
+  readonly held: TerminalsHeld;
+  readonly sessions: TerminalSessions;
+}
+
+/** A window's terminals, its lists read from what it kept before a reload. */
+export function makeTerminals(): Terminals {
+  return { held: new TerminalsHeld(), sessions: new TerminalSessions() };
+}
+
+/** The terminals the doors under it read: the window's own unless a provider hands others. */
+export const TerminalsContext = createContext<Terminals>(makeTerminals());
 
 /** A cloud state from the host's word for it. */
 function cloudStateOf(
@@ -99,8 +133,9 @@ function cloudStateOf(
  * Where a refusal leaves a cloud tab: a stopped sandbox's bar, the wait for
  * an agent that has not opened its sandbox, or the bar that asks again for a
  * shell or agent not found, a sandbox that did not answer, or one whose
- * saved files are gone, saying which; nothing for an agent archived or
- * retired, whose tab closes, as its Changes tab does.
+ * saved files are gone, saying which; the service unreached for no answer;
+ * nothing for an agent archived or retired, whose tab closes, as its
+ * Changes tab does.
  */
 function refusedState(refused: TerminalRefusal): TerminalState | undefined {
   switch (refused) {
@@ -114,6 +149,8 @@ function refusedState(refused: TerminalRefusal): TerminalState | undefined {
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SANDBOX };
     case TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE:
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SNAPSHOT_GONE };
+    case TERMINAL_REFUSAL.UNANSWERED:
+      return SERVICE_UNREACHED;
     case TERMINAL_REFUSAL.GONE:
       return undefined;
   }
@@ -127,16 +164,13 @@ function refusedOrGone(refused: TerminalRefusal, onGone: () => void): TerminalSt
 }
 
 /** The shell's id written onto its terminal in the window's list, so a reload attaches to it again. */
-function holdShellId(
-  registry: AtomRegistry.AtomRegistry,
-  agentId: string,
-  shell: string,
-  terminal: string,
-): void {
-  const held = terminalsHeld[TERMINAL_KIND.CLOUD](agentId);
-  registry.set(
-    held,
-    registry.get(held).map((each) => (each.shell === shell ? { ...each, terminal } : each)),
+function holdShellId(held: TerminalsHeld, agentId: string, shell: string, terminal: string): void {
+  held.set(
+    TERMINAL_KIND.CLOUD,
+    agentId,
+    held
+      .of(TERMINAL_KIND.CLOUD, agentId)
+      .map((each) => (each.shell === shell ? { ...each, terminal } : each)),
   );
 }
 
@@ -147,7 +181,7 @@ function holdShellId(
  * the tab, as for an agent archived.
  */
 function cloudLink(
-  registry: AtomRegistry.AtomRegistry,
+  held: TerminalsHeld,
   agentId: string,
   shell: string,
   onGone: () => void,
@@ -156,8 +190,8 @@ function cloudLink(
     agentId,
     open: async () => {
       const made = await askAct(ACT_KIND.TERMINAL_CREATE, { agentId });
-      if ("refused" in made) return { state: refusedOrGone(made.refused, onGone) };
-      holdShellId(registry, agentId, shell, made.terminal.id);
+      if ("failure" in made) return { state: refusedOrGone(made.failure, onGone) };
+      holdShellId(held, agentId, shell, made.terminal.id);
       return { terminalId: made.terminal.id };
     },
     attach: (terminalId, size) =>
@@ -169,7 +203,7 @@ function cloudLink(
     ended: (session) => session.replace(),
     resume: async () => {
       const resumed = await askAct(ACT_KIND.TERMINAL_RESUME, { agentId });
-      return "refused" in resumed ? refusedOrGone(resumed.refused, onGone) : undefined;
+      return "failure" in resumed ? refusedOrGone(resumed.failure, onGone) : undefined;
     },
     close: (terminalId) => tellAct(ACT_KIND.TERMINAL_KILL, { agentId, terminalId }),
   };
@@ -222,9 +256,14 @@ function shellOf(tab: ShellTab): {
   readonly agentId: string;
   readonly shell: string;
 } {
-  return isTerminalTab(tab)
-    ? { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell }
-    : { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.TERMINAL:
+      return { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell };
+    case STRIP_TAB_KIND.LOCAL:
+      return { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+    default:
+      return absurd(tab);
+  }
 }
 
 /** The tab of one of an agent's terminals of the kind. */
@@ -235,15 +274,10 @@ function tabOf(kind: TerminalKind, agentId: string, held: HeldShell): ShellTab {
 }
 
 /** A new terminal of the kind minted in the window's list after the agent's others, and its tab. */
-function mintedTab(
-  registry: AtomRegistry.AtomRegistry,
-  kind: TerminalKind,
-  agentId: string,
-): ShellTab {
-  const heldAtom = terminalsHeld[kind](agentId);
-  const held = registry.get(heldAtom);
-  const made: HeldShell = { shell: crypto.randomUUID(), title: nextShellTitle(kind, held) };
-  registry.set(heldAtom, [...held, made]);
+function mintedTab(held: TerminalsHeld, kind: TerminalKind, agentId: string): ShellTab {
+  const shells = held.of(kind, agentId);
+  const made: HeldShell = { shell: crypto.randomUUID(), title: nextShellTitle(kind, shells) };
+  held.set(kind, agentId, [...shells, made]);
   return tabOf(kind, agentId, made);
 }
 
@@ -253,28 +287,17 @@ function mintedTab(
  * Show terminal beside the Inbox, which opens it on the agent's task.
  */
 export function useCloudTerminalTab(): (agentId: string) => ShellTab {
-  const registry = useContext(RegistryContext);
+  const { held } = useContext(TerminalsContext);
   return useCallback(
     (agentId) => {
-      const newest = registry.get(terminalsHeld[TERMINAL_KIND.CLOUD](agentId)).at(-1);
+      const newest = held.of(TERMINAL_KIND.CLOUD, agentId).at(-1);
       return newest === undefined
-        ? mintedTab(registry, TERMINAL_KIND.CLOUD, agentId)
+        ? mintedTab(held, TERMINAL_KIND.CLOUD, agentId)
         : tabOf(TERMINAL_KIND.CLOUD, agentId, newest);
     },
-    [registry],
+    [held],
   );
 }
-
-/** What runs once a wait has passed. Note that it is wrapped, because an atom's setter calls a bare function as an update. */
-interface AfterWait {
-  readonly run: () => void;
-}
-
-/** A wait, as an atom whose call runs what it is handed once it has passed, a later call standing in for one still waiting. */
-const waitAtom = (wait: Duration.Duration) =>
-  rendererRuntime.fn((after: AfterWait) =>
-    Effect.sleep(wait).pipe(Effect.andThen(Effect.sync(after.run))),
-  );
 
 export function useTerminalTabSession(
   tab: ShellTab,
@@ -282,7 +305,7 @@ export function useTerminalTabSession(
   /** Closes the tab, once the service says the agent was archived or retired. */
   onGone: () => void,
 ): TerminalView {
-  const registry = useContext(RegistryContext);
+  const { held, sessions } = useContext(TerminalsContext);
   const { kind, agentId, shell } = shellOf(tab);
   // Note that the close is read through a ref, because the tab hands a new one each render, and its terminal outlives it.
   const gone = useRef(onGone);
@@ -291,30 +314,39 @@ export function useTerminalTabSession(
   });
   const session = useMemo(
     () =>
-      terminalSession(registry, kind, agentId, shell, () =>
+      sessions.session(kind, agentId, shell, () =>
         kind === TERMINAL_KIND.CLOUD
           ? new TerminalSession(
-              cloudLink(registry, agentId, shell, () => gone.current()),
-              registry
-                .get(terminalsHeld[TERMINAL_KIND.CLOUD](agentId))
-                .find((each) => each.shell === shell)?.terminal,
+              cloudLink(held, agentId, shell, () => gone.current()),
+              held.of(TERMINAL_KIND.CLOUD, agentId).find((each) => each.shell === shell)?.terminal,
             )
           : new TerminalSession(localLink(agentId), undefined),
       ),
-    [registry, kind, agentId, shell],
+    [held, sessions, kind, agentId, shell],
   );
   const view = useTerminalView(session, shown);
-  const [retryAtom] = useState(() => waitAtom(STARTING_RETRY));
-  const retryLater = useAtomSet(retryAtom);
-  // A shown tab waiting on the agent to open its sandbox asks again a while on.
+  const sandboxOpen = useSandboxOpen(kind === TERMINAL_KIND.CLOUD ? agentId : null);
+  // Note that a later ask stands in for one still waiting, and the tab let go calls it off.
+  const retry = useWait();
+  // How many times this session asked since the list said the sandbox opened.
+  const askedOpen = useRef<{ readonly session: typeof session; readonly asked: number }>(undefined);
+  // A shown tab waiting on the agent to open its sandbox asks again as the task list says it opened, and after a wait where it still starts.
   useEffect(() => {
-    if (!shown || view.state.kind !== TERMINAL_STATE.STARTING) return;
-    retryLater({
-      run: () => {
-        if (session.state.kind === TERMINAL_STATE.STARTING) session.connect();
-      },
-    });
-  }, [shown, view.state, session, retryLater]);
+    if (!shown || sandboxOpen !== true || view.state.kind !== TERMINAL_STATE.STARTING) return;
+    const asked = askedOpen.current?.session === session ? askedOpen.current.asked : 0;
+    askedOpen.current = { session, asked: asked + 1 };
+    if (asked === 0) return session.connect();
+    retry.start(
+      Effect.andThen(
+        Effect.sleep(openingWait(asked)),
+        Effect.sync(() => {
+          if (session.state.kind === TERMINAL_STATE.STARTING) session.connect();
+        }),
+      ),
+    );
+    // Note that a tab hidden calls the ask off, so only a tab on screen asks again.
+    return retry.stop;
+  }, [shown, sandboxOpen, view.state, session, retry]);
   return view;
 }
 
@@ -332,16 +364,16 @@ export function useOpenTerminalTab(
   sidePanel: Pick<SidePanelControl, "onChoose" | "terminals" | "locals" | "viewedAt">,
   onShown: () => void,
 ): (agentId: string, fresh: boolean) => void {
-  const registry = useContext(RegistryContext);
+  const { held: kept } = useContext(TerminalsContext);
   const { onChoose, terminals, locals, viewedAt } = sidePanel;
   return useCallback(
     (agentId, fresh) => {
-      const held = registry.get(terminalsHeld[kind](agentId));
+      const held = kept.of(kind, agentId);
       const open = (kind === TERMINAL_KIND.CLOUD ? terminals : locals).filter(
         (tab) => shellOf(tab).agentId === agentId,
       );
       if (fresh || held.length === 0) {
-        onChoose(mintedTab(registry, kind, agentId));
+        onChoose(mintedTab(kept, kind, agentId));
       } else if (open.length > 0) {
         const at = (tab: ShellTab) =>
           viewedAt.find((each) => sameTab(each.tab, tab))?.at ?? Number.NEGATIVE_INFINITY;
@@ -351,7 +383,7 @@ export function useOpenTerminalTab(
       }
       onShown();
     },
-    [kind, registry, onChoose, terminals, locals, viewedAt, onShown],
+    [kind, kept, onChoose, terminals, locals, viewedAt, onShown],
   );
 }
 
@@ -360,17 +392,17 @@ export function useOpenTerminalTab(
  * and its session, screen, and shell let go, which nothing brings back.
  */
 export function useEndTerminalTab(): (tab: ShellTab) => void {
-  const registry = useContext(RegistryContext);
+  const { held, sessions } = useContext(TerminalsContext);
   return useCallback(
     (tab) => {
       const { kind, agentId, shell } = shellOf(tab);
-      const held = terminalsHeld[kind](agentId);
-      registry.set(
-        held,
-        registry.get(held).filter((each) => each.shell !== shell),
+      held.set(
+        kind,
+        agentId,
+        held.of(kind, agentId).filter((each) => each.shell !== shell),
       );
-      endTerminalSessions(registry, kind, agentId, [shell]);
+      sessions.end(kind, agentId, [shell]);
     },
-    [registry],
+    [held, sessions],
   );
 }

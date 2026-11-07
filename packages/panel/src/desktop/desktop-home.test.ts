@@ -329,6 +329,28 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
   assert.ok(document.activeElement === first, "↑ goes back to the Inbox's item");
 });
 
+test("a right-click on an Inbox row opens the Inbox row's own menu, and opens no item", async () => {
+  const { page, opened } = mount();
+  const press = await vi.waitFor(() => row(page, RETRY_429.title));
+  act(() => {
+    press.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 12, clientY: 8 }),
+    );
+  });
+
+  const words = [
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) [role="menuitem"]'),
+  ].map((entry) => entry.textContent ?? "");
+  // Note that the fixture's item is read, so its row offers to mark it unread.
+  for (const offered of ["Copy link", "Mark as unread", "Remind me", "Resolve"]) {
+    assert.ok(
+      words.some((each) => each.startsWith(offered)),
+      `the menu offers ${offered}: ${words.join(", ")}`,
+    );
+  }
+  assert.deepEqual(opened.items, []);
+});
+
 test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
   // Note that the feed that could not be read comes first, since the test's one client keeps a feed that answered, as the window does.
   const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);

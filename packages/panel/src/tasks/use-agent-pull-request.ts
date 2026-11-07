@@ -11,9 +11,8 @@ import { appStateQuery } from "../use-app-state.js";
  * use-agent-pull-request.ts -- what one agent published, as its tab draws it: the pull request the task list carries for it, and its branch as the host holds it while the tab shows.
  *
  * The service writes what an agent published on its row as it happens, the
- * agent's own `open_pull_request` among it, GitHub's webhook, and the
- * minute's sweep of a token's pull requests, and the task list carries it
- * (`useListedPullRequests`), so the tab draws a pull request the agent
+ * agent's own `open_pull_request` among it and GitHub's webhook, and the
+ * task list carries it (`useListedPullRequests`), so the tab draws a pull request the agent
  * opened mid-run without a read of its own. What the row leaves out is the
  * branch the agent pushed and its repository, which the dock's copies and
  * the branch's chip name: the host holds them while the tab shows

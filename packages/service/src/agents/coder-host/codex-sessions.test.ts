@@ -10,6 +10,7 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
+import { readAgentRunnerRecord } from "@repo/database/models/agent-runner-record";
 import {
   type Agent,
   createAgent,
@@ -30,8 +31,6 @@ import {
   setPlanStatus,
   setProviderKeyStatus,
 } from "@repo/database/models/provider-key-store";
-import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { deviceAgentLine } from "@repo/database/schemas/device-agent";
@@ -57,7 +56,6 @@ import {
 } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { sweepCodexPlanSwaps } from "../../maintenance/codex-plan-sweep.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import {
   launchBearer,
@@ -68,14 +66,14 @@ import {
 } from "../../testing/runner-sandbox-fake.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  PLAN_REFUSAL,
-} from "../eve-host/eve-sessions.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import {
+  PLAN_REFUSAL,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+} from "../sessions/agent-sessions.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { AgentImage } from "./agent-image.js";
@@ -112,8 +110,8 @@ const TOKEN_URL = "https://app.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
 /** The ChatGPT workspace a device-code login's ID token names. */
 const WORKSPACE = "chatgpt-workspace-fixture";
-/** Codex's ChatGPT backend, where the plan's token is set: its host, and its paths, the one place on that host it is set. */
-const CODEX_BACKEND = { HOST: "chatgpt.com", PATH: "/backend-api/codex/" } as const;
+/** Codex's ChatGPT backend, where a sandbox's runner sends the plan's token itself. */
+const CODEX_BACKEND_HOST = "chatgpt.com";
 
 function ring(): KeyRing {
   const parsed = parseKeyRing(Redacted.make(KEK));
@@ -255,10 +253,9 @@ const openAiRules = (api: ReturnType<typeof runnerSandboxApi>, host = "api.opena
   return policy?.allow?.[host];
 };
 
-/** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's, under the path given where one is. */
-const swapRule = (placeholder: string, credential: string, startsWith?: string) => ({
+/** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's. */
+const swapRule = (placeholder: string, credential: string) => ({
   match: {
-    ...(startsWith === undefined ? undefined : { path: { startsWith } }),
     headers: [{ key: { exact: "authorization" }, value: { exact: `Bearer ${placeholder}` } }],
   },
   transform: [{ headers: { authorization: `Bearer ${credential}` } }],
@@ -282,7 +279,7 @@ const turnUnderWay = (userId: string, agent: Agent) =>
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     yield* writer.enqueueTurn(
       { userId, conversationId: agent.conversationId },
-      { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+      { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
     );
     return turnId;
   });
@@ -341,7 +338,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
               Effect.provide(services(runnerSandboxApi())),
             );
             const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-            assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+            assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
             const db = yield* Database;
             const [row] = yield* db
               .select()
@@ -388,7 +385,119 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "open launches the runner in its Codex mode on the account's plan toward Codex's ChatGPT backend and its workspace, its token held at the firewall on that backend alone behind the placeholder its token command answers, with the bearer's placeholder in its environment alone",
+    "a launch's fingerprint digests the credential its machine handed it as it did before the machine decided: the key itself where it is held at a sandbox's firewall or handed to a Mac, and on the plan no credential at all, which the runner asks our route for",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const apiKey = "sk-proj-fixture-account-key";
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
+        );
+        yield* signIn(userId, 60);
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring(), owner, Redacted.make(apiKey)),
+          "sk-proj…-key",
+          null,
+          new Date(0),
+        );
+        const deviceId = randomUUID();
+        yield* registerDevice(userId, {
+          id: deviceId,
+          name: "Studio",
+          ...DEVICE_LAYOUT,
+          codexExecutable: "/Users/fixture/Library/Application Support/Vespin/codex/bin/codex",
+        });
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const agentOn = (
+          payer: (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER],
+          machine: (typeof AGENT_MACHINE)[keyof typeof AGENT_MACHINE],
+        ) =>
+          Effect.map(
+            createAgent(userId, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "openai/gpt-6.1-sol",
+              effort: "xhigh",
+              descriptionSnapshot: "# Teammate invitations\n",
+              prompt: null,
+              repository: null,
+              runtime: CONVERSATION_RUNTIME.CODEX,
+              payer,
+              machine,
+              ...(machine === AGENT_MACHINE.DEVICE ? { deviceId } : undefined),
+            }),
+            (started) => Option.getOrThrow(started).agent,
+          );
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(
+          Layer.provide(
+            fakeHttpClientLayer(() => assert.fail("a local launch reaches no network")),
+          ),
+        );
+        /** The fingerprint the agent's first launch recorded: in its sandbox's runner record, or in its Mac's launch line. */
+        const fingerprintOf = (agent: Agent) =>
+          Effect.gen(function* () {
+            const local = agent.machine === AGENT_MACHINE.DEVICE;
+            const sessions = yield* sessionsFor(userId).pipe(
+              local ? Effect.provide(machines) : (effect) => effect,
+              Effect.provide(services(runnerSandboxApi())),
+            );
+            const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+            assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+            const db = yield* Database;
+            if (local) {
+              const [line] = yield* db
+                .select({ payload: deviceAgentLine.payload })
+                .from(deviceAgentLine)
+                .where(eq(deviceAgentLine.agentId, agent.id));
+              return (line?.payload as { readonly fingerprint?: string } | undefined)?.fingerprint;
+            }
+            const record = yield* readAgentRunnerRecord(userId, opened.sessionId);
+            return Option.getOrUndefined(record)?.fingerprint;
+          });
+
+        // Each digest but the sandbox plan's is the one a launch recorded before its machine handed its
+        // credential over, so a warm runner launched then is not relaunched for it: the first 32 hex
+        // characters of the SHA-256 of
+        // `{"env":[…sorted entries],"names":["linear"],"held":{"slot":…,"credential":…}}`, worked by
+        // hand, `held` absent on a Mac and on the plan. A sandbox's plan held its slot at the firewall
+        // before it signed in on host-supplied tokens, so its warm runner relaunches once to do so.
+        assert.deepEqual(
+          {
+            sandboxKey: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.API_KEY, AGENT_MACHINE.VERCEL),
+            ),
+            sandboxPlan: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.CHATGPT_SUBSCRIPTION, AGENT_MACHINE.VERCEL),
+            ),
+            macKey: yield* fingerprintOf(yield* agentOn(AGENT_PAYER.API_KEY, AGENT_MACHINE.DEVICE)),
+            macPlan: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.CHATGPT_SUBSCRIPTION, AGENT_MACHINE.DEVICE),
+            ),
+          },
+          {
+            sandboxKey: "6b61996f589fd234bed48d87b442c8b9",
+            sandboxPlan: "e772975c0b503f36d76b5d0fc2cf1ad7",
+            macKey: "3f16ad6f5312b44aa95199a2436df31f",
+            macPlan: "70d33426f2bcfa677ec90b7a985a3e46",
+          },
+        );
+      }),
+  );
+
+  it.effect(
+    "open launches the runner in its Codex mode on the account's plan, which it asks our token route for, with no token of the plan's at the firewall or in the sandbox and the bearer's placeholder in its environment alone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -401,7 +510,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations.", lineId));
 
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.match(opened.sessionId, /^codex-[0-9a-f]{12}-[0-9a-f-]{36}$/u);
         const [sandbox] = api.sandboxes;
         assert.equal(sandbox?.tags.sessionId, opened.sessionId);
@@ -415,20 +524,15 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.equal(command.env[RUNNER_ENV.CODEX_PLAN_BACKEND], CODEX_PLAN_BACKEND.CHATGPT);
         assert.equal(command.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID], WORKSPACE);
-        // App-server and its token command hold the placeholder, which the firewall standing as the
-        // runner started swaps on our host for the bearer whose digest the agent's row records.
+        // The runner holds the placeholder, which the firewall standing as it started swaps on our
+        // host for the bearer whose digest the agent's row records.
         const placeholder = command.env[RUNNER_ENV.BEARER];
         const bearer = launchBearer(api, command, SERVICE_HOST);
         assert.ok(placeholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
-        // The token is set at the firewall before the runner starts, behind the placeholder its command answers.
-        const tokenPlaceholder = command.env[RUNNER_ENV.CODEX_TOKEN];
-        assert.ok(tokenPlaceholder !== undefined && tokenPlaceholder.length > 20);
-        assert.notEqual(tokenPlaceholder, placeholder);
-        assert.deepEqual(openAiRules(api, CODEX_BACKEND.HOST), [
-          swapRule(tokenPlaceholder, "access-0", CODEX_BACKEND.PATH),
-        ]);
+        // The runner asks our route for the plan's tokens itself, so none is set at the firewall.
+        assert.equal(openAiRules(api, CODEX_BACKEND_HOST), undefined);
         assert.equal(openAiRules(api), undefined);
 
         const [config, first] = (yield* launchLines(command)) as [CodexConfig, InputLine];
@@ -459,14 +563,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           api.sandboxes,
           api.uploads.flatMap((upload) => [...upload.values()]),
         ]);
-        for (const secret of [
-          "access-0",
-          "refresh-0",
-          "id-token-0",
-          placeholder,
-          tokenPlaceholder,
-          bearer,
-        ]) {
+        for (const secret of ["access-0", "refresh-0", "id-token-0", placeholder, bearer]) {
           assert.equal(visible.includes(secret), false, "a secret outside the environment");
         }
         assert.equal(JSON.stringify(command.env).includes(bearer), false);
@@ -517,7 +614,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const openai = openAi();
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const [command] = api.commands;
         assert.ok(command !== undefined);
         const placeholder = command.env[RUNNER_ENV.OPENAI_API_KEY];
@@ -532,14 +629,17 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(visible.includes(apiKey), false);
         assert.equal(
           (yield* sessions.send(opened.sessionId, message(agent, "Also the emails."))).outcome,
-          EVE_SEND_OUTCOME.ACCEPTED,
+          SESSION_SEND_OUTCOME.ACCEPTED,
         );
         assert.equal(openai.state.renewals, 0);
 
         yield* removeProviderKey(userId, owner.provider, owner.kind);
         const gone = runnerSandboxApi();
         const without = yield* sessionsFor(userId).pipe(Effect.provide(services(gone)));
-        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(
+          (yield* without.open(message(agent, "Go."))).outcome,
+          SESSION_SEND_OUTCOME.FAILED,
+        );
         assert.deepEqual(gone.commands, []);
       }),
   );
@@ -558,7 +658,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
 
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(opened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(openai.state.renewals, 1);
         assert.equal(JSON.stringify([api.commands, api.sandboxes]).includes("access-1"), false);
         const [row] = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
@@ -577,7 +677,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         yield* signIn(userId, 60);
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         yield* updateAgentChoice(userId, agent.id, {
           model: "openai/gpt-4.1",
           effort: "low",
@@ -589,8 +689,8 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           yield* turnUnderWay(userId, agent),
         );
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.ACCEPTED);
         const lines = (yield* launchLines(api.commands[0])).slice(2) as InputLine[];
         assert.deepEqual(lines[0], {
           type: INPUT_LINE.MODEL,
@@ -603,12 +703,12 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const reset = yield* sessions.reset(opened.sessionId);
 
-        assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
+        assert.equal(reset.outcome, SESSION_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.deepEqual(yield* sessions.send(opened.sessionId, message(agent, "Hello?")), {
-          outcome: EVE_SEND_OUTCOME.RETIRED,
+          outcome: SESSION_SEND_OUTCOME.RETIRED,
         });
       }),
   );
@@ -627,7 +727,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           Effect.provide(services(api, openai)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         // The events route records Codex's thread as the runner reports it, and the run ends.
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, THREAD), true);
         yield* runnerTook(agent.id);
@@ -645,7 +745,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.equal(api.commands.length, 2);
@@ -667,36 +767,6 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "a launch's end while a developer's Terminal holds the sandbox takes the token off its firewall and leaves it up",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        yield* signIn(userId, 60);
-        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
-        assert.deepEqual(openAiRules(api, CODEX_BACKEND.HOST), [
-          swapRule(placeholder, "access-0", CODEX_BACKEND.PATH),
-        ]);
-        yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
-
-        yield* runnerTook(agent.id);
-        const ended = yield* runnerEnded({
-          target: { userId, conversationId: agent.conversationId },
-          sessionId: opened.sessionId,
-          sequence: 5,
-        }).pipe(Effect.provide(services(api)));
-
-        assert.equal(ended, RUNNER_ENDED.HELD);
-        assert.equal(api.sandboxes[0]?.status, "running");
-        assert.deepEqual(api.policies.at(-1)?.policy, { mode: "allow-all" });
-      }),
-  );
-
-  it.effect(
     "a sign-in OpenAI signed out, or none, fails the launch with that refusal, deletes its sandbox and starts no runner",
     () =>
       Effect.gen(function* () {
@@ -705,7 +775,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const none = runnerSandboxApi();
         const withoutSignIn = yield* sessionsFor(userId).pipe(Effect.provide(services(none)));
         assert.deepEqual(yield* withoutSignIn.open(message(agent, "Go.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.NONE,
         });
@@ -729,7 +799,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         );
 
         assert.deepEqual(yield* signedOut.open(message(agent, "Go.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
@@ -760,7 +830,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const limited = runnerSandboxApi();
         const limitedSessions = yield* sessionsFor(userId).pipe(Effect.provide(services(limited)));
         assert.deepEqual(yield* limitedSessions.open(message(agent, "Go.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
           planResetsAt: resetsAt.getTime(),
@@ -773,7 +843,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           Effect.provide(services(reset, openAi())),
         );
         const reopened = yield* resetSessions.open(message(agent, "Go."));
-        assert.equal(reopened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(reopened.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
         assert.notDeepEqual(reset.commands, []);
 
         yield* setPlanStatus(
@@ -790,7 +860,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           Effect.provide(services(ineligible)),
         );
         assert.deepEqual(yield* ineligibleSessions.open(message(agent, "Go on.")), {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.INELIGIBLE,
         });
@@ -810,7 +880,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         assert.equal(openai.state.renewals, 0);
         // Ten minutes on, forty are left: renewed ahead of the message, and handed on nowhere.
         yield* TestClock.adjust("10 minutes");
@@ -825,52 +895,6 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         for (const secret of ["access-0", "access-1", "refresh-1"]) {
           assert.equal(visible.includes(secret), false, "a token handed to the runner");
         }
-      }),
-  );
-});
-
-// A database of its own, so the sweep reads this launch's firewall record alone.
-it.layer(getTestDB())("the scheduled renewal of a Codex plan's token", (it) => {
-  it.effect(
-    "the sweep sets the account's renewed token behind the launch's placeholder before it lapses, and writes nothing while the swap carries it",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const openai = openAi();
-        const { userId, agent } = yield* openAgent;
-        yield* signIn(userId, 60);
-        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        // Recorded as the routing above these sessions records every open (`runtime-sessions.ts`), which is how the sweep finds the sandbox.
-        yield* claimRuntimeSession(
-          { userId, conversationId: agent.conversationId },
-          opened.sessionId,
-          yield* DateTime.nowAsDate,
-        );
-        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
-        const swept = Effect.flatMap(DateTime.nowAsDate, (now) =>
-          sweepCodexPlanSwaps(NO_KEYS.providerKeyEncryptionKeys, now).pipe(
-            Effect.provide(services(api, openai)),
-          ),
-        );
-
-        // An hour is left: nothing is due, and nothing is written.
-        const sent = api.policies.length;
-        assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
-        assert.equal(api.policies.length, sent);
-        // Twenty minutes on, forty are left: the token is renewed and set behind the same placeholder.
-        yield* TestClock.adjust("20 minutes");
-        assert.deepEqual(yield* swept, { renewed: 1, failed: 0 });
-        assert.equal(openai.state.renewals, 1);
-        assert.deepEqual(openAiRules(api, CODEX_BACKEND.HOST), [
-          swapRule(placeholder, "access-1", CODEX_BACKEND.PATH),
-        ]);
-        // A minute on, the swap carries the token as it stands, and is left.
-        yield* TestClock.adjust("1 minute");
-        assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
-        assert.equal(openai.state.renewals, 1);
       }),
   );
 });

@@ -3,8 +3,7 @@ import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, queryBuilder } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { agentTable } from "../schemas/agent.js";
 import { member, user } from "../schemas/auth.js";
@@ -18,7 +17,6 @@ import {
 } from "../schemas/slack-installation.js";
 import { SLACK_THREAD_ORIGIN, type SlackThreadOrigin } from "../storage-vocabulary.js";
 import type { TaskStoreEffect } from "./task-store.js";
-import { workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * slack-installation-store.ts -- the Slack team a workspace's bot is connected to, and its members' Slack user ids.
@@ -862,68 +860,5 @@ export function writeSlackChannelRepository(
   }
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(upsertChannelRepository({ organizationId, channelId, repository, now }), txidOf),
-  );
-}
-
-/**
- * The workspace's Slack bot as one member's held read answers it: the
- * workspace it stands in, the team it is connected to, and the default
- * repository for Slack starts, null where none is named; no row while it is
- * not connected, and none at all once the reader is no member of the
- * workspace, so a subscription stays bound to the rule its endpoint
- * checked. Every column is under the key the wire reads it by
- * (`@repo/features/workspace-integrations-live`). None where a statement
- * names a value Realtime cannot carry.
- */
-export function slackInstallationLiveStatement(
-  readerId: string,
-  organizationId: string,
-): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          workspaceId: slackInstallation.organizationId,
-          teamId: slackInstallation.teamId,
-          teamName: slackInstallation.teamName,
-          defaultRepository: slackInstallation.defaultRepository,
-        }),
-      )
-      .from(slackInstallation)
-      .where(
-        and(
-          eq(slackInstallation.organizationId, organizationId),
-          workspaceReachableBy(readerId, organizationId),
-        ),
-      ),
-  );
-}
-
-/**
- * Each Slack channel's default repository the workspace names, as one
- * member's held read answers them: Slack's id for the channel and the
- * repository, while the reader is a member of the workspace. Every column
- * is under the key the wire reads it by, and the order is the reader's to
- * keep. None where a statement names a value Realtime cannot carry.
- */
-export function slackChannelRepositoriesLiveStatement(
-  readerId: string,
-  organizationId: string,
-): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          channelId: slackChannelRepository.channelId,
-          repository: slackChannelRepository.repository,
-        }),
-      )
-      .from(slackChannelRepository)
-      .where(
-        and(
-          eq(slackChannelRepository.organizationId, organizationId),
-          workspaceReachableBy(readerId, organizationId),
-        ),
-      ),
   );
 }

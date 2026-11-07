@@ -26,7 +26,7 @@ import {
   type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
@@ -75,15 +75,21 @@ import {
   handState,
   holdAutomations,
   registryWith,
+  stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import {
+  agentsControl,
+  listedAgent,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -826,7 +832,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
-test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
+test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its tab on the task", () => {
   const shown: string[] = [];
   const agent = (id: string, title: string) => ({
     id,
@@ -838,7 +844,6 @@ test("an archived agent of the open task is still found, after the standing ones
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
-  const base = tasksControl();
   openPalette(
     tasksControl({
       activeTaskId: "plan-1",
@@ -857,7 +862,7 @@ test("an archived agent of the open task is still found, after the standing ones
         archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
         agentIds: ["agent-7"],
       }),
-      agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
+      onShowAgent: (taskId, agentId) => shown.push(`${taskId}:${agentId}`),
     }),
   );
   chooseFilter("This task");
@@ -871,7 +876,7 @@ test("an archived agent of the open task is still found, after the standing ones
   type("refund");
   assert.deepEqual(rows(), ["Refund export · Archived · Billing usage alerts"]);
   press("Refund export · Archived · Billing usage alerts");
-  assert.deepEqual(shown, ["agent-8"]);
+  assert.deepEqual(shown, ["plan-1:agent-8"]);
 });
 
 test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window", async () => {
@@ -1245,10 +1250,13 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
   await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
-  assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
-    renderToStaticMarkup(fileLook(path).icon),
-    "the row wears the file's type icon",
+  // Note that the icon is drawn once the file tree bundle it rides in has landed in the row.
+  await vi.waitFor(() =>
+    assert.equal(
+      row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
+      renderToStaticMarkup(withQueryClient(fileLook(path).icon)),
+      "the row wears the file's type icon",
+    ),
   );
   restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".ui-tooltip-card [data-file-card]");
@@ -1298,17 +1306,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
     agents: {
       total: 1,
       working: 1,
-      agents: [
-        {
-          id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-          title: "Alerts",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          status: AGENT_STATUS.RUNNING,
-        },
-      ],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   openPalette(
@@ -1334,6 +1332,29 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
   const shown: [string, string][] = [];
+  // The task's agent, as the list followed live holds it.
+  writeAppState(
+    stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          taskAgents: [
+            listedAgent({
+              id: "agent-7",
+              planId: "plan-1",
+              title: "Invoice export",
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              status: AGENT_STATUS.RUNNING,
+              createdAt: 1,
+              turnId: null,
+            }),
+          ],
+        },
+      },
+    ),
+  );
   const sent = openPalette(
     tasksControl({
       tasks: [
@@ -1347,17 +1368,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
           agents: {
             total: 1,
             working: 1,
-            agents: [
-              {
-                id: "agent-7",
-                title: "Invoice export",
-                model: "anthropic/claude-opus-5.5",
-                effort: "high",
-                status: AGENT_STATUS.RUNNING,
-              },
-            ],
             pullRequestTotal: 0,
-            pullRequests: [],
           },
         },
       ],
@@ -2967,7 +2978,7 @@ const ROTATION: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  agents: { total: 1, working: 1, agents: [ASKER], pullRequestTotal: 0, pullRequests: [] },
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 
 /** An open item of the agent's, its thread one message of the agent's words. */
@@ -3255,10 +3266,11 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
 });
 
 test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", async () => {
+  // The bridge is handed first, since each tree's subscription reads the bridge standing as it mounts.
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
   act(() => places.render(withQueryClient(createElement(OffersPlaces))));
-  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   paletteOverTask()(DOCUMENT_TASK);
   // The document arrives a few microtasks after the window first draws.
   await settle();

@@ -134,14 +134,14 @@ const EXTRA_CHECKOUT_SCRIPT = [
 ].join("\n");
 
 /**
- * A whole checkout a fork of a base drive holds (`base-drive.ts`) brought
+ * A whole checkout a base snapshot holds (`base-snapshot.ts`) brought
  * up to its branch as GitHub has it now: the branch fetched through
  * the credential the caller set at the firewall and checked out at what was
  * fetched, its writes the group's (`GROUP_WRITES`), and the record
  * rewritten under the name the caller keeps. Note
  * that a checkout that is missing, or whose record names another repository
- * than the refresh variable, exits before any fetch, so a drive forked from
- * the wrong base never reads GitHub on it; and that the empty
+ * than the refresh variable, exits before any fetch, so a sandbox created
+ * from the wrong base never reads GitHub on it; and that the empty
  * checkout of a repository with no commits yet, whose remote still names no
  * HEAD, is already as GitHub has it, so its fetch of no branch is no failure.
  */
@@ -347,8 +347,8 @@ export const cloneExtraRepository = /* @__PURE__ */ Effect.fn("web/cloneExtraRep
 );
 
 /**
- * What a base drive's checkout records it is of: the repository as GitHub
- * spells it, lower-cased, so a base drive and the refresh of a fork of it agree
+ * What a base snapshot's checkout records it is of: the repository as GitHub
+ * spells it, lower-cased, so a base snapshot and the refresh of it agree
  * whatever case a row spells the repository in.
  */
 export function snapshotRecordOf(fullName: string): string {
@@ -356,11 +356,11 @@ export function snapshotRecordOf(fullName: string): string {
 }
 
 /**
- * The checkout a fork of a base drive holds brought up to the branch named,
+ * The checkout a base snapshot holds brought up to the branch named,
  * with the token at the firewall for the fetch alone, as for a clone
  * (`underCloneCredential`), and recorded under the name the caller keeps;
  * refused, in git's own words where it said any, where the checkout is not
- * the base drive's of that repository or the fetch failed.
+ * the base snapshot's of that repository or the fetch failed.
  */
 export const refreshRepository = /* @__PURE__ */ Effect.fn("web/refreshRepository")(function* (
   sandbox: RepositorySandbox,

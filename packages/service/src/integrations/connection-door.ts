@@ -1,5 +1,5 @@
 /**
- * connection-door.ts -- a native agent's integrations, each its own MCP server: which it is handed, and the tools each lists and calls, on the member's own grants, with no eve.
+ * connection-door.ts -- a native agent's integrations, each its own MCP server: which it is handed, and the tools each lists and calls, on the member's own grants.
  *
  * A native harness's agent is handed each connection as an MCP server of
  * its own at the service (`../agents/workspace-mcp/app.ts`), the way Claude Code and
@@ -60,8 +60,8 @@ import { DateTime, Duration, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import type { AdmittedConversation } from "../agents/eve-host/conversation.js";
 import { heldProjection, turnServersOf } from "../agents/native-events/native-projection.js";
+import type { AdmittedConversation } from "../agents/sessions/admitted-conversation.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import type { IntegrationConnect } from "./integration-connect.js";
@@ -144,8 +144,7 @@ function admissionOf(admitted: AdmittedConversation): IntegrationAdmission {
 /**
  * The servers the native turn under way took as it started, mentioned to
  * the agent since its last turn (`native-events/runner-events-app.ts`),
- * which its calls are handed whatever the switches say, as an eve turn's
- * are; none where none was taken, or where the projection cannot be read,
+ * which its calls are handed whatever the switches say; none where none was taken, or where the projection cannot be read,
  * so a passing store failure costs the call a mention, never a switch.
  */
 function turnMentionsOf(
@@ -315,8 +314,7 @@ function sessionFailed(connectionName: string, doing: string, failure: McpToolsF
 }
 
 /**
- * What the model is told of one connection the agent is handed, as eve
- * tells it: the integration's description and, where the member holds more
+ * What the model is told of one connection the agent is handed: the integration's description and, where the member holds more
  * than one account there, the note naming which account this one is, so the
  * agent can pick the account the developer named; nothing for a connection
  * it is not handed. Its server answers it as its `initialize`'s

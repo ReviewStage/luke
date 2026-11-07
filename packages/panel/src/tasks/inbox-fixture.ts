@@ -379,7 +379,12 @@ const INBOXES: ReadonlyMap<string, readonly InboxItem[]> = new Map([
   [TASK.ROUNDING, ROUNDING_ITEMS],
 ]);
 
-/** Whether the item is a question waiting on the account: open, its thread holding an ask still open, as the service counts one (`askingReader`); a notice is not. */
+/** When an inbox last changed: its newest item's change. */
+function newest(items: readonly InboxItem[]): number {
+  return Math.max(...items.map((each) => each.updatedAt));
+}
+
+/** Whether the item is a question: open, its thread holding an ask still open; a notice is not. */
 function asking(item: InboxItem): boolean {
   return (
     item.status === INBOX_STATUS.OPEN &&
@@ -387,17 +392,12 @@ function asking(item: InboxItem): boolean {
   );
 }
 
-/** When an inbox last changed: its newest item's change. */
-function newest(items: readonly InboxItem[]): number {
-  return Math.max(...items.map((each) => each.updatedAt));
-}
-
 /** Every task holding items as main's read of the account names it, the latest changed first. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .map(([taskId, items]) => ({
     taskId,
     items: items.length,
-    toDo: items.filter(asking).length,
+    toDo: items.filter((each) => each.status === INBOX_STATUS.OPEN).length,
     updatedAt: newest(items),
   }))
   .toSorted((a, b) => b.updatedAt - a.updatedAt);
@@ -463,7 +463,7 @@ const AGENTS: ReadonlyMap<string, AgentSummary> = new Map([
   ],
 ]);
 
-/** A task's agents as its row in the list names them. */
+/** A task's agents as its row in the list counts them. */
 function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   const agent = AGENTS.get(taskId);
   if (agent === undefined) return {};
@@ -473,19 +473,7 @@ function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
       total: 1,
       working,
       activityAt: newest(INBOXES.get(taskId) ?? []),
-      agents: [
-        {
-          id: agent.id,
-          title: agent.title,
-          model: agent.model,
-          effort: agent.effort,
-          status: agent.status,
-          at: agent.runStartedAt ?? agent.createdAt,
-          startedBy: ADA,
-        },
-      ],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
 }
@@ -532,12 +520,29 @@ const OWN_TASKS: readonly TaskSummary[] = [
  */
 export function inboxTasksView(profile: string, list: TasksView): TasksView {
   if (!STAGED_PROFILES.has(profile)) return list;
-  const tasks = list.tasks.map((task) =>
-    task.id === TASK.INVITES
-      ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
-      : task,
-  );
-  return { ...list, tasks: [...tasks, ...OWN_TASKS] };
+  const tasks = [
+    ...list.tasks.map((task) =>
+      task.id === TASK.INVITES
+        ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
+        : task,
+    ),
+    ...OWN_TASKS,
+  ];
+  // Note that the list follows each task's agent live too, which its row, its Inbox items, and a person's page read.
+  const followed = tasks.flatMap((task) => {
+    const agent = AGENTS.get(task.id);
+    return agent === undefined
+      ? []
+      : [
+          {
+            ...agent,
+            workspaceId: task.workspaceId,
+            repository: task.repository,
+            ...(agent.status === AGENT_STATUS.RUNNING ? undefined : { settledAt: agent.createdAt }),
+          },
+        ];
+  });
+  return { ...list, tasks, taskAgents: [...(list.taskAgents ?? []), ...followed] };
 }
 
 /* ----- The window's document ----- */

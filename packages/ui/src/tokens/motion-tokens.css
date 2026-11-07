@@ -70,6 +70,7 @@
   --ui-duration-pane: 240ms;
   --ui-duration-fast: 280ms;
   --ui-duration-shape: 460ms;
+  --ui-duration-showcase: 1000ms;
   --ui-motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
   --ui-motion-pane: cubic-bezier(0.2, 0, 0, 1);
   --ui-row-stagger: 32ms;

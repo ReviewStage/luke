@@ -1,4 +1,3 @@
-import { useAtom, useAtomSet } from "@effect/atom-react";
 import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingFailed,
@@ -29,7 +28,7 @@ import {
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { useCallback, useState } from "react";
 import { askAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
@@ -57,7 +56,7 @@ import { DeviceGlyph } from "../tasks/runs-on.js";
  */
 
 /** The code a window was handed to approve, which Settings › Hosts draws its dialog for until it is put away. */
-const hostConnectAtom = Atom.keepAlive(Atom.make<string | undefined>(undefined));
+const hostConnectStore = createStore<string | undefined>(undefined);
 
 const WORDS = {
   TITLE: "Connect a host",
@@ -177,13 +176,13 @@ function readStanding(pairing: UseQueryResult<HostPairingAnswer | HostPairingFai
 
 /** Hands Settings › Hosts a code to approve, as a pairing's link opened in this window does. */
 export function useOpenHostConnect(): (code: string) => void {
-  return useAtomSet(hostConnectAtom);
+  return useCallback((code: string) => hostConnectStore.setState(() => code), []);
 }
 
 /** The code Settings › Hosts draws its dialog for, and how it is put away; none while no link handed one. */
 export function useHostConnect(): readonly [string | undefined, () => void] {
-  const [code, setCode] = useAtom(hostConnectAtom);
-  const close = useCallback(() => setCode(undefined), [setCode]);
+  const code = useSelector(hostConnectStore);
+  const close = useCallback(() => hostConnectStore.setState(() => undefined), []);
   return [code, close];
 }
 

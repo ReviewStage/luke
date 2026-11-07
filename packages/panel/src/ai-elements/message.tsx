@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import {
   BUTTON_SIZE,
   cn,
@@ -16,10 +15,10 @@ import {
   type MarkdownProps,
 } from "@repo/ui/markdown";
 import { QUOTE_CLASS } from "@repo/ui/quote-face";
+import { useQuery } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
-import { AsyncResult } from "effect/reactivity";
 import { type HTMLAttributes, memo, type ReactNode } from "react";
-import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
+import { markdownHtmlParserQuery } from "../markdown-html-parser.js";
 
 /**
  * message.tsx -- AI Elements' Message: one turn of a conversation, by who said it, and the markdown of a reply.
@@ -232,8 +231,7 @@ export type MessageResponseProps = Omit<MarkdownProps, "look" | "className"> & {
  */
 export const MessageResponse = memo(
   ({ line = false, ...props }: MessageResponseProps): ReactNode => {
-    const parser = useAtomValue(markdownHtmlParserAtom);
-    if (AsyncResult.isInitial(parser)) return null;
+    if (useQuery(markdownHtmlParserQuery).isPending) return null;
     return (
       <Markdown
         look={line ? MARKDOWN_LOOK.TRANSCRIPT_LINE : MARKDOWN_LOOK.TRANSCRIPT}

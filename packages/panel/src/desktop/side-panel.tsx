@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import {
   AGENT_MACHINE,
@@ -57,32 +56,28 @@ import {
   agentOfTab,
   agentTab,
   type ChangesStripTab,
+  type CloudBrowserStripTab,
   changesTab,
   cloudBrowserTab,
   fileTab,
   inTaskOrder,
-  isChangesTab,
-  isCloudBrowserTab,
-  isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  isTranscriptTab,
   type LocalStripTab,
   type PageStripTab,
   pageTab,
+  STRIP_TAB_KIND,
   type StripTab,
   type SubagentStripTab,
   sameTab,
   subagentTab,
   TAB_WORDS,
   type TerminalStripTab,
+  type TranscriptStripTab,
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { createStore, useSelector } from "@tanstack/react-store";
+import { absurd } from "effect";
 import {
   Fragment,
   type ReactNode,
@@ -145,7 +140,7 @@ import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
-import { stripTabTitle } from "../tasks/strip-tab-kinds.js";
+import { stripTabTakesFind, stripTabTitle } from "../tasks/strip-tab-kinds.js";
 import {
   AgentGlyph,
   agentEndMark,
@@ -259,6 +254,8 @@ interface StripActivity {
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
+ * The window going to another stop plays neither, since navigation does not
+ * travel (docs/DESIGN.md): the panel the new stop stands, or none, lands at once.
  */
 
 /**
@@ -374,13 +371,26 @@ function tabTaskOf(
   pages: readonly OpenPage[],
   files: readonly OpenFile[],
 ): string | undefined {
-  if (isPageTab(tab)) {
-    const place = pages.find((each) => sameTab(each, tab))?.place;
-    return place !== undefined && "taskId" in place ? place.taskId : undefined;
+  if (typeof tab === "string") return undefined;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.PAGE: {
+      const place = pages.find((each) => sameTab(each, tab))?.place;
+      return place !== undefined && "taskId" in place ? place.taskId : undefined;
+    }
+    case STRIP_TAB_KIND.FILE: {
+      const place = files.find((each) => each.path === tab.file)?.reads?.place;
+      return place !== undefined && "taskId" in place ? place.taskId : undefined;
+    }
+    case STRIP_TAB_KIND.TRANSCRIPT:
+    case STRIP_TAB_KIND.SUBAGENT:
+    case STRIP_TAB_KIND.CHANGES:
+    case STRIP_TAB_KIND.TERMINAL:
+    case STRIP_TAB_KIND.LOCAL:
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return undefined;
+    default:
+      return absurd(tab);
   }
-  if (!isFileTab(tab)) return undefined;
-  const place = files.find((each) => each.path === tab.file)?.reads?.place;
-  return place !== undefined && "taskId" in place ? place.taskId : undefined;
 }
 
 /** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
@@ -855,20 +865,20 @@ export function panelEntries(input: {
           }),
     onPick: () => panel.onChoose(pageTab(page.id)),
   }));
-  // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does;
+  // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does,
+  // and wears the terminal's still glyph and none of its agent's state marks, as the tab it opens does;
   // its words after the name count the agent's terminals. Note that it is named by a key of its
   // own, because the agent's id names the agent's own row where the summary lists them.
   const terminalRows = (input.terminals?.offers ?? []).map(({ agent, label, showsOnChord }) => ({
     row: {
       id: terminalRowKey(TERMINAL_KIND.CLOUD, agent.id),
-      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      ...tabLook({ kind: TAB_KIND.TERMINAL, title: label }),
       detail: <TerminalCount kind={TERMINAL_KIND.CLOUD} agentId={agent.id} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.CLOUD,
       replayMasked: true,
     },
     // Note that the row hangs its tab's card: its agent's, saying under a rule whose sandbox its shell runs in.
-    endMark: agentEndMark(agent, true),
     card:
       cards === undefined
         ? undefined
@@ -888,12 +898,11 @@ export function panelEntries(input: {
   const localRows = (input.locals?.offers ?? []).map(({ agent, label }) => ({
     row: {
       id: terminalRowKey(TERMINAL_KIND.LOCAL, agent.id),
-      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      ...tabLook({ kind: TAB_KIND.LOCAL, title: label }),
       detail: <TerminalCount kind={TERMINAL_KIND.LOCAL} agentId={agent.id} />,
       section: ADD_SECTION.LOCAL,
       replayMasked: true,
     },
-    endMark: agentEndMark(agent, true),
     card:
       cards === undefined
         ? undefined
@@ -1206,47 +1215,57 @@ function stripTabs(input: {
   });
   // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in,
   // and hangs a card saying whose browser that is, with its address; a draft closed is discarded.
-  const cloudBrowserTabs = panel.strip.filter(isCloudBrowserTab).flatMap((tab) => {
-    const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
-    if (drawn === undefined) return [];
-    return [
-      {
-        tab,
-        look: look(tab, {
-          icon: drawn.owner.icon,
-          label: cloudBrowserTitleOf(drawn),
-          labelReplayUnmasked: !("tab" in drawn),
-          card: hungCard({
-            kind: TAB_KIND.BROWSER,
-            owner: drawn.owner,
-            title: cloudBrowserTitleOf(drawn),
-            address: "tab" in drawn ? drawn.tab.address : "",
+  const cloudBrowserTabs = panel.strip
+    .filter(
+      (tab): tab is CloudBrowserStripTab =>
+        typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.CLOUD_BROWSER,
+    )
+    .flatMap((tab) => {
+      const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
+      if (drawn === undefined) return [];
+      return [
+        {
+          tab,
+          look: look(tab, {
+            icon: drawn.owner.icon,
+            label: cloudBrowserTitleOf(drawn),
+            labelReplayUnmasked: !("tab" in drawn),
+            card: hungCard({
+              kind: TAB_KIND.BROWSER,
+              owner: drawn.owner,
+              title: cloudBrowserTitleOf(drawn),
+              address: "tab" in drawn ? drawn.tab.address : "",
+            }),
           }),
-        }),
-        close: () => {
-          if ("draft" in drawn) discardCloudDraft(input.pagePlace, drawn.id);
-          panel.onClose(tab);
+          close: () => {
+            if ("draft" in drawn) discardCloudDraft(input.pagePlace, drawn.id);
+            panel.onClose(tab);
+          },
         },
-      },
-    ];
-  });
+      ];
+    });
   // An agent's transcript beside the Inbox wears the agent's tab as its column draws it, and hangs its card.
-  const transcriptTabs = panel.strip.filter(isTranscriptTab).flatMap((tab) => {
-    const agent = agents.agents?.find((each) => each.id === tab.transcript);
-    if (agent === undefined) return [];
-    const subject = agentSubject(agents, agent.id, held, chosen(tab));
-    return [
-      {
-        tab,
-        look: look(tab, {
-          ...tabLook({ kind: TAB_KIND.AGENT, name: subject.name, agent }),
-          card: hungCard({ kind: TAB_KIND.AGENT, subject, models }),
-        }),
-        close: () => panel.onClose(tab),
-        agent,
-      },
-    ];
-  });
+  const transcriptTabs = panel.strip
+    .filter(
+      (tab): tab is TranscriptStripTab =>
+        typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TRANSCRIPT,
+    )
+    .flatMap((tab) => {
+      const agent = agents.agents?.find((each) => each.id === tab.transcript);
+      if (agent === undefined) return [];
+      const subject = agentSubject(agents, agent.id, held, chosen(tab));
+      return [
+        {
+          tab,
+          look: look(tab, {
+            ...tabLook({ kind: TAB_KIND.AGENT, name: subject.name, agent }),
+            card: hungCard({ kind: TAB_KIND.AGENT, subject, models }),
+          }),
+          close: () => panel.onClose(tab),
+          agent,
+        },
+      ];
+    });
   return [
     ...fixed,
     ...transcriptTabs,
@@ -1639,11 +1658,11 @@ export function ActivityList({
  * menu hangs from where the toggle asked for it with nothing to show; none
  * where no toggle is drawn.
  */
-const panelToggleRoomAtom = Atom.keepAlive(Atom.make<HTMLElement | null>(null));
+const panelToggleRoomStore = createStore<HTMLElement | null>(null);
 
 /** The ref the window hands the box its side panel's toggle stands in, which the panel's "+" menu hangs from (`ToggleOffers`). */
 export function usePanelToggleRoom(): (room: HTMLElement | null) => void {
-  return useAtomSet(panelToggleRoomAtom);
+  return useCallback((room: HTMLElement | null) => panelToggleRoomStore.setState(() => room), []);
 }
 
 /**
@@ -1662,7 +1681,7 @@ function ToggleOffers({
   entries: readonly AddEntry[];
   onAnswered: () => void;
 }): React.JSX.Element | null {
-  const toggle = useAtomValue(panelToggleRoomAtom);
+  const toggle = useSelector(panelToggleRoomStore);
   const [corner, setCorner] = useState<HTMLElement | null>(null);
   const room = toggle ?? corner;
   const [open, setOpen] = useState(true);
@@ -2056,157 +2075,165 @@ function TabContent({
   onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
 }): React.JSX.Element | null {
   const directory = useMemberDirectory();
-  if (isTranscriptTab(tab)) return <>{transcript?.(tab.transcript)}</>;
-  if (isCloudBrowserTab(tab)) {
-    const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
-    // The tab stands for one the service no longer lists only until the panel moves on, a render away.
-    if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the browser")} />;
-    if ("draft" in drawn) {
+  // Note that no fixed kind is drawn now (`DRAWN_KINDS`): the plan's, the Inbox's, and Comments stand elsewhere.
+  if (typeof tab === "string") return null;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.TRANSCRIPT:
+      return <>{transcript?.(tab.transcript)}</>;
+    case STRIP_TAB_KIND.CLOUD_BROWSER: {
+      const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
+      // The tab stands for one the service no longer lists only until the panel moves on, a render away.
+      if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the browser")} />;
+      if ("draft" in drawn) {
+        return (
+          <CloudBrowserDraftPane
+            key={drawn.id}
+            place={pagePlace}
+            draft={drawn.draft}
+            owner={drawn.owner}
+            onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
+            onDiscard={() => cloudDrafts.onDiscard(drawn.id)}
+          />
+        );
+      }
       return (
-        <CloudBrowserDraftPane
-          key={drawn.id}
-          place={pagePlace}
-          draft={drawn.draft}
+        <CloudBrowserPane
+          key={tab.cloudBrowser}
+          tab={drawn.tab}
           owner={drawn.owner}
-          onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
-          onDiscard={() => cloudDrafts.onDiscard(drawn.id)}
+          shown={shown}
+          memberName={(userId) =>
+            directory.members?.find((member) => member.userId === userId)?.name
+          }
         />
       );
     }
-    return (
-      <CloudBrowserPane
-        key={tab.cloudBrowser}
-        tab={drawn.tab}
-        owner={drawn.owner}
-        shown={shown}
-        memberName={(userId) => directory.members?.find((member) => member.userId === userId)?.name}
-      />
-    );
-  }
-  if (isTerminalTab(tab) || isLocalTab(tab)) {
-    const agentId = isTerminalTab(tab) ? tab.terminal : tab.local;
-    return (
-      <TerminalTab
-        key={tab.shell}
-        tab={tab}
-        agents={agentsOf(agentId)}
-        shown={shown}
-        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId })}
-        onClose={() => onCloseTab(tab)}
-      />
-    );
-  }
-  if (isPageTab(tab)) {
-    const drawn = pages.find((each) => each.tab.page === tab.page);
-    // The tab stands for a page its place no longer lists only until the panel moves on, a render away.
-    if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the page")} />;
-    const { line: page, place } = drawn;
-    return (
-      <TaskPagePane
-        key={page.id}
-        place={place}
-        page={page}
-        findActive={findActive}
-        doors={{
-          agents: {
-            control: agents,
-            onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
-          },
-          me: agents.me,
-        }}
-      />
-    );
-  }
-  if (isChangesTab(tab)) {
-    // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
-    return (
-      <PullRequestsOnGitHub key={tabKey(tab)}>
-        {/* A file chosen with ⌘ in its Changes tree opens in a File tab of its own, where the panel reads File tabs by the task (`open-file-tab.ts`). */}
-        <OpenFileTabProvider
-          value={codeFilesRead ? (path) => onBrowseFile(undefined, path, true) : undefined}
-        >
-          {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
-          <Suspense fallback={<SpinnerRegion delay label={readingWords("the pull request")} />}>
-            <PULL_REQUEST_TAB.Route
-              agentId={tab.changes}
-              number={tab.number}
-              control={agentsOf(tab.changes)}
-              shown={shown}
-              repository={repository}
-              tree={fileTree}
-              view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
-              onView={(view) => onPullRequestView(tab, view)}
-              onActions={(actions) => onTabActions(tab, actions)}
-            />
-          </Suspense>
-        </OpenFileTabProvider>
-      </PullRequestsOnGitHub>
-    );
-  }
-  if (isFileTab(tab)) {
-    const file = files.find((each) => each.path === tab.file);
-    // The tab stands for a file no longer open only until the panel moves
-    // on, a render away.
-    if (file === undefined) return <SpinnerRegion delay label={readingWords("the file")} />;
-    const reads = fileReadsOf(file, { place: repositoryPlace ?? { taskId }, repository });
-    const { place } = reads;
-    // Note that the task given another repository draws the file afresh,
-    // because the lines held were read from the one before.
-    return (
-      <Fragment key={reads.repository ?? undefined}>
-        <FileView
+    case STRIP_TAB_KIND.TERMINAL:
+    case STRIP_TAB_KIND.LOCAL: {
+      const agentId = tab.kind === STRIP_TAB_KIND.TERMINAL ? tab.terminal : tab.local;
+      return (
+        <TerminalTab
+          key={tab.shell}
+          tab={tab}
+          agents={agentsOf(agentId)}
+          shown={shown}
+          onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId })}
+          onClose={() => onCloseTab(tab)}
+        />
+      );
+    }
+    case STRIP_TAB_KIND.PAGE: {
+      const drawn = pages.find((each) => each.tab.page === tab.page);
+      // The tab stands for a page its place no longer lists only until the panel moves on, a render away.
+      if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the page")} />;
+      const { line: page, place } = drawn;
+      return (
+        <TaskPagePane
+          key={page.id}
           place={place}
-          repository={reads.repository}
-          file={file}
-          openGitHub={(url) => appPlatform().openGitHub(url)}
-          treeOpen={fileTree.open}
-          onToggleTree={fileTree.onToggle}
-          treeWidth={fileTree.width}
-          onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
-          history={{
-            canGoBack: (file.back?.length ?? 0) > 0,
-            canGoForward: (file.forward?.length ?? 0) > 0,
-            onStep: (step) => onFileHistory(file.path, step),
+          page={page}
+          findActive={findActive}
+          doors={{
+            agents: {
+              control: agents,
+              onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+            },
+            me: agents.me,
           }}
         />
-      </Fragment>
-    );
-  }
-  if (isSubagentTab(tab)) {
-    if (tab.delegation !== undefined) {
-      const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
-      const { subagent } = tab;
-      return (
-        <AgentSubagentTab
-          key={tab.subagent}
-          sender={
-            <AgentActorRef
-              subject={agentSubject(agents, parent.agent, NOTHING_HELD, false)}
-              models={agents.models}
-              onOpen={() => {
-                onOpenTarget(parent);
-                seekCall(subagent);
-              }}
-            />
-          }
-          agentId={tab.delegation.agent}
-          callId={tab.subagent}
-          task={tab.delegation.task}
-          status={standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING}
-          control={agents}
-          shown={shown}
-          onStatus={(status) => onWorkerStatus(tab.subagent, status)}
-          onHeld={onWorkerHeld}
-          onOpenTarget={onOpenTarget}
-          cards={cards.agent(tab.delegation.agent)}
-        />
       );
     }
-    // A tab no delegation started stands only until the panel moves back to the board, a render away.
-    return <SpinnerRegion delay label={readingWords("the worker")} />;
+    case STRIP_TAB_KIND.CHANGES: {
+      // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
+      return (
+        <PullRequestsOnGitHub key={tabKey(tab)}>
+          {/* A file chosen with ⌘ in its Changes tree opens in a File tab of its own, where the panel reads File tabs by the task (`open-file-tab.ts`). */}
+          <OpenFileTabProvider
+            value={codeFilesRead ? (path) => onBrowseFile(undefined, path, true) : undefined}
+          >
+            {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
+            <Suspense fallback={<SpinnerRegion delay label={readingWords("the pull request")} />}>
+              <PULL_REQUEST_TAB.Route
+                agentId={tab.changes}
+                number={tab.number}
+                control={agentsOf(tab.changes)}
+                shown={shown}
+                repository={repository}
+                tree={fileTree}
+                view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
+                onView={(view) => onPullRequestView(tab, view)}
+                onActions={(actions) => onTabActions(tab, actions)}
+              />
+            </Suspense>
+          </OpenFileTabProvider>
+        </PullRequestsOnGitHub>
+      );
+    }
+    case STRIP_TAB_KIND.FILE: {
+      const file = files.find((each) => each.path === tab.file);
+      // The tab stands for a file no longer open only until the panel moves
+      // on, a render away.
+      if (file === undefined) return <SpinnerRegion delay label={readingWords("the file")} />;
+      const reads = fileReadsOf(file, { place: repositoryPlace ?? { taskId }, repository });
+      const { place } = reads;
+      // Note that the task given another repository draws the file afresh,
+      // because the lines held were read from the one before.
+      return (
+        <Fragment key={reads.repository ?? undefined}>
+          <FileView
+            place={place}
+            repository={reads.repository}
+            file={file}
+            openGitHub={(url) => appPlatform().openGitHub(url)}
+            treeOpen={fileTree.open}
+            onToggleTree={fileTree.onToggle}
+            treeWidth={fileTree.width}
+            onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
+            history={{
+              canGoBack: (file.back?.length ?? 0) > 0,
+              canGoForward: (file.forward?.length ?? 0) > 0,
+              onStep: (step) => onFileHistory(file.path, step),
+            }}
+          />
+        </Fragment>
+      );
+    }
+    case STRIP_TAB_KIND.SUBAGENT: {
+      if (tab.delegation !== undefined) {
+        const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
+        const { subagent } = tab;
+        return (
+          <AgentSubagentTab
+            key={tab.subagent}
+            sender={
+              <AgentActorRef
+                subject={agentSubject(agents, parent.agent, NOTHING_HELD, false)}
+                models={agents.models}
+                onOpen={() => {
+                  onOpenTarget(parent);
+                  seekCall(subagent);
+                }}
+              />
+            }
+            agentId={tab.delegation.agent}
+            callId={tab.subagent}
+            task={tab.delegation.task}
+            status={standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING}
+            control={agents}
+            shown={shown}
+            onStatus={(status) => onWorkerStatus(tab.subagent, status)}
+            onHeld={onWorkerHeld}
+            onOpenTarget={onOpenTarget}
+            cards={cards.agent(tab.delegation.agent)}
+          />
+        );
+      }
+      // A tab no delegation started stands only until the panel moves back to the board, a render away.
+      return <SpinnerRegion delay label={readingWords("the worker")} />;
+    }
+    default:
+      return absurd(tab);
   }
-  // Note that no fixed kind is drawn now (`DRAWN_KINDS`): the plan's, the Inbox's, and Comments stand elsewhere.
-  return null;
 }
 
 /**
@@ -2312,6 +2339,7 @@ interface HeldPanel {
 function sameDrawing(a: SidePanelControl, b: SidePanelControl): boolean {
   return (
     a.open === b.open &&
+    a.stop === b.stop &&
     a.fullScreen === b.fullScreen &&
     a.width === b.width &&
     a.tabs === b.tabs &&
@@ -2329,6 +2357,10 @@ function drawnPanel(panel: SidePanelControl, held: HeldPanel | undefined): SideP
 /**
  * The exit `panel`'s change asks for, given what was drawn before it, or
  * `undefined` where the change ends the exit under way, or the one standing.
+ * Note that a change of stop asks for none and ends the one under way,
+ * because the panel shut there belongs to the stop the window left, and
+ * drawing it out over the one arrived at is the flash navigation must not
+ * make.
  */
 function exitFor(
   drawn: SidePanelControl,
@@ -2336,6 +2368,7 @@ function exitFor(
   panel: SidePanelControl,
   held: HeldPanel | undefined,
 ): HeldPanel | undefined {
+  if (last.stop !== panel.stop) return undefined;
   if (last.open && !panel.open) return { leaving: PANEL_LEAVING.CLOSE, panel: drawn };
   if (panel.open && last.fullScreen && !panel.fullScreen) {
     return { leaving: PANEL_LEAVING.FULL_SCREEN, panel: drawn };
@@ -2886,7 +2919,7 @@ export function SidePanel({
           // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
           aria-label={label}
           aria-labelledby={tabId}
-          active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
+          active={keys && focused && stripTabTakesFind(tab)}
           subject={{ task: taskId, tab }}
         >
           {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}

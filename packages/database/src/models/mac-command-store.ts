@@ -30,7 +30,6 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { automationRun } from "../schemas/automation.js";
@@ -51,7 +50,7 @@ import type { ConversationTarget } from "./writer.js";
  * takes it, and settled once, by a Mac after it was claimed; the call that
  * queued it reads the result and withdraws the row. A Mac that follows its
  * account's commands live subscribes to the unclaimed ones of its kinds
- * (`macCommandsLiveStatement`) and claims each by its id.
+ * (`packages/service/src/live/reads/mac-commands.ts`) and claims each by its id.
  */
 
 const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
@@ -321,12 +320,12 @@ const ForeignLineSchema = Schema.Struct({
  * line written before senders were kept, a `user` row with no sender, counts
  * too, because nothing says whose it was; all but the root's first where the
  * agent was started on a prompt or a description, which that first line is, written
- * untagged by eve's relay for every agent started before the start wrote it
+ * untagged by the retired runtime's relay for every agent started before the start wrote it
  * with its sender (`coder-host/start.ts`), unless the automation's run that
  * started the agent was fired by words its owner did not write, which that
  * first line holds. A blank agent was started on
  * none, so its first line is whoever's first steer, and counts. A line its hand-over withdrew counts as
- * well, unlike in every read that shows a line, because eve may still hand
+ * well, unlike in every read that shows a line, because its runtime may still hand
  * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
 const findForeignLine = SqlSchema.findOneOption({
@@ -537,43 +536,6 @@ export function claimMacCommand(
 ): TaskStoreEffect<Option.Option<MacCommand>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     claimOne({ userId, id, queuedSince, kinds, now }),
-  );
-}
-
-/**
- * The account's commands of the kinds given that no Mac has claimed yet,
- * written as a live read, each column under the key `live-wire.ts` reads it
- * by and the instant it was queued in epoch milliseconds. Note that it names
- * no claim window, because a live read measures nothing from the clock: the
- * claim (`claimMacCommand`) keeps the window, on the service's clock. The
- * order is the reader's to keep. None where the statement names a value a
- * live read cannot carry.
- */
-export function macCommandsLiveStatement(
-  userId: string,
-  kinds: readonly MacCommandKind[],
-): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: macCommand.id,
-            kind: macCommand.kind,
-            command: macCommand.command,
-            timeoutSeconds: macCommand.timeoutSeconds,
-          },
-          { queuedAt: macCommand.queuedAt },
-        ),
-      )
-      .from(macCommand)
-      .where(
-        and(
-          eq(macCommand.userId, userId),
-          inArray(macCommand.kind, kinds),
-          isNull(macCommand.claimedAt),
-        ),
-      ),
   );
 }
 

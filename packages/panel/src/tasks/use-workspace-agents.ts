@@ -1,7 +1,8 @@
 import { AGENT_BOUNDS, type AgentSummary, type ListedAgent } from "@repo/features/agent-wire";
 import { summaryOfTaskless, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { appStateQuery, selectTasks } from "../use-app-state.js";
 
 /**
@@ -74,14 +75,43 @@ export function useWorkspaceAgents(
   );
 }
 
+/**
+ * The agent `agentId` names as the task list carries it, on a task or on
+ * none, archived or not; none where the list holds no such agent, which
+ * may yet be one on a task the list has not carried live, so a caller
+ * that must know reads it of the service then.
+ */
+export function listedAgentIn(
+  tasks: Pick<TasksView, "taskAgents" | "tasklessAgents"> | undefined,
+  agentId: string,
+): ListedAgent | undefined {
+  const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
+  if (onTask !== undefined) return onTask;
+  const taskless = tasks?.tasklessAgents?.find((agent) => agent.id === agentId);
+  return taskless === undefined ? undefined : summaryOfTaskless(taskless);
+}
+
 /** The agent `agentId` names as the task list carries it, past the newest and archived alike; none while none is named, or where the list holds no such agent. */
 export function useListedAgent(agentId: string | null): AgentSummary | undefined {
   const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
-  return useMemo(() => {
-    if (agentId === null) return undefined;
-    const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
-    if (onTask !== undefined) return onTask;
-    const taskless = tasks?.tasklessAgents?.find((agent) => agent.id === agentId);
-    return taskless === undefined ? undefined : summaryOfTaskless(taskless);
-  }, [tasks, agentId]);
+  return useMemo(
+    () => (agentId === null ? undefined : listedAgentIn(tasks, agentId)),
+    [tasks, agentId],
+  );
+}
+
+/**
+ * Whether the agent `agentId` names has its sandbox open, as the task list
+ * carries it live (`AgentSummary.sandboxOpen`), so a pane waiting on the
+ * sandbox connects as it opens rather than asking again on a clock; none
+ * while none is named, where the list holds no such agent, or from a
+ * service that does not carry it.
+ */
+export function useSandboxOpen(agentId: string | null): boolean | undefined {
+  const select = useCallback(
+    (state: AppStateSnapshot) =>
+      agentId === null ? undefined : listedAgentIn(state.tasks, agentId)?.sandboxOpen,
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
 }

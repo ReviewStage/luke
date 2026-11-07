@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { readFirewallLaunch } from "@repo/database/models/sandbox-firewall-store";
 import { user } from "@repo/database/schemas/auth";
-import { getTestDB } from "@repo/database/testing";
+import { getTestDB, openTaskAgent, openWorkspace } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Layer, Redacted } from "effect";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
@@ -26,9 +26,8 @@ import { vercelSandboxApi } from "./vercel-sandbox-api.js";
  * A sandbox session's firewall as the service writes it, over Vercel's
  * network-policy write answering from a script and a database of the
  * test's own: each write carries what its writer names beside the swaps the
- * session's launch keeps, the kept launch holds no value in the clear, its
- * end and a clear take the swaps off, a renewal's token is what every later
- * write sends, and a placeholder swap matches its header at the placeholder.
+ * session's launch keeps, the kept launch holds no value in the clear, and a
+ * placeholder swap matches its header at the placeholder.
  * Synthetic accounts, sessions, agents, and tokens throughout.
  */
 
@@ -74,21 +73,27 @@ const swapOf = (domain: string, placeholder: string, value: string) =>
     value: Redacted.make(value),
   });
 
-/** A launch of the fixture agent holding the runner's bearer alone. */
-const bearerLaunch = {
-  agentId: "agent-fixture",
+/** A launch of the agent given holding the runner's bearer alone. */
+const bearerLaunch = (agentId: string) => ({
+  agentId,
   swaps: new Map([
     [LAUNCH_SWAP.RUNNER, swapOf(SERVICE_HOST, "Bearer runner-placeholder-fixture", BEARER)],
   ]),
-};
+});
 
-/** A sandbox session of its own, in a sandbox of its own, under an account of its own. */
+/** A sandbox session of its own, in a sandbox of its own, of an agent of an account of its own. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, name: `sandbox-${randomUUID()}`, sandboxSessionId: `sbs_${randomUUID()}` };
+  const agentId = yield* openTaskAgent(userId, yield* openWorkspace(userId), null);
+  return {
+    userId,
+    agentId,
+    name: `sandbox-${randomUUID()}`,
+    sandboxSessionId: `sbs_${randomUUID()}`,
+  };
 });
 
 /** Vercel as the scenario has it: the session's sandbox found running it, and each policy kept as it lands, in that order. */
@@ -126,7 +131,7 @@ const firewallOver = (layer: Layer.Layer<never>) =>
 
 it.layer(getTestDB())("a sandbox session's firewall", (it) => {
   it.effect(
-    "each write carries what its writer names beside the launch's swaps, the kept launch holds no value in the clear, and its end and a clear take the swaps off",
+    "each write carries what its writer names beside the launch's swaps, and the kept launch holds no value in the clear",
     () =>
       Effect.gen(function* () {
         const session = yield* ownSession;
@@ -134,15 +139,10 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
         const { firewall, services } = yield* firewallOver(api.layer);
 
         const kept = yield* Effect.gen(function* () {
-          yield* firewall.keepLaunch(session, bearerLaunch);
+          yield* firewall.keepLaunch(session, bearerLaunch(session.agentId));
           yield* firewall.write(session, { github: write });
           yield* firewall.write(session, { github: write, clone: read });
-          const row = yield* readFirewallLaunch(session);
-          yield* firewall.endLaunch(session, { github: write });
-          yield* firewall.write(session, {});
-          yield* firewall.keepLaunch(session, bearerLaunch);
-          yield* firewall.clear({ name: session.name, sessionId: session.sandboxSessionId });
-          return row;
+          return yield* readFirewallLaunch(session);
         }).pipe(services);
 
         assert.deepEqual(api.landed, [
@@ -162,61 +162,12 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
               [SERVICE_HOST]: [BEARER_RULE],
             },
           },
-          { allow: { "*": [], "github.com": [WRITE_RULE], "api.github.com": [WRITE_RULE] } },
-          { mode: "allow-all" },
-          { mode: "allow-all" },
         ]);
         assert.ok(kept !== undefined);
-        assert.equal(kept.agentId, "agent-fixture");
+        assert.equal(kept.agentId, session.agentId);
         for (const value of [BEARER, "runner-placeholder-fixture"]) {
           assert.equal(kept.sealedEntries.includes(value), false);
         }
-        assert.equal(yield* readFirewallLaunch(session), undefined);
-      }),
-  );
-
-  it.effect(
-    "a renewal sets the plan's new token behind the launch's placeholder, which every write after sends",
-    () =>
-      Effect.gen(function* () {
-        const session = yield* ownSession;
-        const api = vercel(session);
-        const { firewall, services } = yield* firewallOver(api.layer);
-        const placeholder = "Bearer plan-placeholder-fixture";
-
-        yield* Effect.gen(function* () {
-          yield* firewall.keepLaunch(session, {
-            agentId: "agent-fixture",
-            swaps: new Map([
-              [LAUNCH_SWAP.OPENAI_PLAN, swapOf("api.openai.test", placeholder, "Bearer one")],
-            ]),
-          });
-          const launch = yield* firewall.launchOf(session);
-          assert.ok(launch !== undefined);
-          yield* firewall.renew(
-            session,
-            launch,
-            LAUNCH_SWAP.OPENAI_PLAN,
-            swapOf("api.openai.test", placeholder, "Bearer two"),
-            {},
-          );
-          yield* firewall.write(session, {});
-        }).pipe(services);
-
-        const renewed = {
-          allow: {
-            "*": [],
-            "api.openai.test": [
-              {
-                match: {
-                  headers: [{ key: { exact: "authorization" }, value: { exact: placeholder } }],
-                },
-                transform: [{ headers: { authorization: "Bearer two" } }],
-              },
-            ],
-          },
-        };
-        assert.deepEqual(api.landed, [renewed, renewed]);
       }),
   );
 });

@@ -7,26 +7,25 @@
  * not running has nothing to keep alive, and a stopped one is never resumed
  * here.
  *
- * eve opens one persistent Vercel Sandbox per top-level session, tagged with
- * the session's id, and a worker shares its parent's; a stopped sandbox
- * keeps its checkout in snapshots until Vercel lets them expire. Once we
+ * An agent's session has one persistent Vercel Sandbox (`agent-sandbox-open.ts`),
+ * tagged with the session's id; a stopped sandbox keeps its checkout in
+ * snapshots until Vercel lets them expire. Once we
  * let go of a session for good, its retire's reset, the purge of a deleted
  * task's conversations, or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
  * bounded batch at a time: every sandbox carrying the session's tag is
- * deleted with the snapshots only it kept, then the session's drive
- * (`agent-drive.ts`), and the session leaves the queue.
+ * deleted with the snapshots only it kept, and the session leaves the queue.
  * A delete Vercel did not confirm leaves the session queued, stamped, behind
  * the rest. An agent's archive stops its sandbox rather than deleting it, in
  * the background (`stoppedInBackground`), so an unarchive still resumes from
- * the snapshot, its drive kept; a local agent's archive queues its device a discard line
+ * the snapshot; a local agent's archive queues its device a discard line
  * there too (`device-discard.ts`). Nothing here reads a sandbox's files or a word of any account:
  * what is asked of Vercel is a tag and a name, and what is logged of a
  * failure is its status.
  *
  * Credentials are the deployment's own: the function's Vercel OIDC token,
- * which names this project and its team, as eve's own sandboxes are made
- * with (`vercel-sandbox-api.ts`). A deployment without one answers every
+ * which names this project and its team, as the agents' own sandboxes are
+ * made with (`vercel-sandbox-api.ts`). A deployment without one answers every
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 
@@ -40,9 +39,7 @@ import {
 } from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { afterResponse } from "../http/after-response.js";
-import { agentDriveName } from "./agent-drive.js";
 import { discardedOrLogged } from "./device-discard.js";
-import { sandboxFirewall } from "./sandbox-firewall.js";
 import { keepAliveExtension } from "./sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
@@ -77,16 +74,13 @@ export interface SessionSandboxesService {
    * is left as it is.
    */
   readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
-  /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses, and then the session's drive; answers how many sandboxes went. */
+  /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
-   * filesystem for a later resume; answers how many were stopped. Every credential at its firewall comes off first, its record with it
-   * (`sandbox-firewall.ts`).
+   * filesystem for a later resume; answers how many were stopped.
    */
-  readonly stopFor: (
-    sessionId: string,
-  ) => Effect.Effect<number, SandboxUnavailable, DatabaseServices>;
+  readonly stopFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
@@ -117,8 +111,6 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
       Effect.gen(function* () {
         const sandboxes = yield* api.listTagged(sessionId);
         for (const { name } of sandboxes) yield* api.deleteSandbox(name);
-        // The drive goes last, because Vercel refuses to delete one a running sandbox holds.
-        yield* api.deleteDrive(agentDriveName(sessionId));
         return sandboxes.length;
       }),
     stopFor: (sessionId) =>
@@ -131,10 +123,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
-          // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
           const session = { name: sandbox.name, sessionId: running };
-          yield* sandboxFirewall(api).clear(session);
           yield* Effect.flatMap(api.session(session), (held) => held.stop());
           stopped += 1;
         }

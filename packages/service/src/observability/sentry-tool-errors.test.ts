@@ -2,8 +2,8 @@
  * sentry-tool-errors.test.ts -- an agent's tool call that is refused is answered
  * to the model, and Sentry keeps it as a breadcrumb rather than an issue; one
  * that fails beneath the tool is still an issue.
- * Sentry is started as an eve root starts it, over the recording transport;
- * the model is a script. It stands in a file of its own because eve's start
+ * Sentry is started as the retired runtime's root started it, over the recording transport;
+ * the model is a script. It stands in a file of its own because that start
  * installs process-wide integrations the web suite's tests do not expect.
  */
 

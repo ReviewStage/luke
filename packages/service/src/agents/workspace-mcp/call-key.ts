@@ -1,7 +1,7 @@
 /**
  * call-key.ts -- the key a native agent's tool call runs under, the same across its harness's retry of the call.
  *
- * eve keys a start or a message on its own id for the tool call, so a call
+ * The agent tools key a start or a message on the call's key, so a call
  * run again starts or sends once (`../agent-tools.ts`'s
  * `AgentCall`). A Claude Code or Codex agent's retry, after its
  * harness's timeout or the door's failure, is a fresh call of the harness's,
@@ -20,7 +20,7 @@ import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { nativeCallKeyOf } from "@repo/database/models/native-call-keys";
 import { isRecord, type UnparsedWireValue } from "@repo/wire";
 import type { Effect } from "effect";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 
 /** How long a call of the same input runs under the first call's key: past every harness's tool timeout and the retry it prompts, and short of an agent repeating itself on purpose. */
 export const NATIVE_CALL_KEY_WINDOW_MS = 10 * 60_000;

@@ -17,26 +17,31 @@ import {
   type PortActResult,
 } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { timeRuntime } from "@repo/ui";
 import type { LocalStripTab, ViewedAt } from "@repo/ui/tab-strip-model";
 import { localTab } from "@repo/ui/tab-strip-model";
+import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Clock, Context, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
+import { SIDE_BUNDLES, type SideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
-import { bundleLanded, fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
+import {
+  bundleLanded,
+  fittedTerminalBundles,
+  onSideBundles,
+  standInBundles,
+} from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
 import { TERMINAL_KIND } from "./terminal-session.js";
 import { TerminalCount, TerminalTab } from "./terminal-tab.js";
@@ -256,7 +261,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Each registry lets its terminals go, as a window's does as it closes.
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
@@ -270,6 +274,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The tab mounted for one of the agent's terminals, shown or not, with what it draws. */
@@ -289,10 +294,12 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the window's ticks never start here, because the working agent's mark steps on one
-  // forever, and a test that runs every fake timer out would never finish.
-  const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
+  // Note that the working agent's mark never steps here, because it steps on a beat forever, and a
+  // test that runs every fake timer out would never finish.
+  serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
+  const registry = AtomRegistry.make();
   registries.push(registry);
+  const terminals = windowTerminals();
   const wrapped = (tab: React.ReactElement) =>
     findable
       ? createElement(FindScope, {
@@ -317,7 +324,10 @@ async function mount(
     handed = drawn.handed;
     act(() =>
       root.render(
-        onRegistry(registry, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
+        onRegistry(
+          registry,
+          onTerminals(terminals, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
+        ),
       ),
     );
   };
@@ -338,7 +348,7 @@ async function mount(
       render(on);
       await settle();
     },
-    registry,
+    terminals,
     /** Presses the button the label names, wherever it stands in the tab. */
     press: async (label: string) => {
       const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
@@ -499,7 +509,7 @@ test("a message on the port that is no message of main's is never drawn nor acte
 test("a terminal bundle that fails to load leaves the tab saying so with Retry, which imports it again and draws the screen", async () => {
   const landed = await Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal));
   let online = false;
-  const unloaded = sideBundles({
+  const unloaded = standInBundles({
     terminal: () =>
       online
         ? Promise.resolve(landed)
@@ -595,8 +605,8 @@ function lastPayload(kind: PortActKind | ShellKind) {
 test("a terminal's row in the panel's + counts the agent's Local terminals, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
   const standing = renderToStaticMarkup(
-    onRegistry(
-      tab.registry,
+    onTerminals(
+      tab.terminals,
       createElement(TerminalCount, { kind: TERMINAL_KIND.LOCAL, agentId: AGENT.id }),
     ),
   );
@@ -607,8 +617,8 @@ test("a terminal's row in the panel's + counts the agent's Local terminals, leav
 function localDoors(
   open: readonly LocalStripTab[] = [],
   viewedAt: ViewedAt<SidePanelTab>[] = [],
-  /** The window's atoms, a tab's own where the doors stand beside one. */
-  registry = AtomRegistry.make(),
+  /** The window's terminals, a tab's own where the doors stand beside one. */
+  terminals = windowTerminals(),
 ) {
   const chosen: SidePanelTab[] = [];
   let doors: { open: (agentId: string, fresh: boolean) => void; end: (tab: LocalStripTab) => void };
@@ -624,7 +634,7 @@ function localDoors(
   const container = document.createElement("div");
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(Doors))));
+  act(() => root.render(onTerminals(terminals, createElement(Doors))));
   return {
     chosen,
     open: (fresh: boolean) => act(() => doors.open(AGENT.id, fresh)),
@@ -667,7 +677,7 @@ test("Show local goes to the agent's Local tab viewed last, and with none open, 
 test("closing a Local tab ends its terminal: out of the window's list, its port closed, and its shell ended in main", async () => {
   const tab = await mount();
   const port = main.post(MADE);
-  const doors = localDoors([], [], tab.registry);
+  const doors = localDoors([], [], tab.terminals);
   await doors.end(localTab(AGENT.id, FIRST, "Local 1"));
   assert.deepEqual(
     kept().map((each) => each.shell),
@@ -759,6 +769,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
+  const terminals = windowTerminals();
   const tab = createElement(TerminalTab, {
     tab: localTab(AGENT.id, FIRST, "Local 1"),
     agents,
@@ -772,13 +783,16 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
       root.render(
         onRegistry(
           registry,
-          onSideBundles(
-            FITTED,
-            createElement(FindScope, {
-              active: true,
-              subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
-              children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
-            }),
+          onTerminals(
+            terminals,
+            onSideBundles(
+              FITTED,
+              createElement(FindScope, {
+                active: true,
+                subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
+                children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
+              }),
+            ),
           ),
         ),
       ),

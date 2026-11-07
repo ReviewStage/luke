@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { IntegrationTool } from "@repo/features/integration-health";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import { SIGN_IN_WAIT } from "@repo/features/integration-sign-in";
 import {
@@ -26,7 +25,8 @@ import type { AppHostRead, AppStateDelivery } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { SettingsPage, timeRuntime } from "@repo/ui";
+import { SettingsPage } from "@repo/ui";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -67,10 +67,10 @@ import { IntegrationsSection } from "./integrations-page.js";
  * provider pending at the service until the test settles it, as the browser
  * would, or a Cancel ends it, each reaching the host's read of where they
  * stand, which the test lays again as the service's rows move. A connected
- * provider's server lists the tools the bridge holds for it, which its row
- * opens onto in place. The page's own search keeps the rows it finds under
- * Connected and Not connected, opens a row onto the tools it found, says
- * when it finds nothing, takes Command-F, and gives way to Escape.
+ * provider works once its server lists the tools the bridge holds for it.
+ * The page's own search keeps the rows it finds under Connected and Not
+ * connected, says when it finds nothing, takes Command-F, and gives way to
+ * Escape.
  */
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
@@ -104,7 +104,10 @@ let reopenedDuringCancel = false;
 /** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
 /** The tools each provider's server lists; one absent here is never answered. */
-const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
+const listed = new Map<
+  IntegrationProvider,
+  readonly { readonly name: string; readonly description: string }[]
+>();
 /** The sign-in failures the host's next read carries, each named once as the service ends it. */
 let signInFailures: IntegrationSignInFailure[] = [];
 /** The accounts the host's read names, past a provider's own word. */
@@ -307,11 +310,9 @@ function ownRegistry(): AtomRegistry.AtomRegistry {
 
 /** A registry whose atoms wait on this clock, as the window's would on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  serveEffectsOn(Context.make(Clock.Clock, clock));
   const registry = AtomRegistry.make({
-    initialValues: [
-      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    ],
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
   registries.push(registry);
   return registry;
@@ -380,7 +381,7 @@ function rowNames(page: HTMLElement): (string | undefined)[] {
   return [...page.querySelectorAll('[id$="label"]')].map(nameOf);
 }
 
-/** The words of the buttons standing on a row, its ⋯ and its tools' toggle aside. */
+/** The words of the buttons standing on a row, its ⋯ aside. */
 function rowButtons(row: Element): (string | null)[] {
   return [...row.querySelectorAll("button")]
     .filter((button) => !button.hasAttribute("aria-expanded"))
@@ -588,7 +589,7 @@ test("a connection that works stands quiet, with Reconnect in its ⋯ beside Dis
 
   await choose(row, "Reconnect");
 
-  assert.equal(line, "Connected · 1 tool");
+  assert.equal(line, "Connected");
   assert.deepEqual(buttons, []);
   assert.deepEqual(menu, { items: ["Reconnect", "Disconnect"], heading: undefined });
   assert.deepEqual(
@@ -682,7 +683,7 @@ test("a connection whose tools could not be read says so in the attention tint, 
   await vi.waitFor(() =>
     assert.equal(
       rowNamed(page, "Linear").querySelector(".ui-settings-row-state")?.textContent,
-      "Connected · 1 tool",
+      "Connected",
     ),
   );
   const mended = rowNamed(page, "Linear");
@@ -756,7 +757,7 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
   touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
 
   await pressOnGranola(page, "Cancel");
-  await vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool"));
+  await vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected"));
 });
 
 test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retry", async () => {
@@ -842,7 +843,7 @@ it.effect(
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(readMoves);
       yield* Effect.promise(() =>
-        vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool")),
+        vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected")),
       );
     }),
 );
@@ -898,18 +899,12 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
   }),
 );
 
-/** Vercel and Linear connected, their servers listing these tools, Vercel's annotated as a server may. */
+/** Vercel and Linear connected, their servers listing a tool each. */
 function connectVercelAndLinear(): void {
   touched.set(INTEGRATION_PROVIDER.VERCEL, INTEGRATION_STATUS.CONNECTED);
   touched.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
   listed.set(INTEGRATION_PROVIDER.VERCEL, [
-    { name: "list_projects", description: "Lists projects.", annotations: { readOnlyHint: true } },
-    {
-      name: "delete_project",
-      description: "Deletes a project.",
-      annotations: { readOnlyHint: false, destructiveHint: true },
-    },
-    { name: "get_deployment", description: "Reads one deployment." },
+    { name: "list_projects", description: "Lists projects." },
   ]);
   listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
 }
@@ -923,55 +918,10 @@ function rowNamed(page: HTMLElement, name: string): Element {
   );
 }
 
-/** Each tool the page shows opened: its name and its badge, where it wears one. */
-function shownTools(page: HTMLElement) {
-  return [...page.querySelectorAll('.integration-tools-panel ul[aria-label$=" tools"] > li')].map(
-    (tool) => [toolName(tool), tool.querySelector(".ui-quiet-words")?.textContent ?? undefined],
-  );
-}
-
-/** A tool's name as its row draws it: beside its title, or in the title's place where it has none. */
-function toolName(tool: Element | null | undefined): string | null | undefined {
-  return (
-    tool?.querySelector(".integration-tool-id") ?? tool?.querySelector(".integration-tool-title")
-  )?.textContent;
-}
-
-/** Opens `name`'s row onto its tools. */
-function openRow(page: HTMLElement, name: string): void {
-  act(() =>
-    (
-      rowNamed(page, name).querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
-      assert.fail(`${name}'s row opens onto its tools`)
-    ).click(),
-  );
-}
-
-/** The tool an opened row holds, by the row its list draws current and the title of the page beside it. */
-function held(page: HTMLElement) {
-  return [
-    toolName(
-      page.querySelector(
-        '.integration-tools-panel ul[aria-label$=" tools"] > li:has([aria-current="true"])',
-      ),
-    ),
-    page.querySelector(".integration-tools-panel .integration-tool-detail-title")?.textContent,
-  ];
-}
-
-/** A key pressed wherever the focus stands, as a keyboard's lands, answering whether anything took it. */
-function keyAtFocus(name: string): boolean {
-  const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
-  act(() => {
-    (document.activeElement ?? document.body).dispatchEvent(event);
-  });
-  return event.defaultPrevented;
-}
-
 /** The page's search field. */
 function searchField(page: HTMLElement): HTMLInputElement {
   return (
-    page.querySelector<HTMLInputElement>('input[aria-label="Search integrations and tools"]') ??
+    page.querySelector<HTMLInputElement>('input[aria-label="Search integrations"]') ??
     assert.fail("the page draws its search field")
   );
 }
@@ -1011,25 +961,14 @@ test("the rows stand under Connected and Not connected, each section in the orde
   ]);
 });
 
-test("a query keeps only the rows it found, opening one onto the tools it found, marked and counted", async () => {
+test("a query keeps only the rows it found, its words marked in their names", async () => {
   connectVercelAndLinear();
   const page = await mount();
 
-  await searchFor(page, "deploy");
+  await searchFor(page, "verc");
 
   assert.deepEqual(sections(page), [["Connected", ["Vercel"]]]);
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-  assert.equal(
-    rowNamed(page, "Vercel").querySelector(".ui-settings-row-state button")?.textContent,
-    "1 of 3 tools match",
-  );
-  assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
-  assert.equal(
-    rowNamed(page, "Vercel")
-      .querySelector(".ui-settings-row-state button")
-      ?.getAttribute("aria-label"),
-    "1 of 3 tools match, hide Vercel tools",
-  );
+  assert.equal(rowNamed(page, "Vercel").querySelector("mark")?.textContent, "Verc");
 });
 
 test("a query finds an integration by what it is for, keeping its section", async () => {
@@ -1054,8 +993,8 @@ test("a query that finds nothing says so, and clearing it brings every row back"
   await searchFor(page, "frobnicate");
 
   assert.deepEqual(sections(page), []);
-  assert.equal(page.textContent?.includes("No integrations or tools match “frobnicate”"), true);
-  assert.equal(announcedPolitely(), "No integrations or tools match “frobnicate”");
+  assert.equal(page.textContent?.includes("No integrations match “frobnicate”"), true);
+  assert.equal(announcedPolitely(), "No integrations match “frobnicate”");
 
   const clear =
     page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]') ??
@@ -1119,258 +1058,6 @@ test("Command-F lands in the page's search, and Escape clears it, then lets go o
   assert.equal(document.activeElement !== searchField(page), true);
   window.removeEventListener("keydown", listen);
   assert.deepEqual(reachedWindow, []);
-});
-
-test("a query that finds an integration by its own name opens nothing by itself, and opened, keeps every tool", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  await searchFor(page, "vercel");
-
-  assert.deepEqual(shownTools(page), []);
-  act(() =>
-    (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
-      assert.fail("Vercel's row opens onto its tools")
-    ).click(),
-  );
-  assert.equal(shownTools(page).length, 3);
-});
-
-test("a row closed under one query opens again when that query comes back after another", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  await searchFor(page, "deploy");
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-
-  act(() =>
-    (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".ui-settings-row-state button") ??
-      assert.fail("Vercel's row closes")
-    ).click(),
-  );
-  assert.deepEqual(shownTools(page), []);
-
-  await searchFor(page, "projects");
-  await searchFor(page, "deploy");
-
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-});
-
-test("an opened row holds its first tool, whose page stands beside the list, and a press holds another", async () => {
-  connectVercelAndLinear();
-  listed.set(INTEGRATION_PROVIDER.VERCEL, [
-    {
-      name: "list_projects",
-      title: "List projects",
-      description: "Lists projects.\n\n- Pages through **every** project on the team.",
-      annotations: { readOnlyHint: true, openWorldHint: false },
-      parameters: [{ name: "limit", type: "number", required: false, default: "20" }],
-    },
-    { name: "get_deployment", description: "Reads one deployment." },
-  ]);
-  const page = await mount();
-  openRow(page, "Vercel");
-
-  assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-  // Note that in Settings a pressed tool takes the focus, as a button does, so the arrows reach it next.
-  const pressStart = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  page.querySelector('ul[aria-label$=" tools"] > li > button')?.dispatchEvent(pressStart);
-  assert.equal(pressStart.defaultPrevented, false);
-
-  act(() =>
-    (
-      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
-        (button) => toolName(button) === "list_projects",
-      ) ?? assert.fail("list_projects has its row")
-    ).click(),
-  );
-  assert.deepEqual(held(page), ["list_projects", "List projects"]);
-  const detail = page.querySelector(".integration-tool-detail") ?? assert.fail("no tool page");
-  assert.equal(detail.querySelector(".integration-tool-detail-name")?.textContent, "list_projects");
-  assert.equal(
-    detail.querySelector(".integration-tool-description-whole li strong")?.textContent,
-    "every",
-  );
-  assert.deepEqual(
-    [...detail.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
-    ["Read-only", "Only Vercel's own data"],
-  );
-  assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
-});
-
-test("the list is one Tab stop, and the arrows, Home, and End, wrapping, move the tool an opened row holds, its page following", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  openRow(page, "Vercel");
-  act(() =>
-    page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
-  );
-
-  assert.deepEqual(
-    [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].map(
-      (button) => button.tabIndex,
-    ),
-    [0, -1, -1],
-  );
-  assert.equal(keyAtFocus("ArrowDown"), true);
-  assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-  keyAtFocus("ArrowDown");
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
-  assert.equal(toolName(document.activeElement), "list_projects");
-  keyAtFocus("ArrowDown");
-  assert.deepEqual(held(page), ["delete_project", "delete_project"], "↓ wraps at the end");
-  keyAtFocus("Home");
-  assert.deepEqual(held(page), ["delete_project", "delete_project"]);
-  keyAtFocus("End");
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
-  keyAtFocus("ArrowUp");
-  assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-  assert.deepEqual(
-    [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].map(
-      (button) => button.tabIndex,
-    ),
-    [-1, 0, -1],
-  );
-});
-
-test("the arrows scroll an opened row's tool list, and only it, to keep the held tool in view", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  openRow(page, "Vercel");
-  // Note that the list's scroller is the area its rows stand in.
-  const list =
-    page.querySelector<HTMLElement>(".integration-tools-list")?.parentElement ??
-    assert.fail("the tool list");
-  // Note that jsdom lays nothing out, so the list shows one 30px row and each row stands 30px under the last, less what the list has scrolled.
-  const ROW = 30;
-  const rows = () => [...list.querySelectorAll<HTMLElement>('ul[aria-label$=" tools"] > li')];
-  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this === list ? ROW : 0;
-  });
-  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(ROW);
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    const at = rows().indexOf(this);
-    return new DOMRect(0, at < 0 ? 0 : at * ROW - list.scrollTop, 200, ROW);
-  });
-  act(() =>
-    page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
-  );
-
-  keyAtFocus("ArrowDown");
-  keyAtFocus("ArrowDown");
-  assert.equal(list.scrollTop, 2 * ROW, "the third tool's row stands in the list's view");
-  keyAtFocus("Home");
-  assert.equal(list.scrollTop, 0, "the first tool's row stands in view again");
-});
-
-test("Return hands the focus to the held tool's page, and Escape or Left hands it back to its row, never leaving the page", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  openRow(page, "Vercel");
-  const reached = { escapes: 0 };
-  const heard = (event: KeyboardEvent) => {
-    if (event.key === "Escape") reached.escapes += 1;
-  };
-  window.addEventListener("keydown", heard);
-  try {
-    act(() =>
-      page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
-    );
-    keyAtFocus("ArrowDown");
-
-    for (const back of ["Escape", "ArrowLeft"]) {
-      keyAtFocus("Enter");
-      assert.equal(
-        document.activeElement ===
-          page.querySelector(".integration-tool-detail-body")?.parentElement,
-        true,
-      );
-      assert.equal(keyAtFocus(back), true, back);
-      assert.equal(toolName(document.activeElement), "get_deployment");
-    }
-    assert.equal(reached.escapes, 0);
-    assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-  } finally {
-    window.removeEventListener("keydown", heard);
-  }
-});
-
-test("a search that no longer finds the held tool hands its place to the first it does", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  openRow(page, "Vercel");
-  act(() =>
-    (
-      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
-        (button) => toolName(button) === "list_projects",
-      ) ?? assert.fail("list_projects has its row")
-    ).click(),
-  );
-  await searchFor(page, "deploy");
-
-  assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-});
-
-test("a query naming the integration and a tool opens the row onto that tool", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  await searchFor(page, "vercel deploy");
-
-  assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
-});
-
-test("a tool held opens its page at the top, wherever the last one was scrolled", async () => {
-  connectVercelAndLinear();
-  const page = await mount();
-  openRow(page, "Vercel");
-  const body = () =>
-    page.querySelector<HTMLElement>(".integration-tool-detail-body")?.parentElement ??
-    assert.fail("no tool page");
-  body().scrollTop = 120;
-
-  act(() =>
-    (
-      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
-        (button) => toolName(button) === "list_projects",
-      ) ?? assert.fail("list_projects has its row")
-    ).click(),
-  );
-
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
-  assert.equal(body().scrollTop, 0);
-});
-
-test("a search's words are marked on the held tool's page, where they landed past the row's one line", async () => {
-  connectVercelAndLinear();
-  listed.set(INTEGRATION_PROVIDER.VERCEL, [
-    { name: "list_projects", description: "Lists projects.\n\nIncludes **archived** ones too." },
-  ]);
-  const page = await mount();
-  await searchFor(page, "archived");
-
-  assert.deepEqual(held(page), ["list_projects", "list_projects"]);
-  assert.deepEqual(
-    [...page.querySelectorAll(".integration-tool-description-whole mark.search-match")].map(
-      (mark) => mark.textContent,
-    ),
-    ["archived"],
-  );
-});
-
-test("a tool its server says nothing of has a page that says so", async () => {
-  connectVercelAndLinear();
-  listed.set(INTEGRATION_PROVIDER.VERCEL, [{ name: "whoami", description: "" }]);
-  const page = await mount();
-  openRow(page, "Vercel");
-
-  assert.equal(page.querySelector(".ui-list-row-description") === null, true);
-  assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
-  assert.equal(page.querySelector(".integration-tool-hints") === null, true);
-  assert.equal(page.querySelector(".integration-tool-parameters") === null, true);
 });
 
 test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
@@ -1735,14 +1422,6 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
 /** How tall a row is drawn, in the layout given. */
 const ROW = 40;
 
-/** How much taller a row opened onto its tools stands, in the layout given. */
-const TOOLS = 200;
-
-/** How tall a moving row stands: a row's height, and its tools' under it where it opened onto them. */
-function heightOf(row: Element): number {
-  return row.querySelector(".integration-tools-panel") === null ? ROW : ROW + TOOLS;
-}
-
 /** Each row standing under the rows before it on the page, as a layout would; jsdom lays nothing out. */
 function layRowsInOrder(page: HTMLElement): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -1750,17 +1429,9 @@ function layRowsInOrder(page: HTMLElement): void {
   ) {
     const rows = [...page.querySelectorAll("[data-motion-key]")];
     const at = rows.indexOf(this);
-    const top = rows.slice(0, Math.max(at, 0)).reduce((sum, row) => sum + heightOf(row), 0);
+    const top = Math.max(at, 0) * ROW;
     return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
   });
-}
-
-/** What a row moves as, the box its motion follows, by the row's name. */
-function movingRow(page: HTMLElement, name: string): HTMLElement {
-  return (
-    rowNamed(page, name).closest<HTMLElement>("[data-motion-key]") ??
-    assert.fail(`${name}'s row moves`)
-  );
 }
 
 /** Granola, Linear, and Mercury offered, none of them connected. */
@@ -1795,121 +1466,6 @@ test("with motion held still, an integration that connects takes its place and n
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
       [],
-    );
-  } finally {
-    motions.remove();
-  }
-});
-
-/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it, in a window tall enough to show them all, since the list motion plays only what the reader can see. */
-function layInDocumentOrder(): void {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    const top = [...document.querySelectorAll("*")].indexOf(this) * ROW;
-    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
-  });
-  vi.spyOn(window, "innerHeight", "get").mockImplementation(
-    () => document.querySelectorAll("*").length * ROW,
-  );
-}
-
-/** The chevron on a row's tools press, and whether it stands turned. */
-function toolsChevron(page: HTMLElement, name: string): HTMLElement {
-  return (
-    rowNamed(page, name).querySelector<HTMLElement>(
-      ".ui-settings-row-state button .ui-disclosure-turn",
-    ) ?? assert.fail(`${name}'s tools press wears a turning chevron`)
-  );
-}
-
-/** The motions played on `element`, by their keyframes. */
-function motionsOn(
-  motions: ReturnType<typeof playListMotions>,
-  element: Element | null | undefined,
-): Keyframe[][] {
-  return motions.played.filter((each) => each.element === element).map((each) => each.keyframes);
-}
-
-test("a row's tools unroll under one chevron that turns, and roll up as it turns back", async () => {
-  const motions = playListMotions();
-  // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
-  for (const [name, value] of [
-    ["--ui-duration-quick", "140ms"],
-    ["--ui-row-stagger", "32ms"],
-  ] as const) {
-    document.documentElement.style.setProperty(name, value);
-  }
-  try {
-    connectVercelAndLinear();
-    const page = await mount();
-    layInDocumentOrder();
-    const under = movingRow(page, "Vercel");
-    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
-
-    openRow(page, "Linear");
-    await settle();
-
-    assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
-    const box = rowNamed(page, "Linear").closest("[data-motion-key]")?.querySelector(".ui-reveal");
-    assert.equal(box?.querySelector(".integration-tools-panel") !== null, true);
-    assert.deepEqual(motionsOn(motions, box).at(-1), [
-      { clipPath: "inset(0 0 100% 0)" },
-      { clipPath: "inset(0)" },
-    ]);
-    // Note that the row under it glides down with the clip's foot, rather than jumping under the tools.
-    assert.equal(motionsOn(motions, under).length > 0, true);
-
-    openRow(page, "Linear");
-    await settle();
-
-    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
-    assert.equal(box?.hasAttribute("inert"), true);
-    assert.deepEqual(motionsOn(motions, box).at(-1), [
-      { opacity: "1", clipPath: "inset(0)" },
-      { opacity: 0, clipPath: "inset(0 0 100% 0)" },
-    ]);
-    act(() => motions.played.findLast((each) => each.element === box)?.finish());
-    assert.equal(box?.isConnected, false);
-  } finally {
-    document.documentElement.style.removeProperty("--ui-duration-quick");
-    document.documentElement.style.removeProperty("--ui-row-stagger");
-    motions.remove();
-  }
-});
-
-test("with motion held still, a row's tools show at once and fold at once", async () => {
-  const motions = playListMotions();
-  try {
-    for (const name of ["--ui-duration-exit", "--ui-duration-shape"]) {
-      document.documentElement.style.setProperty(name, "0ms");
-    }
-    connectVercelAndLinear();
-    const page = await mount();
-    layInDocumentOrder();
-
-    openRow(page, "Linear");
-    await settle();
-
-    assert.equal(
-      rowNamed(page, "Linear")
-        .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel") != null,
-      true,
-    );
-    assert.deepEqual(
-      motions.played.map((each) => each.keyframes),
-      [],
-    );
-
-    openRow(page, "Linear");
-    await settle();
-
-    assert.equal(
-      rowNamed(page, "Linear")
-        .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel") == null,
-      true,
     );
   } finally {
     motions.remove();

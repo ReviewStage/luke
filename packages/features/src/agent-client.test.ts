@@ -68,39 +68,44 @@ function causeTraceOf(answer: object): unknown {
   return traceId;
 }
 
+it.effect("starts an agent with the request as sent", () =>
+  Effect.gen(function* () {
+    const request = { idempotencyKey: "press-1", ...CHOICE };
+    const api = fakeCloudApi({
+      [`POST /api/plans/${TASK_ID}/agents`]: {
+        answer: () => ({ agent: AGENT }),
+        status: 201,
+      },
+    });
+    const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
+    assert.deepEqual(started, { agent: AGENT });
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+  }),
+);
+
 it.effect(
-  "starts an agent with the request as sent, and reads each refusal as its own failure",
+  "a Start and a choice the catalog refuses as an invalid request read as a choice the service does not offer now",
   () =>
     Effect.gen(function* () {
-      const request = { idempotencyKey: "press-1", ...CHOICE };
-      const api = fakeCloudApi({
+      const refusing = fakeCloudApi({
         [`POST /api/plans/${TASK_ID}/agents`]: {
-          answer: () => ({ agent: AGENT }),
-          status: 201,
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
         },
       });
-      const refusals = [
-        [HOSTED_API_ERROR.NO_REPOSITORY, AGENT_CALL_FAILURE.NO_REPOSITORY],
-        [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE],
-        [HOSTED_API_ERROR.INVALID_REQUEST, AGENT_CALL_FAILURE.INVALID_CHOICE],
-        [HOSTED_API_ERROR.GITHUB_UNANSWERED, AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
-        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
-      ] as const;
 
-      const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
-      assert.deepEqual(started, { agent: AGENT });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+      const started = yield* Effect.provide(
+        client().start(TASK_ID, { idempotencyKey: "press-1", ...CHOICE }),
+        refusing.layer,
+      );
+      const chosen = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), refusing.layer);
 
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          [`POST /api/plans/${TASK_ID}/agents`]: {
-            answer: () => ({ error }),
-            status: HTTP_STATUS.CONFLICT,
-          },
-        });
-        const refused = yield* Effect.provide(client().start(TASK_ID, request), refusing.layer);
-        assert.deepEqual(uncaused(refused), { failure }, error);
-      }
+      assert.deepEqual(started, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+      assert.deepEqual(chosen, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
     }),
 );
 
@@ -609,7 +614,7 @@ it.effect(
 );
 
 it.effect(
-  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to eve, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
+  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to the agent's session, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
   () =>
     Effect.gen(function* () {
       const request = { text: "Also the emails.", clientKey: "key-1" };
@@ -768,31 +773,6 @@ it.effect(
           { failure },
           error,
         );
-      }
-    }),
-);
-
-it.effect(
-  "a dictated clip answers its words, and a clip refused for want of an OpenAI key says so rather than unanswered",
-  () =>
-    Effect.gen(function* () {
-      const clip = { audio: "T2dnUw==", durationMs: 1_500, keywords: ["relay"] };
-      const answering = fakeCloudApi({
-        "POST /api/dictation": { answer: () => ({ text: "Run the tests" }) },
-      });
-      const heard = yield* Effect.provide(client().transcribeDictation(clip), answering.layer);
-      assert.deepEqual(heard, { text: "Run the tests" });
-
-      const refusals = [
-        [HOSTED_API_ERROR.OPENAI_KEY_MISSING, AGENT_CALL_FAILURE.OPENAI_KEY_MISSING],
-        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
-      ] as const;
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          "POST /api/dictation": { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
-        });
-        const refused = yield* Effect.provide(client().transcribeDictation(clip), refusing.layer);
-        assert.deepEqual(uncaused(refused), { failure }, error);
       }
     }),
 );

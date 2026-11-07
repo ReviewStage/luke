@@ -10,7 +10,6 @@ import {
   createActPortHandler,
   macShellProcedures,
   type PlatformActProcedures,
-  portForwardProcedures,
   terminalProcedures,
 } from "@repo/host/act-port";
 import type { AppStateSnapshot } from "@repo/host/app-state";
@@ -141,7 +140,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         execFile("/usr/bin/open", ["-a", "Terminal", folder], () => undefined),
       exists: (folder) => fs.existsSync(folder),
     }),
-    ...portForwardProcedures<WebContents>({ host: operator.host }),
     ...terminalProcedures<WebContents>({
       host: operator.host,
       ports: {
@@ -185,6 +183,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
+    reportOnline: (_context, online) => services.tellOnline(online),
     notifyReady: async (context) => {
       windows.panelReady();
       if (!launch.captureOutput) return;
@@ -211,6 +210,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       {
         account: {
           host: operator.host,
+          acts: operator.acts,
           haltSessionReplay: operator.haltSessionReplay,
           resumeSessionReplay: operator.resumeSessionReplay,
           askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
@@ -223,10 +223,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
         chapters: { host: operator.host },
         installedSkills: { host: operator.host },
         integrations: { host: operator.host },
-        macCommands: { host: operator.host },
         pushes: windowPushes,
         settings: {
           host: operator.host,
+          acts: operator.acts,
           // The port names its window as an unknown sender; only a window of
           // this process's own is one the reporter is minted for.
           reporterOf: (actor) => {
@@ -238,6 +238,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          acts: operator.acts,
           colorCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,

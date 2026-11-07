@@ -3,8 +3,6 @@ import { it } from "@effect/vitest";
 import { accountBearer } from "@repo/features";
 import { PORT_FORWARD_STATE } from "@repo/features/port-forward-acts";
 import { TUNNEL_CLOSE, TUNNEL_FRAME } from "@repo/features/sandbox-tunnel-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@repo/gateway";
-import type { WireRecord } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { type Cause, Effect, Queue, Stream } from "effect";
 import { Base64 } from "effect/encoding";
@@ -28,7 +26,6 @@ import type { TerminalSocketArrival, TerminalSocketFrame } from "./compose-termi
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER_AGENT_ID = "1d2f3a4b-5c6d-4c6b-9e0a-8b3c7a1e2f4d";
-const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
@@ -59,6 +56,7 @@ const scriptedConnection = Effect.gen(function* () {
 function subject(options: { taken?: number[] } = {}) {
   return Effect.gen(function* () {
     const ports = new Map<string, number[]>([[AGENT_ID, []]]);
+    const stopped = new Set<string>();
     const taken = new Set(options.taken);
     /** Each listener standing, by the local port it holds: what it accepts. */
     const listeners = new Map<number, Queue.Queue<LoopbackConnection, Cause.Done>>();
@@ -87,7 +85,11 @@ function subject(options: { taken?: number[] } = {}) {
         }),
       },
       client: {
-        list: (agentId) => Effect.sync(() => ({ running: true, ports: ports.get(agentId) ?? [] })),
+        list: (agentId) =>
+          Effect.sync(() => ({
+            running: !stopped.has(agentId),
+            ports: stopped.has(agentId) ? [] : (ports.get(agentId) ?? []),
+          })),
       },
       openSocket: (url) =>
         Effect.gen(function* () {
@@ -112,13 +114,9 @@ function subject(options: { taken?: number[] } = {}) {
           return Stream.fromQueue(accepted);
         }),
     }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord) => {
-      const handler = composer.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return handler(params, context);
-    };
     return {
-      call,
+      /** Forwarding turned on or off, as the panel's Forward to localhost asks it. */
+      set: composer.acts.PORT_FORWARD_SET,
       /** How forwarding stands, as the windows were last told. */
       told: () => told.last,
       composer,
@@ -126,6 +124,8 @@ function subject(options: { taken?: number[] } = {}) {
       tunnels,
       /** The ports the service reads in an agent's sandbox from now on. */
       serve: (agentId: string, listening: number[]) => void ports.set(agentId, listening),
+      /** The agent's sandbox stopped, as the service reads it from now on. */
+      stop: (agentId: string) => void stopped.add(agentId),
       /** A connection made to a local port, as a browser on the Mac would. */
       connect: (localPort: number, connection: LoopbackConnection) => {
         const listener = listeners.get(localPort);
@@ -147,10 +147,10 @@ function readFrame(frame: TerminalSocketFrame) {
 
 it.effect("a port taken on this Mac is listened on at the next free one", () =>
   Effect.gen(function* () {
-    const { call, serve, told } = yield* subject({ taken: [3000] });
+    const { set, serve, told } = yield* subject({ taken: [3000] });
     serve(AGENT_ID, [3000, 5173]);
 
-    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
+    yield* set({ agentId: AGENT_ID, on: true });
     yield* settle;
 
     assert.deepEqual(told(), {
@@ -167,11 +167,11 @@ it.effect("a port taken on this Mac is listened on at the next free one", () =>
 
 it.effect("the forwarded ports follow each read, for one agent at a time", () =>
   Effect.gen(function* () {
-    const { call, serve, listeners, told } = yield* subject();
+    const { set, serve, listeners, told } = yield* subject();
     serve(AGENT_ID, [3000, 5173]);
     serve(OTHER_AGENT_ID, [8080]);
 
-    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
+    yield* set({ agentId: AGENT_ID, on: true });
     yield* settle;
     assert.deepEqual([...listeners.keys()].sort(), [3000, 5173]);
 
@@ -182,7 +182,7 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
     assert.deepEqual([...listeners.keys()].sort(), [4000, 5173]);
 
     // Forwarding another agent lets every port of the first go.
-    const other = yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, {
+    const other = yield* set({
       agentId: OTHER_AGENT_ID,
       on: true,
     });
@@ -196,7 +196,24 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
     });
     assert.deepEqual(other, { on: true, running: false, ports: [] });
 
-    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: OTHER_AGENT_ID, on: false });
+    yield* set({ agentId: OTHER_AGENT_ID, on: false });
+    assert.deepEqual([...listeners.keys()], []);
+    assert.equal(told(), null);
+  }),
+);
+
+it.effect("forwarding is let go once a sandbox seen running stops", () =>
+  Effect.gen(function* () {
+    const { set, serve, stop, listeners, told } = yield* subject();
+    serve(AGENT_ID, [3000]);
+    yield* set({ agentId: AGENT_ID, on: true });
+    yield* settle;
+    assert.deepEqual([...listeners.keys()], [3000]);
+
+    stop(AGENT_ID);
+    yield* TestClock.adjust(PORT_FORWARD.LOOK_EVERY);
+    yield* settle;
+
     assert.deepEqual([...listeners.keys()], []);
     assert.equal(told(), null);
   }),
@@ -206,9 +223,9 @@ it.effect(
   "each connection is a channel on its port's tunnel, and a closed tunnel opens again on the next connection",
   () =>
     Effect.gen(function* () {
-      const { call, serve, connect, tunnels, told } = yield* subject();
+      const { set, serve, connect, tunnels, told } = yield* subject();
       serve(AGENT_ID, [3000]);
-      yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
+      yield* set({ agentId: AGENT_ID, on: true });
       yield* settle;
 
       const browser = yield* scriptedConnection;

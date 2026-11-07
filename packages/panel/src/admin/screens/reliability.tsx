@@ -65,6 +65,7 @@ import {
   type StatSpec,
 } from "../charts/stat-card.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
+import { useExternalPress } from "../chrome/external-links.js";
 import { AppTurnsNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
@@ -340,11 +341,18 @@ function AnalyticsNote({
 }: {
   consoleUrl: string | null | undefined;
 }): React.JSX.Element {
+  const pressOf = useExternalPress();
   return (
     <Text tone={TEXT_TONE.MUTED}>
       Per-request HTTP error rates live in{" "}
       {consoleUrl ? (
-        <TextLink href={consoleUrl} look={TEXT_LINK_LOOK.UNDERLINED} external newTab>
+        <TextLink
+          href={consoleUrl}
+          look={TEXT_LINK_LOOK.UNDERLINED}
+          external
+          newTab
+          onClick={pressOf(consoleUrl)}
+        >
           product analytics
         </TextLink>
       ) : (

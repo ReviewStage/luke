@@ -1,9 +1,9 @@
-import type { HostedMacCommandClient } from "@repo/features";
+import { type HostedMacCommandClient, MAC_COMMAND_CALL_FAILURE } from "@repo/features";
 import {
+  MAC_COMMANDS_READ,
   type MacCommandsLiveAnswer,
-  macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
-} from "@repo/features/live-wire";
+} from "@repo/features/mac-command-live";
 import {
   isMacShellCommand,
   MAC_COMMAND_KIND,
@@ -13,9 +13,10 @@ import {
   type MacCommandResult,
   type MacShellCommand,
   type MacShellResult,
+  macCommandKindsQuery,
 } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { carried, GATEWAY_EVENT } from "@repo/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import {
   Clock,
@@ -26,14 +27,17 @@ import {
   FiberSet,
   Option,
   Schedule,
-  Schema,
+  type Scope,
   Stream,
+  SubscriptionRef,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { MAC_COMMAND_ACTS } from "./contract/index.js";
 import { Environment, Reporter } from "./effect/seams.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import { decodedLiveRows, LIVE_RESTART, waitOrRegained } from "./live-follow.js";
@@ -41,7 +45,6 @@ import {
   MAC_COMMAND_DECISION,
   type MacCommandAsk,
   type MacCommandDecision,
-  macCommandAnswerSchema,
 } from "./mac-command-ask.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
@@ -79,23 +82,22 @@ import type { RunMode } from "./run-mode.js";
  * A live read writes nothing, so the Mac says it listens for its kinds
  * itself, every `LISTENING_EVERY`, well inside the service's freshness
  * window: the one timer that remains, because presence is a fact about this
- * process that no row change can carry. Since the service counts the Mac
- * listening on the beat alone, each beat also reads the unclaimed commands
- * once, unheld, and a command left waiting past `MISSED_AFTER` is one the
- * follow missed, as a poll that stalled without an error misses every
- * command: the beat claims it and ends the follow, which is read again, so
- * a stalled follow costs a command seconds rather than
- * every call until the app restarts. Each beat reads the gate first, so
- * the setting switched off, a sign-out, or a run that sends nothing ends the
- * follow and the beats, the agents' calls are told no Mac listens, and every
- * command still running is stopped, its process group killed. Every read
- * names the account the follow started for, so one the service signs out
- * ends the follow. Quitting closes the scope, which kills every command
- * still running with its process group.
+ * process that no row change can carry.
+ *
+ * The gate is a value that changes rather than one read again on a timer:
+ * the account it stands open for, worked out afresh each time a setting or
+ * the account changes (`MacCommandsDependencies.changed`). The setting
+ * switched off, a sign-out, or another account signing in ends the follow
+ * and the beats at once, the agents' calls are told no Mac listens, and
+ * every command still running is stopped, its process group killed; a gate
+ * shut waits for it to open, reading nothing. Every read names the account
+ * the follow started for, so one the service signs out ends the follow.
+ * Quitting closes the scope, which kills every command still running with
+ * its process group.
  */
 
-/** How long the follow rests while the gate is shut, or after a turn that died. */
-const IDLE = Duration.seconds(5);
+/** How long the follow rests after a turn that died, before it tries again. */
+const DIED_REST = Duration.seconds(5);
 /** How often a Mac following its commands says it listens: a third of the service's forty-five-second freshness window. */
 const LISTENING_EVERY = Duration.seconds(15);
 /**
@@ -104,15 +106,6 @@ const LISTENING_EVERY = Duration.seconds(15);
  * the rows that named it may not change again to say so.
  */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
-/** How long the service lets a command wait to be claimed: one waiting longer is refused, so a beat leaves it be. */
-const CLAIM_WINDOW = Duration.seconds(30);
-/**
- * How long a command may wait unclaimed while the follow stands before a
- * beat counts it missed: well past a live delivery and a granted claim, and
- * with `LISTENING_EVERY` and a slow read or two still inside `CLAIM_WINDOW`,
- * so a missed command is claimed in time.
- */
-const MISSED_AFTER = Duration.seconds(5);
 
 /** The login shell when the environment names none: macOS's own default. */
 const DEFAULT_SHELL = "/bin/zsh";
@@ -122,12 +115,10 @@ const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
 /** The kinds of command this Mac runs, which every read names: shell alone, for now. */
 const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
 
-const decodeLiveRows = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
-
 /** The service's side of the commands, as this concern asks it. */
 export type MacCommandClient = Pick<
   HostedMacCommandClient,
-  "live" | "claim" | "listening" | "settle"
+  "liveRead" | "claim" | "listening" | "settle"
 >;
 
 export interface MacCommandsDependencies {
@@ -135,14 +126,23 @@ export interface MacCommandsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** How Settings lets agents run commands on this Mac, read as each follow begins, on every beat, and as each claimed command is about to run. */
+  /** How Settings lets agents run commands on this Mac, read as the gate is worked out and as each claimed command is about to run. */
   mode: Effect.Effect<MacCommandMode>;
+  /**
+   * Subscribes, for as long as the subscriber's scope stands, to every
+   * change that may move the gate: a setting written, or the account
+   * signed in, out, or switched. What each carries is not read: the gate is
+   * worked out afresh from `mode`, `account`, and `accountId` on each.
+   */
+  changed: Effect.Effect<Stream.Stream<unknown>, never, Scope.Scope>;
   /** Writes the setting to Always allow, answering whether the write landed: the prompt's Allow all commands, which also runs the command asked. */
   allowAlways: Effect.Effect<boolean>;
   client: MacCommandClient;
 }
 
-export type MacCommandsComposer = Composer;
+export interface MacCommandsComposer extends Composer {
+  readonly acts: HostActTable<typeof MAC_COMMAND_ACTS>;
+}
 
 /** What a command taken as the setting was switched off, or the account signed out, answers. */
 const SWITCHED_OFF: MacShellResult = {
@@ -325,15 +325,40 @@ export function composeMacCommands(
         account.capabilitiesActive(),
     );
 
+    /** The gate as last worked out: the account the Mac takes commands for, none while it is shut. */
+    const gate = yield* SubscriptionRef.make<string | undefined>(undefined);
+    const gateFor = Effect.map(gateOpen, (open) => (open ? dependencies.accountId() : undefined));
+    /** How many times the gate has moved: shut, opened, or opened for another account. */
+    let moves = 0;
+    const gateMoved = Effect.flatMap(gateFor, (userId) =>
+      Effect.map(SubscriptionRef.getAndSet(gate, userId), (was) => {
+        if (was !== userId) moves += 1;
+      }),
+    );
+    /** Waits until the gate stands open, for whichever account. */
+    const opened = SubscriptionRef.changes(gate).pipe(
+      Stream.filter((userId) => userId !== undefined),
+      Stream.runHead,
+    );
+    /** Waits until the gate no longer stands open for `userId`: shut, or open for another account. */
+    const left = (userId: string) =>
+      SubscriptionRef.changes(gate).pipe(
+        Stream.filter((now) => now !== userId),
+        Stream.runHead,
+      );
+
     /**
      * One command heard of, claimed by its id and, once granted, run on a
      * fiber of its own; with the gate shut since, answered as not run
      * instead. A claim the service did not answer is asked again a few times
      * (`CLAIM_RETRY`), since the rows that named it may not change again to
      * say so. Note that the claim and its answer are uninterruptible and run
-     * on the concern's own set rather than the follow's fiber, because a
-     * command the service granted is this Mac's alone to answer, and a follow
-     * ended mid-claim would otherwise leave its call waiting out its time.
+     * on a set of the concern's own (`claims`), never cleared, rather than the
+     * follow's fiber or the set of commands running, because a command the
+     * service granted is this Mac's alone to answer, a follow ended mid-claim
+     * would otherwise leave its call waiting out its time, and a clear of the
+     * commands running would wait out the claim, holding up the next
+     * account's follow past its own commands' claim window.
      */
     const claimed = (running: FiberSet.FiberSet, userId: string, command: MacCommandRead) =>
       Effect.gen(function* () {
@@ -341,84 +366,57 @@ export function composeMacCommands(
           Effect.repeat({
             schedule: Schedule.spaced(CLAIM_RETRY.every),
             times: CLAIM_RETRY.times,
-            until: (granted) => granted !== undefined,
+            until: (granted) =>
+              !("failure" in granted) || granted.failure !== MAC_COMMAND_CALL_FAILURE.UNANSWERED,
           }),
         );
         // A claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
-        if (answer === undefined || !("id" in answer)) return;
-        if (!(yield* gateOpen)) {
-          yield* asked(client.settle(answer.id, SWITCHED_OFF));
+        if ("failure" in answer) return;
+        const { command: granted } = answer;
+        if (!(yield* gateOpen) || dependencies.accountId() !== userId) {
+          yield* asked(client.settle(granted.id, SWITCHED_OFF));
           return;
         }
-        yield* FiberSet.run(running, decided(answer, userId));
+        yield* FiberSet.run(running, decided(granted, userId));
       }).pipe(Effect.uninterruptible);
 
     /** The unclaimed commands of this Mac's kinds, their rows inline, held past `after` where it names one, for the account `userId` names. */
     const seal = (userId: string, poll: boolean, after?: string) =>
-      asked(client.live(RUNS, userId, poll, after));
-
-    /**
-     * The unclaimed commands the follow should long since have claimed, read
-     * once and unheld: each waiting past `MISSED_AFTER` and still inside the
-     * claim window, both by the service's clock, which queued it and keeps
-     * the window. Note that the read's expiry is that clock's now, because a
-     * polled read is answered already expired. None where the service
-     * answered no rows, or rows that did not decode.
-     */
-    const missed = (userId: string) =>
-      Effect.map(seal(userId, true), (read): readonly MacCommandRead[] => {
-        if ("failure" in read) return [];
-        const { rows: carried, expiresAt: now } = read.queries.commands;
-        const rows = decodeLiveRows({ commands: carried ?? [] });
-        if (Option.isNone(rows)) return [];
-        const late = rows.value.commands.filter((row) => {
-          const waited = now - row.queuedAt;
-          return (
-            waited >= Duration.toMillis(MISSED_AFTER) && waited < Duration.toMillis(CLAIM_WINDOW)
-          );
-        });
-        return macCommandsOfLiveRows({ commands: late });
-      });
+      asked(
+        client.liveRead(
+          MAC_COMMANDS_READ,
+          { userId, kinds: macCommandKindsQuery(RUNS) },
+          poll ? { after } : undefined,
+        ),
+      );
 
     /**
      * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
-     * as long as the gate stands and the account signed in is the one the
-     * follow is for; it returns once either changes, which ends the follow.
-     * Each beat also claims what the follow missed (`missed`) and, finding
-     * any, returns once the beat's pause has passed, so the follow that
-     * missed it is sealed again. Note that the claims are awaited and the
-     * pause kept, because a claim refused or unanswered leaves its row
-     * waiting, and the next follow's first beat would find it again at once;
-     * and that they are made together, because one claim's retries must not
-     * spend another command's claim window.
+     * as long as the follow stands, which ends as the gate leaves its
+     * account.
      */
-    const presence = (running: FiberSet.FiberSet, userId: string) =>
-      Effect.gen(function* () {
-        while ((yield* gateOpen) && dependencies.accountId() === userId) {
-          yield* asked(client.listening(RUNS));
-          const late = yield* missed(userId);
-          if (late.length > 0) {
-            report("the Mac command follow missed a command; it is claimed and followed again");
-            yield* Effect.forEach(late, (command) => claimed(running, userId, command), {
-              concurrency: "unbounded",
-              discard: true,
-            });
-          }
-          yield* Effect.sleep(LISTENING_EVERY);
-          if (late.length > 0) return;
-        }
-      });
+    const presence = Effect.gen(function* () {
+      for (;;) {
+        yield* asked(client.listening(RUNS));
+        yield* Effect.sleep(LISTENING_EVERY);
+      }
+    });
 
     /**
      * The unclaimed commands followed (`live-follow.ts`, which polls the
-     * service, held) until the gate shuts or
-     * the session signs out, each new one claimed by its id, the earliest
-     * queued first (`claimed`). A command is claimed once per follow, and
-     * forgotten once it leaves the rows, so the ids this keeps are only those
-     * still waiting. A follow ends where the gate shuts, the session signs
-     * out, or the account signed in changes.
+     * service, held) until the gate leaves the account or the session signs
+     * out, each new one claimed by its id, the earliest queued first
+     * (`claimed`). A command is claimed once per follow, and forgotten once
+     * it leaves the rows, so the ids this keeps are only those still
+     * waiting. A follow ends where the gate shuts, the session signs out, or
+     * the account signed in changes.
      */
-    const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
+    const followed = (
+      running: FiberSet.FiberSet,
+      claims: FiberSet.FiberSet,
+      userId: string,
+      first: MacCommandsLiveAnswer,
+    ) =>
       Effect.suspend(() => {
         let tried = new Set<string>();
         const claimNew = (commands: readonly MacCommandRead[]) =>
@@ -426,70 +424,81 @@ export function composeMacCommands(
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
             for (const command of fresh) {
-              yield* FiberSet.run(running, claimed(running, userId, command));
+              yield* FiberSet.run(claims, claimed(running, userId, command));
             }
           });
         const rows = decodedLiveRows(
           { poll: (after) => seal(userId, true, after) },
           first,
-          macCommandsLiveRowsSchema,
+          MAC_COMMANDS_READ.rows,
         );
         const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
-        return Effect.raceFirst(following, presence(running, userId)).pipe(
+        const follow = Effect.raceFirst(following, presence).pipe(
           Effect.catch(() => waitOrRegained(LIVE_RESTART)),
         );
+        return Effect.raceFirst(follow, Effect.asVoid(left(userId)));
       });
 
+    /** How many times the gate had moved when the running set was last cleared. */
+    let clearedAt = 0;
+
     /**
-     * One turn of the loop: the commands followed until the gate shuts, the
-     * read asked again after a pause, or as soon as the service answers
-     * again, where it did not answer it or signed the session out; with the gate shut, every command still
-     * running stopped (its process group killed as its scope closes) and a
-     * rest. Every turn begins by letting go of the asks of any account but
-     * the one signed in, since a follow ends as the account changes.
+     * One turn of the loop: the commands followed until the gate leaves the
+     * account, the read asked again after a pause, or as soon as the service
+     * answers again, where it did not answer it or signed the session out;
+     * with the gate moved since the commands running were claimed, every
+     * one of them stopped (its process group killed as its scope closes),
+     * though it opened again for the same account; with it shut, a wait for
+     * it to open.
+     * Every turn begins by letting go of the asks of any account but the one
+     * signed in, since a follow ends as the account changes.
      */
-    const turn = (running: FiberSet.FiberSet) =>
+    const turn = (running: FiberSet.FiberSet, claims: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
-        if (!(yield* gateOpen)) {
+        if (moves !== clearedAt) {
+          clearedAt = moves;
           yield* FiberSet.clear(running);
-          return yield* Effect.sleep(IDLE);
+          // Note that the clear waits out any claim under way, during which the gate may have moved again, so the next turn starts from where it stands now.
+          if (moves !== clearedAt) return;
         }
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out.
-        const userId = dependencies.accountId();
-        if (userId === undefined) return yield* Effect.sleep(IDLE);
+        const userId = yield* SubscriptionRef.get(gate);
+        if (userId === undefined) return yield* Effect.asVoid(opened);
         const sealed = yield* seal(userId, false);
-        if ("failure" in sealed) return yield* waitOrRegained(LIVE_RESTART);
-        yield* followed(running, userId, sealed);
+        if ("failure" in sealed) {
+          return yield* Effect.raceFirst(waitOrRegained(LIVE_RESTART), Effect.asVoid(left(userId)));
+        }
+        yield* followed(running, claims, userId, sealed);
       });
 
     const lifetime = Effect.gen(function* () {
       const running = yield* FiberSet.make();
-      // A turn that died is reported and the reads rest before the next, as a shut gate does.
-      const guarded = Effect.catchDefect(turn(running), () =>
+      const claims = yield* FiberSet.make();
+      // Note that the changes are subscribed to before the gate is first worked out, so one that lands meanwhile is heard rather than lost.
+      const changes = yield* dependencies.changed;
+      yield* gateMoved;
+      yield* Effect.forkScoped(Stream.runForEach(changes, () => gateMoved));
+      // A turn that died is reported and the reads rest before the next.
+      const guarded = Effect.catchDefect(turn(running, claims), () =>
         Effect.andThen(
           Effect.sync(() => report("the Mac command read failed")),
-          Effect.sleep(IDLE),
+          Effect.sleep(DIED_REST),
         ),
       );
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MAC_COMMANDS> = {
-      /** The developer's answer to one ask, by its id; one no longer waiting, answered or timed out, is told so. */
-      [GATEWAY_METHOD.MAC_COMMAND_ANSWER]: (params) =>
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MAC_COMMANDS> = {};
+    const acts: HostActTable<typeof MAC_COMMAND_ACTS> = {
+      /** The developer's answer to one ask, by its id; one no longer waiting, answered or timed out, is answered all the same, since the prompt goes with it. */
+      MAC_COMMAND_ANSWER: ({ id, decision }) =>
         Effect.gen(function* () {
-          const read = yield* readParams(
-            macCommandAnswerSchema,
-            params,
-            "an answer names an ask and a decision",
-          );
-          const held = asks.get(read.id);
-          if (held === undefined) return carried({ answered: false });
-          yield* Deferred.succeed(held.decided, read.decision);
-          return carried({ answered: true });
+          const held = asks.get(id);
+          if (held === undefined) return;
+          yield* Deferred.succeed(held.decided, decision);
         }),
     };
-    return { methods, lifetime } satisfies MacCommandsComposer;
+    return { methods, acts, lifetime } satisfies MacCommandsComposer;
   });
 }

@@ -107,7 +107,7 @@ const openAccounts = Effect.gen(function* () {
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
-    // This suite deletes nothing, so it retires no session and reaches no eve.
+    // This suite deletes nothing, so it retires no session and reaches no harness.
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
@@ -257,17 +257,23 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
 });
 
 it.layer(getTestDB())("the preferences snapshot's chapters model part", (it) => {
-  it.effect("is Haiku until the account chooses, and a choice written is the one read back", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts;
-      assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
+  it.effect(
+    "is Haiku until the account chooses, and a choice written is the one read back, OpenAI's model of a tier among them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts;
+        assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
 
-      const chosen = yield* ask(request(owner, { chaptersModel: CHAPTERS_MODEL.SONNET }));
-      assert.equal(partOf(chosen, "chaptersModel"), CHAPTERS_MODEL.SONNET);
-      assert.equal(partOf(chosen, "updatedAt"), undefined);
-      assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.SONNET);
-      assert.equal(partOf(yield* ask(request(other)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
-    }),
+        const chosen = yield* ask(request(owner, { chaptersModel: CHAPTERS_MODEL.SONNET }));
+        assert.equal(partOf(chosen, "chaptersModel"), CHAPTERS_MODEL.SONNET);
+        assert.equal(partOf(chosen, "updatedAt"), undefined);
+        assert.equal(partOf(yield* ask(request(owner)), "chaptersModel"), CHAPTERS_MODEL.SONNET);
+        assert.equal(partOf(yield* ask(request(other)), "chaptersModel"), CHAPTERS_MODEL.HAIKU);
+
+        // OpenAI's model of Haiku's tier, as the Chapters tab picks it, is kept as well.
+        const openAi = yield* ask(request(owner, { chaptersModel: "gpt-6-luna" }));
+        assert.equal(partOf(openAi, "chaptersModel"), "gpt-6-luna");
+      }),
   );
 
   it.effect("refuses a model the set does not offer, and keeps what stood", () =>

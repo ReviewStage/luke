@@ -2,7 +2,7 @@
  * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on its OpenAI API key.
  *
  * The `codex` implementation of `AgentSessions`
- * (`eve-host/eve-sessions.ts`), on the launch machinery every native
+ * (`sessions/agent-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Codex's own:
  *
  * - The runner's config names the image's `codex` and carries our coder
@@ -11,18 +11,19 @@
  *   provider into app-server's argv (`@repo/agent-runner`'s `codex.ts`). A
  *   relaunch names the conversation's `native_session`, Codex's thread id
  *   as the events route records it, for `thread/resume`.
- * - The launch's environment carries `CODEX_HOME`, on the sandbox's
- *   persisted disk where the image made it, so a thread outlives a stop.
- * - On the plan, app-server takes its bearer from the runner's token command
- *   as it needs one: as its turn's requests go out, every few minutes, and
- *   after a 401. On a Mac the command asks our token route for the token
- *   (`../native-events/runner-token-app.ts`), so no token travels through
- *   the host's queue. In a sandbox no token enters it at all: the command
- *   answers a placeholder minted for the launch, and the launch sets the
- *   swap that puts the token in its place at the sandbox's firewall
- *   (`HarnessLaunch`'s `held`, `LAUNCH_SWAP.OPENAI_PLAN`), which the
- *   scheduled sweep renews while it stands (`renewPlanSwap`), so a turn
- *   outlives the hour a token lives. The swap stands on Codex's ChatGPT
+ * - The launch's environment carries `CODEX_HOME` where its machine names
+ *   one (`MachineLayout`'s `codexHome`): a sandbox's, on its persisted disk
+ *   where the image made it, so a thread outlives a stop.
+ * - On the plan, the runner asks our token route for the token
+ *   (`../native-events/runner-token-app.ts`), so the launch declares no
+ *   credential of the plan's and no token travels through a launch's
+ *   environment or a host's queue. In a sandbox it signs app-server in on
+ *   host-supplied ChatGPT tokens, the token and the workspace it pays from,
+ *   and asks again whenever app-server asks it for fresh ones after a 401,
+ *   so a turn outlives the hour a token lives; the sign-in that renews the
+ *   token stays here. On a host app-server takes its bearer from the
+ *   runner's token command as it needs one: as its turn's requests go out,
+ *   every few minutes, and after a 401, and sends it to Codex's ChatGPT
  *   backend, which the runner is told to send its requests to
  *   (`planBackendEnv`).
  * - The token is the account's `chatgpt_oauth` row's, renewed first where
@@ -35,20 +36,19 @@
  *   by the plan never turns to another payer.
  * - An agent its starter's OpenAI API key pays for is launched with
  *   `OPENAI_API_KEY`, which the runner names as app-server's provider
- *   `env_key` in place of the token command: on a Mac the key opened, and in
- *   a sandbox a placeholder minted for the launch, the key swapped in for it
- *   at the firewall as the plan's token is (`LAUNCH_SWAP.OPENAI_KEY`). It
+ *   `env_key` in place of the token command, declared as a fixed credential:
+ *   on a Mac the key opened, and in a sandbox a placeholder minted for the
+ *   launch, the key swapped in for it at the firewall
+ *   (`LAUNCH_SWAP.OPENAI_KEY`). It
  *   never asks the plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
- * - A local agent runs the Codex its host checked against the pin, in its
- *   folder there, with `CODEX_HOME` left at its default under the agent's
- *   own home, on the account's saved credential as a cloud agent does, the
- *   plan's token asked of the route over HTTPS, so no token ever travels
- *   through the host's queue.
+ * - The runner runs the Codex its machine names (`MachineLayout`'s
+ *   `codexExecutable`): the image's in a sandbox, and on a Mac the one its
+ *   host checked against the pin, `CODEX_HOME` left at its default under the
+ *   agent's own home there; a Mac that checked none runs no Codex agent.
  */
 
-import { CODEX_PIN } from "@repo/agent-runner/pins";
 import {
   CODEX_EFFORT,
   CODEX_PLAN_BACKEND,
@@ -59,20 +59,14 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
-import { type Agent, readAgent, readAgentRouting } from "@repo/database/models/agent-store";
-import {
-  type FirewallOwner,
-  type KeyRing,
-  PROVIDER_KEY_UNREADABLE,
-  parseKeyRing,
-} from "@repo/database/models/provider-key-seal";
+import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
+import { PROVIDER_KEY_UNREADABLE, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
-import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { Duration, Effect, Option, Redacted, Result } from "effect";
+import { Duration, Effect, Option, type Redacted, Result } from "effect";
 import {
   CHATGPT_ACCESS,
   type ChatGptPlanIdentity,
@@ -82,22 +76,19 @@ import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../eve-host/eve-sessions.js";
-import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
-import { SKILL_ROOT } from "../repository-skills.js";
 import {
-  type FirewallSession,
-  LAUNCH_SWAP,
-  type LaunchSwapKind,
-  newPlaceholder,
-  type PlaceholderSwap,
-  placeholderSwap,
-  renewedSwap,
-  sandboxFirewall,
-} from "../sandbox-firewall.js";
-import type { VercelSandboxApi } from "../vercel-sandbox-api.js";
-import { firewallSourcesOfAgent } from "./checkout.js";
+  LaunchRefused,
+  type MachineLayout,
+  type RunnerCredential,
+} from "../machine/agent-machine.js";
+import { SKILL_ROOT } from "../repository-skills.js";
+import { LAUNCH_SWAP, type PlaceholderSwap } from "../sandbox-firewall.js";
+import {
+  KEY_REFUSAL,
+  PLAN_REFUSAL,
+  type PlanRefusal,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   type HarnessLaunch,
@@ -109,12 +100,9 @@ import {
 import type { NativeSessions } from "./runtime-sessions.js";
 
 export interface CodexSessionsOptions extends RunnerSessionsOptions {
-  /** Our token route, which the runner asks for the plan's token mid-turn (`RUNNER_TOKEN_PATH`). */
+  /** Our token route, which the runner asks for the plan's token, mid-turn included (`RUNNER_TOKEN_PATH`). */
   readonly tokenUrl: string;
 }
-
-/** Where the image keeps Codex (`apps/web/agent-image/Dockerfile`), and the `CODEX_HOME` a sandbox makes in `agent`'s home. */
-const CODEX_PATH = { EXECUTABLE: CODEX_PIN.LINK, HOME: CODEX_PIN.HOME } as const;
 
 const CODEX_HOME_ENV = "CODEX_HOME";
 
@@ -122,15 +110,16 @@ const CODEX_HOME_ENV = "CODEX_HOME";
  * How much of an access token must be left for a launch, a message, or the
  * token route to go on with it, or it is renewed first: most of the hour
  * one lives, so every turn starts on a nearly fresh token, and every token
- * app-server is handed outlasts the five minutes it keeps one by far.
+ * app-server is handed outlasts the five minutes a host's keeps one by far.
  */
 export const CODEX_TOKEN_MARGIN = Duration.minutes(45);
 
 /**
- * The header Codex sends its bearer in, named in lower case as the firewall
- * matches it.
+ * The header Codex sends an API key in, named in lower case as the firewall
+ * matches it, and the scheme ahead of the key there.
  */
 const BEARER_HEADER = "authorization";
+const BEARER_SCHEME = "Bearer ";
 
 /** Where a credential is swapped in at a sandbox's firewall: a host, and the paths under it where only some carry it. */
 type SwapTarget = Pick<PlaceholderSwap, "domain" | "path">;
@@ -139,24 +128,12 @@ type SwapTarget = Pick<PlaceholderSwap, "domain" | "path">;
 const OPENAI_API: SwapTarget = { domain: "api.openai.com" };
 
 /**
- * Where Codex sends the plan's bearer from a sandbox: the provider's
- * `base_url` the runner writes for its backend (`@repo/agent-runner`'s
- * `codex.ts`), Codex's ChatGPT backend, which OpenAI's API refuses the
- * plan's token on. Note that it is held to the backend's paths, because
- * that token is the account's ChatGPT sign-in, which the rest of
- * chatgpt.com would take too.
- */
-const PLAN_TARGET: SwapTarget = {
-  domain: "chatgpt.com",
-  path: { startsWith: "/backend-api/codex/" },
-};
-
-/**
- * What tells the runner which backend the plan's launch sends its requests
- * to: Codex's ChatGPT backend, and the workspace it pays from, where its ID
- * token named one. Note that these sit in the launch's environment, which
- * its fingerprint digests, so a warm runner whose plan was connected again
- * under another workspace is relaunched.
+ * What tells a host's runner which backend the plan's launch sends its
+ * requests to: Codex's ChatGPT backend, and the workspace it pays from,
+ * where its ID token named one; a sandbox's runner, signed in on
+ * host-supplied tokens, reads neither. Note that these sit in the launch's
+ * environment, which its fingerprint digests, so a warm runner whose plan
+ * was connected again under another workspace is relaunched.
  */
 function planBackendEnv(plan: ChatGptPlanIdentity): Readonly<Record<string, string>> {
   return {
@@ -167,35 +144,15 @@ function planBackendEnv(plan: ChatGptPlanIdentity): Readonly<Record<string, stri
   };
 }
 
-/** A token as Codex sends it, whole: the header's value. */
-function bearerOf(token: string): Redacted.Redacted {
-  return Redacted.make(`Bearer ${token}`);
-}
-
-/**
- * A credential held at a sandbox's firewall for one launch: a placeholder
- * minted for it in the variable Codex reads, and the swap of its kind that
- * sets the real bearer in its place where the target says.
- */
-function heldAtFirewall(
-  kind: LaunchSwapKind,
-  target: SwapTarget,
-  variable: string,
-  credential: Redacted.Redacted<string>,
-  fingerprint?: Redacted.Redacted,
-): NonNullable<HarnessLaunch["held"]> {
-  const placeholder = Redacted.value(newPlaceholder());
-  const entry = placeholderSwap({
-    ...target,
-    header: BEARER_HEADER,
-    placeholder: bearerOf(placeholder),
-    value: bearerOf(Redacted.value(credential)),
-  });
+/** The account's OpenAI API key as a launch declares it: sent to OpenAI's API, fixed for the launch. */
+function apiKeyCredential(key: Redacted.Redacted<string>): RunnerCredential {
   return {
-    env: { [variable]: placeholder },
-    kind,
-    entry,
-    ...(fingerprint === undefined ? undefined : { fingerprint }),
+    variable: RUNNER_ENV.OPENAI_API_KEY,
+    value: key,
+    target: OPENAI_API,
+    header: BEARER_HEADER,
+    scheme: BEARER_SCHEME,
+    slot: LAUNCH_SWAP.OPENAI_KEY,
   };
 }
 
@@ -233,12 +190,13 @@ function codexModelOf(agent: Agent): string | undefined {
 }
 
 /**
- * Where Codex keeps its threads: in a sandbox, the home the image made on its
- * persisted disk; on a host, its default under the agent's own home there
- * (`@repo/host`'s `local-agent-box.ts`), which the launch leaves alone.
+ * Where Codex keeps its threads: the home its machine names, as a sandbox
+ * does on its persisted disk; else its default under the agent's own home,
+ * as on a Mac (`@repo/host`'s `local-agent-box.ts`), which the launch leaves
+ * alone.
  */
-function homeOf(agent: Agent): Readonly<Record<string, string>> {
-  return agent.machine === AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+function homeOf(layout: Pick<MachineLayout, "codexHome">): Readonly<Record<string, string>> {
+  return layout.codexHome === undefined ? {} : { [CODEX_HOME_ENV]: layout.codexHome };
 }
 
 /** Codex as the shared launch drives it, for one account. */
@@ -247,9 +205,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 
   /**
    * The account's sign-in asked whether it still pays, its access token
-   * renewed first where it is due, and answered for a sandbox's firewall
-   * with the plan it pays from; a Mac's runner asks the route for the
-   * token, so none is handed there.
+   * renewed first where it is due, answering the plan it pays from; the
+   * runner asks the route for the token, so none is handed here.
    */
   const standingPlan = Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
@@ -271,7 +228,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
           : undefined),
       });
     }
-    return { token: access.accessToken, plan: access.plan };
+    return access.plan;
   });
 
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
@@ -308,14 +265,13 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.map(savedPayer(agent), (payer) => payer === AGENT_PAYER.API_KEY);
 
   /**
-   * The account's OpenAI API key opened, as `OPENAI_API_KEY`, which the
-   * runner names as app-server's provider `env_key` in place of the plan's
-   * token command: the key itself on a Mac, and in a sandbox a placeholder,
-   * the key held at its firewall; a Preview's stand-in where the key is gone
-   * or unreadable (`accounts/own-api-key.ts`); refused where neither is, and
+   * The account's OpenAI API key opened, declared as `OPENAI_API_KEY`, which
+   * the runner names as app-server's provider `env_key` in place of the
+   * plan's token command; a Preview's stand-in where the key is gone or
+   * unreadable (`accounts/own-api-key.ts`); refused where neither is, and
    * never turned to the plan.
    */
-  const apiKeyEnv = (agent: Agent) =>
+  const apiKeyEnv = (layout: Pick<MachineLayout, "codexHome">) =>
     Effect.gen(function* () {
       const environment = yield* HostedEnvironment;
       const key = yield* ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.OPENAI, environment);
@@ -328,53 +284,30 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
           keyRefusal: KEY_REFUSAL.UNREADABLE,
         });
       }
-      const launch: HarnessLaunch =
-        agent.machine === AGENT_MACHINE.DEVICE
-          ? { env: { ...homeOf(agent), [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(key) } }
-          : {
-              env: homeOf(agent),
-              held: heldAtFirewall(
-                LAUNCH_SWAP.OPENAI_KEY,
-                OPENAI_API,
-                RUNNER_ENV.OPENAI_API_KEY,
-                key,
-                key,
-              ),
-            };
+      const launch: HarnessLaunch = { env: homeOf(layout), credentials: [apiKeyCredential(key)] };
       return launch;
     });
 
   /**
-   * The plan asked, the runner told the backend it pays through, and in a
-   * sandbox its token held at the firewall behind the token command's
-   * placeholder, on that backend's host; the sweep renews it there, so no
-   * fingerprint reads it.
+   * The plan asked, and the runner told the backend it pays through; the
+   * runner asks our route for the plan's tokens, so no credential of the
+   * plan's is declared here.
    */
-  const planEnv = (agent: Agent) =>
-    Effect.map(standingPlan, ({ token, plan }): HarnessLaunch => {
-      const env = { ...homeOf(agent), ...planBackendEnv(plan) };
-      return agent.machine === AGENT_MACHINE.DEVICE
-        ? { env }
-        : {
-            env,
-            held: heldAtFirewall(
-              LAUNCH_SWAP.OPENAI_PLAN,
-              PLAN_TARGET,
-              RUNNER_ENV.CODEX_TOKEN,
-              token,
-            ),
-          };
-    });
+  const planEnv = (layout: Pick<MachineLayout, "codexHome">) =>
+    Effect.map(
+      standingPlan,
+      (plan): HarnessLaunch => ({ env: { ...homeOf(layout), ...planBackendEnv(plan) } }),
+    );
 
   /**
    * The credential a launch starts with, chosen here alone: the account's
-   * saved credential (`savedPayer`), its key or the plan's token, each held
-   * at a sandbox's firewall; on a Mac its key in the environment, or the
-   * plan's token asked of our route over HTTPS.
+   * saved credential (`savedPayer`), its key, which the agent's machine
+   * hands over as it decides, or the plan's token, asked of our route over
+   * HTTPS.
    */
-  const launch = (agent: Agent) =>
+  const launch = (agent: Agent, layout: MachineLayout) =>
     Effect.gen(function* () {
-      return yield* (yield* onApiKey(agent)) ? apiKeyEnv(agent) : planEnv(agent);
+      return yield* (yield* onApiKey(agent)) ? apiKeyEnv(layout) : planEnv(layout);
     });
 
   const config = (
@@ -387,9 +320,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
-      const local = agent.machine === AGENT_MACHINE.DEVICE;
       // Note that a Mac runs only the Codex it checked against the pin, and one that checked none runs no Codex agent.
-      if (local && layout.codexExecutable === undefined) {
+      if (layout.codexExecutable === undefined) {
         return yield* new LaunchRefused({ reason: "no codex" });
       }
       const effort = effortOf(agent.effort);
@@ -397,7 +329,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       const written: CodexConfig = {
         harness: RUNNER_HARNESS.CODEX,
         cwd: layout.checkoutPath,
-        executable: layout.codexExecutable ?? CODEX_PATH.EXECUTABLE,
+        executable: layout.codexExecutable,
         model,
         ...(effort === undefined ? undefined : { effort }),
         ...(speed.fast ? speed : undefined),
@@ -443,101 +375,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
   };
 }
 
-/**
- * How a renewal of a plan's swap came out: a new token set; the swap left as
- * it stood, or found standing no longer; or no token to set, the sign-in
- * refusing one, OpenAI not answering, the plan's limit reached, or the store
- * failing, any of which leaves the swap's token to lapse unless a later
- * renewal sets one.
- */
-export const PLAN_RENEWAL = {
-  RENEWED: "renewed",
-  LEFT: "left",
-  UNANSWERED: "unanswered",
-} as const;
-
-/**
- * The firewall session a kept launch runs in, its sandbox found by name the
- * way an agent's sandbox is found: the agent the launch named, the session
- * its conversation records, the sandboxes tagged with it, and among them the
- * one still running the launch's session. None where any of them no longer
- * stands, as for a row its session outlived, or one kept before launches
- * named their agent.
- */
-const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
-  Effect.gen(function* () {
-    if (agentId === undefined) return undefined;
-    const agent = yield* readAgent(owner.userId, agentId);
-    if (Option.isNone(agent)) return undefined;
-    const runtime = yield* recordedRuntimeSession({
-      userId: owner.userId,
-      conversationId: agent.value.conversationId,
-    });
-    if (runtime === undefined) return undefined;
-    const sandboxes = yield* api.listTagged(runtime);
-    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
-    if (sandbox === undefined) return undefined;
-    return { ...owner, name: sandbox.name } satisfies FirewallSession;
-  });
-
-/**
- * The plan's token behind a sandbox session's standing swap renewed, where
- * the launch kept for the session still holds one: the account's token as
- * it stands, renewed first where less than the token margin is left of it,
- * set behind the same placeholder where it is not what the swap already
- * sets, and the session's whole policy sent with the agent's repository
- * credential minted afresh beside it, since every write is whole
- * (`firewallSourcesOfAgent`). A sign-in that no longer answers a token, or a
- * credential that could not be minted, leaves the swap as it stands, which
- * OpenAI refuses once its token lapses, as the route refused a Mac's command.
- * So does a swap a launch on the retired third-party sign-in set on another
- * host, which the plan's token is never sent to. A launch whose sandbox no
- * longer runs its session is left (`launchSession`), for the sweep's drop.
- */
-export const renewPlanSwap = (api: VercelSandboxApi, owner: FirewallOwner, ring: KeyRing) =>
-  Effect.gen(function* () {
-    const firewall = sandboxFirewall(api);
-    const launch = yield* firewall.launchOf(owner);
-    const standing = launch?.swaps.get(LAUNCH_SWAP.OPENAI_PLAN);
-    if (launch === undefined || standing === undefined) return PLAN_RENEWAL.LEFT;
-    const next = yield* Effect.gen(function* () {
-      const access = yield* refreshChatGptAccess(owner.userId, ring, CODEX_TOKEN_MARGIN);
-      if (access.outcome !== CHATGPT_ACCESS.READY) {
-        yield* Effect.logWarning(
-          `a Codex plan's swap was not renewed: ChatGPT sign-in ${access.outcome}`,
-        );
-        return PLAN_RENEWAL.UNANSWERED;
-      }
-      if (!Redacted.value(standing.rules).every(([swapped]) => swapped === PLAN_TARGET.domain)) {
-        yield* Effect.logWarning(
-          "a Codex plan's swap was not renewed: it stands on another host than the plan's",
-        );
-        return PLAN_RENEWAL.LEFT;
-      }
-      const entry = renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)));
-      if (entry === undefined) return PLAN_RENEWAL.LEFT;
-      const session = yield* launchSession(api, owner, launch.agentId);
-      if (session === undefined) return PLAN_RENEWAL.LEFT;
-      return {
-        session,
-        entry,
-        sources: yield* firewallSourcesOfAgent(owner.userId, launch.agentId),
-      };
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.as(
-          Effect.logWarning(`a Codex plan's swap was not renewed: ${failure._tag}`),
-          PLAN_RENEWAL.UNANSWERED,
-        ),
-      ),
-    );
-    if (typeof next === "string") return next;
-    yield* firewall.renew(next.session, launch, LAUNCH_SWAP.OPENAI_PLAN, next.entry, next.sources);
-    return PLAN_RENEWAL.RENEWED;
-  });
-
 /** The sessions for one account, over the calling fiber's services. */
-export const codexSessions = <Turn extends EveHostTurn = EveHostTurn>(
+export const codexSessions = <Turn extends SessionTurn = SessionTurn>(
   options: CodexSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);

@@ -69,17 +69,7 @@ const SUMMARY: TaskSummary = {
   agents: {
     total: 1,
     working: 1,
-    agents: [
-      {
-        id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-        title: "Invite flow",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 

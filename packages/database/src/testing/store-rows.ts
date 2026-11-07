@@ -162,7 +162,7 @@ export interface TurnInsertRow {
   readonly conversationId: string;
   readonly origin: TurnInsert["origin"];
   readonly status: TurnInsert["status"];
-  readonly eveTurnId?: string | null;
+  readonly runtimeTurnId?: string | null;
   readonly queuedAt?: Date;
   readonly startedAt?: Date | null;
   readonly settledAt?: Date | null;
@@ -182,7 +182,7 @@ export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise
           conversationId: row.conversationId,
           origin: row.origin,
           status: row.status,
-          eveTurnId: row.eveTurnId ?? null,
+          runtimeTurnId: row.runtimeTurnId ?? null,
           queuedAt: row.queuedAt ?? new Date(),
           startedAt: row.startedAt ?? null,
           settledAt: row.settledAt ?? null,
@@ -203,7 +203,7 @@ const TurnRowSchema = Schema.Struct({
   conversationId: Schema.String,
   origin: Schema.String,
   status: Schema.String,
-  eveTurnId: Schema.NullOr(Schema.String),
+  runtimeTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   reasoningEffort: Schema.NullOr(Schema.String),
   promptHash: Schema.NullOr(Schema.String),

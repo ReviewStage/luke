@@ -44,9 +44,10 @@ import { Redacted, Result, Schema } from "effect";
  * purposes of their own
  * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
  * beside them, so the seal opens for no other session's row. The rewrap
- * does not visit those rows either: the sweep drops each a day and an hour
- * after it was last written, so a version stays in the ring that long past
- * the rewrap that moved every other row off it.
+ * does not visit those rows either: no session runs a day and an hour past
+ * its row's last write, so a version stays in the ring that long past the
+ * rewrap that moved every other row off it, and a row still sealed under it
+ * then is one no read reaches, its session long stopped.
  *
  * A pending ChatGPT device-code login's codes, which together claim the
  * sign-in at OpenAI, are sealed the same way for the fifteen minutes the
@@ -55,6 +56,14 @@ import { Redacted, Result, Schema } from "effect";
  * beside them, so the seal opens for no other login. The rewrap does not
  * visit those rows either, which a login's settling clears and the
  * account's next start replaces.
+ *
+ * A workspace's environment variables, each one's value, are sealed the
+ * same way for as long as the variable stands
+ * (`workspace_environment_variable`), with purposes of their own
+ * (`luke/workspace-environment/*`) and the workspace and the variable's name
+ * bound in place of an account, so a value opens for no other workspace's
+ * row and no other name's. The rewrap does not visit those rows: a version
+ * stays in the ring until every variable sealed under it is set again.
  *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
@@ -92,6 +101,10 @@ const SEAL_PURPOSE = {
   CHATGPT_DEVICE_LOGIN: {
     DATA_KEY: "luke/chatgpt-device-login/data-key",
     SECRET: "luke/chatgpt-device-login/codes",
+  },
+  WORKSPACE_ENVIRONMENT: {
+    DATA_KEY: "luke/workspace-environment/data-key",
+    SECRET: "luke/workspace-environment/value",
   },
 } as const;
 
@@ -132,6 +145,21 @@ export interface SealedGitHubToken {
   readonly sealedDataKey: string;
   /** base64 of nonce, ciphertext, and tag: the token under the data key. */
   readonly sealedToken: string;
+}
+
+/** What a row holds of one workspace environment variable's value. */
+export interface SealedWorkspaceVariable {
+  readonly keyVersion: number;
+  /** base64 of nonce, ciphertext, and tag: the data key under the key-encryption key. */
+  readonly sealedDataKey: string;
+  /** base64 of nonce, ciphertext, and tag: the value under the data key. */
+  readonly sealedValue: string;
+}
+
+/** Whose a workspace environment variable is: the workspace and the variable's name, which its seal binds. */
+export interface WorkspaceVariableOwner {
+  readonly organizationId: string;
+  readonly name: string;
 }
 
 /** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's launch swaps are: the version, the wrapped data key, and the seal. */
@@ -483,4 +511,31 @@ export function openChatGptDeviceCodes(
     read.success.sealed,
   );
   return codes === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(codes);
+}
+
+/** A workspace environment variable's value sealed for its row under a fresh data key, wrapped under the ring's current version. */
+export function sealWorkspaceVariable(
+  ring: KeyRing,
+  owner: WorkspaceVariableOwner,
+  value: Redacted.Redacted<string>,
+): SealedWorkspaceVariable {
+  const names = [owner.organizationId, owner.name];
+  const { sealed, ...wrapped } = sealSecret(ring, SEAL_PURPOSE.WORKSPACE_ENVIRONMENT, names, value);
+  return { ...wrapped, sealedValue: sealed };
+}
+
+/** The value a workspace environment variable's row seals, or unreadable where any part of it does not open for this workspace and name. */
+export function openWorkspaceVariable(
+  ring: KeyRing,
+  owner: WorkspaceVariableOwner,
+  sealed: SealedWorkspaceVariable,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const value = openSecret(
+    ring,
+    SEAL_PURPOSE.WORKSPACE_ENVIRONMENT,
+    [owner.organizationId, owner.name],
+    sealed,
+    sealed.sealedValue,
+  );
+  return value === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(value);
 }

@@ -1,19 +1,19 @@
 /**
  * agent-tools.ts -- every tool name an agent's transcript may carry, which the service offers and the desktop draws.
  *
- * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
- * says which roles each of our tools serves; the names themselves are
+ * The service's tool catalog (`packages/service/src/agents/tool-catalog/catalog.ts`)
+ * says which agents each of our tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
  * same name the service offered it under, the brain's as a coding
- * agent's. Beside them stand the names eve gives tools of its own that a
+ * agent's. Beside them stand the names the retired runtime gave tools of its own that a
  * brain's transcript carries, and the coding agents' web reads that earlier
  * transcripts still name.
  */
 
 import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
+import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
-import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 
 /** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
@@ -46,14 +46,14 @@ export const AGENT_TOOL = {
   // The workspace's shared memory, which a coding agent keeps and searches.
   SAVE_MEMORY: "save_memory",
   SEARCH_MEMORY: "search_memory",
-  // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.
+  // The public reads, every role's: the retired runtime's provider-run search on the agent's own model call, and the page read.
   WEB_SEARCH: "web_search",
   READ_WEB_PAGE: "read_web_page",
   // A command on the developer's own Mac, every role's.
   RUN_ON_MAC: "run_on_mac",
   // A real browser in the agent's own sandbox, which the developer can watch and take over, every role's.
   BROWSER: "browser",
-  // eve's shell and file tools and the code extension's, started in a coding agent's checkout.
+  // The retired runtime's shell and file tools and the code extension's, started in a coding agent's checkout.
   BASH: "bash",
   READ_FILE: "read_file",
   WRITE_FILE: "write_file",
@@ -68,7 +68,7 @@ export const AGENT_TOOL = {
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_THREADS: INBOX_TOOL.READ,
   OPEN_PULL_REQUEST: "open_pull_request",
-  // eve's own, which loads one of the skills a session is offered.
+  // The retired runtime's own, which loaded one of the skills a session was offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the task's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
@@ -79,18 +79,18 @@ export const AGENT_TOOL = {
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
-  // eve's own durable pause, which a coding agent takes before it checks on its checks or a deploy again.
+  // The retired runtime's own durable pause, which a coding agent took before it checked on its checks or a deploy again.
   SLEEP: "sleep",
 } as const;
 
 export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
 
 /**
- * The tools eve gives a brain session of its own, which its transcript
- * carries: its subagent tool for the worker, which earlier transcripts name
+ * The tools the retired runtime gave a brain session of its own, which its
+ * transcript carries: its subagent tool for the worker, which earlier transcripts name
  * where the brain now calls its own `delegate`, and the two task
- * controls it adds beside any task. Note that their names are eve's own and
- * the tasks they name are eve's subagent tasks, not a task of ours.
+ * controls it added beside any task. Note that their names are its own and
+ * the tasks they name are its subagent tasks, not a task of ours.
  */
 export const EVE_TOOL = {
   WORKER: "worker",
@@ -99,7 +99,7 @@ export const EVE_TOOL = {
 } as const;
 
 /**
- * eve's own two tools for a connection, which any agent's transcript may
+ * The retired runtime's own two tools for a connection, which any agent's transcript may
  * carry: one lists a connection's tools and one runs one. The call it ran
  * is stored beside the run, under its integration's remote name
  * (`integration-wire.ts`'s `INTEGRATION_REMOTE_TOOL`).
@@ -111,7 +111,7 @@ export const CONNECTION_TOOL = {
 
 /**
  * Tools no agent is offered now whose calls a transcript written then still
- * names: eve's provider-run web reads, which coding agents ran before they
+ * names: the retired runtime's provider-run web reads, which coding agents ran before they
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
  * four about the workspace's own issues, gone with them, the inbox's
@@ -127,7 +127,7 @@ export const CONNECTION_TOOL = {
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
-  // Our own search on our key, replaced by eve's provider-run `web_search` on the agent's own key.
+  // Our own search on our key, replaced by the retired runtime's provider-run `web_search` on the agent's own key.
   SEARCH_WEB: "search_web",
   LIST_CODING_AGENTS: "list_coding_agents",
   READ_CODING_AGENT: "read_coding_agent",

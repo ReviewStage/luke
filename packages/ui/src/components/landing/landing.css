@@ -1,5 +1,5 @@
 /* landing.css -- the landing (`landing-page.tsx`): its margin grid, the bar
-   that floats once the page scrolls, the hero beside the ball, each
+   that floats once the page scrolls, the hero beside the Inbox, each
    feature's stage, the devices, the screens the scenes lay out at the app's
    own sizes, the close, and the foot over the wordmark. The page queries its
    own width rather than the viewport's, so it is drawn the same in a frame
@@ -90,7 +90,7 @@
   .ui-landing-rule > i::after {
     content: "";
     position: absolute;
-    background: var(--ui-color-text-muted);
+    background: var(--ui-color-border-strong);
   }
 
   .ui-landing-rule > i::before {
@@ -141,7 +141,8 @@
     border: 1px solid transparent;
     border-bottom-color: var(--ui-color-border);
     border-radius: 0;
-    background: var(--ui-color-ground);
+    background: var(--ui-display-landing-bar);
+    backdrop-filter: blur(16px);
     white-space: nowrap;
     transition-property:
       transform, left, right, max-width, height, padding, border-radius, border-color,
@@ -160,7 +161,8 @@
     padding: 0 6px 0 20px;
     border-color: var(--ui-color-border-strong);
     border-radius: var(--ui-display-bar-radius);
-    background: var(--ui-color-surface);
+    background: var(--ui-color-float-solid);
+    box-shadow: var(--ui-display-landing-edge);
     transform: translateY(12px);
   }
 
@@ -179,13 +181,27 @@
     background: var(--ui-color-border-strong);
   }
 
-  /* The hero: the one line and its calls to the left, the ball to the right. */
+  /* The hero: the one line and its calls to the left, the Inbox to the right. */
   .ui-landing-hero {
     position: relative;
     display: flex;
     align-items: center;
-    min-height: 660px;
+    min-height: 700px;
     overflow: hidden;
+  }
+
+  /* The page's one glow: a faint light behind the hero's Inbox, centered
+     on where it stands, so the screen reads lifted off the ground. */
+  .ui-landing-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse 640px 520px at calc(100% - var(--ui-landing-inset) - 314px) 46%,
+      var(--ui-display-landing-glow),
+      transparent 70%
+    );
+    pointer-events: none;
   }
 
   .ui-landing-hero-words {
@@ -196,18 +212,18 @@
   }
 
   .ui-landing-title {
-    font-family: var(--ui-font-display);
-    font-size: var(--ui-display-landing-size);
-    font-weight: var(--ui-display-landing-weight);
-    line-height: var(--ui-display-landing-leading);
-    letter-spacing: var(--ui-display-landing-tracking);
+    font-family: var(--ui-display-landing-face);
+    font-size: var(--ui-display-landing-title-size);
+    font-weight: var(--ui-display-landing-title-weight);
+    line-height: var(--ui-display-landing-title-leading);
+    letter-spacing: var(--ui-display-landing-title-tracking);
     text-wrap: balance;
   }
 
   .ui-landing-hero-lead,
   .ui-landing-lead {
-    max-width: 520px;
-    margin-top: 18px;
+    max-width: 480px;
+    margin-top: 20px;
     color: var(--ui-color-text-muted);
     font-size: var(--ui-display-lead-size);
     line-height: var(--ui-display-lead-leading);
@@ -218,21 +234,75 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-    margin-top: 32px;
+    margin-top: 40px;
   }
 
   .ui-landing-hero-art {
     position: absolute;
-    top: 40px;
+    top: 60px;
     right: calc(var(--ui-landing-inset) + 24px);
     width: 580px;
     height: 580px;
   }
 
-  .ui-landing-orb {
-    display: block;
+  /* The hero's Inbox: one column of the app, its foot fading out over
+     its older asks rather than cut off. */
+  .ui-landing-hero-art {
+    mask-image: linear-gradient(to bottom, black 62%, transparent 96%);
+  }
+
+  .ui-landing-panel {
+    box-sizing: border-box;
+    width: 100%;
+    aspect-ratio: 500 / 700;
+    overflow: hidden;
+    border: 1px solid var(--ui-color-border-strong);
+    border-radius: var(--ui-display-window-radius);
+    background: var(--ui-color-sidebar);
+    box-shadow: var(--ui-display-landing-edge);
+  }
+
+  .ui-landing-panel-fit {
     width: 100%;
     height: 100%;
+    overflow: hidden;
+  }
+
+  .ui-landing-panel-screen {
+    position: relative;
+    width: 500px;
+    height: 700px;
+    transform: scale(var(--ui-landing-fit, 1));
+    transform-origin: 0 0;
+    color: var(--ui-color-text);
+  }
+
+  /* Note that the hero's list glides on the showcase's length and an ease
+     in and out rather than the spring, because a homepage watches it move
+     rather than waiting on it: the spring's quick start and overshoot,
+     right for a list a reader acts on, read as a snap there. A post's fade
+     runs the length of the glide. */
+  .ui-landing-hero-inbox {
+    --ui-duration-shape: var(--ui-duration-showcase);
+    --ui-duration-quick: var(--ui-duration-showcase);
+    --ui-spring: var(--ui-motion-exit);
+  }
+
+  .ui-landing-hero-inbox {
+    display: grid;
+    grid-template-rows: 50px minmax(0, 1fr);
+    padding: 0 8px;
+  }
+
+  .ui-landing-hero-sheet {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: var(--ui-radius-14) var(--ui-radius-14) 0 0;
+    background: var(--ui-color-ground);
+    box-shadow:
+      0 0 0 1px var(--ui-color-border),
+      0 1px 2px var(--ui-color-shadow-soft);
   }
 
   /* A feature: its heading and sentence over its stage. */
@@ -241,29 +311,31 @@
   }
 
   .ui-landing-section-body {
-    padding: 104px var(--ui-landing-gutter) 96px;
+    padding: 128px var(--ui-landing-gutter) 112px;
   }
 
   .ui-landing-section-title {
     max-width: 680px;
-    font-family: var(--ui-font-display);
-    font-size: var(--ui-display-feature-size);
-    font-weight: var(--ui-display-landing-weight);
+    font-family: var(--ui-display-landing-face);
+    font-size: var(--ui-display-landing-feature-size);
+    font-weight: var(--ui-display-landing-title-weight);
     line-height: var(--ui-display-feature-leading);
-    letter-spacing: var(--ui-display-landing-tracking);
+    letter-spacing: var(--ui-display-landing-feature-tracking);
     text-wrap: balance;
   }
 
-  /* A stage: a box of drifting dots holding the feature's screen, which
-     runs off its foot where the screen is a window. */
+  /* A stage: a panel a step above the ground, lit along its top edge,
+     holding the feature's screen, which runs off its foot where the screen
+     is a window. */
   .ui-landing-stage {
     position: relative;
-    margin-top: 40px;
-    padding: 48px 6%;
+    margin-top: 56px;
+    padding: 56px 6%;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border);
-    border-radius: var(--ui-radius-14);
-    background: var(--ui-color-ground);
+    border: 1px solid var(--ui-display-landing-rule);
+    border-radius: var(--ui-display-landing-stage-radius);
+    background: var(--ui-color-overlay);
+    box-shadow: var(--ui-display-landing-edge);
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
@@ -271,16 +343,18 @@
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-    margin-bottom: -48px;
+    margin-bottom: -56px;
   }
 
-  .ui-landing-field,
+  /* The foot's wordmark in dots, pressed faintly in the muted words' warm
+     gray rather than the accent, so it closes the page quietly. */
   .ui-landing-wordmark {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    color: var(--ui-color-accent);
+    color: var(--ui-color-text-muted);
+    opacity: 0.3;
   }
 
   .ui-landing-scene {
@@ -321,7 +395,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 32px;
-    padding: 96px var(--ui-landing-gutter) 64px;
+    padding: 112px var(--ui-landing-gutter) 80px;
   }
 
   .ui-landing-close .ui-landing-actions {
@@ -480,6 +554,7 @@
     border: 1px solid var(--ui-color-border-strong);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
+    box-shadow: var(--ui-display-landing-screen-glow);
   }
 
   .ui-landing-window-fit,
@@ -518,15 +593,20 @@
     background: var(--ui-color-border-strong);
   }
 
+  /* The phone's bezel, corners, and island are shares of its own width
+     (its holder is the container they measure), so it keeps one shape at
+     any size the devices draw it at. */
   .ui-landing-phone {
     position: relative;
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 393 / 852;
-    padding: 9px;
+    padding: 3.5cqw;
     border-radius: var(--ui-display-phone-radius);
     background: var(--ui-color-sidebar);
-    box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
+    box-shadow:
+      inset 0 0 0 1px var(--ui-color-border-strong),
+      var(--ui-display-landing-screen-glow);
   }
 
   .ui-landing-phone-fit {
@@ -542,11 +622,11 @@
 
   .ui-landing-phone-island {
     position: absolute;
-    top: 20px;
+    top: 7.9cqw;
     left: 50%;
-    width: 76px;
-    height: 22px;
-    margin-left: -38px;
+    width: 30cqw;
+    height: 8.7cqw;
+    margin-left: -15cqw;
     border-radius: var(--ui-display-island-radius);
     background: var(--ui-color-sidebar);
   }
@@ -1001,29 +1081,42 @@
     border-left: 1px solid var(--ui-color-border);
   }
 
-  /* The devices: the Mac window, with the phone standing over its corner. */
+  /* The devices: the Mac window behind and the phone in front over its
+     lower corner, as a product lineup sets them, one picture scaled as a
+     whole to the stage at every width. The phone stands nine tenths of the
+     window's height, so its app draws at nearly the window's density, the
+     two reading as one set; its foot stands a little below the window's, as
+     a nearer thing does, and a ring of the stage's ground sets its edge
+     apart from the window it covers. The shares follow from that: a 16:10
+     window's height, nine tenths of it, and the phone's 393:852 make the
+     phone 0.26 of the window's width, so a window 86% of the row puts the
+     phone's last 22% at the row's end, a third of it over the window. */
   .ui-landing-stage[data-scene="devices"] {
-    height: 620px;
-    padding: 0;
+    padding: 64px 6% 72px;
   }
 
   .ui-landing-devices {
-    height: 100%;
+    position: relative;
   }
 
   .ui-landing-devices-window {
-    position: absolute;
-    top: 64px;
-    left: 5%;
-    width: 66%;
+    width: 86%;
   }
 
   .ui-landing-devices-phone {
     position: absolute;
-    top: 44px;
-    right: 8%;
+    right: 0;
+    bottom: -4%;
     z-index: 2;
-    width: 254px;
+    width: 22.3%;
+    container-type: inline-size;
+  }
+
+  .ui-landing-devices-phone .ui-landing-phone {
+    box-shadow:
+      inset 0 0 0 1px var(--ui-color-border-strong),
+      0 0 0 2.5cqw var(--ui-color-ground),
+      0 6cqw 16cqw var(--ui-color-shadow-deep);
   }
 
   /* The phone's Inbox: its bar under the status bar's room, its search, its
@@ -1056,10 +1149,10 @@
   }
 
   /* Under the Pinned line (`docs/DESIGN.md`), the room beside the words is
-     narrower than the ball, so the hero stacks as a phone's does: the words,
-     then the ball under them, no wider than the column, no taller than it
+     narrower than the Inbox, so the hero stacks as a phone's does: the words,
+     then the Inbox under them, no wider than the column, no taller than it
      stands beside the words, and no taller than a share of the screen, so a
-     phone held sideways keeps the words and the ball's top on its first
+     phone held sideways keeps the words and the Inbox's top on its first
      screen; the words' room above them gives way on a short screen too. The
      small viewport is the one measured, so a browser's own bars never count.
      A container query keeps no state, so the line has its enter width alone,
@@ -1067,12 +1160,12 @@
   /* off-scale: 1120px, the Pinned line */
   @container (width < 1120px) {
     .ui-landing-hero {
-      /* off-scale: the ball's least size, and its share of the screen */
-      --ui-landing-orb-least: 160px;
-      --ui-landing-orb-screen: 58svh;
-      /* off-scale: the room above the words and above the ball, each a share of the screen */
+      /* off-scale: the Inbox's least size, and its share of the screen */
+      --ui-landing-art-least: 160px;
+      --ui-landing-art-screen: 58svh;
+      /* off-scale: the room above the words and above the Inbox, each a share of the screen */
       --ui-landing-hero-top: min(96px, 8svh);
-      --ui-landing-orb-top: min(24px, 2svh);
+      --ui-landing-art-top: min(24px, 2svh);
 
       flex-direction: column;
       align-items: stretch;
@@ -1083,21 +1176,43 @@
       padding: var(--ui-landing-hero-top) var(--ui-landing-gutter) 0;
     }
 
+    /* Stacked, the glow stands under the words, behind the Inbox. */
+    .ui-landing-hero::before {
+      background: radial-gradient(
+        ellipse 90% 50% at 50% 70%,
+        var(--ui-display-landing-glow),
+        transparent 70%
+      );
+    }
+
     .ui-landing-hero-art {
       position: relative;
       top: auto;
       right: auto;
       width: auto;
       height: max(
-        var(--ui-landing-orb-least),
-        min(580px, 100cqw - 2 * var(--ui-landing-gutter), var(--ui-landing-orb-screen))
+        var(--ui-landing-art-least),
+        min(580px, 100cqw - 2 * var(--ui-landing-gutter), var(--ui-landing-art-screen))
       );
-      margin: var(--ui-landing-orb-top) var(--ui-landing-gutter) 40px;
+      max-width: 580px;
+      margin: var(--ui-landing-art-top) var(--ui-landing-gutter) 40px;
     }
   }
 
-  /* Under 640px of room the page keeps to one column: the ball under the
-     words, each stage under its heading, and the phone nearer the window. */
+  /* Under 640px of room the page keeps to one column: the Inbox under the
+     words, and each stage under its heading. A
+     window scaled to the column draws its words too small to read, so a
+     stage that holds one alone shows the one moment that sells it instead:
+     the desktop app as it is, laid out at 1280 by 800, cut to that moment's
+     box and scaled so the box spans the stage, about three quarters of the
+     app's size on a phone. It stands in from the stage's top and start, on
+     the drifting dots, its corner the window's, and runs off the stage's
+     end and foot as a wide stage's window runs off its foot; the stage is
+     as tall as the box, so no ground stands empty. A window names its box
+     in its own pixels: where it starts
+     (`--ui-landing-crop-x`, `--ui-landing-crop-y`) and how wide and tall it
+     is (`--ui-landing-crop-w`, `--ui-landing-crop-h`); a margin's percentage
+     is of the stage's width, so each offset is a share of the box's. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
@@ -1162,8 +1277,40 @@
       padding: 28px 5%;
     }
 
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
+      padding: var(--ui-space-24) 0 0 var(--ui-space-20);
+      aspect-ratio: var(--ui-landing-crop-w) / var(--ui-landing-crop-h);
+    }
+
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-scene {
+      overflow: clip;
+      border-top: 1px solid var(--ui-color-border-strong);
+      border-left: 1px solid var(--ui-color-border-strong);
+      border-top-left-radius: var(--ui-display-window-radius);
+    }
+
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-      margin-bottom: -24px;
+      width: calc(100% * 1280 / var(--ui-landing-crop-w));
+      margin: calc(-100% * var(--ui-landing-crop-y) / var(--ui-landing-crop-w)) 0 0
+        calc(-100% * var(--ui-landing-crop-x) / var(--ui-landing-crop-w));
+    }
+
+    /* The Inbox's moment is the ask: the question over its options, the
+       pick, the note, and the send. */
+    .ui-landing-stage[data-scene="inbox"] {
+      --ui-landing-crop-x: 592;
+      --ui-landing-crop-y: 56;
+      --ui-landing-crop-w: 420;
+      --ui-landing-crop-h: 440;
+    }
+
+    /* The task's moment is the hand-off: the agent started and messaged,
+       and its answer, the next one rising from the foot. */
+    .ui-landing-stage[data-scene="agents"] {
+      --ui-landing-crop-x: 268;
+      --ui-landing-crop-y: 0;
+      --ui-landing-crop-w: 420;
+      --ui-landing-crop-h: 345;
     }
 
     .ui-landing-beside {
@@ -1171,35 +1318,7 @@
     }
 
     .ui-landing-stage[data-scene="devices"] {
-      height: 420px;
-    }
-
-    .ui-landing-devices-window {
-      top: 30px;
-      left: 4%;
-      width: 86%;
-    }
-
-    .ui-landing-devices-phone {
-      top: 120px;
-      right: 5%;
-      width: 150px;
-    }
-
-    .ui-landing-phone {
-      padding: 6px;
-      border-radius: var(--ui-display-phone-radius-narrow);
-    }
-
-    .ui-landing-phone-fit {
-      border-radius: var(--ui-display-phone-screen-radius-narrow);
-    }
-
-    .ui-landing-phone-island {
-      top: 12px;
-      width: 44px;
-      height: 13px;
-      margin-left: -22px;
+      padding: 28px 5% 36px;
     }
 
     .ui-landing-close {

@@ -4,6 +4,7 @@ import {
   type TaskAssigneeNotMember,
   type TaskIdTaken,
 } from "@repo/database/models/task-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_KIND } from "@repo/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -34,8 +35,8 @@ import {
   type TaskCreateAsked,
   type TaskCreateRelationRefused,
 } from "../tasks/task-create-relation.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
+  AGENT_CALLER,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
   type AgentReadCall,
@@ -80,7 +81,7 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * with a description to start from where one is given. Only a pilot may make a task
  * in pilot mode, and only as a child, which is how it gives a part too big
  * for one pull request a pilot of its own. It is made under an id drawn from
- * eve's key for the call (`called-id.ts`), so a call run again answers the
+ * the call's key (`called-id.ts`), so a call run again answers the
  * task it made and makes no second.
  * Every answer is data the model reads, never a credential.
  */
@@ -117,9 +118,11 @@ export const READ_TASK_TOOL = {
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' descriptions: the coding agent's starter's Task descriptions, or a pilot's Pilot, or the member's own Task descriptions (`descriptionsOnFor`). */
+/** Whether the caller reaches tasks' descriptions: as the coding agent's standing read it, or the member's own Task descriptions (`descriptionsOnFor`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
-  return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
+  return caller.kind === AGENT_CALLER.AGENT
+    ? Effect.succeed(caller.descriptionsOn)
+    : descriptionsOnFor(caller.userId);
 }
 
 /** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */

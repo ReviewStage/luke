@@ -17,7 +17,7 @@
  * `forAgents` is on (Subscription) and the plan is offered, the account's
  * own API key for the model's provider otherwise: on Claude Code, as its
  * documented `ANTHROPIC_API_KEY`, for a Claude model, and on Codex, as its
- * provider's `env_key`, for a GPT model. No new agent runs on eve, whose
+ * provider's `env_key`, for a GPT model. No new agent runs on the retired runtime, whose
  * agents are refused as ended (`runtime-sessions.ts`). Our own key
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
@@ -103,7 +103,7 @@ const IN_A_SANDBOX: AgentMachineChoice = {
   deviceId: undefined,
 };
 
-/** What a new agent runs on, a native harness and never eve, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
+/** What a new agent runs on, a native harness and never the retired runtime, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
 export interface AgentRuntimeChoice {
   readonly runtime: NativeRuntime;
   readonly payer: AgentPayer | undefined;

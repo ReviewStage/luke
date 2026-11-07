@@ -1,7 +1,7 @@
 /**
  * agent-browser.ts -- an agent's browser as the service reaches it: a Chromium kept running in the agent's own sandbox, and a DevTools protocol session with it over the sandbox's PTY.
  *
- * A sandbox is found as the Terminal tab finds it, by the eve session it is
+ * A sandbox is found as the Terminal tab finds it, by the session it is
  * tagged with (`vercel-sandbox-api.ts`): a root session's own id, which a
  * worker's session names as its root, since a worker works in its parent's
  * sandbox. The brain's
@@ -67,6 +67,7 @@ import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  IMAGE_NOT_READY,
   type ListedSandbox,
   SANDBOX_STATUS,
   type SandboxSessionApi,
@@ -96,19 +97,22 @@ import {
 } from "./sandbox-recorder.js";
 
 const AGENT_BROWSER = {
-  /** How often a resuming sandbox is asked whether it runs yet, and how many times before it is given up on: a minute in all. */
+  /**
+   * How often a resuming sandbox is asked whether it runs yet, and how many
+   * times before it is given up on: a minute in all, beside the wait on an
+   * image the registry still prepares, which the open makes itself
+   * (`agent-sandbox-open.ts`) and this never makes again.
+   */
   RESUME_SPACING: Duration.seconds(2),
   RESUME_TRIES: 30,
   /** How long the bridge may take to say it is ready once its PTY is open. */
   READY_TIMEOUT: Duration.seconds(15),
   /**
    * A bridge that did not come up is tried again on a fresh PTY this many
-   * times, this far apart, while the first failure is no older than the
-   * window, so a browser that is down still answers within a bridge's bound.
+   * times, this far apart, all within a bridge's bound.
    */
   BRIDGE_RETRIES: 2,
   BRIDGE_RETRY_SPACING: Duration.seconds(1),
-  BRIDGE_RETRY_WINDOW: Duration.seconds(10),
   /** The most the bridge's attempts take in all once the browser runs, so a hung one never stacks its timeouts. */
   BRIDGE_BOUND: Duration.seconds(20),
   /** How long a command waits on its answer. */
@@ -431,8 +435,7 @@ function ownScope<A, E>(
 }
 
 /**
- * The session whose sandbox an agent's browser runs in, as eve hands a tool
- * its session: a root session's own id, and a worker's root's, since a
+ * The session whose sandbox an agent's browser runs in: a root session's own id, and a worker's root's, since a
  * worker works in its parent's sandbox and opens none of its own.
  */
 export function browserSessionOf(session: {
@@ -476,14 +479,10 @@ export function agentBrowserOver(
       // Note that each try opens it again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
-      // gone, which only a sandbox opened before `getOrCreate` answers, is the one refusal answered at
-      // once, since no later try finds it again.
+      // gone, which only a sandbox opened before `getOrCreate` answers, is answered at once, since no
+      // later try finds it again, as is an image still being prepared, which the open has already
+      // waited on as long as it ever does.
       const resumed = reopened(sessionId, sandbox).pipe(
-        Effect.mapError((error) =>
-          snapshotGone(error)
-            ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
-            : sandboxUnavailable(error),
-        ),
         Effect.flatMap((found) =>
           found.status === SANDBOX_STATUS.RUNNING
             ? Effect.succeed({ name: found.name, sessionId: found.currentSessionId })
@@ -494,8 +493,17 @@ export function agentBrowserOver(
         Effect.retry({
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
-          while: (failure) => failure.reason !== BROWSER_UNREACHABLE.SNAPSHOT_GONE,
+          while: (failure) =>
+            failure._tag === "BrowserUnreachable" ||
+            !(snapshotGone(failure) || failure.code === IMAGE_NOT_READY),
         }),
+        Effect.mapError((failure) =>
+          failure._tag === "BrowserUnreachable"
+            ? failure
+            : snapshotGone(failure)
+              ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, failure.status)
+              : sandboxUnavailable(failure),
+        ),
       );
     });
 
@@ -588,7 +596,6 @@ export function agentBrowserOver(
             schedule: Schedule.max([
               Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
               Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
-              Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
             ]),
             while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
           }),

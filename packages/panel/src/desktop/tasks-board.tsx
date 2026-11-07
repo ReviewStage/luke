@@ -67,7 +67,6 @@ import {
   Stack,
   selectionRun,
   TASK_AGENTS_MARK_SIZE,
-  TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -159,6 +158,7 @@ import {
   useTaskMenuItems,
   useTaskRowTab,
 } from "./task-actions.js";
+import { TaskRowStatus } from "./task-card.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -398,7 +398,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
   workspaceName: string;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  /** How many of its threads wait on the reader, questions and updates alike, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   /** How many of its sub-tasks are finished, of all of them, `subTasksTotal`; none where it has none. */
   subTasksFinished: number;
@@ -570,7 +570,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
             />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
+            <TaskRowStatus task={task} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
         {menu.moreDrawn ? (
@@ -732,7 +732,7 @@ function TaskBoardColumnView({
   panelId: string;
   properties: readonly TaskProperty[];
   people: ColumnPeople;
-  /** How many of a task's questions wait on the reader, by its id (`useTasksWaiting`). */
+  /** How many of a task's threads wait on the reader, by its id (`useTasksWaiting`). */
   waitingOn: ReadonlyMap<string, number>;
   /** How many of a task's sub-tasks are finished, of all of them, by its id; none for a task with none. */
   subTasksOf: ReadonlyMap<string, ChildTaskCount>;

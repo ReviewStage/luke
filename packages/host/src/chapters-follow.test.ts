@@ -88,6 +88,21 @@ it.effect(
         MODEL_PROVIDER.ANTHROPIC,
         "a key swapped is drawn though Generate stood",
       );
+
+      generator = {
+        ...generator,
+        runsOnChoices: [
+          { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+          { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+        ],
+      };
+      live.set({});
+      yield* nextPoll;
+      assert.equal(
+        told.at(-1)?.[AGENT_ID]?.["7"]?.rows?.pullRequest?.runsOnChoices?.length,
+        2,
+        "a second key saved offers the pick though Generate runs on what it did",
+      );
       yield* Fiber.interrupt(held);
     }),
 );

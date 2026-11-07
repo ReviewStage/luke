@@ -1,13 +1,11 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import {
-  integrationAutomationsOn,
-  recordAutomationRun,
-} from "@repo/database/models/automation-store";
+import { integrationAutomationsOn } from "@repo/database/models/automation-store";
 import { AUTOMATION_FIRING, AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
 import { TRIGGER_PROVIDER, type TriggerProvider } from "@repo/features/trigger-catalog";
 import { HTTP_METHOD } from "@repo/wire";
-import { DateTime, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { AutomationCadence, cadenceOrUnavailable } from "../automations/automation-cadence.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -42,10 +40,12 @@ import {
  * answered and queues nothing, so the provider does not retry it. Each
  * event the source reads it as finds the enabled automations of that
  * workspace alone listening for it, keeps those whose filters it passes,
- * and queues one run for each under the delivery's own key, so a
- * redelivery queues none; the run carries the event's subject and its
- * summary, never the delivery's body, and the minute sweep starts each
- * agent, since a provider waits only a second or so for the answer.
+ * and publishes one firing for each under the delivery's own key, which a
+ * redelivery's run is recorded under once; the firing carries the event's
+ * subject and its summary, never the delivery's body, and the
+ * automation-runs queue's consumer records and starts each run
+ * (`automation-run-consumer.ts`), since a provider waits only a second or
+ * so for the answer.
  * Nothing of the body is logged.
  */
 
@@ -68,7 +68,7 @@ const queueEvent = Effect.fnUntraced(function* (
   provider: TriggerProvider,
   organizationId: string,
   event: NormalizedEvent,
-  firedAt: Date,
+  firedAt: number,
 ) {
   const listening = yield* integrationAutomationsOn(
     organizationId,
@@ -76,12 +76,14 @@ const queueEvent = Effect.fnUntraced(function* (
     event.event,
     MAXIMUM_AUTOMATIONS,
   );
+  const cadence = yield* AutomationCadence;
   let queued = 0;
   for (const automation of listening) {
     const { trigger } = automation;
     if (trigger.kind !== AUTOMATION_TRIGGER.INTEGRATION) continue;
     if (!integrationFiltersMatch(trigger.filters, event.attributes)) continue;
-    const recorded = yield* recordAutomationRun(automation, {
+    yield* cadence.publish({
+      automationId: automation.id,
       dedupeKey: event.dedupeKey,
       firing: {
         kind: AUTOMATION_FIRING.INTEGRATION,
@@ -92,7 +94,7 @@ const queueEvent = Effect.fnUntraced(function* (
       payload: event.summary,
       firedAt,
     });
-    if (Option.isSome(recorded)) queued += 1;
+    queued += 1;
   }
   return queued;
 });
@@ -128,10 +130,10 @@ function deliveryEndpoint(source: TriggerSource<TriggerSourceServices>) {
     if (Option.isNone(workspace)) {
       return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { queued: 0 });
     }
-    const firedAt = yield* DateTime.nowAsDate;
+    const firedAt = yield* Clock.currentTimeMillis;
     let queued = 0;
     for (const event of source.normalize(delivery)) {
-      queued += yield* hostedStoreOrUnavailable(
+      queued += yield* cadenceOrUnavailable(
         queueEvent(source.provider, workspace.value, event, firedAt),
       );
     }

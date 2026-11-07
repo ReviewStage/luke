@@ -14,7 +14,7 @@ import {
 
 /**
  * What the agent box's context ring and its popover say of a page's
- * context: the share in words, the ring's color by how near eve's
+ * context: the share in words, the ring's color by how near the harness's
  * compaction the last step read, the parts the read divides into with a
  * "~" on every estimate, and the lines under them. Synthetic counts
  * throughout.
@@ -57,7 +57,7 @@ test("the ring's hover says near the limit once the ring is amber or red, and sa
   assert.equal(contextHint(reading(950_000)), "95% of context used, near the limit");
 });
 
-test("the ring has room short of a tenth of the window below eve's compaction, turns amber from there, and red at the compaction and past it", () => {
+test("the ring has room short of a tenth of the window below the harness's compaction, turns amber from there, and red at the compaction and past it", () => {
   assert.equal(contextLevel(reading(799_999)), "room");
   assert.equal(contextLevel(reading(800_000)), "near");
   assert.equal(contextLevel(reading(899_999)), "near");
@@ -81,7 +81,7 @@ test("the popover divides the read into the instructions, the tools, the descrip
   assert.ok(Math.abs(filled - 62) < 1e-9);
 });
 
-test("an agent handed a prompt names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
+test("an agent handed a prompt names its brief so; once the harness compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
     contextRows(CONTEXT, AGENT_BRIEF.PROMPT).map((row) => row.label),
     ["System prompt", "Tool definitions", "Prompt", "Conversation"],
@@ -112,7 +112,7 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
   assert.ok(Math.abs(filled - 0.3) < 1e-9);
 });
 
-test("under the legend: what the cache read and wrote, the last step's output, where eve compacts, and when it last did, where it has", () => {
+test("under the legend: what the cache read and wrote, the last step's output, where the harness compacts, and when it last did, where it has", () => {
   assert.deepEqual(contextStats(CONTEXT, NOW), [
     { label: "Read from cache", value: "600K" },
     { label: "Written to cache", value: "18K" },

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_STATUS, type ListedAgent } from "@repo/features/agent-wire";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
@@ -21,7 +21,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
-import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@repo/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -51,7 +51,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
 /**
@@ -125,30 +125,40 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-sam", name: "Sam Ortiz", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
+/** One of a task's agents as the test names it, which last moved `at`. */
+interface AgentLine {
+  readonly id: string;
+  readonly title: string;
+  readonly status: ListedAgent["status"];
+  readonly at: number;
+  readonly startedBy: typeof CHARLES;
+}
+
 function agent(
   n: number,
   title: string,
   startedBy: typeof CHARLES,
-  status: TaskAgentLine["status"],
+  status: AgentLine["status"],
   ago: number,
-): TaskAgentLine {
+): AgentLine {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
     status,
     at: NOW - ago,
     startedBy,
   };
 }
 
+/** Each task's agents, by the task's id, which the list follows live. */
+const LINES = new Map<string, readonly AgentLine[]>();
+
 function task(
   n: number,
   name: string,
   createdBy: typeof CHARLES,
   ago: number,
-  agents: readonly TaskAgentLine[] = [],
+  agents: readonly AgentLine[] = [],
   assignee?: typeof CHARLES,
 ): TaskSummary {
   const summary: TaskSummary = {
@@ -162,17 +172,29 @@ function task(
     createdBy,
     ...(assignee === undefined ? undefined : { assignee }),
   };
+  LINES.set(summary.id, agents);
   if (agents.length === 0) return summary;
-  return {
-    ...summary,
-    agents: {
-      total: agents.length,
-      working: 0,
-      agents,
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
-  };
+  return { ...summary, agents: { total: agents.length, working: 0, pullRequestTotal: 0 } };
+}
+
+/** Every agent of the tasks, as the list follows them live, which the page lists them from: since its run began while it works, since its newest turn ended once it has. */
+function followedOf(tasks: readonly TaskSummary[]): readonly ListedAgent[] {
+  return tasks.flatMap((summary) =>
+    (LINES.get(summary.id) ?? []).map(({ at, ...line }) =>
+      listedAgent(
+        {
+          ...line,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planId: summary.id,
+          createdAt: at,
+          turnId: null,
+          ...(line.status === AGENT_STATUS.RUNNING ? { runStartedAt: at } : { settledAt: at }),
+        },
+        { workspaceId: ACME.id },
+      ),
+    ),
+  );
 }
 
 const BACKOFF = agent(1, "Jittered backoff", CHARLES, AGENT_STATUS.RUNNING, 12 * MINUTE);
@@ -262,8 +284,8 @@ beforeEach(() => {
         agent: {
           id: agentId,
           planId: CACHE.id,
-          model: CACHE_KEYS.model,
-          effort: CACHE_KEYS.effort,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
           title: CACHE_KEYS.title,
           createdAt: 1,
           status: AGENT_STATUS.COMPLETED,
@@ -352,6 +374,7 @@ function mountWith(
   holdPeople(reads.deliverMembers);
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
+      liveAgents: followedOf(more.tasks ?? overrides.tasks ?? TASKS),
       me: DEAN.userId,
       workspace: { ...ACME, memberCount },
       tasks: TASKS,

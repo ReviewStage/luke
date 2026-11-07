@@ -1,11 +1,8 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { TURN_ABANDON } from "@repo/database/models/abandoned-turns";
 import {
-  agentConversation,
   awaitingLinesOfReached,
-  discardAgent,
   latestTurnsOfReached,
-  readAgentByKey,
   readVisibleAgent,
 } from "@repo/database/models/agent-store";
 import {
@@ -21,13 +18,11 @@ import {
   creatorStillMember,
   failClaimedRun,
   readAutomationToRun,
-  type StrandedRun,
   settleAutomationRun,
   startedRunAgents,
   subjectRunStartedSince,
   withAutomationLocked,
 } from "@repo/database/models/automation-store";
-import { sentLineStands } from "@repo/database/models/message-reads";
 import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { automationLineMetadata, storeWriter } from "@repo/database/models/writer";
 import type { StoredAutomationOrigin } from "@repo/database/schemas/agent";
@@ -58,7 +53,6 @@ import {
   type TriggerProvider,
 } from "@repo/features/trigger-catalog";
 import { failureKind } from "@repo/runtime/effect";
-import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
@@ -67,8 +61,8 @@ import { type StartServices, type StartWhere, startAgent } from "../agents/coder
 import { agentStatusOf } from "../agents/coder-host/status.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
+import type { AgentSessions, TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
@@ -84,8 +78,8 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * checked exactly as they are for the developer's own Start, and the agent
  * runs as the owner on the owner's keys, naming the automation it ran for. The agent is reached as the deployment acting for the
  * owner, since no request of the owner's is in hand. The run's own id is
- * the Start's key, so a run acted on twice, by two
- * sweeps or a sweep and its trigger, starts one agent. A run about one pull
+ * the Start's key, so a run acted on twice, by two deliveries of its
+ * firing, starts one agent. A run about one pull
  * request or issue starts its agent named by it, and any other run's agent
  * is named by the title model from the automation's prompt.
  *
@@ -96,8 +90,9 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * running, read as each agent's tab reads it) is skipped, never queued, as
  * is an integration's run about a subject (one Sentry issue) another run
  * started on within the trigger's cooldown. The
- * guards read what earlier runs settled, so the sweep acts on one
- * automation's runs one after another (`automation-sweep.ts`); a noisy
+ * guards read what earlier runs settled, and each act reads them under
+ * the automation's row lock, so one automation's runs are decided one
+ * after another however many deliveries come at once; a noisy
  * trigger costs nothing past
  * its caps. A start refused is a failed run with one fixed word for why,
  * and the next firing tries again.
@@ -109,7 +104,7 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * one, so an agent let go costs the automation its memory and never its runs.
  */
 
-/** How long a claimed run counts as starting; a start runs in seconds, and one older is the sweep's to recover. */
+/** How long a claimed run counts as starting against the concurrency guard; a start runs in seconds. */
 const CLAIM_WINDOW_MS = 10 * 60_000;
 
 const AUTOMATION_RUNS = {
@@ -141,7 +136,7 @@ const WORKING: ReadonlySet<AgentStatus> = new Set([AGENT_STATUS.STARTING, AGENT_
 export type SessionsForAccount = (
   userId: string,
 ) => Effect.Effect<
-  AgentSessions<EveTypedTurn>,
+  AgentSessions<TypedTurn>,
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 >;
@@ -443,15 +438,15 @@ const steerClaimed = Effect.fnUntraced(function* (
   const found = yield* readVisibleAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null)
     return Option.none<AutomationRunOutcome>();
-  const eve = yield* Effect.result(sessionsFor(automation.userId));
-  if (Result.isFailure(eve)) {
+  const agentSessions = yield* Effect.result(sessionsFor(automation.userId));
+  if (Result.isFailure(agentSessions)) {
     return Option.some<AutomationRunOutcome>(
-      yield* failedRun(run, reasonOfSteerRefusal(eve.failure)),
+      yield* failedRun(run, reasonOfSteerRefusal(agentSessions.failure)),
     );
   }
   const sent = yield* Effect.result(
     steerAgent(
-      eve.success,
+      agentSessions.success,
       storeWriter({ tools: CODER_TOOL_SET }),
       automation.userId,
       found.value,
@@ -581,7 +576,7 @@ type Decision =
 
 /**
  * The guards read and the run claimed under the automation's row lock, so
- * two acts on its runs, a sweep and a "Run now" among them, never both read
+ * two acts on its runs, two deliveries or one and a "Run now", never both read
  * room for one more agent: a run held back is settled skipped there, and
  * one let through is claimed, started with no agent yet, which the next
  * act's concurrency counts. Note that the automation is read again under
@@ -785,8 +780,7 @@ const startClaimed = Effect.fnUntraced(function* (
  * where another act settled or claimed it first. Note that an agent found
  * under the run's key is never taken as its start here, because a run
  * still queued has made none, and one claimed may be opening an agent
- * that its own act will yet let go of; a claim whose act died is the
- * stranded sweep's to settle.
+ * that its own act will yet let go of.
  */
 const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, run: ActedRun) {
   const decision = yield* decide(run.automationId, run);
@@ -828,19 +822,30 @@ const outcomeOf = Effect.fnUntraced(function* (sessionsFor: SessionsForAccount, 
 
 /**
  * Acts on one queued run and settles it, answering how it came out;
- * nothing where its automation is gone. A store that fails midway is
- * logged and the run left queued, so the next sweep acts on it again under
- * the same key.
+ * nothing where another act settled or claimed it first. A store that fails
+ * midway fails the act, the run left queued or claimed, so a delivery of
+ * its firing that is not acknowledged is delivered again and acts under the
+ * same key (`automation-run-consumer.ts`).
+ */
+export const actOnAutomationRun = /* @__PURE__ */ Effect.fn("web/actOnAutomationRun")(function* (
+  sessionsFor: SessionsForAccount,
+  run: ActedRun,
+): Effect.fn.Return<AutomationRunOutcome | undefined, unknown, StartServices> {
+  const acted = yield* outcomeOf(sessionsFor, run);
+  return acted?.outcome;
+});
+
+/**
+ * Acts on one queued run as `actOnAutomationRun` does, for a caller that
+ * answers its own request whatever came of the run, a "Run now": a store
+ * that fails midway is logged and answered as nothing.
  */
 export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutomationRun")(
   function* (
     sessionsFor: SessionsForAccount,
     run: ActedRun,
   ): Effect.fn.Return<AutomationRunOutcome | undefined, never, StartServices> {
-    return yield* Effect.gen(function* () {
-      const acted = yield* outcomeOf(sessionsFor, run);
-      return acted?.outcome;
-    }).pipe(
+    return yield* actOnAutomationRun(sessionsFor, run).pipe(
       Effect.catch((failure) =>
         Effect.as(
           Effect.logWarning(`an automation run could not be acted on: ${failureKind(failure)}`),
@@ -850,72 +855,3 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
     );
   },
 );
-
-/**
- * What a recovered start of a same-agent automation's run does as its act
- * would have: keeps the agent where the automation still holds what the run
- * was claimed for, none or the gone agent, and answers that it replaced the
- * gone one where it did so, or had already before the act died. Note that
- * the keep is no guard of its own, because the store's compare holds every
- * other automation and target to its own (`adoptAutomationAgent`).
- */
-const recoveredAdoption = Effect.fnUntraced(function* (stranded: StrandedRun, agentId: string) {
-  const adopted = yield* adoptAutomationAgent(
-    stranded.automationId,
-    stranded.claimedAgentId,
-    agentId,
-  );
-  const kept =
-    adopted ||
-    Option.exists(
-      yield* readAutomationToRun(stranded.automationId),
-      (automation) =>
-        automation.targetKind === AUTOMATION_TARGET.SAME_AGENT &&
-        automation.targetAgentId === agentId,
-    );
-  return kept && stranded.claimedAgentId !== null ? AUTOMATION_RUN_REASON.AGENT_REPLACED : null;
-});
-
-/**
- * A claimed run whose function died between the claim and its agent,
- * settled as the start its key made where that agent's session ran, and
- * failed as unavailable where none did, an agent made but never opened let
- * go with it, so no run is left starting for good. A run handed to the
- * same agent is settled with the agent it was claimed for, where that
- * agent holds the line it sent under its key, and otherwise read as a
- * start, since one whose agent was gone started a fresh one under its key.
- */
-export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStrandedRun")(function* (
-  stranded: StrandedRun,
-): Effect.fn.Return<void, unknown, DatabaseServices> {
-  // A run handed to the same agent is the start of the agent it was claimed for where that agent holds
-  // the line it sent under its key, and of no other agent whatever its lines hold.
-  if (stranded.claimedAgentId !== null) {
-    // Read past the creator's gate, since a creator who left after the line landed still sent it.
-    const agent = yield* agentConversation(stranded.claimedAgentId);
-    const sent =
-      Option.isSome(agent) &&
-      (yield* sentLineStands(
-        agent.value.userId,
-        agent.value.conversationId,
-        sentLineId(stranded.id),
-      ));
-    if (sent) {
-      yield* attachRunAgent(stranded.id, stranded.claimedAgentId);
-      return;
-    }
-  }
-  const started = yield* readAgentByKey(stranded.userId, stranded.id);
-  // Note that an agent made under the key whose session never ran a turn was never opened, the
-  // function gone between making it and eve taking it, so it is let go rather than taken as started.
-  const opened = Option.isSome(started)
-    ? (yield* latestTurnsOfReached([started.value.conversationId])).size > 0
-    : false;
-  if (Option.isSome(started) && opened) {
-    const reason = yield* recoveredAdoption(stranded, started.value.id);
-    yield* attachRunAgent(stranded.id, started.value.id, reason);
-    return;
-  }
-  if (Option.isSome(started)) yield* discardAgent(stranded.userId, started.value.id);
-  yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
-});

@@ -49,8 +49,6 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FAILURE_NOTE_TIME,
-  FailureNote,
   GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
@@ -59,8 +57,6 @@ import {
   MESSAGE_LINE_INSET,
   MessageHead,
   MessageLine,
-  NOTE_LINE_LOOK,
-  NoteLine,
   OneLine,
   STATUS_TONE,
   SUBJECT_FIT,
@@ -70,15 +66,21 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TurnEnd,
   useAnnounce,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { AlarmClockCheckIcon, GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import { skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
+import {
+  ACTION_RESULT_STATUS,
+  type GitHubLineMetadata,
+  MESSAGE_ROLE,
+  type WireValue,
+} from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -123,7 +125,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import { useForwardEntry } from "./agent-forward.js";
+import { ForwardChip, useAutoForward } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -147,6 +149,7 @@ import {
   delegates,
   type EndLineParts,
   endLineOffersContinue,
+  endLineOffersTryAgain,
   endLineParts,
   endLineReason,
   finishedReplyLead,
@@ -169,6 +172,7 @@ import {
   type SentLine,
   type StartingLaunch,
   slackLineOf,
+  TRY_AGAIN_LABEL,
   type TurnStretch,
   teammateStarter,
   threadLineOf,
@@ -1750,81 +1754,6 @@ export function AgentMessage({
 }
 
 /**
- * The line a transcript ends on once its turn was stopped or failed: a
- * failure is a `FailureNote`; a stop's words are a quiet `NoteLine`. A turn failed on
- * the reader's own refused key offers its API keys after the words, inside
- * the note.
- */
-function AgentEndLine({
-  ended,
-  endReason,
-  keyProvider,
-  onOpenApiKeys,
-  about,
-}: {
-  ended: EndLineParts;
-  endReason: FailureReason | undefined;
-  keyProvider: ModelProvider | undefined;
-  onOpenApiKeys: (() => void) | undefined;
-  /** The agent and task the failure is about, which its copied details name. */
-  about: FailureAbout;
-}): React.JSX.Element {
-  // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
-  const remedy =
-    endReason === FAILURE_REASON.API_KEY
-      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
-      : undefined;
-  const remedyButton =
-    remedy === undefined ? null : (
-      <span className="ml-control-gap align-middle">
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
-          {remedy}
-        </Button>
-      </span>
-    );
-  if (ended.failed) {
-    return (
-      <div className={END_LINE_CLASS} data-ended="" data-failed="">
-        <FailureNote
-          failure={failureShown({
-            surface: FAILURE_SURFACE.AGENT_TURN,
-            // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
-            cause:
-              (ended.failure === undefined ? undefined : TURN_FAILURE_CAUSE.get(ended.failure)) ??
-              FAILURE_CONDITION.UNREAD,
-            about,
-          })}
-          time={FAILURE_NOTE_TIME.PAST}
-        >
-          {ended.words}
-          {remedyButton}
-        </FailureNote>
-      </div>
-    );
-  }
-  return (
-    <NoteLine look={NOTE_LINE_LOOK.INSET} data-ended="">
-      <span className="agent-end-words">{ended.words}</span>
-      {remedyButton}
-    </NoteLine>
-  );
-}
-
-/**
- * A failed end line's frame: a failure's mark, its words, then what the
- * turn cost after a dot, flowing as one sentence in the caption role, so a
- * long failure wraps under its own words. Only a failure is drawn in the
- * danger ink (`FailureNote`): a stop is the developer's own doing, said in
- * a quiet note line.
- */
-const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
-
-/**
- * The end line's row: the line, then the press it ends on (Continue in new
- * agent), on one row, centered on the line's words, which wraps the press
- * under them only where the column is too narrow for both.
- */
-/**
  * Says the turn's end, a stop or a failure, once, as it lands. Note that it
  * is said by the transcript rather than its end line, because the line
  * mounts with its words and its failure is history, no alert; and that only
@@ -1838,6 +1767,14 @@ function useTurnEndSaid(ended: EndLineParts | undefined, pageRuns: boolean): voi
   useAnnounce(ANNOUNCE.POLITE, sawRunning ? (ended?.words ?? "") : "");
 }
 
+/**
+ * The line a transcript ends on once its turn was stopped or failed, and
+ * the press on its row (`TurnEnd`): a failure reported under its cause, a
+ * stop's words alone. A turn failed on the reader's own refused key offers
+ * its harness's row in Settings as the row's press, where no other press
+ * stands, since a key the reader mends offers neither Continue nor Try
+ * again.
+ */
 function AgentEndRow({
   ended,
   endReason,
@@ -1851,25 +1788,43 @@ function AgentEndRow({
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  /** The agent and task the failure is about, which its copied details name. */
   about: FailureAbout;
   press: ReactNode;
   /** Whether it stands in the empty state's own centered column, centered as its column is. */
   centered?: boolean;
 }): React.JSX.Element {
-  // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
+  // Note that a key refused is mended at its harness's row in Settings, so its row offers that row as its press.
+  const remedy =
+    endReason === FAILURE_REASON.API_KEY
+      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
+      : undefined;
+  const failure = ended.failed
+    ? failureShown({
+        surface: FAILURE_SURFACE.AGENT_TURN,
+        // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
+        cause:
+          (ended.failure === undefined ? undefined : TURN_FAILURE_CAUSE.get(ended.failure)) ??
+          FAILURE_CONDITION.UNREAD,
+        about,
+      })
+    : undefined;
   return (
-    <div
-      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centered ? " justify-center" : ""}`}
+    <TurnEnd
+      failure={failure}
+      press={
+        remedy === undefined ? (
+          press
+        ) : (
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+            {remedy}
+          </Button>
+        )
+      }
+      centered={centered}
     >
-      <AgentEndLine
-        ended={ended}
-        endReason={endReason}
-        keyProvider={keyProvider}
-        onOpenApiKeys={onOpenApiKeys}
-        about={about}
-      />
-      {press}
-    </div>
+      {ended.words}
+    </TurnEnd>
   );
 }
 
@@ -2773,7 +2728,6 @@ function AgentTabView({
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
   const queue = useAgentQueue(agent.id, transcript.queue);
   const pictures = useAgentPictureDoor(agent.id);
-  const forward = useForwardEntry(agent);
   const queueEditing = useQueueEditing(composer, queue, pictures);
   const enterQueues = useQuery({ ...appStateQuery, select: selectEnterQueues }).data === true;
   // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
@@ -2888,11 +2842,22 @@ function AgentTabView({
       unsent,
       notes: failedNotes,
       sending,
-      retry: (id: string) => retryLine?.(id),
-      takeBack: (id: string) => takeBackLine?.(id),
+      // Note that an archived agent takes no message, so a line refused before it was archived is only deleted.
+      retry: onUnarchive === undefined ? (id: string) => retryLine?.(id) : undefined,
+      takeBack: onUnarchive === undefined ? (id: string) => takeBackLine?.(id) : undefined,
       drop: (id: string) => dropLine?.(id),
     }),
-    [undelivered, composer.closed, unsent, failedNotes, sending, retryLine, takeBackLine, dropLine],
+    [
+      undelivered,
+      composer.closed,
+      unsent,
+      failedNotes,
+      sending,
+      retryLine,
+      takeBackLine,
+      dropLine,
+      onUnarchive,
+    ],
   );
   const starterActor = usePerson(agent.startedBy);
   const wholeParts = useWholePartDoor(agent.id);
@@ -3098,8 +3063,12 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
-            plus={forward === undefined ? undefined : [forward]}
+            tools={(narrow) => (
+              <>
+                <AgentPlace agent={agent} narrow={narrow} />
+                <ForwardChip agent={agent} />
+              </>
+            )}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its description or
             // task, so the box takes a follow up even before the transcript is read.
@@ -3203,6 +3172,28 @@ export function StartingAgentTab({
 }
 
 /**
+ * Try again on a failed end line (`endLineOffersTryAgain`), pressed once:
+ * the line it sends takes the end line's place, and a line that did not go
+ * draws the end line, and so a fresh press, again.
+ */
+function TryAgainPress({ onPress }: { onPress: () => void }): React.JSX.Element {
+  // Note that the press is kept in a ref as well as drawn, so a second press before the draw sends nothing.
+  const pressed = useRef(false);
+  const [sent, setSent] = useState(false);
+  const press = () => {
+    if (pressed.current) return;
+    pressed.current = true;
+    setSent(true);
+    onPress();
+  };
+  return (
+    <Button variant={BUTTON_VARIANT.OUTLINE} icon={<GLYPH.RETRY />} disabled={sent} onClick={press}>
+      {TRY_AGAIN_LABEL}
+    </Button>
+  );
+}
+
+/**
  * An agent's tab, by the agent's id alone: its transcript is followed from
  * the moment the tab stands, while the agent itself may still be on its way with the task's list of agents. What needs
  * the agent, its composer, its model, its pull request, and how its log is
@@ -3281,6 +3272,7 @@ function AgentTabBody({
     known: control.pullRequests.get(agent.id),
   });
   const moveToCloud = useMoveToCloud(agent, control);
+  useAutoForward(agent, shown);
   // Note that the log never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.
   // Note that nothing counts as landed before the first page.
   const surroundsLanded = messages.length > 0;
@@ -3333,6 +3325,29 @@ function AgentTabBody({
     onOpenTarget === undefined
       ? undefined
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
+  // An archived agent's box gives way to its Unarchive: the page's own where it draws the agent
+  // alone, else this tab's, as on a task, a refusal said as the page says it.
+  const unarchive =
+    control.onUnarchive ??
+    (agent.archivedAt === undefined
+      ? undefined
+      : () =>
+          control.onArchive(agent.id, false).then(
+            (result) => {
+              if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+              toast({
+                words: result.reason,
+                tone: STATUS_TONE.DANGER,
+                hold: TOAST_HOLD.FAILED,
+                failure: {
+                  surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+                  cause: result,
+                  about: { agentId: agent.id },
+                },
+              });
+            },
+            () => undefined,
+          ));
   // An agent a pilot started reports to it and takes no member's message, so its box names the pilot instead.
   const pilot = agent.startedByPilot;
   const reportsTo = pilotTarget(agent);
@@ -3353,13 +3368,17 @@ function AgentTabBody({
   // On a pilot task only its pilot continues, so a coding agent there offers no Continue anywhere.
   const continues = offersContinue(control.mode, agent);
   // The failed end line holds the press, Continue again once another agent continued this one.
-  const pressed = endLineOffersContinue({
+  const ending = {
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
     failure: transcript.failure,
     continued: continued.length > 0,
     boxClosed: composer.closed !== undefined,
-  });
+  };
+  const pressed = endLineOffersContinue(ending);
+  // Where a message carries the agent on, the row offers it as a line of the developer's own, unless the box is a pilot's or an archived task's note.
+  const triesAgain =
+    endLineOffersTryAgain(ending) && reportsTo === undefined && control.onUnarchive === undefined;
   // How the messages are named moves only when the agent's place or the messages read do, not with each page.
   const readIds = useKept(
     messages.map((message) => message.id),
@@ -3397,7 +3416,7 @@ function AgentTabBody({
         counts={shown}
         delegationStarts={shown ? transcript.delegations : undefined}
         onStop={() => control.onStop(agent.id)}
-        onUnarchive={control.onUnarchive}
+        onUnarchive={unarchive}
         onOpenSubagent={onOpenSubagent}
         onOpenTarget={onOpenTarget}
         cards={cards}
@@ -3426,13 +3445,15 @@ function AgentTabBody({
               offers={continues}
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
+          ) : triesAgain ? (
+            <TryAgainPress onPress={() => composer.sendWords(RETRY_LINE)} />
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}
         onMoveToCloud={moveToCloud}
         endTrail={
           // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
-          continued.length === 0 || control.onUnarchive === undefined ? undefined : (
+          continued.length === 0 || unarchive === undefined ? undefined : (
             <ContinuedTrail {...continuedDoors} />
           )
         }

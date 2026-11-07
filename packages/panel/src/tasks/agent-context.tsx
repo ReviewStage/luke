@@ -38,7 +38,7 @@ import {
  *
  * Beside the model chip stands a small ring, the way Claude Code and
  * Cursor draw one, filled with the share of the window the agent's newest
- * step read and colored by how near eve's compaction that is
+ * step read and colored by how near the harness's compaction that is
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
@@ -46,7 +46,7 @@ import {
  * `PopoverPanel`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its color, and under them the
- * cache, the step's answer, where eve compacts, and when it last did. The
+ * cache, the step's answer, where the harness compacts, and when it last did. The
  * ring stands only once a step has ended, since there is nothing to fill
  * it before. The popover closes on its ×, on Escape, which stops there so
  * the panel behind stays open, on a second press of the ring, and on focus
@@ -56,7 +56,7 @@ import {
 /** What the ring and its popover are called. */
 const CONTEXT_LABEL = "Context usage";
 
-/** The ring's fill: muted with room to spare, amber within a tenth of the window of eve's compaction, and red at or past it. */
+/** The ring's fill: muted with room to spare, amber within a tenth of the window of the harness's compaction, and red at or past it. */
 const LEVEL_TONE = {
   [CONTEXT_LEVEL.ROOM]: PROGRESS_RING_TONE.MUTED,
   [CONTEXT_LEVEL.NEAR]: PROGRESS_RING_TONE.ATTENTION,

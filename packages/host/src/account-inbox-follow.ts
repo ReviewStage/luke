@@ -15,7 +15,6 @@ import {
   INBOX_CHANGE,
   INBOX_ITEM,
   type InboxChange,
-  remindAtAfter,
   settles,
 } from "./inbox-collections.js";
 import { answeredCollection, rowsOf } from "./live-collection.js";
@@ -119,7 +118,7 @@ function entryChanged<Row extends Entry>(
 ): Row | "gone" | undefined {
   if (!changedIds(change).includes(entry.id)) return undefined;
   if (change.kind === INBOX_CHANGE.REMINDED) {
-    const until = remindAtAfter(entry.remindAt, change) ?? null;
+    const { until } = change;
     return (entry.remindAt ?? null) === until ? undefined : { ...entry, remindAt: until };
   }
   if (change.kind === INBOX_CHANGE.ANSWERED && entry.updatedAt > change.item.updatedAt) {
@@ -135,10 +134,9 @@ function entryChanged<Row extends Entry>(
   return (entry.unread === true) === unread ? undefined : { ...entry, unread };
 }
 
-/** Whether a task's open item is a question waiting on the reader, as its task's count counts it. */
+/** Whether a task's open item, a question or an update alike, waits on the reader, as its task's count counts it. */
 function counted(entry: AccountInboxLiveRows["items"][number], readerId: string): boolean {
-  const waitsOn = entry.waitsOn ?? entry.startedBy ?? readerId;
-  return entry.asking !== false && waitsOn === readerId;
+  return (entry.waitsOn ?? entry.startedBy ?? readerId) === readerId;
 }
 
 /** The parts of the read a write changes. */

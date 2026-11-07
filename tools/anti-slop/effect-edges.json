@@ -4,6 +4,7 @@
     "apps/desktop/src/main/services/compose-desktop.ts",
     "apps/desktop/src/utility/task-code.ts",
     "packages/panel/src/renderer-runtime.ts",
+    "packages/ui/src/ui-runtime.ts",
     "apps/desktop/src/renderer/window-root.tsx",
     "apps/host/src/main.ts",
     "apps/cli/src/main.ts",
@@ -30,6 +31,7 @@
     "packages/features/src/hosted-link.ts",
     "packages/host/src/client/app-state-store.ts",
     "packages/host/src/update-service.ts",
+    "packages/service/src/automations/automation-run-consumer.ts",
     "packages/service/src/member-mcp/server.ts"
   ],
   "rawAsyncPrimitives": [

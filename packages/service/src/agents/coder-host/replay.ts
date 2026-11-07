@@ -1,8 +1,5 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import {
-  type AgentRepositoryEntry,
-  readAgentRepositories,
-} from "@repo/database/models/agent-repositories";
+import type { AgentRepositoryEntry } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   type LineSent,
@@ -17,8 +14,6 @@ import {
   messageSeqOf,
   type StoredMessageRecord,
 } from "@repo/database/models/message-reads";
-import { standingSessionsOf } from "@repo/database/models/recorded-session";
-import { readTaskHeader } from "@repo/database/models/task-store";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
@@ -34,7 +29,7 @@ import {
   type StartNoteHeading,
   toolStep,
 } from "@repo/features/agent-replay";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_BOUNDS,
@@ -43,7 +38,6 @@ import {
   type AgentPullRequest,
   type AgentStartFrom,
   base64Bytes,
-  PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { isVideoType } from "@repo/features/conversation-picture-wire";
 import { mentionMarkdownLink } from "@repo/features/link-grammar";
@@ -68,24 +62,16 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { standingAgentDrive } from "../agent-drive.js";
-import { controlsAgent } from "../agent-reach.js";
-import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
-import { agentPublished } from "./published.js";
-import {
-  copySourceWork,
-  SNAPSHOT_MISS,
-  type SnapshotOutcome,
-  type SourceCopyServices,
-} from "./snapshot.js";
-import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
+import type { SnapshotOutcome } from "./snapshot.js";
+import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
 
 /**
  * replay.ts -- what an agent started from another agent of its plan is handed: that agent's brief, its transcript replayed, and where it left its work.
  *
- * eve opens a session with a user message and keeps no history seeded
- * beside it, so the transcript goes inside the first message, in the format
+ * A new agent's session opens with a user message and, unless a continue
+ * hands it its source's own harness transcript (`takeover.ts`), keeps no
+ * history seeded beside it, so the transcript goes inside the first message, in the format
  * `@repo/features/agent-replay` writes and the desktop reads back. The
  * source is read as the account asking, on the plan the Start names and no
  * other, and its transcript under the member who started it, whose
@@ -112,8 +98,9 @@ import { CURSOR_START } from "./transcript.js";
  * reasoning is left out, as a model does not read its earlier reasoning in
  * later turns either. The preamble
  * names where the source's work now stands: in the new agent's own
- * checkout, on a fork of the drive the source's stood on (`agent-drive.ts`),
- * what it had not committed included; for a source from before drives, the
+ * checkout, in a sandbox created from the latest snapshot of the source's
+ * stopped one (`../machine/vercel-machine.ts`), what it had not committed
+ * included; for a source whose sandbox was not stopped on a snapshot, the
  * branch its checkout was copied to as the Start was made (`snapshot.ts`),
  * what it had not pushed included, or, where it could not be copied, the
  * branch and pull request it left, read from its row rather than from
@@ -150,18 +137,18 @@ interface CallWords {
 }
 
 /**
- * Each coding tool's words, eve's and those a native harness calls under its
+ * Each coding tool's words, the retired runtime's and those a native harness calls under its
  * own names (`../native-events/`); a patch, and a Codex file change, name
  * their files in their own input and stand apart.
  */
 const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
-  [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
-  [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
-  [CODER_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
-  [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [AGENT_TOOL.BASH, { verb: "Ran", key: "command" }],
+  [AGENT_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
+  [AGENT_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
+  [AGENT_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
+  [AGENT_TOOL.GREP, { verb: "Searched", key: "pattern" }],
+  [AGENT_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
+  [AGENT_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
   [RETIRED_CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
   [CLAUDE_CODE_TOOL.BASH, { verb: "Ran", key: "command" }],
@@ -177,14 +164,14 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   // Note that its verb is the transcript's own, which the replay card reads back as the pull request's line.
   [
-    CODER_TOOL.OPEN_PULL_REQUEST,
+    AGENT_TOOL.OPEN_PULL_REQUEST,
     { verb: ROW_CALL_WORDS[CALL_KIND.OPEN_PULL_REQUEST].verb, key: "title" },
   ],
 ]);
 
-/** The tools that edit the one file their input names: eve's own, and Claude Code's. */
+/** The tools that edit the one file their input names: the retired runtime's own, and Claude Code's. */
 const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
-  CODER_TOOL.WRITE_FILE,
+  AGENT_TOOL.WRITE_FILE,
   CLAUDE_CODE_TOOL.WRITE,
   CLAUDE_CODE_TOOL.EDIT,
   CLAUDE_CODE_TOOL.NOTEBOOK_EDIT,
@@ -253,14 +240,14 @@ function changedFiles(input: UnparsedWireValue): readonly string[] {
 
 /** The files a patch or a Codex file change edits; none for any other call. */
 function patchedFiles(name: string, input: UnparsedWireValue): readonly string[] {
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
+  if (name === AGENT_TOOL.APPLY_PATCH) return patchFiles(input);
   if (name === CODEX_TOOL.FILE_CHANGE) return changedFiles(input);
   return [];
 }
 
 /** What a call was done to, read from its input alone. */
 function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
+  if (name === AGENT_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
     return patchedFiles(name, input).join(", ");
   }
   const words = CALL_WORDS.get(name);
@@ -273,7 +260,7 @@ function subjectOf(name: string, input: UnparsedWireValue): string {
 export function callEntry(part: StoredToolPart): string {
   const name = part.type.slice("tool-".length);
   const verb =
-    name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
+    name === AGENT_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
       ? CALL_ENTRY_WORDS.EDITED
       : (CALL_WORDS.get(name)?.verb ?? CALL_ENTRY_WORDS.USED);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
@@ -433,7 +420,7 @@ function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefi
   return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text, sentAt);
 }
 
-/** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
+/** A file the source's prompt carried, as a Start attaches one again; nothing where its transcript kept no bytes of it. */
 function attachmentOf(url: string, mediaType: string, name: string): AgentAttachment | undefined {
   const prefix = `data:${mediaType};base64,`;
   if (!url.startsWith(prefix) || !ATTACHMENT_TYPES.has(mediaType)) return undefined;
@@ -594,36 +581,6 @@ function pullWords(published: AgentPullRequest | null): string {
     : `, with its pull request ${mentionMarkdownLink(`#${published.number}`, published.url)}`;
 }
 
-/** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */
-function stillOpen(published: AgentPullRequest | null): boolean {
-  return (
-    published !== null &&
-    (published.state === PULL_REQUEST_STATE.OPEN || published.state === PULL_REQUEST_STATE.DRAFT)
-  );
-}
-
-/**
- * Whether a continue goes on in its source's pull request: one its row last
- * read open, read again on GitHub now, since one merged or closed since the
- * row was written must not take the work. A read that fails is logged and
- * answered no, so the continue opens a pull request of its own rather than
- * pushing to a branch that may be done.
- */
-const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullRequest | null) =>
-  source.branch === null || !stillOpen(stored)
-    ? Effect.succeed(false)
-    : agentPublished(userId, source).pipe(
-        Effect.map((answer) => stillOpen(answer.pullRequest)),
-        Effect.catch((failure) =>
-          Effect.as(
-            Effect.logWarning(
-              `the pull request of an agent being continued could not be read: ${failure._tag}`,
-            ),
-            false,
-          ),
-        ),
-      );
-
 /** How a continue is told to carry the copy onto its source's pull request, still open, rather than open a second one. */
 function carryOntoWords(copied: string, branch: string): string {
   return (
@@ -665,16 +622,16 @@ function carriedWhere(carried: CarriedWork): string {
   );
 }
 
-/** Where the source's work reaches the new agent: on a fork of the drive it stood on, or, for a source from before drives, the copy pushed for it (`snapshot.ts`). */
-export const TAKEN_ON = { DRIVE: "drive", COPY: "copy" } as const;
+/** Where the source's work reaches the new agent: in the latest snapshot of its stopped sandbox, or the copy pushed for it (`snapshot.ts`). */
+export const TAKEN_ON = { SNAPSHOT: "snapshot", COPY: "copy" } as const;
 
 export type SourceWork =
-  | { readonly on: typeof TAKEN_ON.DRIVE; readonly drive: string }
+  | { readonly on: typeof TAKEN_ON.SNAPSHOT; readonly sandbox: string }
   | { readonly on: typeof TAKEN_ON.COPY; readonly copy: SnapshotOutcome };
 
-/** What the new agent's row keeps of where the source's work reached it: the drive its own is forked from, or the branch the copy was pushed to. */
-function startedOn(work: SourceWork): Pick<StoredStartedFrom, "branch" | "drive"> {
-  if (work.on === TAKEN_ON.DRIVE) return { drive: work.drive };
+/** What the new agent's row keeps of where the source's work reached it: the sandbox whose snapshot its own is created from, or the branch the copy was pushed to. */
+function startedOn(work: SourceWork): Pick<StoredStartedFrom, "branch" | "sandbox"> {
+  if (work.on === TAKEN_ON.SNAPSHOT) return { sandbox: work.sandbox };
   return work.copy.copied ? { branch: work.copy.branch } : {};
 }
 
@@ -692,20 +649,20 @@ function ownBranchWords(
 }
 
 /**
- * Where the source's work stands for the new agent whose drive is forked
- * from the source's: in its own checkout, as the source left it, on the
- * source's branch. A continue in its source's open pull request goes on
+ * Where the source's work stands for the new agent whose sandbox is created
+ * from the snapshot of the source's: in its own checkout, as the source
+ * left it, on the source's branch. A continue in its source's open pull request goes on
  * there; any other work moves to a branch of its own first, so it never
  * pushes onto the source's.
  */
-function onDriveWhere(
+function onSnapshotWhere(
   source: Agent,
   published: AgentPullRequest | null,
   carried: CarriedWork | undefined,
   inPullRequest: boolean,
 ): string {
   const lead =
-    "Your checkout is a copy of its own, taken as you started: its commits, and what it had not committed or pushed, " +
+    "Your checkout is a copy of its own, taken from its sandbox as it last stopped: its commits, and what it had not committed or pushed, " +
     "stand in your working tree as it left them, so read `git status` and `git log` to see where it stood.";
   const own = ownBranchWords(source, published, carried);
   if (inPullRequest && source.branch !== null) {
@@ -724,7 +681,7 @@ function onDriveWhere(
 /**
  * Where the source's work stands for the new agent. Note that a continue
  * whose source's pull request is still open goes on in it, so the work does
- * not split across two (`goesOnInPullRequest`); a fork opens its own.
+ * not split across two (`takeover.ts`'s `goesOnInPullRequest`); a fork opens its own.
  */
 function whereOf(
   source: Agent,
@@ -733,7 +690,9 @@ function whereOf(
   carried: CarriedWork | undefined,
   inPullRequest: boolean,
 ): string {
-  if (work.on === TAKEN_ON.DRIVE) return onDriveWhere(source, published, carried, inPullRequest);
+  if (work.on === TAKEN_ON.SNAPSHOT) {
+    return onSnapshotWhere(source, published, carried, inPullRequest);
+  }
   const { copy } = work;
   const pull = pullWords(published);
   if (copy.copied) {
@@ -763,8 +722,8 @@ function whereOf(
 
 /**
  * What the new agent is told of the repositories its source worked in
- * beside its own, which it works in too: on a fork of the source's drive,
- * that their checkouts came with its own, as it left them; otherwise,
+ * beside its own, which it works in too: from a snapshot of the source's
+ * sandbox, that their checkouts came with its own, as it left them; otherwise,
  * checked out again at the branches they started on, that only the
  * source's own checkout was copied (`snapshot.ts`), so nothing it had not
  * pushed in them came along, and where it pushed a branch and opened a pull
@@ -774,7 +733,7 @@ function whereOf(
 function extrasWords(extras: readonly AgentRepositoryEntry[], work: SourceWork): string {
   if (extras.length === 0) return "";
   const named = extras.map((each) => `\`${each.repository}\``).join(", ");
-  if (work.on === TAKEN_ON.DRIVE) {
+  if (work.on === TAKEN_ON.SNAPSHOT) {
     return ` It also worked in ${named} beside its own repository, which you work in too, their checkouts copied with its own as it left them.`;
   }
   const pushed = extras.flatMap((each) => {
@@ -1027,7 +986,7 @@ function sameRepository(one: string | null, other: string | null): boolean {
  * that the walk goes on past the work it found, because the context that
  * bounds the replay is that of the first agent that measured one.
  */
-const lineageOf = (userId: string, source: Agent, repository: string | null) =>
+export const lineageOf = (userId: string, source: Agent, repository: string | null) =>
   Effect.gen(function* () {
     const lineage: Agent[] = [source];
     let carried: CarriedWork | undefined;
@@ -1140,94 +1099,33 @@ function transcriptSteps(
   return records.slice(first, end).flatMap((record) => rowSteps(record, senders.get(record.id)));
 }
 
+/** What a source's own conversation hands a Start from it: its brief as the new agent's prompt, the files of its first message, its steps, and where a fork cut them. */
+export interface SourceTranscript {
+  /** The source's prompt as the new agent's prompt; none where the source was handed the description. */
+  readonly prompt: string | undefined;
+  readonly attachments: readonly AgentAttachment[];
+  readonly unkept: readonly string[];
+  /** Every step the replay could hand on, oldest first, its chain's carried ahead of its own; and how many there were. */
+  readonly steps: readonly ReplayStep[];
+  readonly totalSteps: number;
+  readonly carriedSummary: ReplaySummary | undefined;
+  readonly cut: StepCut | undefined;
+  /** The files the source's file tools edited after a fork's message (`editedAfter`), read only when it is run, so a Start reads them once the source's work is taken; none edited for a continue. */
+  readonly edited: Effect.Effect<readonly string[] | undefined, HostedRefusal, DatabaseServices>;
+}
+
 /**
- * Where the source's work reaches the new agent. A source whose session has
- * a drive of its own hands that drive, which the new agent's is forked from
- * at its first open (`agent-drive.ts`), so its sandbox is never woken; one
- * from before drives has its work copied to a branch as it always was
- * (`snapshot.ts`). Note that a source in another repository than the one
- * the new agent works in hands no drive, since its checkout would be none
- * of the new agent's, and that a drive that could not be read is a miss,
- * logged, as a copy that failed is.
+ * The source's conversation as a Start from it reads it, as the member who
+ * started it: its rows up to the message a fork names, cut within it where
+ * the fork names a step, its steps, its brief, and the files its first
+ * message carried that fit beside `noteFiles`. A message that is none of
+ * its journals is invalid, and a page that does not read is unavailable.
  */
-const sourceWorkOf = (
-  userId: string,
+export const sourceTranscriptOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   source: Agent,
-  repository: string | null,
-  forked: boolean,
-  idempotencyKey: string,
-) => {
-  const missed: SourceWork = {
-    on: TAKEN_ON.COPY,
-    copy: { copied: false, miss: SNAPSHOT_MISS.FAILED },
-  };
-  return Effect.gen(function* () {
-    const [session] =
-      source.repository?.toLowerCase() === repository?.toLowerCase()
-        ? yield* standingSessionsOf(source.userId, [source.conversationId])
-        : [];
-    if (session !== undefined) {
-      const api = yield* vercelSandboxApi(deploymentOidcToken);
-      const drive = yield* standingAgentDrive(api, session.sessionId);
-      if (drive !== undefined) return { on: TAKEN_ON.DRIVE, drive } satisfies SourceWork;
-    }
-    const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
-    return { on: TAKEN_ON.COPY, copy } satisfies SourceWork;
-  }).pipe(
-    Effect.catch((failure) =>
-      Effect.as(Effect.logWarning(`the source's drive was not read: ${String(failure)}`), missed),
-    ),
-  );
-};
-
-/**
- * Where a Start puts its agent: a task, or a workspace with no task and the
- * repository the agent clones there, or none, where any coder handed words
- * alone stands (`start.ts`'s `landingOf`); an
- * agent it is started from must stand in the same place.
- */
-export type StartWhere =
-  | { readonly taskId: string }
-  | { readonly taskId: null; readonly organizationId: string; readonly repository: string }
-  | { readonly taskId: null; readonly organizationId: string; readonly repository: null };
-
-/** The repository the new agent clones in the place: the task's as it stands now, or the workspace place's own; none where the task names none. */
-const placeRepository = (userId: string, place: StartWhere) =>
-  Effect.gen(function* () {
-    if (place.taskId === null) return place.repository;
-    const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, place.taskId));
-    return Option.isSome(task) ? task.value.repository : null;
-  });
-
-/**
- * What a Start from another agent of the place is handed and runs on, read
- * as the account, the source's files held to what fits beside `noteFiles`.
- * Note that a source the account reaches in no such place is refused as
- * naming nothing, so a source on another plan is never dropped and started
- * afresh; a message that is none of its journals is invalid.
- */
-export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  place: StartWhere,
-  from: AgentStartFrom,
+  from: Pick<AgentStartFrom, "messageId" | "messageSteps" | "messageStepParts">,
   noteFiles: readonly AgentAttachment[],
-  idempotencyKey: string,
-): Effect.fn.Return<StartFrom, HostedRefusal, DatabaseServices | SourceCopyServices> {
-  const [found] = yield* hostedStoreOrUnavailable(listPublishedAgentsById(userId, [from.agentId]));
-  const inPlace =
-    found !== undefined &&
-    found.agent.taskId === place.taskId &&
-    (place.taskId !== null || found.agent.organizationId === place.organizationId);
-  if (!inPlace) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  }
-  const { agent: source, published } = found;
-  // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
-  if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const repository = yield* placeRepository(userId, place);
-  const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
-    lineageOf(userId, source, repository),
-  );
+): Effect.fn.Return<SourceTranscript, HostedRefusal, DatabaseServices> {
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const { cutSeq } = read;
@@ -1250,37 +1148,20 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handed = briefOf(source.prompt ?? source.descriptionSnapshot ?? "", opened);
   const mine = handed.note === undefined ? own : [handed.note, ...own];
   const carried = handed.carried?.steps ?? [];
-  const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   // A source handed the description carries files only where its own note did, so its first message is read either way.
   const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
-  const forked = from.messageId !== undefined;
-  // The work is read once the transcript reads, so a Start refused on its message pushes nothing.
-  const work = yield* sourceWorkOf(userId, source, repository, forked, idempotencyKey);
-  const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
-  const [, ...extras] = yield* hostedStoreOrUnavailable(readAgentRepositories(userId, source.id));
-  const edited =
-    cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
+  const edited: SourceTranscript["edited"] =
+    cutSeq === undefined
+      ? Effect.succeed([])
+      : hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
   return {
-    source,
-    lineage,
     prompt: source.prompt === null ? undefined : handed.brief,
     attachments: files.attachments,
+    unkept: files.unkept,
     steps: [...carried, ...mine],
-    totalSteps,
+    totalSteps: (handed.carried?.totalSteps ?? 0) + mine.length,
     carriedSummary: handed.carried?.summary,
-    choice: { model: source.model, effort: source.effort, contextWindow: source.contextWindow },
-    disabledServers: source.disabledServers,
-    serverWords: source.automationOrigin?.prompt,
-    told: {
-      published,
-      work,
-      carried: carriedWork,
-      forked: { at: forked, edited },
-      unkept: files.unkept,
-      inPullRequest,
-      extras,
-      messageId: from.messageId,
-      cut,
-    },
+    cut,
+    edited,
   };
 });

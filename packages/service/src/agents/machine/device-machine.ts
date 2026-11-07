@@ -118,7 +118,6 @@ import {
 } from "../vercel-sandbox-api.js";
 import {
   type AgentMachineService,
-  CREDENTIAL_RENEWAL,
   type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
@@ -228,14 +227,12 @@ function objectOf(value: object): DeviceAgentObject {
 
 /**
  * A launch's credentials as a Mac's runner takes them, which no firewall of
- * ours stands in front of: a fixed one's value in its variable, sealed with
- * the launch, and a renewed one not at all, since the runner asks our token
- * route for it.
+ * ours stands in front of: each one's value in its variable, sealed with the
+ * launch.
  */
 function handedOnMac(credentials: readonly RunnerCredential[]): DeliveredCredentials {
-  const fixed = credentials.filter((each) => each.renewal === CREDENTIAL_RENEWAL.FIXED);
   return {
-    env: Object.fromEntries(fixed.map((each) => [each.variable, Redacted.value(each.value)])),
+    env: Object.fromEntries(credentials.map((each) => [each.variable, Redacted.value(each.value)])),
     swaps: new Map(),
   };
 }
@@ -293,6 +290,8 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
+        // Note that a Mac's Codex keeps its threads at its default under the agent's own home.
+        codexHome: undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
         transcriptsKept: false,
@@ -488,8 +487,6 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      endLaunch: () => Effect.void,
-      clear: () => Effect.void,
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
@@ -539,7 +536,7 @@ function deviceMachineOver(
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.
     // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
-    checkOutExtras: () => Effect.void,
+    checkOutMissing: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);
