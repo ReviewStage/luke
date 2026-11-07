@@ -301,12 +301,6 @@
     font-weight: var(--ui-type-emphasis-weight);
   }
 
-  /* A preview tab, which the next one opened takes the place of, wears its
-     name in italics until it is kept, as VS Code draws one. */
-  .ui-tab[data-preview="true"] .ui-tab-label {
-    font-style: italic;
-  }
-
   /* Renamed in place, the label gives way to a field in the same type,
      ringed rather than bordered so nothing moves. */
   .ui-tab-button[data-editing="true"] {

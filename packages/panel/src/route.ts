@@ -39,7 +39,7 @@ import {
  *
  * The table, by surface:
  *
- * - An Inbox item previews beside it what the panel standing for what holds
+ * - An Inbox item opens beside it what the panel standing for what holds
  *   it draws: a file of any repository, read through the item's workspace
  *   where it is not the item's own, a page of any task or agent on no
  *   task, read on its own place where it is not the item's, an archived
@@ -50,7 +50,7 @@ import {
  *   which opens its tab on the task; any other agent is the window's too,
  *   which opens it in the middle. Another Inbox item is chosen in the Inbox the item stands in,
  *   rather than in its task's Inbox tab.
- * - A task's page and an agent's page preview a pull request one of their
+ * - A task's page and an agent's page open beside them a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
  *   any other of their repository by its number in their first agent's; and
  *   a page of any other task or agent on no task, read on its own place,
@@ -59,7 +59,7 @@ import {
  *   pull request a listed task's or a listed agent on no task's agent opened;
  *   anything else leaves for the browser, as everything does outside the
  *   window.
- * - The Tasks tab previews a page, an agent's Changes, a worker, or a review
+ * - The Tasks tab opens beside it a page, an agent's Changes, a worker, or a review
  *   thread of the task it shows with nothing standing over its plan, chooses
  *   that task's Overview for the task itself, one of its description's sections, or
  *   one of its comments, at the section or the comment, and goes to any
@@ -232,8 +232,8 @@ export type Thing =
 
 /** What a press does. */
 export const ROUTE = {
-  /** Opens a thing in the panel beside the surface, as its preview. */
-  PREVIEW: "preview",
+  /** Opens a thing in the panel beside the surface, as a tab of its own. */
+  BESIDE: "beside",
   /** The window goes to a place. */
   GO: "go",
   /** The task shown chooses its column's Overview, at the section or the comment the place names. */
@@ -246,7 +246,7 @@ export const ROUTE = {
 
 /** What a press does, and with what. */
 export type Route =
-  | { readonly kind: typeof ROUTE.PREVIEW; readonly thing: Thing }
+  | { readonly kind: typeof ROUTE.BESIDE; readonly thing: Thing }
   | { readonly kind: typeof ROUTE.GO; readonly link: ReadLink }
   | { readonly kind: typeof ROUTE.OVERVIEW; readonly place: OverviewPlace }
   | { readonly kind: typeof ROUTE.EXTERNAL; readonly href: string }
@@ -265,8 +265,8 @@ type AgentsHere = Extract<Here, { readonly kind: typeof HERE.TASK | typeof HERE.
 
 const NOTHING: Route = { kind: ROUTE.NOTHING };
 
-function preview(thing: Thing): Route {
-  return { kind: ROUTE.PREVIEW, thing };
+function beside(thing: Thing): Route {
+  return { kind: ROUTE.BESIDE, thing };
 }
 
 function go(link: ReadLink): Route {
@@ -305,18 +305,18 @@ function itemOfInbox(
 ): Route {
   const { itemId } = at;
   if ("planId" in at) {
-    return preview({ kind: THING.INBOX_ITEM, itemId, taskId: at.planId, agentId: undefined });
+    return beside({ kind: THING.INBOX_ITEM, itemId, taskId: at.planId, agentId: undefined });
   }
   // An item named by its id alone is the window's to find, by asking the service whose it is.
   if (!("agentId" in at)) return NOTHING;
   const { agentId } = at;
   if (here.taskId !== undefined) {
     return (here.heldIds ?? here.agentIds)?.includes(agentId) === true
-      ? preview({ kind: THING.INBOX_ITEM, itemId, taskId: here.taskId, agentId })
+      ? beside({ kind: THING.INBOX_ITEM, itemId, taskId: here.taskId, agentId })
       : NOTHING;
   }
   return agentId === here.agentId
-    ? preview({ kind: THING.INBOX_ITEM, itemId, taskId: undefined, agentId })
+    ? beside({ kind: THING.INBOX_ITEM, itemId, taskId: undefined, agentId })
     : NOTHING;
 }
 
@@ -334,7 +334,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
           ? at.planId === here.taskId
           : here.agentId !== undefined && at.agentId === here.agentId;
       const place: PagePlace = "planId" in at ? { taskId: at.planId } : { agentId: at.agentId };
-      return preview(
+      return beside(
         own
           ? { kind: THING.PAGE, pageId: at.pageId }
           : { kind: THING.PAGE, pageId: at.pageId, place },
@@ -343,12 +343,12 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
     // An archived agent's Changes still opens beside the item, as its older link under the task did.
     case LINK_PLACE.CHANGES:
       return holdsAgent(at, here.taskId, here.heldIds ?? here.agentIds)
-        ? preview({ kind: THING.CHANGES, agentId: at.agentId })
+        ? beside({ kind: THING.CHANGES, agentId: at.agentId })
         : NOTHING;
     // A review thread of an agent's pull request opens beside the item as its Changes does.
     case LINK_PLACE.PULL_REQUEST_THREAD:
       return holdsAgent(at, here.taskId, here.heldIds ?? here.agentIds)
-        ? preview({
+        ? beside({
             kind: THING.THREAD,
             agentId: at.agentId,
             threadId: at.threadId,
@@ -360,7 +360,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
       return here.taskId !== undefined &&
         holdsAgent(at, here.taskId, here.agentIds) &&
         here.agentIds?.includes(at.agentId) === true
-        ? preview({ kind: THING.TRANSCRIPT, agentId: at.agentId, messageId: at.messageId })
+        ? beside({ kind: THING.TRANSCRIPT, agentId: at.agentId, messageId: at.messageId })
         : NOTHING;
     case LINK_PLACE.INBOX_ITEM:
       return itemOfInbox(at, here);
@@ -369,7 +369,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
       if (here.taskId === undefined || !holdsAgent(at, here.taskId, here.agentIds)) return NOTHING;
       // An archived one, which the panel does not draw, is the window's, which opens its tab on the task.
       return here.agentIds?.includes(at.agentId) === true
-        ? preview({ kind: THING.TRANSCRIPT, agentId: at.agentId })
+        ? beside({ kind: THING.TRANSCRIPT, agentId: at.agentId })
         : go({
             workspace: link.workspace,
             place: { kind: LINK_PLACE.AGENT, planId: here.taskId, agentId: at.agentId },
@@ -395,17 +395,17 @@ function pullRequestBeside(
 ): Route {
   const opened = openedBy(here, here.heldIds ?? here.agentIds);
   const agentId = pullRequestAgentOf(address.href, opened);
-  if (agentId !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId });
+  if (agentId !== undefined) return beside({ kind: THING.PULL_REQUEST, agentId });
   if (!ofRepository(address.repository, here.repository)) return NOTHING;
   // A page under an agent's own pull request's, its files say, is still that agent's.
   const owner = opened.find(
     (each) => repositoryPullRequestOf(each.url, here.repository) === address.number,
   );
-  if (owner !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId: owner.agentId });
+  if (owner !== undefined) return beside({ kind: THING.PULL_REQUEST, agentId: owner.agentId });
   const first = here.agentIds?.[0];
   return first === undefined
     ? NOTHING
-    : preview({ kind: THING.PULL_REQUEST, agentId: first, number: address.number });
+    : beside({ kind: THING.PULL_REQUEST, agentId: first, number: address.number });
 }
 
 /** An address pressed on an Inbox item, whose panel stands for what holds the item, so nothing opens there before an item is chosen. */
@@ -422,12 +422,12 @@ function besideItem(address: Address, here: InboxItemHere): Route {
       const { path, lines, repository } = address;
       if (repository === undefined) {
         return here.repository !== null && here.repository !== undefined
-          ? preview({ kind: THING.FILE, path, lines })
+          ? beside({ kind: THING.FILE, path, lines })
           : NOTHING;
       }
       return ofRepository(repository, here.repository)
-        ? preview({ kind: THING.FILE, path, lines })
-        : preview({ kind: THING.FILE, path, lines, repository });
+        ? beside({ kind: THING.FILE, path, lines })
+        : beside({ kind: THING.FILE, path, lines, repository });
     }
     case ADDRESS.WEB:
       return NOTHING;
@@ -443,7 +443,7 @@ function pageBeside(at: LinkPlace, here: AgentsHere): Route {
     here.kind === HERE.TASK
       ? "planId" in at && at.planId === here.taskId
       : "agentId" in at && at.agentId === here.agentId;
-  return own ? NOTHING : preview({ kind: THING.PAGE, pageId: at.pageId, place });
+  return own ? NOTHING : beside({ kind: THING.PAGE, pageId: at.pageId, place });
 }
 
 /**
@@ -503,7 +503,7 @@ function overviewPlaceOf(place: LinkPlace): place is OverviewPlace {
 
 /**
  * A place the Tasks tab goes to: of the task it shows with nothing over its
- * plan, a thing opens as the panel's preview, as any link pressed there
+ * plan, a thing opens in the panel as a tab, as any link pressed there
  * does, and the task itself, a section, or a comment chooses its Overview;
  * one of another task's, or any other place, goes there.
  */
@@ -514,7 +514,7 @@ function onTasksTab(address: Address, here: TasksTabHere): Route {
   if (!standing) return go(address.link);
   if (overviewPlaceOf(place)) return { kind: ROUTE.OVERVIEW, place };
   const thing = taskThingOf(place);
-  return thing === undefined ? go(address.link) : preview(thing);
+  return thing === undefined ? go(address.link) : beside(thing);
 }
 
 /**

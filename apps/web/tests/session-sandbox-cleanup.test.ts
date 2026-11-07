@@ -10,13 +10,8 @@ import { getTestDB } from "@repo/database/testing";
 import { Effect } from "effect";
 
 /**
- * The queue of agents' sessions whose Vercel Sandboxes are still to be deleted,
- * over a real dialect: what lets go of a session queues it in its own
- * transaction, the purge and an account's deletion, and the sweep works the
- * queue against a Vercel Sandbox that answers from a script, dequeuing a
- * session whose sandboxes went and keeping one Vercel refused, behind the
- * rest. Every session id is minted per test, and every read is of those
- * ids, since the queue is the deployment's and not an account's.
+ * The sessions an account's standing conversations run in, over a real
+ * dialect, which the account's delete retires before anything is deleted.
  */
 
 const openUser = Effect.gen(function* () {
@@ -52,7 +47,7 @@ const openConversation = (
 
 const mintSession = () => `wrun_${randomUUID()}`;
 
-it.layer(getTestDB())("the session sandbox queue", (it) => {
+it.layer(getTestDB())("the standing sessions read", (it) => {
   it.effect(
     "the standing sessions read names the account's standing conversations' sessions by kind, the ones asked for where it is asked, and none of another account's",
     () =>

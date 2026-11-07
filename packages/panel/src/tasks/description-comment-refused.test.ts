@@ -18,7 +18,7 @@ import {
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useDraftsOwner } from "../composer-drafts.js";
@@ -86,6 +86,8 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  act(() => windowRoot?.unmount());
+  windowRoot = undefined;
   document.body.innerHTML = "";
   window.localStorage.clear();
 });
@@ -102,6 +104,16 @@ const DEAN = { id: "u-dean", email: "dean@example.com" } as const;
 function SignedIn({ account }: { account: Identity }): null {
   useDraftsOwner(account);
   return null;
+}
+
+/** The window's root, which stands while its surfaces open and close, and goes with the test. */
+let windowRoot: Root | undefined;
+
+/** Signs `account` in to the window, whose root stands apart from the surfaces it draws. */
+function signIn(account: Identity): void {
+  windowRoot ??= createRoot(document.createElement("div"));
+  const root = windowRoot;
+  act(() => root.render(createElement(SignedIn, { account })));
 }
 
 /** The Comments tab over the one open thread, whose reply the service answers with `landing`, as `account` reads it. */
@@ -136,16 +148,14 @@ function drawn(
       sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
     });
     const tree = createElement(
-      Fragment,
-      null,
-      createElement(SignedIn, { account: reader }),
-      createElement(
-        DescriptionCommentsProvider,
-        { value: control },
-        createElement(CommentFocusScope, { reveal: undefined, children: tab }),
-      ),
+      DescriptionCommentsProvider,
+      { value: control },
+      createElement(CommentFocusScope, { reveal: undefined, children: tab }),
     );
-    act(() => root.render(onRegistry(registry, tree)));
+    // Note that the surface is built before the reader signs in, because building it stands up the test's window, no one signed in.
+    const surface = onRegistry(registry, tree);
+    signIn(reader);
+    act(() => root.render(surface));
   };
   draw(account);
   act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());

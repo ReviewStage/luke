@@ -1,8 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { causeKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
-import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
-import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
 import { GitHubBackground } from "../github/github-rate-gate.js";
 import {
   bearerMatchesSecret,
@@ -33,14 +31,10 @@ interface MaintenanceSweeps {
   sweepDeviceLeases: (now: number) => SweepRead<DeviceLeaseSweepOutcome>;
   /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, a sweep's worth. */
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
-  /** Deletes the Vercel Sandboxes of the next agents' sessions queued for it, a sweep's worth. */
-  sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
   /** Settles as failed the turns of the running native agents whose runner died mid-turn, a sweep's worth. */
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Fires the automations whose schedule is due, a sweep's worth, each once. */
-  sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
@@ -71,10 +65,8 @@ interface MaintenanceSweepAnswer {
   abandoned: Swept<number>;
   deviceLeases: Swept<DeviceLeaseSweepOutcome>;
   deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
-  sandboxes: Swept<SessionSandboxSweepOutcome>;
   nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  automations: Swept<AutomationSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
@@ -120,10 +112,8 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       "sweepDeviceWarmRunners",
       sweeps.sweepDeviceWarmRunners(now),
     ),
-    sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
   };

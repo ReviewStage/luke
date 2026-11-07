@@ -5,9 +5,9 @@ import { Database, type DatabaseServices } from "@repo/database/core/query";
 import {
   createAutomation,
   listAutomationRuns,
-  queuedAutomationRuns,
   updateAutomation,
 } from "@repo/database/models/automation-store";
+import { automationRun } from "@repo/database/schemas/automation";
 import { getTestDB, leaveWorkspace, startTask } from "@repo/database/testing";
 import { automationPath, automationWebhookPath, HOSTED_API_ERROR } from "@repo/features";
 import {
@@ -20,6 +20,7 @@ import {
 } from "@repo/features/automation-wire";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
+import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -127,6 +128,15 @@ const call = (secret: string, init: { readonly key?: string; readonly body?: str
   body: init.body ?? ALERT,
 });
 
+/** The automation's runs as their delivery reads them, each firing beside the body it keeps. */
+const keptRuns = (automationId: string) =>
+  Database.use((db) =>
+    db
+      .select({ firing: automationRun.firing, payload: automationRun.payload })
+      .from(automationRun)
+      .where(eq(automationRun.automationId, automationId)),
+  );
+
 const INVALID = {
   status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
   body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
@@ -134,7 +144,7 @@ const INVALID = {
 
 it.layer(getTestDB())("an automation's webhook", (it) => {
   it.effect(
-    "a call under the secret queues one run with its body, a retry under the same key queues none, and a secret in the address admits nothing, since a request log keeps the address",
+    "a call under the secret queues one run with its body, a retry under the same key records none, and a secret in the address admits nothing, since a request log keeps the address",
     () =>
       Effect.gen(function* () {
         const { owner, automation, secret } = yield* openWebhook;
@@ -155,15 +165,12 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
           [first, retry, second, byAddress],
           [
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
-            { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 0 } },
+            { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
             INVALID,
           ],
         );
-        // The body rides only the queued run the sweep acts on, so it is read as the sweep reads it.
-        const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
-          (run) => run.automationId === automation.id,
-        );
+        const queued = yield* keptRuns(automation.id);
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 2);
         assert.deepEqual(
           queued.map((run) => [run.firing, run.payload]).sort(),
@@ -302,7 +309,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
 
         assert.deepEqual(
           answers.map((each) => each.body),
-          [{ queued: 1 }, { queued: 0 }, { queued: 1 }],
+          [{ queued: 1 }, { queued: 1 }, { queued: 1 }],
         );
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 2);
       }),
@@ -315,10 +322,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
       yield* leaveWorkspace(workspaceId, owner);
 
       assert.deepEqual(yield* ask(automationWebhookPath(automation.id), call(secret)), INVALID);
-      const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
-        (run) => run.automationId === automation.id,
-      );
-      assert.deepEqual(queued, []);
+      assert.deepEqual(yield* keptRuns(automation.id), []);
     }),
   );
 });

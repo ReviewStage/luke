@@ -131,7 +131,6 @@ import {
   withdrawRunnerLine,
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
-import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { openWorkspaceEnvironment } from "@repo/database/models/workspace-environment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
@@ -2004,9 +2003,9 @@ export const runnerSessions = <
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
           if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
-          // Note that the session is queued for the delete sweep too, because a sandbox opened under
-          // its tag while the reset ran is none of the places it found, and the sweep's next pass deletes it.
-          yield* queueSessionSandboxes([sessionId]);
+          // Note that each place found was deleted directly by its discard, and a sandbox opened under
+          // the session's tag while the reset ran is none of them, so it is left to expire on Vercel's
+          // own schedule (`CODER.SANDBOX_SNAPSHOTS`) rather than queued for a later delete.
           return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),

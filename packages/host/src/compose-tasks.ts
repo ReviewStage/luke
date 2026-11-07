@@ -553,6 +553,9 @@ export type TasksClient = Pick<
     | "removeMember"
     | "tokenRepositories"
     | "setTokenRepository"
+    | "environment"
+    | "putVariable"
+    | "deleteVariable"
     | "changeRole"
     | "transfer"
     | "leave"
@@ -611,7 +614,7 @@ export interface TasksComposer extends Composer {
   listed: (txid: string | undefined) => Effect.Effect<void>;
   /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
   queueable: readonly AnyWrite[];
-  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`). */
+  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`), and a terminal waiting on its agent's sandbox reads the list again on (`compose-host.ts`). */
   pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them, answering once each has landed. */
   repositoriesMoved: Effect.Effect<void>;
@@ -2265,6 +2268,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return served(call);
   }
 
+  /** A workspace call asked where the gate stands open, answering its answer or refused for why not (`workspaceRefused`). */
+  function workspaceAsked<Answer>(
+    call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer, ActRefused> {
+    return Effect.gen(function* () {
+      if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+      const asked = yield* workspaceCall(call);
+      if (!asked.ok) return yield* workspaceRefused(asked.failure);
+      return asked.answer;
+    });
+  }
+
   /**
    * A workspace write's call carried to the service where the gate stands
    * open: the workspace as it then stands, or why it refused.
@@ -2908,6 +2923,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         })),
       answered: workspaceAnswered("repositories"),
     }),
+    // Note that the environment is asked of the service on each act and held
+    // nowhere here, because no answer carries a value and Settings reads the
+    // names again after each write.
+    WORKSPACE_ENVIRONMENT_LIST: ({ workspaceId }) =>
+      workspaceAsked(client.workspaces.environment(workspaceId)),
+    WORKSPACE_ENVIRONMENT_PUT: ({ workspaceId, name, value }) =>
+      workspaceAsked(client.workspaces.putVariable(workspaceId, name, value)),
+    WORKSPACE_ENVIRONMENT_DELETE: ({ workspaceId, name }) =>
+      workspaceAsked(client.workspaces.deleteVariable(workspaceId, name)),
     WORKSPACE_MEMBER_REMOVE: declaredWrite(dependencies.pool, memberRemoved, {
       answered: workspaceAnswered("members"),
     }),

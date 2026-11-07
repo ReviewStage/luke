@@ -337,6 +337,7 @@ function press(listed: string): void {
 const SETTINGS_PAGES = [
   "Account",
   "Workspace",
+  "Environment",
   "Agents",
   "Integrations",
   "Vespin MCP",
@@ -355,12 +356,12 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
-test("the Settings filter lists Memory after Workspace only while the account has the Memory experiment on", async () => {
+test("the Settings filter lists Memory after Environment only while the account has the Memory experiment on", async () => {
   handState(experimentsOn(EXPERIMENT.MEMORY));
   await paletteUnderState(tasksControl());
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 3), ["Account", "Workspace", "Memory"]);
+  assert.deepEqual(rows().slice(0, 4), ["Account", "Workspace", "Environment", "Memory"]);
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
@@ -1250,10 +1251,13 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
   await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
-  assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
-    renderToStaticMarkup(fileLook(path).icon),
-    "the row wears the file's type icon",
+  // Note that the icon is drawn once the file tree bundle it rides in has landed in the row.
+  await vi.waitFor(() =>
+    assert.equal(
+      row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
+      renderToStaticMarkup(withQueryClient(fileLook(path).icon)),
+      "the row wears the file's type icon",
+    ),
   );
   restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".ui-tooltip-card [data-file-card]");

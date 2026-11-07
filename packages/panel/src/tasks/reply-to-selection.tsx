@@ -1,6 +1,13 @@
-import { useAtomSet } from "@effect/atom-react";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@repo/ui";
+import {
+  BUTTON_SIZE,
+  Button,
+  IconButton,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
+  Tooltip,
+  useWait,
+} from "@repo/ui";
 import { replyOf } from "@repo/ui/reply-quote";
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Duration, Effect } from "effect";
@@ -17,7 +24,6 @@ import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../description-editor/contract.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 
 /**
  * reply-to-selection.tsx -- words selected in an agent's message answered from its message box: Reply over the selection, and the quote block it lays into the box.
@@ -98,16 +104,10 @@ const PRESS_ROOM = 40;
  */
 const SELECTION_SETTLE = Duration.millis(300);
 
-/**
- * A finger's selection settling, as an atom whose work is the wait: each
- * change starts it over, and once it runs out `offer` is called. Note that
- * `offer` is handed inside a record, because a function handed to an atom's
- * setter is read as an update of its value and called at once.
- */
-const selectionSettleAtom = () =>
-  rendererRuntime.fn(({ offer }: { readonly offer: () => void }) =>
-    Effect.andThen(Effect.sleep(SELECTION_SETTLE), Effect.sync(offer)),
-  );
+/** A finger's selection settling: once the wait runs out, `offer` is called. */
+function selectionSettled(offer: () => void): Effect.Effect<void> {
+  return Effect.andThen(Effect.sleep(SELECTION_SETTLE), Effect.sync(offer));
+}
 
 /** A selection Reply answers: its words as the reply, the words it lies in, and where the press stands. */
 interface Picked extends PressPlace {
@@ -220,8 +220,8 @@ export function ReplyToSelection({
 }): ReactNode {
   const [picked, setPicked] = useState<Picked | undefined>(undefined);
   const shown = picked !== undefined;
-  const [settleAtom] = useState(selectionSettleAtom);
-  const settle = useAtomSet(settleAtom);
+  // Note that each change starts the wait over, and the press's going calls it off.
+  const settle = useWait();
 
   // A selection is offered once the pointer or the keys let it go, or a finger's once it rests, never while it is being drawn.
   useEffect(() => {
@@ -231,7 +231,8 @@ export function ReplyToSelection({
     // Note that a mouse's selection waits for its pointerup as ever, so only a finger's is offered on resting,
     // and a mouse's drag is never measured as it goes.
     const changed = () => {
-      if (coarsePointerNow() && pickedIn(element) !== undefined) settle({ offer });
+      if (coarsePointerNow() && pickedIn(element) !== undefined)
+        settle.start(selectionSettled(offer));
     };
     element.addEventListener("pointerup", offer);
     element.addEventListener("keyup", offer);

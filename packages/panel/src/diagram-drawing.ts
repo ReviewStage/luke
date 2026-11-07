@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { drawnDark, onDrawnThemeChange } from "@repo/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -7,9 +6,8 @@ import {
   type DiagramDrawing,
   type DiagramModule,
 } from "@repo/ui/diagram-contract";
+import { useQuery } from "@tanstack/react-query";
 import { createStore, useSelector } from "@tanstack/react-store";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useSyncExternalStore } from "react";
 import { useSideBundles } from "./bundle-loader.js";
 
@@ -41,9 +39,6 @@ const BODY_TITLE = /^[ \t]*(?:\w+[ \t]+)?title[ \t]+(.+?)[ \t]*$/mu;
 
 /** A line of Mermaid code that names nothing of the diagram: blank or a comment. */
 const SILENT_LINE = /^\s*(?:%%.*)?\s*$/u;
-
-/** What a drawer of no code reads in the bundle's place, so a surface that may draw a diagram imports Mermaid only once it does. */
-const NO_BUNDLE = Atom.make(AsyncResult.initial<DiagramModule, Error>());
 
 /**
  * Each drawing the window holds, by appearance and then by code, oldest
@@ -128,19 +123,20 @@ export function useDrawing(
   appearance: DiagramAppearance,
 ): { readonly drawing: DiagramDrawing | undefined; readonly retry: (() => void) | undefined } {
   const { diagram } = useSideBundles();
-  const bundleRead = code === undefined ? NO_BUNDLE : diagram;
-  const bundle = useAtomValue(bundleRead);
-  const retryBundle = useAtomRefresh(bundleRead);
+  // Note that a drawer of no code reads nothing, so a surface that may draw a diagram imports Mermaid only once it does.
+  const bundle = useQuery({ ...diagram, enabled: code !== undefined });
+  const retryBundle = () => void bundle.refetch();
+  const module = bundle.data;
   const held = useSelector(drawnStore, (now) =>
     code === undefined ? undefined : now.get(appearance)?.get(code),
   );
   useEffect(() => {
-    if (code === undefined || held !== undefined || !AsyncResult.isSuccess(bundle)) return;
-    void drawnBy(bundle.value, appearance, code);
-  }, [held, bundle, appearance, code]);
+    if (code === undefined || held !== undefined || module === undefined) return;
+    void drawnBy(module, appearance, code);
+  }, [held, module, appearance, code]);
   if (code === undefined) return { drawing: undefined, retry: undefined };
   if (held !== undefined) return { drawing: held, retry: undefined };
-  return AsyncResult.isFailure(bundle)
+  return bundle.isError
     ? { drawing: { kind: DIAGRAM_DRAWING.REFUSED }, retry: retryBundle }
     : { drawing: undefined, retry: undefined };
 }

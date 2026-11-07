@@ -967,7 +967,9 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
       deps.browser.connect(session.success.value, view.reached.tab.conversationId),
     );
     if (Result.isFailure(connected)) {
-      return connected.failure.reason === BROWSER_UNREACHABLE.NOT_OPENED
+      // A sandbox still starting closes as not opened, which the pane asks again after a wait.
+      return connected.failure.reason === BROWSER_UNREACHABLE.NOT_OPENED ||
+        connected.failure.reason === BROWSER_UNREACHABLE.STARTING
         ? BROWSER_LIVE_CLOSE_REASON.NOT_OPENED
         : BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;
     }

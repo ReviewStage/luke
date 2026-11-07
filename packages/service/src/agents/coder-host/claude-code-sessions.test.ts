@@ -44,7 +44,6 @@ import {
 } from "@repo/database/models/provider-key-store";
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
-import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -527,9 +526,6 @@ const isRefresh = (run: { readonly env: Readonly<Record<string, string>> }) =>
 /** Whether a run in the sandbox was the install. */
 const isInstall = (run: { readonly args: readonly string[] }) =>
   run.args.some((arg) => arg.includes("pnpm install"));
-
-/** How much of the sandbox delete queue a test reads, the store's other sessions among it. */
-const QUEUE_READ = 1_000;
 
 /** The base snapshot's sandbox standing, where one does. */
 const baseSandbox = (api: ReturnType<typeof runnerSandboxApi>) =>
@@ -2426,7 +2422,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "reset deletes the sandbox, queues the session for the delete sweep, and retires the runner's bearer; a session gone answers retired",
+    "reset deletes the sandbox and retires the runner's bearer; a session gone answers retired",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2442,7 +2438,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, SESSION_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        assert.ok((yield* nextSessionSandboxes(QUEUE_READ)).includes(opened.sessionId));
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
@@ -2839,7 +2834,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "the next agent on the repository is created from the base snapshot, makes its user, fetches only its branch, installs, clones nothing, and launches with its write token standing",
+    "the next agent on the repository is created from the base snapshot, makes its user, fetches only its branch, installs nothing, clones nothing, and launches with its write token standing",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2871,7 +2866,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ownRuns[refresh]?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.REPOSITORY],
           RELAY_FULL_NAME,
         );
-        assert.ok(ownRuns.findIndex(isInstall) > refresh);
+        assert.equal(ownRuns.filter(isInstall).length, 0);
         assert.equal(api.commands.length, 2);
         assert.equal(api.snapshots.length, 1, "the base was not filled again");
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;

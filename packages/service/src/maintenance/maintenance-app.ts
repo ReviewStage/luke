@@ -8,9 +8,7 @@ import { HttpClient, HttpRouter } from "effect/http";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
-import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
@@ -35,9 +33,9 @@ const SWEEP_MONITOR: CronMonitor = {
 };
 
 /**
- * The scheduled sweep handed the deployment's real seams. An automation's run
- * reaches its agent's session through `routedSessions` acting for the
- * automation's owner, never the bearer the cron called with.
+ * The scheduled sweep handed the deployment's real seams. A wakeup or a
+ * queued message reaches its agent's session through `routedSessions` acting
+ * for the agent's owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -50,10 +48,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
   const sessionsFor: SessionsForAccount = routedSessions;
   const httpClient = yield* HttpClient.HttpClient;
-  const sandboxes = Layer.provide(
-    sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, httpClient),
-  );
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
@@ -71,14 +65,11 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepDeviceWarmRunners(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
-    sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepNativeSandboxes: (now) =>
       sweepNativeSandboxes(new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
-    sweepAutomations: (now) =>
-      sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
   });
 });

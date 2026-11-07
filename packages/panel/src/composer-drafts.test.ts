@@ -16,8 +16,8 @@ import type { Task } from "@repo/features/task-wire";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
 import { agentTab, draftTab, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { Clock, Context, Effect, Schema } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
@@ -27,6 +27,7 @@ import {
   DRAFT_PLACE,
   type DraftControl,
   type DraftWriter,
+  heldLines,
   keptLines,
   useDraft,
   useDraftsOwner,
@@ -36,7 +37,6 @@ import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopTasks } from "./desktop/desktop-tasks.js";
 import { SidebarTask } from "./desktop/task-actions.js";
 import { DRAFT_WORD } from "./draft-mark.js";
-import { rendererRuntime } from "./renderer-runtime.js";
 import {
   type AgentComposerControl,
   type MessageSender,
@@ -287,11 +287,10 @@ test("an agent's tab wears the Draft pencil while another of its task's tabs is 
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+/** A registry for a window whose waits run on this clock, as the window's run on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
+  serveEffectsOn(Context.make(Clock.Clock, clock));
+  return AtomRegistry.make();
 }
 
 /** Longer than the typing rests before the drafts are written to storage. */
@@ -371,7 +370,19 @@ test("a draft outlasts a reload of the window, words and mark alike", async () =
   assert.equal(after.box(), "Expire invites after a week");
 });
 
-test("lines a window keeps for its account outlast a reload, but for what storage leaves out, and reach no other account", async () => {
+/** Closes the window standing and opens it afresh, signed in as `account`. */
+function signedIn(account: { readonly id: string; readonly email: string }): void {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  const Owner = () => {
+    useDraftsOwner(account);
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Owner))));
+}
+
+test("lines a window keeps for its account outlast a reload, but for what storage leaves out, and reach no other account", () => {
   const lines = keptLines<
     { readonly id: string; readonly words: string; readonly files: readonly string[] },
     { readonly id: string; readonly words: string }
@@ -382,55 +393,58 @@ test("lines a window keeps for its account outlast a reload, but for what storag
     fromKept: (kept) => ({ ...kept, files: [] }),
     idOf: (kept) => kept.id,
   });
-  const signedIn = (account: { readonly id: string; readonly email: string }) => {
-    const registry = AtomRegistry.make();
-    const Owner = () => {
-      useDraftsOwner(account);
-      return null;
-    };
-    const root = createRoot(document.body.appendChild(document.createElement("div")));
-    roots.push(root);
-    act(() => root.render(onRegistry(registry, createElement(Owner))));
-    return registry;
-  };
   const ada = { id: "account-ada", email: "ada@acme.test" };
 
-  signedIn(ada).set(lines, [{ id: "held-1", words: "Say who it goes to.", files: ["invite.png"] }]);
+  signedIn(ada);
+  lines.set(() => [{ id: "held-1", words: "Say who it goes to.", files: ["invite.png"] }]);
 
-  assert.deepEqual(signedIn(ada).get(lines), [
-    { id: "held-1", words: "Say who it goes to.", files: [] },
-  ]);
-  assert.deepEqual(signedIn({ id: "account-grace", email: "grace@acme.test" }).get(lines), []);
+  signedIn(ada);
+  assert.deepEqual(lines.store.state, [{ id: "held-1", words: "Say who it goes to.", files: [] }]);
+  signedIn({ id: "account-grace", email: "grace@acme.test" });
+  assert.deepEqual(lines.store.state, []);
+});
+
+test("lines a window holds for an account are drawn for no other signing in to it, and wait for their writer", () => {
+  const lines = heldLines<{ readonly id: string }>();
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+  const Owner = ({ account }: { readonly account: typeof ada }) => {
+    useDraftsOwner(account);
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const signIn = (account: typeof ada) =>
+    act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Owner, { account }))));
+
+  signIn(ada);
+  lines.set(() => [{ id: "refused-1" }]);
+  signIn({ id: "account-grace", email: "grace@acme.test" });
+  assert.deepEqual(lines.store.state, []);
+
+  signIn(ada);
+  assert.deepEqual(lines.store.state, [{ id: "refused-1" }]);
 });
 
 test("a window that read kept lines before another let them go never writes them back as it adds its own", () => {
+  const key = "app.testKeptLinesStale";
   const lines = keptLines<{ readonly id: string }, { readonly id: string }>({
-    key: "app.testKeptLinesStale",
+    key,
     kept: Schema.Struct({ id: Schema.String }),
     toKept: (line) => line,
     fromKept: (kept) => kept,
     idOf: (kept) => kept.id,
   });
-  const signedIn = () => {
-    const registry = AtomRegistry.make();
-    const Owner = () => {
-      useDraftsOwner({ id: "account-ada", email: "ada@acme.test" });
-      return null;
-    };
-    const root = createRoot(document.body.appendChild(document.createElement("div")));
-    roots.push(root);
-    act(() => root.render(onRegistry(registry, createElement(Owner))));
-    return registry;
-  };
-  const sending = signedIn();
-  sending.set(lines, [{ id: "sent" }]);
-  const stale = signedIn();
-  assert.deepEqual(stale.get(lines), [{ id: "sent" }]);
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+  signedIn(ada);
+  lines.set(() => [{ id: "sent" }]);
+  assert.deepEqual(lines.store.state, [{ id: "sent" }]);
 
-  sending.set(lines, []);
-  stale.set(lines, [...stale.get(lines), { id: "new" }]);
+  // Another window lets the line go, a write this one has not heard.
+  window.localStorage.setItem(key, "[]");
+  lines.set((now) => [...now, { id: "new" }]);
 
-  assert.deepEqual(signedIn().get(lines), [{ id: "new" }]);
+  signedIn(ada);
+  assert.deepEqual(lines.store.state, [{ id: "new" }]);
 });
 
 test("a message sent takes its words out of the draft, so the box comes back empty and nothing is marked", async () => {
@@ -674,6 +688,17 @@ function answerMotion(): void {
   });
 }
 
+/** No one signed in to the window drawing `element`, which reads its drafts as the window's root does. */
+function NoOneSignedIn(): null {
+  useDraftsOwner(undefined);
+  return null;
+}
+
+/** `element` as a window no one is signed in to draws it, its drafts read afresh from storage. */
+function signedOut(element: React.ReactElement): React.ReactElement {
+  return createElement(Fragment, null, createElement(NoOneSignedIn), element);
+}
+
 /**
  * The sidebar itself, open on `open`'s agent's tab from the tab pinned to it
  * where `pinned`, which the sidebar then marks in place of the task's row.
@@ -708,7 +733,10 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
+      onRegistry(
+        AtomRegistry.make(),
+        signedOut(createElement(DesktopSidebar, sidebarProps(tasks))),
+      ),
     ),
   );
   await settle();
@@ -754,7 +782,10 @@ async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
+      onRegistry(
+        AtomRegistry.make(),
+        signedOut(createElement(DesktopSidebar, sidebarProps(tasks))),
+      ),
     ),
   );
   await settle();

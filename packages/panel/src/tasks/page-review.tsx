@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
@@ -17,6 +16,7 @@ import {
 import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useSelector } from "@tanstack/react-store";
 import { Schema } from "effect";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
@@ -144,7 +144,7 @@ const keptHeldSchema = Schema.Struct({
 });
 
 /** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
-const reviewAtom = keptLines<HeldComment, typeof keptHeldSchema.Type>({
+const reviewLines = keptLines<HeldComment, typeof keptHeldSchema.Type>({
   key: "app.pageReviews",
   kept: keptHeldSchema,
   toKept: ({ attachments: _files, element, reply, ...rest }) => ({
@@ -254,8 +254,8 @@ export function usePageReview(
   version: number,
 ): PageReviewControl {
   const planId = control?.planId;
-  const all = useAtomValue(reviewAtom);
-  const setAll = useAtomSet(reviewAtom);
+  const all = useSelector(reviewLines.store);
+  const setAll = reviewLines.set;
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);

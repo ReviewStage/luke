@@ -699,6 +699,10 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: "workspace.tokenRepositoriesFollow",
   WORKSPACE_TOKEN_REPOSITORIES_RETRY: "workspace.tokenRepositoriesRetry",
   WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
+  /** A workspace's environment variables by name, read once as Settings › Environment opens and again after each write; no answer carries a value. */
+  WORKSPACE_ENVIRONMENT_LIST: "workspace.environmentList",
+  WORKSPACE_ENVIRONMENT_PUT: "workspace.environmentPut",
+  WORKSPACE_ENVIRONMENT_DELETE: "workspace.environmentDelete",
 } as const;
 
 /**
@@ -1050,6 +1054,9 @@ export const PORT_ACT_USE = {
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORIES_RETRY: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORY_SET: ACT_USE.WRITE,
+  WORKSPACE_ENVIRONMENT_LIST: ACT_USE.FETCH,
+  WORKSPACE_ENVIRONMENT_PUT: ACT_USE.WRITE,
+  WORKSPACE_ENVIRONMENT_DELETE: ACT_USE.WRITE,
 } as const satisfies Record<keyof typeof PORT_ACT_KIND, ActUse>;
 
 /**

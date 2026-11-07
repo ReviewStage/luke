@@ -4,20 +4,19 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { sideBundles } from "../bundle-loader.js";
-import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import type { DescriptionEditorModule } from "../description-editor/contract.js";
 import { descriptionEditor } from "../description-editor/index.js";
+import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import {
   composerEditor,
   installEditorLayout,
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { onSideBundles } from "../testing/side-bundles.js";
+import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { AgentComposer } from "./agent-composer.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
@@ -40,10 +39,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** Waits out the bundle's import and the notification of its landing. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 function Box(): ReactNode {
@@ -63,7 +64,7 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   roots.push(root);
   const landing = Promise.withResolvers<DescriptionEditorModule>();
   let asked = false;
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     descriptionEditor: () => {
       asked = true;
       return landing.promise;
@@ -103,7 +104,7 @@ test("a key pressed in the box is timed under the message box's keystroke span, 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const bundles = sideBundles({ descriptionEditor: () => Promise.resolve(descriptionEditor) });
+  const bundles = standInBundles({ descriptionEditor: () => Promise.resolve(descriptionEditor) });
   await act(async () => root.render(withQueryClient(onSideBundles(bundles, createElement(Box)))));
   await settle();
 

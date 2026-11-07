@@ -2,22 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
-import { createAutomation } from "@repo/database/models/automation-store";
 import { deleteTask } from "@repo/database/models/task-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { conversations } from "@repo/database/schemas/storage";
 import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { noDatabase } from "@repo/database/testing/no-database";
-import {
-  AUTOMATION_ACTION,
-  AUTOMATION_DEFAULT_GUARDS,
-  AUTOMATION_TRIGGER,
-} from "@repo/features/automation-wire";
-import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Duration, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Duration, Effect, Layer, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -25,14 +18,7 @@ import { afterEach, vi } from "vitest";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
-import { connectAgentApiKeys } from "../testing/agent-credentials.js";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "../testing/github-app-fake.js";
-import { recordingHarness } from "../testing/native-harness-fake.js";
+import { openGithubUser } from "../testing/github-app-fake.js";
 import { recordingSentry, type SentItem, sentOfType } from "../testing/sentry-transport.js";
 import { maintenanceApp } from "./maintenance-app.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -41,12 +27,9 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  * The sweep's group as the cron reaches it, told to Sentry's Crons through a
  * recording transport. A sweep that runs does so over an empty migrated
  * database, so it finds nothing to do and reaches no provider; what each
- * sweep does is `maintenance-sweep.test.ts`'s. The exceptions are a
+ * sweep does is `maintenance-sweep.test.ts`'s. The exception is a
  * deleted task's agent, whose conversation the purge takes once its
- * retention has passed and not before, and an automation the sweep starts,
- * whose agent's harness is reached acting for its owner, with nothing sent
- * under the cron's bearer the sweep itself was called with, over
- * GitHub as a fake HTTP boundary and a harness that writes down each call.
+ * retention has passed and not before.
  */
 
 const CRON_SECRET = "cron-secret-1";
@@ -217,78 +200,5 @@ it.layer(getTestDB())("a deleted task's agent", (it) => {
 
         assert.deepEqual({ kept, purged }, { kept: true, purged: true });
       }),
-  );
-});
-
-/** The one installation reaching the automation's repository. */
-const RELAY = { owner: "Acme", name: "Relay" } as const;
-const INSTALLATION: InstallationFixture = {
-  id: 7_100,
-  login: RELAY.owner,
-  accountId: 71_000,
-  repositories: [RELAY],
-};
-const MODEL = "openai/gpt-6.1-sol";
-
-/** An owner, a task on the installation's repository, and an automation on it due a minute ago. */
-const openDueAutomation = Effect.gen(function* () {
-  const owner = yield* openGithubUser();
-  yield* connectAgentApiKeys(owner);
-  const task = yield* startTask(owner, {
-    name: "Flaky tests",
-    repository: `${RELAY.owner}/${RELAY.name}`,
-  });
-  yield* connectWorkspaceGitHub(task.workspaceId, INSTALLATION);
-  const now = yield* Clock.currentTimeMillis;
-  Option.getOrThrow(
-    yield* createAutomation(owner, {
-      organizationId: task.workspaceId,
-      repositories: task.repository === null ? [] : [task.repository],
-      name: "Flaky-test sweep",
-      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-      action: {
-        kind: AUTOMATION_ACTION.AGENT,
-        prompt: "Find the flakiest test in CI this week and fix it.",
-        choice: { model: MODEL, effort: "low" },
-      },
-      guards: AUTOMATION_DEFAULT_GUARDS,
-      nextRunAt: new Date(now - 60_000),
-      webhookSecretHash: null,
-      archiveSuccessful: false,
-    }),
-  );
-  return owner;
-});
-
-/**
- * GitHub reaching the automation's repository, the catalog the automation's
- * model is offered in, and a harness that writes down each call and whom it
- * acted for.
- */
-function githubAndHarness() {
-  const github = githubReaching([INSTALLATION]);
-  const catalog = modelCatalogOf([
-    { id: MODEL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
-  ]);
-  const harness = recordingHarness();
-  return {
-    heard: harness.heard,
-    reached: Layer.mergeAll(github.layer, catalog, harness.layer),
-  };
-}
-
-it.layer(getTestDB())("an automation the sweep starts", (it) => {
-  it.effect("reaches its agent's harness acting for its owner", () =>
-    Effect.gen(function* () {
-      const owner = yield* openDueAutomation;
-      const agentSessions = githubAndHarness();
-      const sentry = recordingSentry();
-      const database = yield* testDatabase;
-      const status = yield* sweep(CRON_SECRET, CRON_SECRET, database, agentSessions.reached).pipe(
-        Effect.provide(sentry.layer),
-      );
-      assert.equal(status, 200);
-      assert.deepEqual(agentSessions.heard, [{ call: "open", account: owner }]);
-    }),
   );
 });
