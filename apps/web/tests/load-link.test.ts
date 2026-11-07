@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import type { ShownLink } from "@repo/features/link-grammar";
+import { RUN_PROFILE } from "@repo/host/app-state";
+import { createBrowserHistory } from "@tanstack/react-router";
 import { afterEach, test } from "vitest";
-import { addressBar, installPanelDoors, openAt, unmountPanels } from "./support/web-panel";
+import { withLoadLink } from "../src/app/load-link";
+import {
+  addressBar,
+  fixtureBridge,
+  installPanelDoors,
+  openAt,
+  unmountPanels,
+} from "./support/web-panel";
 
 /**
  * A tab opened at a link written before the task was a task, under
@@ -11,6 +21,20 @@ import { addressBar, installPanelDoors, openAt, unmountPanels } from "./support/
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** What the tab's address, opened at `address`, says as a link as the page loads; nothing where its route opens it. */
+function saidAt(address: string): ShownLink | undefined {
+  openAt(address);
+  const history = createBrowserHistory();
+  const heard: ShownLink[] = [];
+  const stop = withLoadLink(fixtureBridge(RUN_PROFILE.IDLE), history).onShowLink((link) =>
+    heard.push(link),
+  );
+  stop();
+  history.destroy();
+  return heard[0];
+}
 
 afterEach(() => unmountPanels());
 
@@ -48,4 +72,12 @@ test("a tab opened at a link place keeps every other key its query carries as it
   installPanelDoors();
 
   assert.equal(addressBar(), `/acme/task/${TASK_ID}?ref=mail#rollout`);
+});
+
+test("a tab opened at an agent's own address says it as a link, which finds where the agent stands, while a place under the agent is left to its route", () => {
+  assert.deepEqual(saidAt(`/acme/agent/${AGENT_ID}`), {
+    workspace: "acme",
+    place: { kind: "agent", agentId: AGENT_ID },
+  });
+  assert.equal(saidAt(`/acme/agent/${AGENT_ID}/changes`), undefined);
 });

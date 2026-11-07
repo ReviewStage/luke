@@ -1,9 +1,11 @@
 /**
- * link-places.ts -- a task's link places, each declared once with the routes its params are read from: a comment thread, a section, and a page.
+ * link-places.ts -- the window's link places, each declared once with the routes its params are read from: a task's comment thread, section, and page, and an agent's tab, message, worker, Changes, and review thread.
  *
  * A link place is a place a link names within a task's own place, or an
  * agent's page, which its step does not stand at: a section and a comment
- * thread open the task's Overview, and a page opens the side panel on it.
+ * thread open the task's Overview, a page opens the side panel on it, and an
+ * agent's place opens its tab in the column, or its tab of the side panel,
+ * on its task, or on the agent's own page where it is on none.
  * Its route is where its params are read (`panel-router.tsx`), so a link is
  * opened by matching it on the route tree, whichever door hands it: a press
  * in the window, the desktop's `SHOW_LINK`, or a page loaded at its address.
@@ -20,6 +22,7 @@
 
 import {
   decodedStep,
+  isLinkPlace,
   LINK_PLACE,
   type LinkPlace,
   type LinkPlaceKind,
@@ -46,10 +49,20 @@ interface LinkAddress {
   readonly hash: string;
 }
 
-/** A link place's declaration: the kind of place it is, the routes it stands at, and the place it reads there; none where the address is another place of the same route's. */
+/**
+ * A link place's declaration: the kind of place it is, the routes it stands
+ * at, and the place it reads there, none where the address is another place
+ * of the same route's. `ownPlaceRoutes` are routes a routed place stands at
+ * as its own page, at which a link opened in the window is matched but a
+ * page loaded or landed is not, since there the routed place stands
+ * (`routed-places.ts`), and `lands` answers whether a link's place is one a
+ * load lands on at its route rather than at such a page.
+ */
 interface LinkPlaceDeclaration {
   readonly kind: LinkPlaceKind;
   readonly routes: readonly PanelRouteId[];
+  readonly ownPlaceRoutes?: readonly PanelRouteId[];
+  readonly lands?: (place: LinkPlace) => boolean;
   readonly read: (at: LinkAddress) => LinkPlace | undefined;
 }
 
@@ -57,6 +70,14 @@ interface LinkPlaceDeclaration {
 function commentOf(search: LinkAddress["search"]): string | undefined {
   const { comment } = search;
   return typeof comment === "string" ? comment : undefined;
+}
+
+/** An agent's place as its route's params name it, under the task an address names it under or none, read through the link grammar's own schema; none where they name no such place. */
+function agentPlaceOf(params: PlaceParams, fields: Readonly<Record<string, unknown>>) {
+  const { workspace, taskId, agentId } = params;
+  if (workspace === undefined || agentId === undefined) return undefined;
+  const place = { ...fields, ...(taskId === undefined ? {} : { planId: taskId }), agentId };
+  return isLinkPlace(place) ? place : undefined;
 }
 
 /**
@@ -101,12 +122,56 @@ export const LINK_ROUTED_PLACE = {
       return agentId === undefined ? undefined : { kind: LINK_PLACE.PAGE, agentId, pageId };
     },
   },
+  AGENT: {
+    kind: LINK_PLACE.AGENT,
+    routes: ["/places/$workspace/task/$taskId/agent/$agentId/"],
+    // Note that an agent's own address is its page's (`ROUTED_PLACE.AGENT`), which a load there stands as a link said, as it always has.
+    ownPlaceRoutes: ["/places/$workspace/agent/$agentId/"],
+    lands: (place) => "planId" in place,
+    read: ({ params }) => agentPlaceOf(params, { kind: LINK_PLACE.AGENT }),
+  },
+  MESSAGE: {
+    kind: LINK_PLACE.MESSAGE,
+    routes: [
+      "/places/$workspace/task/$taskId/agent/$agentId/message/$messageId",
+      "/places/$workspace/agent/$agentId/message/$messageId",
+    ],
+    read: ({ params }) =>
+      agentPlaceOf(params, { kind: LINK_PLACE.MESSAGE, messageId: params.messageId }),
+  },
+  WORKER: {
+    kind: LINK_PLACE.WORKER,
+    routes: [
+      "/places/$workspace/task/$taskId/agent/$agentId/worker/$callId",
+      "/places/$workspace/agent/$agentId/worker/$callId",
+    ],
+    read: ({ params }) => agentPlaceOf(params, { kind: LINK_PLACE.WORKER, callId: params.callId }),
+  },
+  CHANGES: {
+    kind: LINK_PLACE.CHANGES,
+    routes: [
+      "/places/$workspace/task/$taskId/agent/$agentId/changes/",
+      "/places/$workspace/agent/$agentId/changes/",
+    ],
+    read: ({ params }) => agentPlaceOf(params, { kind: LINK_PLACE.CHANGES }),
+  },
+  PULL_REQUEST_THREAD: {
+    kind: LINK_PLACE.PULL_REQUEST_THREAD,
+    routes: [
+      "/places/$workspace/task/$taskId/agent/$agentId/changes/$view/thread/$threadId",
+      "/places/$workspace/agent/$agentId/changes/$view/thread/$threadId",
+    ],
+    // Note that a view no Pull request tab has is no review thread's, which the grammar's schema refuses.
+    read: ({ params }) =>
+      agentPlaceOf(params, {
+        kind: LINK_PLACE.PULL_REQUEST_THREAD,
+        threadId: params.threadId,
+        view: params.view,
+      }),
+  },
 } as const satisfies { readonly [Name in string]: LinkPlaceDeclaration };
 
 const DECLARATIONS: readonly LinkPlaceDeclaration[] = Object.values(LINK_ROUTED_PLACE);
-
-/** The kinds of place a link place's route opens, which a page loaded at its address leaves to it. */
-const ROUTED_KINDS: ReadonlySet<LinkPlaceKind> = new Set(DECLARATIONS.map((each) => each.kind));
 
 /** A link a link place's route reads, by the declaration that read it. */
 export interface RoutedLink {
@@ -117,12 +182,19 @@ export interface RoutedLink {
 /** What the matching reads of the router: its routes, matched with each one's schema reading the query, and its own reading of a query. */
 type LinkRouter = Pick<RegisteredRouter, "matchRoutes" | "options">;
 
-/** The link place at an address, matched on the route tree, by its path, its query, and its fragment, with or without its `#`; none where it stands at no link place's route. */
+/** Whether a declaration reads the route `id`: one it stands at, or, for a link opened in the window rather than a page landing, a routed place's own page it is matched at. */
+function readsAt(declared: LinkPlaceDeclaration, id: string, landing: boolean): boolean {
+  const own = landing ? [] : (declared.ownPlaceRoutes ?? []);
+  return [...declared.routes, ...own].some((each) => each === id);
+}
+
+/** The link place at an address, matched on the route tree, by its path, its query, and its fragment, with or without its `#`, as a page `landing` there or a link opened in the window; none where it stands at no link place's route. */
 function routedAt(
   router: LinkRouter,
   pathname: string,
   search: string,
   hash: string,
+  landing: boolean,
 ): RoutedLink | undefined {
   const matches = router.matchRoutes(pathname, router.options.parseSearch(search));
   const leaf = matches.at(-1);
@@ -130,7 +202,7 @@ function routedAt(
   const params = placeParamsOf(matches);
   const at: LinkAddress = { params, search: leaf.search, hash: hash.replace(/^#/u, "") };
   for (const declared of Object.values(LINK_ROUTED_PLACE)) {
-    if (!declared.routes.some((id) => id === leaf.routeId)) continue;
+    if (!readsAt(declared, leaf.routeId, landing)) continue;
     const place = declared.read(at);
     if (place !== undefined && params.workspace !== undefined) {
       return { declared, link: { workspace: params.workspace, place } };
@@ -154,7 +226,7 @@ export function routedLinkOf(
   const under = link.workspace === "" ? standingIn : link.workspace;
   if (under === undefined || under === "") return undefined;
   const url = new URL(linkOf(link.place, under));
-  const routed = routedAt(router, url.pathname, url.search, url.hash);
+  const routed = routedAt(router, url.pathname, url.search, url.hash, false);
   return routed === undefined
     ? undefined
     : { ...routed, link: { ...routed.link, workspace: link.workspace } };
@@ -162,7 +234,10 @@ export function routedLinkOf(
 
 /** Whether a link's place is one a link place's route opens, so a page loaded at its address lands there and leaves the open to it. */
 export function opensAtItsRoute(link: ReadLink): boolean {
-  return ROUTED_KINDS.has(link.place.kind);
+  const declared: LinkPlaceDeclaration | undefined = DECLARATIONS.find(
+    (each) => each.kind === link.place.kind,
+  );
+  return declared !== undefined && (declared.lands?.(link.place) ?? true);
 }
 
 /**
@@ -179,7 +254,7 @@ export function useLinkPlaceLandings(open: (link: ReadLink) => void): void {
   useEffect(() => {
     if (landed.current === location || savesStep(location)) return;
     landed.current = location;
-    const routed = routedAt(router, location.pathname, location.search, location.hash);
+    const routed = routedAt(router, location.pathname, location.search, location.hash, true);
     if (routed !== undefined) open(routed.link);
   }, [router, location, open]);
 }

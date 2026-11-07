@@ -15,10 +15,12 @@
  * `/<workspace>/plan/…`, is moved onto the address written now,
  * `/<workspace>/task/…`, before it is read, so the address bar, a reload, and
  * Copy link name it as every link does now. A link place, a section, a
- * comment thread, or a page (`@repo/panel/places/link-places`), is its
- * route's to open, so a tab opened at one is moved onto the address its link
- * is written at now, every older spelling read, and lands on that route,
- * which opens it, rather than being said here.
+ * comment thread, a page, or an agent's place under its task or under its
+ * page (`@repo/panel/places/link-places`), is its route's to open, so a tab
+ * opened at one is moved onto the address its link is written at now, every
+ * older spelling read, and lands on that route, which opens it, rather than
+ * being said here. An agent's own address is its page's, which is still
+ * said here, as its link finds where the agent stands.
  */
 
 import {
