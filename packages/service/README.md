@@ -693,7 +693,12 @@ until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
 The wait is for the swaps a runner's launch keeps at its sandbox's firewall
 (`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
-does not move and the sweep drops a day and an hour after its last write. A row counted unreadable reads
+does not move and the sweep drops a day and an hour after its last write. The rewrap
+does not move a workspace's environment variables (`workspace_environment_variable`)
+either, and its counts leave them out: before dropping a version, check that
+`select count(*) from workspace_environment_variable where key_version = <old>`
+answers none, and keep the version until each one it counts is set again or
+removed, since dropping it leaves their values unopenable. A row counted unreadable reads
 `unreadable` to its account, which is told to replace it. It is not a
 migration, since a migration holds no key and runs before the deployment
 whose ring it would need.
