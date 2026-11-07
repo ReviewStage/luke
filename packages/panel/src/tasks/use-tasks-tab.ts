@@ -2257,11 +2257,13 @@ export function useTasksTab(input: {
   const homeOpen = input.homeView.open;
   const homeNow = useRef({ home: input.homeView, boundFor });
   homeNow.current = { home: input.homeView, boundFor };
+  // Note that a fixture run binds its task for good, so leaving it only leaves what stands over it, as it always has.
   const leaveTask = useCallback(() => {
     const now = homeNow.current;
-    if (!now.home.open) now.home.onOpen();
+    if (fixture !== undefined && now.boundFor !== undefined) leaveOverPlan();
+    else if (!now.home.open) now.home.onOpen();
     else if (now.boundFor !== undefined) unbindTask();
-  }, [unbindTask]);
+  }, [fixture, unbindTask, leaveOverPlan]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
   const navigations = useRef(0);
@@ -3730,7 +3732,11 @@ export function useTasksTab(input: {
     input.automationsView.onOpen(to, stepOf(shown));
   };
 
-  const goHome = leaveTask;
+  // Note that a fixture run's Home leaves a version history over its task too, as it always has.
+  const goHome = () => {
+    if (fixture !== undefined && boundFor !== undefined) closeHistory();
+    leaveTask();
+  };
 
   /**
    * An app link's place opened through the door each kind already has: the
