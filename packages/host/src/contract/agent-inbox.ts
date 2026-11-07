@@ -1,5 +1,5 @@
 /**
- * agent-inbox.ts -- the Inbox's asks of the host, declared, and the procedures of the holds beside them.
+ * agent-inbox.ts -- the Inbox's asks of the host, declared, and the live follow of a task's or an agent's inbox beside them.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
  * inbox held followed, and read again, and every item the account reaches read again; one item answered,
@@ -19,12 +19,10 @@
  * Only a panel draws the Inbox, so every act is the panel's alone, and a
  * refusal or a defect of the host's is drawn as the coding-agent calls'
  * unanswered failure, as every one was before it was declared, or, for a
- * held close let go, as one no longer held. The hold, and each Try again,
- * stays a procedure of its own (`act-port/agent-inbox-procedures.ts`): a
- * live read, not a plain act.
+ * held close let go, as one no longer held. A task's or an agent's inbox
+ * is a live follow, declared once (`live-follow.ts`), not a plain act.
  */
 
-import { eventIterator, type } from "@orpc/contract";
 import {
   AGENT_CALL_FAILURE,
   agentInboxAnsweredViewSchema,
@@ -47,11 +45,11 @@ import {
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
 } from "@repo/features/agent-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
-import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
-import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /** What the window draws for an act the host could not answer. */
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -157,17 +155,22 @@ export const AGENT_INBOX_ACTS = declaredActs({
   }),
 });
 
+/** The Inbox's live read the host follows for the windows: one task's or one agent's inbox. */
+export const AGENT_INBOX_FOLLOWS = liveFollows({
+  AGENTS_INBOX_FOLLOW: liveFollow({
+    slice: LIVE_READ.HOLDER_INBOX,
+    hold: HOLD.WINDOW,
+    key: agentInboxScopeSchema,
+    refusal: "Could not follow the inbox on this system.",
+    panelOnly: true,
+    retry: {
+      name: "AGENTS_INBOX_RETRY",
+      refusal: "Could not read the inbox again on this system.",
+    },
+  }),
+});
+
 export const agentInboxActsContract = {
   ...contractOf(AGENT_INBOX_ACTS),
-  // Note that the hold's stream carries nothing: the held inbox reaches the panel on app state, and the stream is the window's hold on it.
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
-    "Could not follow the inbox on this system.",
-  )
-    .input(exactInput(agentInboxScopeSchema))
-    .output(eventIterator(type<never>())),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY]: actProcedure(
-    "Could not read the inbox again on this system.",
-  )
-    .input(exactInput(agentInboxScopeSchema))
-    .output(EffectSchema.Void),
+  ...followsContractOf(AGENT_INBOX_FOLLOWS),
 };

@@ -17,7 +17,7 @@ import { TestClock } from "effect/testing";
 import type { AppInstalledSkills } from "./app-state.js";
 import { composeInstalledSkills, type InstalledSkillsClient } from "./compose-installed-skills.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
-import { toldLive } from "./testing/told-live.js";
+import { tellingsOf } from "./testing/told-live.js";
 
 /**
  * Settings › Skills' asks through the host as a window makes them, over a
@@ -162,7 +162,7 @@ function subject(
     /** Each skill a workspace's slice last showed, by its id; none where it showed no rows. */
     const shown = (workspaceId: string) => {
       // SAFETY: the host tells the skills slice whole, as built.
-      const held = toldLive(emitted, LIVE_READ.INSTALLED_SKILLS).at(-1) as
+      const held = tellingsOf(emitted, LIVE_READ.INSTALLED_SKILLS).at(-1) as
         | AppInstalledSkills
         | undefined;
       return held?.[workspaceId]?.rows?.map(({ id }) => id);

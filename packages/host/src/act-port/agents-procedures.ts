@@ -1,9 +1,10 @@
 /**
- * agents-procedures.ts -- the Tasks tab's holds of a task's coding agents and what they published, and the asks whose answer is noted on its way.
+ * agents-procedures.ts -- the Tasks tab's asks of a task's coding agents whose answer is noted on its way, and its notes of which agent is shown and seen.
  *
  * Only a panel draws a task's agents, so every procedure refuses the
  * takeover and any other window, in its own sentence. The agents' plain
- * acts are declared (`contract/agents.ts`) and answered by their composer;
+ * acts and live follows are declared (`contract/agents.ts`) and answered
+ * by their composer;
  * those written here are the ones whose answer is noted on its way, by the
  * notices (`@repo/host/agent-notices`), which hold where each agent stands
  * so an end the panel is not looking at is still announced, and which
@@ -12,49 +13,16 @@
  * what it published. Nothing else is held here.
  */
 
-import {
-  AGENT_CALL_FAILURE,
-  type AgentAgentAnswer,
-  type AgentPullRequestParams,
-  type AgentTranscriptKey,
-  type PullRequestPart,
-  type PullRequestPartParams,
-} from "@repo/features/agent-view";
-import { Data, Effect, MutableHashMap, Stream } from "effect";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
+import { Effect } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND, AGENT_ACTS } from "../contract/index.js";
 import type { HostActTable } from "../host-acts.js";
 import { type ActSender, actPort } from "./base.js";
 import { declaredAnswer } from "./declared-acts.js";
-import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
-/** What the agent procedures reach: the host's asks of the service, and the notices. */
+/** What the agent procedures reach: the acts whose answer they note, and the notices. */
 export interface AgentProceduresDependencies {
-  host: {
-    /** The models held at the host while any stream of them stands; what it holds reaches the panel on app state. */
-    agentModelsFollow(): Effect.Effect<void>;
-    agentModelsUnfollow(): Effect.Effect<void>;
-    agentModelsRetry(): Effect.Effect<void>;
-    /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
-    hostsPresenceFollow(): Effect.Effect<void>;
-    hostsPresenceUnfollow(): Effect.Effect<void>;
-    hostsPresenceRefresh(): Effect.Effect<void>;
-    /** A transcript held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
-    transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-    transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-    /** A held transcript read again at once, as Try again asks. */
-    transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
-    /** One part of one agent's pull request held at the host while any stream of it stands; what it holds reaches the panel on app state. */
-    pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
-    pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
-    /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
-    pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
-    /** One agent's own tools held at the host while any stream of them stands; what it holds reaches the panel on app state. */
-    agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
-    agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
-    /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
-    agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
-  };
   /** The agents' acts whose answer is noted on its way, each answered by its composer's handler (`HostAssembly`'s). */
   acts: Pick<HostActTable<typeof AGENT_ACTS>, NotedAgentAct>;
   /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
@@ -93,91 +61,13 @@ function noted<Answer, E>(
   return Effect.tap(answer, (value) => Effect.sync(() => note(value)));
 }
 
-/** A transcript as a key that equals another naming the same one. */
-class TranscriptStreamKey extends Data.Class<{
-  readonly kind: AgentTranscriptKey["kind"];
-  readonly owner: string;
-  readonly callId: string | undefined;
-}> {}
-
-/** A pull request's part as a key that equals another naming the same one. */
-class PullRequestPartStreamKey extends Data.Class<{
-  readonly part: PullRequestPart;
-  readonly agentId: string;
-  readonly number: number | undefined;
-}> {}
-
-function pullRequestPartKeyOf({ part, agentId, number }: PullRequestPartParams) {
-  return new PullRequestPartStreamKey({ part, agentId, number });
-}
-
-function transcriptKeyOf(transcript: AgentTranscriptKey): TranscriptStreamKey {
-  return new TranscriptStreamKey({
-    kind: transcript.kind,
-    owner: transcript.agentId,
-    callId: transcript.callId,
-  });
-}
-
 export function agentProcedures(dependencies: AgentProceduresDependencies) {
-  const { host, acts, notices } = dependencies;
-  /** Every transcript a window holds a stream open of, so the host lets one go only with the last. */
-  const openTranscripts: OpenFollows<TranscriptStreamKey> = MutableHashMap.empty();
-  /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
-  const openPresence: OpenFollows = MutableHashMap.empty();
-  /** Whether a window holds a stream of the models open, so the host lets them go only with the last. */
-  const openModels: OpenFollows = MutableHashMap.empty();
-  /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
-  const openTools: OpenFollows = MutableHashMap.empty();
-  /** Every pull request's part a window holds a stream open of, so the host lets it go only with the last. */
-  const openParts: OpenFollows<PullRequestPartStreamKey> = MutableHashMap.empty();
+  const { acts, notices } = dependencies;
   const notedAgent = <E>(answer: Effect.Effect<AgentAgentAnswer, E>) =>
     noted(answer, (value) => {
       if ("agent" in value) notices.observeAgents([value.agent]);
     });
   return {
-    [AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW]: actPort[AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const hold = followedStream(
-          {
-            keyOf: () => "models",
-            follow: () => host.agentModelsFollow(),
-            unfollow: () => host.agentModelsUnfollow(),
-          },
-          openModels,
-          input,
-        );
-        return streamed(yield* Stream.toAsyncIterableEffect(hold));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: actPort[AGENT_ACT_KIND.AGENTS_MODELS_RETRY].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.agentModelsRetry();
-      },
-    ),
-    [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const hold = followedStream(
-          {
-            keyOf: () => "presence",
-            follow: () => host.hostsPresenceFollow(),
-            unfollow: () => host.hostsPresenceUnfollow(),
-          },
-          openPresence,
-          input,
-        );
-        return streamed(yield* Stream.toAsyncIterableEffect(hold));
-      },
-    ),
-    [AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.hostsPresenceRefresh();
-      },
-    ),
     [AGENT_ACT_KIND.AGENTS_LIST]: actPort[AGENT_ACT_KIND.AGENTS_LIST].effect(function* ({ input }) {
       return yield* noted(
         declaredAnswer(AGENT_ACTS.AGENTS_LIST, acts.AGENTS_LIST, input),
@@ -206,27 +96,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
           }
         },
       );
-    }),
-    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[AGENT_ACT_KIND.AGENTS_TRANSCRIPT].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const hold = followedStream(
-          {
-            keyOf: transcriptKeyOf,
-            follow: host.transcriptFollow,
-            unfollow: host.transcriptUnfollow,
-          },
-          openTranscripts,
-          input,
-        );
-        return streamed(yield* Stream.toAsyncIterableEffect(hold));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY]: actPort[
-      AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.transcriptRetry(input);
     }),
     [AGENT_ACT_KIND.AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGE].effect(function* ({
       input,
@@ -302,48 +171,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       notices.seen(input.agentId);
-    }),
-    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actPort[
-      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const hold = followedStream(
-        {
-          keyOf: pullRequestPartKeyOf,
-          follow: host.pullRequestPartFollow,
-          unfollow: host.pullRequestPartUnfollow,
-        },
-        openParts,
-        input,
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(hold));
-    }),
-    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY]: actPort[
-      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.pullRequestPartRetry(input);
-    }),
-    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actPort[
-      AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const hold = followedStream(
-        {
-          keyOf: (agent: AgentPullRequestParams) => agent.agentId,
-          follow: host.agentWorkspaceToolsFollow,
-          unfollow: host.agentWorkspaceToolsUnfollow,
-        },
-        openTools,
-        input,
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(hold));
-    }),
-    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY]: actPort[
-      AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.agentWorkspaceToolsRetry(input);
     }),
   };
 }

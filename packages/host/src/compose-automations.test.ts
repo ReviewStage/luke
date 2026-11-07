@@ -36,7 +36,7 @@ import { vi } from "vitest";
 import type { AppAutomationReads } from "./app-state.js";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
-import { toldLive } from "./testing/told-live.js";
+import { tellingsOf } from "./testing/told-live.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
@@ -292,7 +292,7 @@ function subject(
     /** Each time `read`'s slice was told, in order. */
     const toldOf = <Read extends keyof AppAutomationReads>(read: Read) =>
       // SAFETY: the host tells each automations slice whole, as built.
-      toldLive(emitted, read) as AppAutomationReads[Read][];
+      tellingsOf(emitted, read) as AppAutomationReads[Read][];
     /** What the held reads told the windows' app state, in order. */
     const told = () =>
       emitted.flatMap((each) =>

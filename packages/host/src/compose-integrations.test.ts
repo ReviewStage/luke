@@ -28,7 +28,7 @@ import {
   type McpClientsClient,
 } from "./compose-integrations.js";
 import { polledLive } from "./testing/polled-live.js";
-import { toldLive } from "./testing/told-live.js";
+import { tellingsOf } from "./testing/told-live.js";
 import { windowFocus } from "./window-focus.js";
 
 /**
@@ -199,10 +199,10 @@ function subject(
       acts: composer.acts,
       holdIntegrations,
       letIntegrationsGo,
-      told: () => toldLive(emitted, LIVE_READ.INTEGRATION_TOOLS),
+      told: () => tellingsOf(emitted, LIVE_READ.INTEGRATION_TOOLS),
       // SAFETY: the host tells its own slice as built, in this process.
-      integrations: () => toldLive(emitted, LIVE_READ.INTEGRATIONS) as AppIntegrations[],
-      clients: () => toldLive(emitted, LIVE_READ.MCP_CLIENTS),
+      integrations: () => tellingsOf(emitted, LIVE_READ.INTEGRATIONS) as AppIntegrations[],
+      clients: () => tellingsOf(emitted, LIVE_READ.MCP_CLIENTS),
       focus,
     };
   });

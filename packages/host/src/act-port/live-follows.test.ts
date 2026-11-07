@@ -3,14 +3,23 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
+import {
+  AGENT_CALL_FAILURE,
+  INBOX_SCOPE_KIND,
+  PULL_REQUEST_PART,
+  TRANSCRIPT_KIND,
+} from "@repo/features/agent-view";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
+import { OWN_PULL_REQUEST, OWN_TRANSCRIPT } from "../app-state.js";
 import {
   ACCOUNT_ASK_ACT_KIND,
   AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   CHAPTERS_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
@@ -51,7 +60,7 @@ const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const WORKSPACE_ID = "workspace-1";
 
-/** Each follow as a window holds it: its hold's and Try again's kinds and words, as the window drew them before they were declared, the key it holds by, the service path its read asks, and where its slice holds the key. */
+/** Each follow as a window holds it: its hold's and Try again's kinds and words, as the window drew them before they were declared, the key it holds by, the service path its read asks, where its slice holds the key, and, for a read told failed in words of its own, where those words stand and what they say. */
 const FOLLOWS = [
   {
     follow: AGENT_ACT_KIND.HOSTS_FOLLOW,
@@ -277,6 +286,70 @@ const FOLLOWS = [
     slice: LIVE_READ.DESCRIPTION_COMMENTS,
     at: ["description", TASK_ID],
   },
+  {
+    follow: AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW,
+    followRefusal: "Could not follow the models on this system.",
+    retry: AGENT_ACT_KIND.AGENTS_MODELS_RETRY,
+    retryRefusal: "Could not read the models again on this system.",
+    key: undefined,
+    path: HOSTED_SERVICE_PATH.MODELS,
+    slice: LIVE_READ.MODELS,
+    at: [SIGNED_IN.id],
+  },
+  {
+    follow: AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW,
+    followRefusal: "Could not follow your devices' beats on this system.",
+    retry: AGENT_ACT_KIND.HOSTS_PRESENCE_REFRESH,
+    retryRefusal: "Could not read your devices' beats again on this system.",
+    key: undefined,
+    path: HOSTED_SERVICE_PATH.DEVICE_PRESENCE,
+    slice: LIVE_READ.DEVICE_PRESENCE,
+    at: [SIGNED_IN.id],
+  },
+  {
+    follow: AGENT_ACT_KIND.AGENTS_TRANSCRIPT,
+    followRefusal: "Could not follow the agent's transcript on this system.",
+    retry: AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY,
+    retryRefusal: "Could not read the agent's transcript again on this system.",
+    key: { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID },
+    path: `/api/agents/${AGENT_ID}/messages/newest`,
+    slice: LIVE_READ.TRANSCRIPT,
+    at: [AGENT_ID, OWN_TRANSCRIPT],
+    failedAt: ["rows", "failure", "failure"],
+    failed: AGENT_CALL_FAILURE.UNANSWERED,
+  },
+  {
+    follow: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW,
+    followRefusal: "Could not follow the agent's pull request on this system.",
+    retry: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY,
+    retryRefusal: "Could not read the agent's pull request again on this system.",
+    key: { part: PULL_REQUEST_PART.PULL_REQUEST, agentId: AGENT_ID },
+    path: `/api/agents/${AGENT_ID}/overview/pull-request`,
+    slice: LIVE_READ.PULL_REQUEST,
+    at: [AGENT_ID, OWN_PULL_REQUEST],
+    failedAt: ["rows", "failure"],
+    failed: AGENT_CALL_FAILURE.UNANSWERED,
+  },
+  {
+    follow: AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW,
+    followRefusal: `Could not follow the agent's ${PRODUCT_NAME} tools on this system.`,
+    retry: AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_RETRY,
+    retryRefusal: `Could not read the agent's ${PRODUCT_NAME} tools again on this system.`,
+    key: { agentId: AGENT_ID },
+    path: `/api/agents/${AGENT_ID}/workspace-tools`,
+    slice: LIVE_READ.WORKSPACE_TOOLS,
+    at: [AGENT_ID],
+  },
+  {
+    follow: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
+    followRefusal: "Could not follow the inbox on this system.",
+    retry: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY,
+    retryRefusal: "Could not read the inbox again on this system.",
+    key: { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX,
+    slice: LIVE_READ.HOLDER_INBOX,
+    at: [INBOX_SCOPE_KIND.PLAN, TASK_ID],
+  },
 ] as const satisfies readonly {
   readonly follow: PortActKind;
   readonly retry?: PortActKind;
@@ -351,7 +424,11 @@ it.effect(
         yield* Effect.promise(() => until(() => readAt(slice(), each.at) !== undefined));
 
         assert.equal(asked(), 1, `${each.follow}: two holds share one follow`);
-        assert.deepEqual(readAt(slice(), each.at), { failed: true }, `${each.follow}: told`);
+        assert.deepEqual(
+          readAt(readAt(slice(), each.at), "failedAt" in each ? each.failedAt : []),
+          "failed" in each ? each.failed : { failed: true },
+          `${each.follow}: told`,
+        );
 
         if ("retry" in each) {
           yield* Effect.promise(() => port.as(PANEL)[each.retry](each.key as never));

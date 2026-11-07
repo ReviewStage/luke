@@ -11,7 +11,7 @@ import { isRecord, type WireValue } from "@repo/wire";
  */
 
 /** Every telling of the slice `read` among `events`, whole, in order. */
-export function toldLive(
+export function tellingsOf(
   events: readonly { readonly kind: string; readonly payload: WireValue }[],
   read: LiveRead,
 ): WireValue[] {

@@ -349,8 +349,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     acts: operator.acts,
-    agentInbox: { host },
-    agents: { host, notices },
+    agents: { notices },
     // Note that nothing is pushed on the tab's port: the tab hears the host
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.

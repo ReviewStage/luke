@@ -196,10 +196,6 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
 
 /** A fetched read keyed by the account signed in, as the windows hold it: one hold for all of them. */
 export interface AccountHeld {
-  /** The windows' hold, taken under the account signed in now; none while nobody is. */
-  readonly follow: Effect.Effect<void>;
-  /** The windows' hold let go. */
-  readonly unfollow: Effect.Effect<void>;
   /** One window's hold for the caller's scope: the windows' hold taken with the first and let go with the last, as a live follow's stream stands for it. */
   readonly hold: Effect.Effect<void, never, Scope.Scope>;
   /** The hold taken anew under the account signed in now, where the windows hold it, as the account gate opening asks. */
@@ -228,17 +224,17 @@ export function accountHeld(
         ? FiberHandle.clear(hold)
         : FiberHandle.run(hold, Effect.scoped(Effect.andThen(read.hold(userId), Effect.never)));
     });
+    /** The windows' hold, taken under the account signed in now; none while nobody is. */
     const follow = Effect.suspend(() => {
       held = true;
       return take;
     });
+    /** The windows' hold let go. */
     const unfollow = Effect.suspend(() => {
       held = false;
       return FiberHandle.clear(hold);
     });
     return {
-      follow,
-      unfollow,
       hold: Effect.acquireRelease(
         Effect.suspend(() => {
           holders += 1;
