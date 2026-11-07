@@ -37,6 +37,43 @@ function openedRow(
 }
 
 /**
+ * Every API key of the account's own that opens, the preferred provider's
+ * first: the keys a call beside its agents may spend on, such as a pull
+ * request's chapters, whose Generate offers each. None where it holds
+ * none. Our own key is never one; on a Preview, its stand-ins, the
+ * preferred provider's first, answer for an admin of ours where no key of
+ * the account's opens, so the account's own keys still win wherever one
+ * opens.
+ */
+export function ownKeysOf(
+  userId: string,
+  preferred: ProviderKeyProvider,
+  environment: AccountKeyEnvironment,
+): TaskStoreEffect<readonly OwnKey[]> {
+  return Effect.gen(function* () {
+    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
+    const order = [
+      preferred,
+      ...Object.values(PROVIDER_KEY_PROVIDER).filter((other) => other !== preferred),
+    ];
+    const own = order.flatMap((provider) => {
+      const row = rows.find((each) => each.provider === provider);
+      const key =
+        row === undefined
+          ? undefined
+          : openedRow(userId, row, environment.providerKeyEncryptionKeys);
+      return key === undefined ? [] : [{ provider, key }];
+    });
+    if (own.length > 0) return own;
+    const standIns = yield* previewKeysOf(userId, environment);
+    return order.flatMap((provider) => {
+      const key = standIns[provider];
+      return key === undefined ? [] : [{ provider, key }];
+    });
+  });
+}
+
+/**
  * The account's own API key a call beside its agents spends on, such as a
  * pull request's chapters or a replay's summary: the
  * preferred provider's where the account saved one that opens, the other
@@ -51,25 +88,5 @@ export function ownKeyOf(
   preferred: ProviderKeyProvider,
   environment: AccountKeyEnvironment,
 ): TaskStoreEffect<OwnKey | undefined> {
-  return Effect.gen(function* () {
-    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-    const order = [
-      preferred,
-      ...Object.values(PROVIDER_KEY_PROVIDER).filter((other) => other !== preferred),
-    ];
-    for (const provider of order) {
-      const row = rows.find((each) => each.provider === provider);
-      const key =
-        row === undefined
-          ? undefined
-          : openedRow(userId, row, environment.providerKeyEncryptionKeys);
-      if (key !== undefined) return { provider, key };
-    }
-    const standIns = yield* previewKeysOf(userId, environment);
-    for (const provider of order) {
-      const key = standIns[provider];
-      if (key !== undefined) return { provider, key };
-    }
-    return undefined;
-  });
+  return Effect.map(ownKeysOf(userId, preferred, environment), (keys) => keys[0]);
 }

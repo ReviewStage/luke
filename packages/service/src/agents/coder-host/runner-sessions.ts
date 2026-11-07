@@ -122,6 +122,7 @@ import {
   readNativeRewind,
 } from "@repo/database/models/conversation-rewind";
 import { deviceAgentAwaitsUpdate } from "@repo/database/models/device-agent-store";
+import { parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
   ANY_LAUNCH,
   clearRunnerLines,
@@ -131,6 +132,7 @@ import {
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
+import { openWorkspaceEnvironment } from "@repo/database/models/workspace-environment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -147,10 +149,11 @@ import {
   Option,
   Redacted,
   Ref,
+  Result,
   Schedule,
 } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
-import type { HostedEnvironment } from "../../environment.js";
+import { HostedEnvironment } from "../../environment.js";
 import {
   recordServerEvent,
   type SERVER_AGENT_HARNESS,
@@ -161,7 +164,6 @@ import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentMachine,
   type AgentMachineService,
-  CREDENTIAL_RENEWAL,
   type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
@@ -340,7 +342,6 @@ function runnerBearer(bearer: string, host: string): RunnerCredential {
     header: BEARER_HEADER,
     scheme: BEARER_PREFIX,
     slot: LAUNCH_SWAP.RUNNER,
-    renewal: CREDENTIAL_RENEWAL.FIXED,
   };
 }
 
@@ -506,7 +507,7 @@ function launchFingerprint(
   const names = integrations.map((each) => each.name).sort();
   const slots = declared.filter(isHeld).map((each) => ({
     slot: each.slot,
-    credential: each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+    credential: Redacted.value(each.value),
   }));
   // Note that one slot is digested alone, under the key it was digested by, as the one a launch could hold before credentials were declared.
   const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
@@ -548,6 +549,21 @@ function placeOfHandle(handle: RunnerHandle): MachinePlace {
 /** Where a found place's record is kept, under the account and agent given. */
 function recordOf(found: FoundPlace, userId: string, agentId: string) {
   return { machine: found.machine, session: found.session, name: found.name, userId, agentId };
+}
+
+/**
+ * The agent's workspace's variables, opened for its launch on a cloud
+ * machine; none on a Mac, nor in a deployment with no ring, under which
+ * none could have been set.
+ */
+function workspaceEnvironmentOf(agent: Agent, machine: AgentMachineKind) {
+  return Effect.gen(function* () {
+    if (machine !== AGENT_MACHINE.VERCEL) return {};
+    const keys = (yield* HostedEnvironment).providerKeyEncryptionKeys;
+    const ring = keys === undefined ? undefined : parseKeyRing(keys);
+    if (ring === undefined || Result.isFailure(ring)) return {};
+    return yield* openWorkspaceEnvironment(ring.success, agent.organizationId);
+  });
 }
 
 /** How a message reached its runner, as the handoff counts it. */
@@ -905,7 +921,9 @@ export const runnerSessions = <
           handle,
           ready: { firstSequence, rewind, opening },
         } = yield* machine.launchRunner(place.running, {
+          // Note that the workspace's variables go first, so ours win a name they share.
           env: {
+            ...(yield* workspaceEnvironmentOf(agent, place.running.machine)),
             ...credential.env,
             ...delivered.env,
           },
@@ -1417,7 +1435,7 @@ export const runnerSessions = <
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot of a sandbox opened before `getOrCreate` expired
           // (`CODER.SANDBOX_SNAPSHOTS`), so it can never resume: the session goes on in a fresh one
-          // under the session's tag, on the session's drive. The harness's own session files went
+          // under the session's tag, its checkout cloned again. The harness's own session files went
           // with the old filesystem, so its session resumes from the transcript the service keeps
           // (`keptSessionOf`). The expired sandbox is deleted only once
           // the fresh one runs, so a launch that fails (a clone refused, say) leaves the session
@@ -1554,10 +1572,10 @@ export const runnerSessions = <
         if (live === undefined) return;
         const { handle } = live;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]);
-        // Note that a read of the exit answers null for a command still running once its own wait is up.
-        const exited = machine.runnerExit(handle).pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
+        // Note that the read is handed the bound, because it answers null for a command still running once its own wait is up.
+        const exited = machine.runnerExit(handle, CODER.RUNNER_HALT);
         const stopped = yield* exited;
-        if (Option.isNone(stopped) || stopped.value === null) {
+        if (stopped === null) {
           yield* machine.kill(handle);
           yield* exited;
         }
@@ -1820,7 +1838,11 @@ export const runnerSessions = <
         const handed = yield* queues
           ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent, true))
           : Effect.map(
-              holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
+              holdingRunner(
+                agent.id,
+                sendHolding(sessionId, message, layout, sent, false),
+                CODER.RUNNER_LEASE.SEND_WAIT,
+              ),
               Option.some,
             );
         if (Option.isSome(handed)) return handed.value;
@@ -1982,8 +2004,8 @@ export const runnerSessions = <
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
           if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
-          // Note that the session's drive goes through the delete queue rather than here, because a
-          // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
+          // Note that the session is queued for the delete sweep too, because a sandbox opened under
+          // its tag while the reset ran is none of the places it found, and the sweep's next pass deletes it.
           yield* queueSessionSandboxes([sessionId]);
           return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
@@ -2291,9 +2313,7 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
     return RUNNER_ENDED.HELD;
   }
-  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
-  // credentials stay on its firewall until the stop.
-  yield* machine.firewall.clear(running);
+  // Its credentials stay on its firewall until the stop.
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });

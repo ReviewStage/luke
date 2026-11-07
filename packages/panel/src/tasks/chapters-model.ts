@@ -4,6 +4,7 @@ import {
   OPENAI_CHAPTERS_MODEL_LABEL,
 } from "@repo/features/chapters-model-choice";
 import { patchHunks } from "@repo/features/diff-hunks";
+import type { ModelProvider } from "@repo/features/models-wire";
 import {
   CHAPTER_KIND,
   type Chapter,
@@ -26,7 +27,8 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  * The view draws one state at a time (`chaptersShown`): the read on its way,
  * failed, or saying there is no pull request; no chapters yet, offering
  * Generate where the member can make them, on the model and key the read
- * names; chapters being made, by this
+ * names, or the one they last picked where they may pick
+ * (`pickedRunsOn`); chapters being made, by this
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
  * has moved on from, or for another push than the files drawn, or for any
@@ -73,6 +75,8 @@ export type ChaptersShown =
       readonly generatable: boolean;
       /** What the member's Generate would run on; none where the service did not say. */
       readonly runsOn: ChaptersRunsOn | undefined;
+      /** Every model the member's Generate may run on, where they saved keys of two providers; none otherwise. */
+      readonly runsOnChoices: readonly ChaptersRunsOn[] | undefined;
     }
   | {
       readonly kind: typeof CHAPTERS_SHOWN.GENERATING;
@@ -103,6 +107,20 @@ const MODEL_LABELS: Readonly<Record<string, string>> = {
 /** A chapters model as the view names it, one that told them or one a Generate would run on: its label where Generate offers it, else the id as stored. */
 export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(MODEL_LABELS, model) ? (MODEL_LABELS[model] ?? model) : model;
+}
+
+/**
+ * What a Generate runs on as the view draws it: where the member may pick,
+ * the choice of the provider they last picked, which their preferences row
+ * draws the moment they pick; else, and before that row is read, what the
+ * read says.
+ */
+export function pickedRunsOn(
+  runsOn: ChaptersRunsOn | undefined,
+  choices: readonly ChaptersRunsOn[] | undefined,
+  picked: ModelProvider | undefined,
+): ChaptersRunsOn | undefined {
+  return choices?.find((choice) => choice.provider === picked) ?? runsOn;
 }
 
 /** The heads the tab's own reads hold now, each where it holds one: its pull request's, and its files'. */
@@ -154,7 +172,12 @@ export function chaptersShown(
   const { chapters, generatable } = pullRequest;
   switch (chapters.status) {
     case PULL_REQUEST_CHAPTERS_STATE.NONE:
-      return { kind: CHAPTERS_SHOWN.NONE, generatable, runsOn: pullRequest.runsOn };
+      return {
+        kind: CHAPTERS_SHOWN.NONE,
+        generatable,
+        runsOn: pullRequest.runsOn,
+        runsOnChoices: pullRequest.runsOnChoices,
+      };
     case PULL_REQUEST_CHAPTERS_STATE.GENERATING:
       return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: chapters.startedAt, ours: false };
     case PULL_REQUEST_CHAPTERS_STATE.FAILED:

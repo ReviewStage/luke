@@ -110,6 +110,10 @@ import {
   type SentryInstallProcedureSeams,
   sentryInstallProcedures,
 } from "../triggers/sentry/sentry-install-procedures.js";
+import {
+  type WorkspaceEnvironmentProcedureSeams,
+  workspaceEnvironmentProcedures,
+} from "../workspace-environment/workspace-environment-procedures.js";
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
@@ -143,6 +147,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   TaskFilesProcedureSeams &
   TaskSectionsProcedureSeams &
   TasksProcedureSeams &
+  WorkspaceEnvironmentProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
   SentryInstallProcedureSeams &
@@ -184,6 +189,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     supportAccess: supportAccessProcedures(seams),
     taskFiles: taskFilesProcedures(seams),
     taskSections: taskSectionsProcedures(seams),
+    workspaceEnvironment: workspaceEnvironmentProcedures(seams),
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
     workspaceSentry: sentryInstallProcedures(seams),

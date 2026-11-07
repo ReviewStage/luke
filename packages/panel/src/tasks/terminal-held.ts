@@ -1,5 +1,5 @@
+import { Store, useSelector } from "@tanstack/react-store";
 import { Option, Schema } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import { TERMINAL_KIND, type TerminalKind } from "./terminal-session.js";
 
 /**
@@ -15,7 +15,9 @@ import { TERMINAL_KIND, type TerminalKind } from "./terminal-session.js";
  * opens a fresh one. Note that every list is kept under one key, nested by
  * kind and then by the agent's id, because a key is never built from an id.
  * It holds ids and names, never a byte a shell printed. A terminal leaves
- * its list as its tab closes.
+ * its list as its tab closes. The lists are one TanStack `Store` the window
+ * holds (`use-terminal-session.ts`'s `TerminalsContext`), read from storage
+ * as it is made and written through to it at each change.
  */
 
 /** The one key the window's terminals are kept under. */
@@ -74,41 +76,37 @@ function writeHeld(held: HeldShells): void {
   }
 }
 
-/** Every terminal as the window holds it: what it kept before a reload, read once, then each list written through to storage. */
-const allHeld = Atom.keepAlive(
-  Atom.writable(
-    (): HeldShells => readHeld(),
-    (context, next: HeldShells) => {
-      writeHeld(next);
-      context.setSelf(next);
-    },
-  ),
-);
+/** Every terminal a window holds, by kind, then by agent: what it kept before a reload, read as it is made, then each list written through to storage. */
+export class TerminalsHeld {
+  /** The lists themselves; written only through `set`, which keeps storage in step. */
+  readonly all = new Store<HeldShells>(readHeld());
 
-/** One kind's terminals of one agent, oldest first, written through to the window's session storage. */
-function heldOfKind(kind: TerminalKind) {
-  return Atom.family((agentId: string) =>
-    Atom.keepAlive(
-      Atom.writable(
-        (get) => get(allHeld)[kind][agentId] ?? NOTHING_HELD,
-        (context, shells: readonly HeldShell[]) => {
-          const all = context.get(allHeld);
-          const { [agentId]: _was, ...others } = all[kind];
-          context.set(allHeld, {
-            ...all,
-            [kind]: shells.length === 0 ? others : { ...others, [agentId]: shells },
-          });
-        },
-      ),
-    ),
-  );
+  /** One kind's terminals of one agent, oldest first. */
+  of(kind: TerminalKind, agentId: string): readonly HeldShell[] {
+    return this.all.state[kind][agentId] ?? NOTHING_HELD;
+  }
+
+  /** Sets one kind's terminals of one agent, written through to the window's session storage. */
+  set(kind: TerminalKind, agentId: string, shells: readonly HeldShell[]): void {
+    const all = this.all.state;
+    const { [agentId]: _was, ...others } = all[kind];
+    const next = {
+      ...all,
+      [kind]: shells.length === 0 ? others : { ...others, [agentId]: shells },
+    };
+    writeHeld(next);
+    this.all.setState(() => next);
+  }
 }
 
-/** The terminals the window holds, by kind, then by agent. */
-export const terminalsHeld = {
-  [TERMINAL_KIND.CLOUD]: heldOfKind(TERMINAL_KIND.CLOUD),
-  [TERMINAL_KIND.LOCAL]: heldOfKind(TERMINAL_KIND.LOCAL),
-} as const;
+/** One kind's terminals of one agent the window holds, oldest first, as a component reads them. */
+export function useHeldShells(
+  held: TerminalsHeld,
+  kind: TerminalKind,
+  agentId: string,
+): readonly HeldShell[] {
+  return useSelector(held.all, (all) => all[kind][agentId] ?? NOTHING_HELD);
+}
 
 /** The name a new terminal takes: its kind's word and the next number past every name of that shape the agent's terminals of the kind hold. */
 export function nextShellTitle(kind: TerminalKind, shells: readonly HeldShell[]): string {

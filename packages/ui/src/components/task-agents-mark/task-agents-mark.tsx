@@ -1,6 +1,6 @@
 import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@repo/features/task-agents-model";
-import type { TaskAgentsSummary } from "@repo/features/task-wire";
+import type { TaskAgentsSummary, TaskPullRequestLine } from "@repo/features/task-wire";
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,
@@ -60,12 +60,15 @@ const PULL_REQUEST_INK = {
 /** The icon at the end of a task's row for how its agents stand; nothing where none of them failed, works, or left a pull request. */
 export function TaskAgentsMark({
   agents,
+  pullRequests,
   size = TASK_AGENTS_MARK_SIZE.SMALL,
 }: {
   agents: TaskAgentsSummary | undefined;
+  /** Every pull request the task's agents opened (`pullRequestsOfTask`). */
+  pullRequests: readonly TaskPullRequestLine[];
   size?: TaskAgentsMarkSize;
 }): React.JSX.Element | null {
-  const status = taskAgentsStatus(agents);
+  const status = taskAgentsStatus(agents, pullRequests);
   const seat = `task-agents-mark inline-flex flex-none items-center justify-center [&>.failed-mark]:size-full ${SEAT_CLASS[size]}`;
   switch (status.kind) {
     case TASK_AGENTS_STATUS.NONE:

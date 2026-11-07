@@ -46,13 +46,14 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import { accountPreferencesLiveAnswerSchema } from "../account-preferences-live.js";
-import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
+import { AGENT_ORIGIN_READ } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
-import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
+import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "../browser-tabs-live.js";
+import { TASK_COMMENTS_READ } from "../description-comment-live.js";
 import { HOSTS_READ } from "../host-live.js";
 import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
 import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
@@ -66,16 +67,15 @@ import {
   LIVE_USER_QUERY,
   macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
-  taskBrowserTabsLiveAnswerSchema,
-  taskHistoryLiveAnswerSchema,
-  taskPagesLiveAnswerSchema,
-  taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
 import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
+import { TASK_HISTORY_READ } from "../task-history-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
+import { AGENT_PAGES_READ, TASK_PAGES_READ } from "../task-pages-live.js";
+import { TASK_RECORD_READ } from "../task-record-live.js";
 import { workspaceIntegrationsLiveAnswerSchema } from "../workspace-integrations-live.js";
 import {
   workspaceInvitationsLiveAnswerSchema,
@@ -133,15 +133,6 @@ const liveAccountInboxItemsSchema = EffectSchema.Struct({
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The task whose comments a live read follows, and the page whose threads it follows, its plan's own where it names none; each read as text, one that is no UUID answered as not found. */
-const liveTaskCommentsSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  page: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -210,38 +201,14 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX_ITEMS }))
     .input(liveAccountInboxItemsSchema)
     .output(EffectSchema.flip(accountInboxItemsLiveAnswerSchema)),
-  taskRecord: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskRecordLiveAnswerSchema)),
-  taskPages: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_PAGES }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
-  agentPages: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_PAGES }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
-  agentOrigin: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_ORIGIN }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(agentOriginLiveAnswerSchema)),
-  taskHistory: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
-  taskComments: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_COMMENTS }))
-    .input(liveTaskCommentsSchema)
-    .output(EffectSchema.flip(taskCommentsLiveAnswerSchema)),
-  taskBrowserTabs: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
-  agentBrowserTabs: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_BROWSER_TABS }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
+  [TASK_RECORD_READ.name]: liveProcedure(TASK_RECORD_READ),
+  [TASK_PAGES_READ.name]: liveProcedure(TASK_PAGES_READ),
+  [AGENT_PAGES_READ.name]: liveProcedure(AGENT_PAGES_READ),
+  [AGENT_ORIGIN_READ.name]: liveProcedure(AGENT_ORIGIN_READ),
+  [TASK_HISTORY_READ.name]: liveProcedure(TASK_HISTORY_READ),
+  [TASK_COMMENTS_READ.name]: liveProcedure(TASK_COMMENTS_READ),
+  [TASK_BROWSER_TABS_READ.name]: liveProcedure(TASK_BROWSER_TABS_READ),
+  [AGENT_BROWSER_TABS_READ.name]: liveProcedure(AGENT_BROWSER_TABS_READ),
   tasks: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
     .input(liveTasksSchema)

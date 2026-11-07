@@ -12,27 +12,33 @@
  * Each output is its wire schema flipped (`packages/service/src/orpc/base.ts`).
  * A picture kept answers 201 with its id and one refused in band answers 200
  * with why, so that procedure answers its status beside its body.
+ *
+ * Each declares the refusals its handler answers
+ * (`packages/service/src/tasks/task-files-procedures.ts`) beyond those any
+ * procedure may (`declaredProcedure`): a plan, a page, or a version out of
+ * the account's reach, or an id that is no UUID, as not found.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
-import { pageFrameAnswerSchema } from "../page-frame.js";
-import { taskPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
-import { PICTURE_BOUNDS } from "../picture-wire.js";
 import {
   DESCRIPTION_ATTACHMENT_STATUS,
   descriptionAttachmentAnswerSchema,
   descriptionAttachmentRequestSchema,
 } from "../description-attachment-wire.js";
+import { pageFrameAnswerSchema } from "../page-frame.js";
+import { taskPagesAnswerSchema, taskPageVersionAnswerSchema } from "../page-wire.js";
+import { PICTURE_BOUNDS } from "../picture-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import {
   taskFileAnswerSchema,
   taskSkillsAnswerSchema,
   taskSkillsQueryFields,
   taskTreeAnswerSchema,
 } from "../task-wire.js";
-import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, refuses } from "./base.js";
 
 /** An upload is one picture or video as a `data:` URL at the larger of their byte bounds, base64 being four characters for every three bytes, with room for its type and key. */
 const PICTURE_BODY_BYTES =
@@ -84,20 +90,27 @@ const pictureKeptSchema = EffectSchema.Struct({
 
 const TASK_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
 
+/** What a read of the plan, or of one of its rows, refuses beyond any procedure: the plan or the row out of the account's reach. */
+const NOT_FOUND = refuses(HOSTED_API_ERROR.NOT_FOUND);
+
 export const taskFilesContract = {
-  file: hostedProcedure
+  file: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/file` }))
     .input(taskFileQuerySchema)
     .output(EffectSchema.flip(taskFileAnswerSchema)),
-  tree: hostedProcedure
+  tree: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/tree` }))
     .input(taskTreeQuerySchema)
     .output(EffectSchema.flip(taskTreeAnswerSchema)),
-  skills: hostedProcedure
+  skills: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/skills` }))
     .input(EffectSchema.Struct({ ...taskInputSchema.fields, ...taskSkillsQueryFields }))
     .output(EffectSchema.flip(taskSkillsAnswerSchema)),
-  keepPicture: hostedProcedure
+  keepPicture: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(bodyCap(PICTURE_BODY_BYTES))
     .meta(
       openapi({
@@ -109,11 +122,13 @@ export const taskFilesContract = {
     )
     .input(exactBodyInput(taskInputSchema, descriptionAttachmentRequestSchema))
     .output(EffectSchema.flip(pictureKeptSchema)),
-  pages: hostedProcedure
+  pages: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/pages` }))
     .input(taskInputSchema)
     .output(EffectSchema.flip(taskPagesAnswerSchema)),
-  page: hostedProcedure
+  page: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(
       openapi({
         method: HTTP_METHOD.GET,
@@ -123,7 +138,8 @@ export const taskFilesContract = {
     .input(taskPageVersionSchema)
     .output(EffectSchema.flip(taskPageVersionAnswerSchema)),
   /** One version of one page as a browser's frame loads it: sent on to its short-lived link on the sandbox's own site, or to the page saying pages open in the Mac app where the deployment has no sandbox. */
-  pageFrame: hostedProcedure
+  pageFrame: declaredProcedure
+    .errors(NOT_FOUND)
     .meta(
       openapi({
         method: HTTP_METHOD.GET,

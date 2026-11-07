@@ -46,7 +46,6 @@ it.effect(
         );
         assert.equal(taskOf(after, INVITES), taskOf(before, INVITES));
         assert.equal(agentOf(after, invites.id), agentOf(before, invites.id));
-        assert.equal(taskOf(after, BILLING)?.agents?.agents[0]?.title, "CSV export");
         assert.equal(agentOf(after, billing.id)?.title, "CSV export");
       }),
     ),

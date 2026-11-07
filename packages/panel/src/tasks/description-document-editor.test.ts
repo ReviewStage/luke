@@ -50,10 +50,11 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
-import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
+import { useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
@@ -155,6 +156,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await letGoOfWords();
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
@@ -223,12 +225,6 @@ function commentsOver(threads: readonly DescriptionCommentThread[]): Description
 /** What the window tells its shell of the descriptions' words, drawn beside the description as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
-}
-
-/** The descriptions' words told which account is signed in, as the window tells them. */
-function WordsOwner(): null {
-  useDescriptionWordsOwner();
-  return null;
 }
 
 /** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
@@ -1155,6 +1151,21 @@ test("words a description was left with stay once the account signed in comes to
   await settle();
 
   assert.ok(toastStood, "the toast over them stands");
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
+});
+
+test("words a description was left with stay once the window draws itself again as the same account", async () => {
+  const { container, render, unmount } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+
+  unmount();
+  mount();
+  await settle();
+
   assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
 });
 

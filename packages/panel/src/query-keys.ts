@@ -49,6 +49,8 @@ export const QUERY_ROOT = {
   TASK_REVISION: "task-revision",
   /** A picture the window reads (`picture-query.ts`'s `pictureQuery`), by what it belongs to and its id there. */
   PICTURE: "picture",
+  /** The section icon picker's wholes loaded on demand (`desktop/section-icon-picker.tsx`), Lucide's and the emoji, by which. */
+  SECTION_ICONS: "section-icons",
 } as const;
 
 /**

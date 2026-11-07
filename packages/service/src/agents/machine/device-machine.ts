@@ -118,7 +118,6 @@ import {
 } from "../vercel-sandbox-api.js";
 import {
   type AgentMachineService,
-  CREDENTIAL_RENEWAL,
   type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
@@ -133,7 +132,6 @@ import {
   type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
-  SWAP_RENEWAL,
 } from "./agent-machine.js";
 
 export const MAC_MACHINE = {
@@ -229,14 +227,12 @@ function objectOf(value: object): DeviceAgentObject {
 
 /**
  * A launch's credentials as a Mac's runner takes them, which no firewall of
- * ours stands in front of: a fixed one's value in its variable, sealed with
- * the launch, and a renewed one not at all, since the runner asks our token
- * route for it.
+ * ours stands in front of: each one's value in its variable, sealed with the
+ * launch.
  */
 function handedOnMac(credentials: readonly RunnerCredential[]): DeliveredCredentials {
-  const fixed = credentials.filter((each) => each.renewal === CREDENTIAL_RENEWAL.FIXED);
   return {
-    env: Object.fromEntries(fixed.map((each) => [each.variable, Redacted.value(each.value)])),
+    env: Object.fromEntries(credentials.map((each) => [each.variable, Redacted.value(each.value)])),
     swaps: new Map(),
   };
 }
@@ -491,8 +487,6 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      clear: () => Effect.void,
-      renew: () => Effect.succeed({ outcome: SWAP_RENEWAL.LEFT }),
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.

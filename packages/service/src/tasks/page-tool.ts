@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { writePage } from "@repo/database/models/task-pages";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { PAGE_THEME_VARIABLE, PAGE_WIDE_CLASS } from "@repo/features/page-theme";
 import {
   PAGE_BOUNDS,
@@ -13,7 +14,6 @@ import {
 import { isSecretFile } from "@repo/features/task-wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { writtenPageMention } from "../agents/written-mentions.js";
 import {
   ACTION_RESULT_STATUS,

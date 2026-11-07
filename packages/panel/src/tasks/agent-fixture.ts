@@ -63,6 +63,7 @@ import {
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
+  type TaskPullRequestLine,
   type TaskSummary,
   type TaskTreeEntry,
 } from "@repo/features/task-wire";
@@ -1064,30 +1065,18 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     total: 1,
     working: 0,
     activityAt: STARTED_AT + 23 * MINUTE,
-    agents: [
-      {
-        id: agent.id,
-        title: agent.title,
-        model: agent.model,
-        effort: agent.effort,
-        status: agent.status,
-        at: STARTED_AT,
-      },
-    ],
     pullRequestTotal: 1,
-    pullRequests: [
-      {
-        number: PULL_REQUEST.number,
-        title: PULL_REQUEST.title,
-        state: PULL_REQUEST_STATE.OPEN,
-        checks: CHECK_SUMMARY.PASSING,
-        additions: ADDITIONS,
-        deletions: DELETIONS,
-        url: PULL_REQUEST.url,
-        agentId: agent.id,
-        queued: true,
-      },
-    ],
+  };
+  const pullRequest: TaskPullRequestLine = {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: ADDITIONS,
+    deletions: DELETIONS,
+    url: PULL_REQUEST.url,
+    agentId: agent.id,
+    queued: true,
   };
   // Note that the agent works where its task does, as the task list carries its row.
   const task = open.tasks.find((each) => each.id === taskId);
@@ -1095,7 +1084,16 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     ...open,
     tasks: open.tasks.map((each) => (each.id === taskId ? { ...each, agents } : each)),
     taskAgents: [
-      { ...agent, workspaceId: task?.workspaceId ?? "", repository: task?.repository ?? null },
+      {
+        ...agent,
+        workspaceId: task?.workspaceId ?? "",
+        repository: task?.repository ?? null,
+        settledAt: STARTED_AT,
+      },
+    ],
+    taskPullRequests: [
+      ...(open.taskPullRequests ?? []).filter((each) => each.taskId !== taskId),
+      { taskId, pullRequests: [pullRequest] },
     ],
   };
 }

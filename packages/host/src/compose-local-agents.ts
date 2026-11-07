@@ -216,8 +216,6 @@ const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 const BEAT_DEADLINE = Duration.seconds(5);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
-/** How a line's claim the service did not answer is asked again, well inside its own claim window. */
-const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's process group has to end after SIGTERM before the group is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** How long making an agent's repository may take, a first clone of a large one or a wait on another launch's clone included, before its launch is given up. */
@@ -497,6 +495,17 @@ export function composeLocalAgents(
     );
 
     // -- the follow --------------------------------------------------
+
+    /**
+     * The token each line's claim carries, by the line's id, minted at its
+     * first claim and kept until a claim of it is answered, so the claim
+     * asked again after its answer was lost is the same claim, which the
+     * service answers again rather than refusing as taken. Note that it
+     * outlives a follow, because a gate that shuts between a lost answer and
+     * its re-ask would otherwise leave a launch the service granted that no
+     * later follow asks for.
+     */
+    const claimTokens = new Map<string, string>();
 
     /** Everything one open gate runs, on the device it registered, from its home folder. */
     const follow = (folder: string, shellVariables: Readonly<Record<string, string>>) =>
@@ -1072,25 +1081,16 @@ export function composeLocalAgents(
           });
 
         /**
-         * The token each line's claim carries, by the line's id, minted at its
-         * first claim and kept until a claim of it is answered, so the claim
-         * asked again after its answer was lost is the same claim, which the
-         * service answers again rather than refusing as taken.
+         * One line claimed by its id under its token, asked once; refused, or
+         * nothing where unanswered. Note that an unanswered claim keeps its
+         * token, so `linesFollowed` asks it again before its next read rather
+         * than this holding `claiming` through repeats of its own.
          */
-        const claimTokens = new Map<string, string>();
-
-        /** One line claimed by its id under its token, asked again a few times where unanswered; refused, or nothing where never answered. */
         const claimedLine = (id: string) =>
           Effect.gen(function* () {
             const token = claimTokens.get(id) ?? kernel.createId();
             claimTokens.set(id, token);
-            const answer = yield* asked(client.claimLine(deviceId, id, token)).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced(CLAIM_RETRY.every),
-                times: CLAIM_RETRY.times,
-                until: (answered) => answered !== undefined,
-              }),
-            );
+            const answer = yield* asked(client.claimLine(deviceId, id, token));
             if (answer !== undefined) claimTokens.delete(id);
             return answer;
           });
@@ -1101,8 +1101,9 @@ export function composeLocalAgents(
          * hand-over are uninterruptible, because a line the service granted
          * is this Mac's alone to deliver, and its token is let go of in the
          * same step, so no line is handed over twice. Both hold `claiming`,
-         * so a beat never settles a launch whose claim is unanswered; none is
-         * asked once the device has paused its claims to switch releases.
+         * and a beat leaves a line whose token is kept, so it never settles a
+         * launch whose claim is unanswered; none is asked once the device has
+         * paused its claims to switch releases.
          */
         const lineTaken = (id: string) =>
           Effect.uninterruptible(
@@ -1121,8 +1122,9 @@ export function composeLocalAgents(
          * The lines read and claimed in the service's order, each handed to
          * its agent's mailbox. A claim never answered ends the batch there,
          * so a later line of the same agent is never delivered before it, and
-         * is asked again under its token before the next read, since the
-         * service lists no line once claimed and the claim may have landed.
+         * is asked again under its token after `REREAD`, before the next read,
+         * since the service lists no line once claimed and the claim may have
+         * landed.
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
@@ -1133,7 +1135,7 @@ export function composeLocalAgents(
             const lines = yield* asked(client.lines(deviceId));
             if (lines === undefined) return yield* Effect.sleep(REREAD);
             for (const line of lines) {
-              if (!(yield* lineTaken(line.id))) return;
+              if (!(yield* lineTaken(line.id))) return yield* Effect.sleep(REREAD);
             }
           }),
         );
@@ -1201,10 +1203,14 @@ export function composeLocalAgents(
             const unknown = [...open].filter((id) => !heard.knew.has(id));
             if (unknown.length === 0) return;
             // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
+            // Note too that a line whose claim's answer was lost keeps its token until it is asked again, so it is left for that claim to deliver.
             yield* claiming.withPermit(
               Effect.forEach(
                 unknown,
-                (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
+                (id) =>
+                  starting.has(id) || runningLaunches().has(id) || claimTokens.has(id)
+                    ? Effect.void
+                    : settle(id),
                 { discard: true },
               ),
             );

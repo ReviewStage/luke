@@ -1,8 +1,7 @@
-import { useAtomValue } from "@effect/atom-react";
-import { Clock, Duration, Option, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import { rendererRuntime } from "./renderer-runtime.js";
+import { forkEffect, streamInto } from "@repo/ui";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
+import { Clock, Duration, Schedule, Stream } from "effect";
+import { useEffect } from "react";
 
 /**
  * pending-clock.ts -- the renderer clock a value given here reads while it waits on a view to carry it (`@repo/ui/pending-values`).
@@ -17,16 +16,27 @@ import { rendererRuntime } from "./renderer-runtime.js";
 const PENDING_TICK = Duration.seconds(5);
 
 /** The time now, and again each `PENDING_TICK` after, on the renderer's clock. */
-const pendingClockAtom = rendererRuntime.atom(
-  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(PENDING_TICK)),
+const pendingClock = Stream.fromEffectSchedule(
+  Clock.currentTimeMillis,
+  Schedule.spaced(PENDING_TICK),
 );
 
-/** No reading, while nothing waits on a view. */
-const NO_PENDING_CLOCK = Atom.make(AsyncResult.initial<number>());
-
-/** The renderer clock's latest reading while `waiting`, read each `PENDING_TICK`; none while nothing waits, or before its first reading. */
+/**
+ * The renderer clock's latest reading while `waiting`, read each
+ * `PENDING_TICK`; none while nothing waits, or before its first reading.
+ * The reading is the reader's own store, read only while it waits, and
+ * forgotten as the wait ends, so the next wait counts afresh.
+ */
 export function usePendingNow(waiting: boolean): number | undefined {
-  return Option.getOrUndefined(
-    AsyncResult.value(useAtomValue(waiting ? pendingClockAtom : NO_PENDING_CLOCK)),
-  );
+  const now = useCreateStore<number | undefined>(undefined);
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const stop = forkEffect(streamInto(pendingClock, now));
+    return () => {
+      stop();
+      now.setState(() => undefined);
+    };
+  }, [waiting, now]);
+  const reading = useSelector(now);
+  return waiting ? reading : undefined;
 }

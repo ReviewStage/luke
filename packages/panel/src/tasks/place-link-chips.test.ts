@@ -77,21 +77,7 @@ const TASK: TaskSummary = {
   updatedAt: AT,
   repository: "acme/relay",
   number: 42,
-  agents: {
-    total: 1,
-    working: 1,
-    agents: [
-      {
-        id: AGENT,
-        title: "Expire old invitations",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 
 /** Main's document holding the task, its agent, its page, and an Inbox item waiting on it. */
@@ -103,6 +89,21 @@ const STATE: AppStateSnapshot = (() => {
       ...IDLE_TASKS_VIEW,
       workspaces: [ACME],
       tasks: [TASK],
+      // The task's agent, as the list followed live holds it.
+      taskAgents: [
+        {
+          id: AGENT,
+          planId: TASK_ID,
+          title: "Expire old invitations",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: AGENT_STATUS.RUNNING,
+          createdAt: AT,
+          turnId: null,
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+        },
+      ],
       tasklessAgents: [
         {
           id: TRIAGE_AGENT,

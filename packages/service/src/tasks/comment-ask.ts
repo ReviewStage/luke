@@ -1,6 +1,7 @@
 import { readAgent } from "@repo/database/models/agent-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -11,7 +12,6 @@ import {
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { MESSAGE_CHANNEL } from "@repo/wire";
 import { Effect, Option } from "effect";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";

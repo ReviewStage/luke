@@ -4,7 +4,6 @@ import { readAgentRepositories } from "@repo/database/models/agent-repositories"
 import {
   type Agent,
   hasRepository,
-  readAgent,
   settleAgentAuthor,
   type WithRepository,
 } from "@repo/database/models/agent-store";
@@ -57,11 +56,11 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * confirmed to reach it and a read token minted for that one repository,
  * set at the sandbox's firewall for the clone alone and withdrawn after it.
  * The clone is whole, since a branch and a pull request are cut from the
- * history, or is no clone at all where its drive was forked from its
- * workspace's repository's base drive, whose whole checkout is fetched up
- * to the branch instead (`refreshAgentCheckout`, `../agent-drive.ts`), or
- * kept from an earlier sandbox of its session, whose checkout stands as the
- * agent left it. The launch then finishes it (`finishCheckoutWith`): a
+ * history, or is no clone at all where its sandbox was created from its
+ * workspace's repository's base snapshot, whose whole checkout is fetched
+ * up to the branch instead (`refreshAgentCheckout`, `../base-snapshot.ts`),
+ * or from the snapshot of the agent it was started from, whose checkout
+ * stands as that agent left it. The launch then finishes it (`finishCheckoutWith`): a
  * write token is minted, carrying contents and pull requests write, since
  * the agent pushes a branch and opens a pull request from it, and set at the
  * firewall; the commit identity is set; and the token is handed back for
@@ -383,42 +382,6 @@ export const agentFirewallSources = /* @__PURE__ */ Effect.fn("web/agentFirewall
   },
 );
 
-/**
- * The same for the account's agent named, read afresh, for a firewall write
- * made apart from the agent's own calls, as a launch's end or a sweep makes
- * one; none where no agent is named or the account reaches it no longer.
- */
-export const firewallSourcesOfAgent = /* @__PURE__ */ Effect.fn("web/firewallSourcesOfAgent")(
-  function* (
-    userId: string,
-    agentId: string | undefined,
-  ): Effect.fn.Return<FirewallSources, CheckoutRefused | StoreFailure, CheckoutServices> {
-    if (agentId === undefined) return {};
-    const agent = yield* readAgent(userId, agentId);
-    if (Option.isNone(agent)) return {};
-    const target = { userId, conversationId: agent.value.conversationId };
-    return yield* agentFirewallSources(target, agent.value);
-  },
-);
-
-/**
- * The same for a write that takes an ended launch's swaps off a place a
- * Terminal keeps up: none where the credential could not be minted, said in
- * the log, because the ended runner's credentials must come off whether or
- * not the shell goes on reaching GitHub.
- */
-export const firewallSourcesAfterLaunch = (userId: string, agentId: string | undefined) =>
-  firewallSourcesOfAgent(userId, agentId).pipe(
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(
-          `a held sandbox's repository credential was not minted as its launch ended: ${failure._tag}`,
-        ),
-        {} satisfies FirewallSources,
-      ),
-    ),
-  );
-
 /** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several, answering the repository at the place given among them. */
 const agentRepositoriesToken = Effect.fnUntraced(function* (
   target: ConversationTarget,
@@ -647,7 +610,7 @@ export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRep
 );
 
 /**
- * The checkout a fork of the repository's base drive holds brought up to
+ * The checkout the repository's base snapshot holds brought up to
  * the repository's default branch, on the read the caller made of it, the token
  * at the firewall for the fetch alone, and recorded under the name the
  * agent's row holds; refused, in git's words, where the sandbox holds no
