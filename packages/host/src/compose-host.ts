@@ -43,8 +43,8 @@ import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
 import { composeThisMacHost } from "./compose-this-mac-host.js";
 import { composeWorkspaces } from "./compose-workspaces.js";
-import type { Composer, DuplicateGatewayMethod } from "./composer.js";
-import { mergedMethods } from "./effect/composer.js";
+import type { Composer, DuplicateGatewayMethod, DuplicateHostAct } from "./composer.js";
+import { mergedActs, mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
@@ -59,7 +59,7 @@ import {
   type ThisMacHost,
 } from "./effect/seams.js";
 import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
-import { ActRefused } from "./host-acts.js";
+import { ActRefused, type HostActTable } from "./host-acts.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
@@ -124,8 +124,8 @@ interface PlatformConcernRequirements {
 /**
  * Every concern constructed, linked, and merged, with nothing yet begun: the
  * composers in the launch's order, the arming that follows the last of them,
- * and the drain. A method two concerns claim fails this build, so which
- * concern answers a method is checked before anything starts.
+ * and the drain. A method or an act two concerns claim fails this build, so
+ * which concern answers each is checked before anything starts.
  *
  * The platform concerns are the ones `chosen` names. One left out is never
  * started, adds nothing to the layer's requirements, and answers each of its
@@ -135,7 +135,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
   chosen: readonly Chosen[],
 ): Layer.Layer<
   HostAssemblyTag,
-  DuplicateGatewayMethod,
+  DuplicateGatewayMethod | DuplicateHostAct,
   HostAssemblyRequirements | PlatformConcernRequirements[Chosen]
 > {
   const platform = new Set<HostPlatformConcern>(chosen);
@@ -613,11 +613,27 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         }),
     };
 
-    const methods = yield* mergedMethods(Object.values(concerns));
-    const service = createGatewayService({
-      nodes: kernel.nodes,
-      methods: { ...methods, ...bootstrapMethods },
-    });
+    // Note that the host's own methods are folded with the composers', so a composer claiming one fails the build as two composers claiming one do.
+    const methods = yield* mergedMethods([
+      ...Object.values(concerns).map((concern) => concern.methods),
+      bootstrapMethods,
+    ]);
+    // Note that a platform concern left out stands in its composer's place, so its refusing acts are that composer's one claim, never a second.
+    const acts: HostActTable = yield* mergedActs([
+      account.acts,
+      agents.acts,
+      accountAsks.acts,
+      settings.acts,
+      thisMacHost.acts,
+      automations.acts,
+      installedSkills.acts,
+      integrations.acts,
+      macCommands.acts,
+      portForwards.acts,
+      tasks.acts,
+      workspaces.acts,
+    ]);
+    const service = createGatewayService({ nodes: kernel.nodes, methods });
     yield* hostService.set(service);
 
     /**
@@ -642,21 +658,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     const assembly: HostAssembly = {
       gateway: service.gateway,
-      // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
-      acts: {
-        ...account.acts,
-        ...agents.acts,
-        ...accountAsks.acts,
-        ...settings.acts,
-        ...thisMacHost.acts,
-        ...automations.acts,
-        ...installedSkills.acts,
-        ...integrations.acts,
-        ...macCommands.acts,
-        ...portForwards.acts,
-        ...tasks.acts,
-        ...workspaces.acts,
-      },
+      acts,
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),
@@ -676,7 +678,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
   // first, so a requirement a composer gains is never dropped from `R`.
   const checked: Layer.Layer<
     HostAssemblyTag,
-    DuplicateGatewayMethod,
+    DuplicateGatewayMethod | DuplicateHostAct,
     HostAssemblyRequirements | PlatformConcernRequirements[HostPlatformConcern]
   > = Layer.effect(HostAssemblyTag, build);
   // SAFETY: the build asks for a platform concern's own seam only on the
@@ -684,7 +686,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
   // never reads what `PlatformConcernRequirements` would have added for it.
   return checked as Layer.Layer<
     HostAssemblyTag,
-    DuplicateGatewayMethod,
+    DuplicateGatewayMethod | DuplicateHostAct,
     HostAssemblyRequirements | PlatformConcernRequirements[Chosen]
   >;
 }

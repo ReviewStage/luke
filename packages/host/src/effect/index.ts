@@ -10,7 +10,7 @@ export type {
   TerminalSocketArrival,
   TerminalSocketOpening,
 } from "../compose-terminals.js";
-export { DuplicateGatewayMethod } from "../composer.js";
+export { DuplicateGatewayMethod, DuplicateHostAct } from "../composer.js";
 export {
   type CookieSessionDoor,
   CookieSessionFailed,
