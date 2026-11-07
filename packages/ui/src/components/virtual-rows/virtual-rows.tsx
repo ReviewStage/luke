@@ -53,7 +53,7 @@ import { type RovingReach, reachedKey, rovingItemIn } from "../roving-keys/rovin
  * is on where it stood, a row growing at the end keeps a reader at the end
  * there, and a row appended follows on to it where the reader stood within
  * `scrollEndThreshold` of the end (`followOnAppend`). The run opens on its
- * last rows (`scrollToEnd()` once mounted), and its caller asks whether it
+ * last rows (`scrollToEnd()` once its scroller is laid out), and its caller asks whether it
  * stands at its end and takes it there through its handle.
  *
  * A run read from its top, as a list of items is, is anchored to its start
@@ -445,14 +445,16 @@ export function VirtualRows({
     directDomUpdates: true,
     directDomUpdatesMode: "position",
   });
-  // A run anchored to its end opens there once the virtualizer holds its scroller, and only once, so a page kept hidden and shown again leaves it where the reader left it.
   // What the run measured is handed back as it goes, read off the virtualizer's own cache, each row materialized.
   const heard = useRef(onMeasurements);
   heard.current = onMeasurements;
   useEffect(() => () => heard.current?.(Array.from(virtualizer.measurementsCache)), [virtualizer]);
+  // A run anchored to its end opens there once the virtualizer holds its scroller and the scroller is laid out, and only once, so a page kept hidden and shown again leaves it where the reader left it.
+  // Note that a scroller not laid out, as one first drawn in a pane not shown yet, has no end to open at: the scroll would settle at its top and count as done, so the run waits for its size (`sized`).
   const opened = useRef(false);
   useLayoutEffect(() => {
-    if (!fromEnd || opened.current || virtualizer.scrollElement === null) return;
+    const box = virtualizer.scrollElement;
+    if (!fromEnd || opened.current || box === null || box.clientHeight === 0) return;
     opened.current = true;
     virtualizer.scrollToEnd();
   });

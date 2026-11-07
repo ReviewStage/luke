@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
@@ -20,7 +19,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { type HostReadsHanded, handHostReads } from "../testing/app-state.js";
@@ -197,11 +195,7 @@ async function mount(): Promise<HTMLElement> {
             Fragment,
             null,
             createElement(AgentsPage, { signedIn: true }),
-            createElement(
-              RegistryContext.Provider,
-              { value: rendererRegistry },
-              createElement(ToastHost),
-            ),
+            createElement(ToastHost),
           ),
         ),
       ),

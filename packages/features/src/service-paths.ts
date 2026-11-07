@@ -382,6 +382,10 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
   /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
   WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",
+  /** A workspace's shared environment variables: their names to a member (GET, `WORKSPACE_ENVIRONMENT_QUERY`), or one set by an owner or admin (PUT), answering the names as they then stand (`workspace-environment-wire.ts`). */
+  WORKSPACE_ENVIRONMENT: "/api/workspaces/environment",
+  /** One of a workspace's environment variables removed by an owner or admin (POST), answering the names as they then stand. */
+  WORKSPACE_ENVIRONMENT_DELETE: "/api/workspaces/environment/delete",
   /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, to a member (GET, `WORKSPACE_SLACK_BOT_QUERY`). */
   WORKSPACE_SLACK_BOT: "/api/workspaces/slack-bot",
   /** A workspace's Slack bot connected by an owner or admin to the team its token answers for (POST), answering the bot as it then stands (`slack-bot-wire.ts`). */

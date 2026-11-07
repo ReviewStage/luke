@@ -1,9 +1,10 @@
 /**
- * snapshot.ts -- the work of a source agent from before drives, pushed or not, copied to a new branch for an agent continued or forked from it.
+ * snapshot.ts -- the work of a source agent whose sandbox is not stopped on a snapshot, pushed or not, copied to a new branch for an agent continued or forked from it.
  *
- * A source with a drive of its own hands its drive instead, which the new
- * agent's is forked from (`../agent-drive.ts`), so this copy serves only an
- * agent opened before drives, until its snapshots lapse.
+ * A source whose sandbox stands stopped on a snapshot hands that sandbox
+ * instead, whose latest snapshot the new agent's is created from
+ * (`takeover.ts`'s `sourceWorkOf`), so this copy serves a source still
+ * running, or one opened before sandboxes were named for their session.
  *
  * Each agent runs in a sandbox of its own, so what the source never
  * committed and pushed would be lost to the agent started from it. As that
@@ -200,9 +201,7 @@ const stopMissed = (why: string) =>
  * It lists the sandbox again rather than trusting a session it was handed,
  * so a wake interrupted before it answered is stopped too, and asks again
  * whether it must stay up once listed, so a terminal, a turn, or another
- * Start's copy that took it up since the first ask keeps it. Its kept
- * launch is deleted ahead of each stop, as ahead of every other stop, so no
- * renewal writes to it again.
+ * Start's copy that took it up since the first ask keeps it.
  */
 const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -213,7 +212,6 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
         continue;
       }
       const running = { name: sandbox.name, sessionId: sandbox.currentSessionId };
-      yield* sandboxFirewall(api).clear(running);
       yield* (yield* api.session(running)).stop();
     }
   }).pipe(

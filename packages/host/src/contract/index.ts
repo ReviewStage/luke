@@ -15,10 +15,10 @@ import { cliActsContract } from "./cli.js";
 import { INSTALLED_SKILL_ACTS, installedSkillActsContract } from "./installed-skills.js";
 import { INTEGRATION_ACTS, integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
-import { macCommandActsContract } from "./mac-commands.js";
+import { MAC_COMMAND_ACTS, macCommandActsContract } from "./mac-commands.js";
 import { macShellActsContract } from "./mac-shells.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
-import { portForwardActsContract } from "./port-forwards.js";
+import { PORT_FORWARD_ACTS, portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
 import { SETTINGS_ACTS, settingsActsContract } from "./settings.js";
 import { TASKS_ACTS, tasksActsContract } from "./tasks.js";
@@ -72,12 +72,10 @@ export {
   CLI_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
-  MAC_COMMAND_ACT_KIND,
   MAC_SHELL_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
-  PORT_FORWARD_ACT_KIND,
   type PortActKind,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
@@ -86,6 +84,8 @@ export {
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
+export { MAC_COMMAND_ACTS } from "./mac-commands.js";
+export { PORT_FORWARD_ACTS } from "./port-forwards.js";
 export {
   type EventPushName,
   PUSH,
@@ -111,6 +111,8 @@ export const HOST_ACTS = {
   ...CHAPTERS_ACTS,
   ...INSTALLED_SKILL_ACTS,
   ...INTEGRATION_ACTS,
+  ...MAC_COMMAND_ACTS,
+  ...PORT_FORWARD_ACTS,
   ...SETTINGS_ACTS,
   ...TASKS_ACTS,
   ...WORKSPACE_ACTS,

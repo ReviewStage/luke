@@ -23,11 +23,12 @@ import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect, Option } from "effect";
 import { linkInstallation, setInstallationStatus } from "../github/github-installations.js";
+import { workspaceIntegrationsRead } from "../live/reads/workspace-integrations.js";
+import { workspacesRead } from "../live/reads/workspaces.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { workspaceIntegrationsLive, workspacesLive } from "./live-queries.js";
 
 /**
- * The account's workspaces (`workspacesLive`) on the migrated capture:
+ * The account's workspaces (`workspacesRead`) on the migrated capture:
  * each write that moves the account's list of workspaces, through its real
  * writer, notifies a topic the read is woken on, as the read looks its
  * topics up when it is asked for, so a window holding it hears the write
@@ -37,7 +38,7 @@ import { workspaceIntegrationsLive, workspacesLive } from "./live-queries.js";
  * account's first workspace named its own, which notifies the account.
  * Workspaces and memberships are written by the organization plugin, as
  * our routes write them. A workspace's own integrations
- * (`workspaceIntegrationsLive`) are on a narrower topic of their own, which
+ * (`workspaceIntegrationsRead`) are on a narrower topic of their own, which
  * every write to its Sentry installations or its Slack bot notifies alone.
  *
  * Synthetic accounts, workspaces, and installations throughout.
@@ -76,7 +77,7 @@ const wakesTheWorkspaces = <A, E, R>(
   userId: string,
 ) =>
   Effect.gen(function* () {
-    const woken = yield* workspacesLive.topics({ userId });
+    const woken = yield* workspacesRead.topics({ userId });
     const fired = yield* expectTopicsFire(write, topics);
     assert.ok(
       topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id)),
@@ -175,7 +176,7 @@ it.effect(
         const owner = yield* openAccount("Ada Lovelace");
         const workspaceId = yield* openTeam(plugin, owner);
         const integrations: readonly SyncTopic[] = [[TOPIC.WORKSPACE_INTEGRATIONS, workspaceId]];
-        const woken = workspaceIntegrationsLive.topics({ userId: owner, workspaceId });
+        const woken = workspaceIntegrationsRead.topics({ userId: owner, workspaceId });
         assert.ok(
           woken.some(([kind, id]) => kind === TOPIC.WORKSPACE_INTEGRATIONS && id === workspaceId),
           "the integrations read is woken by the workspace's integrations topic",

@@ -1,4 +1,5 @@
 import type { HostedAgentClient } from "@repo/features";
+import { ACCOUNT_PREFERENCES_READ } from "@repo/features/account-preferences-live";
 import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
@@ -63,6 +64,7 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
+import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -257,7 +259,6 @@ export type AgentClient = Pick<
   | "pullRequestChaptersLive"
   | "generateChapters"
   | "models"
-  | "accountPreferencesLive"
   | "writeDefault"
   | "writeChaptersProvider"
   | "liveRead"
@@ -308,7 +309,6 @@ export type AgentClient = Pick<
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
-  | "workspaceMemoriesLive"
   | "forgetMemory"
   | "transcribeDictation"
   | "answerInbox"
@@ -572,7 +572,8 @@ export function composeAgents(
         tellItems,
       );
     const preferences = yield* heldAccountPreferences({
-      seal: (userId, poll, after) => asked(client.accountPreferencesLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(client.liveRead(ACCOUNT_PREFERENCES_READ, { userId }, poll ? { after } : undefined)),
       gate,
       pool: dependencies.pool,
       tell: (held: AppAccountPreferences) =>
@@ -583,7 +584,13 @@ export function composeAgents(
       Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
     const memories = yield* heldMemories({
       seal: (workspaceId, userId, poll, after) =>
-        asked(client.workspaceMemoriesLive(workspaceId, userId, poll, after)),
+        asked(
+          client.liveRead(
+            WORKSPACE_MEMORIES_READ,
+            { userId, workspaceId },
+            poll ? { after } : undefined,
+          ),
+        ),
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
@@ -1264,7 +1271,7 @@ function composed(
   /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
   const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
       name: INBOX_QUEUED_WRITE.REMIND,

@@ -37,6 +37,7 @@ import {
   pagePlaceId,
 } from "@repo/features/page-wire";
 import { markedAs, readMarkOf } from "@repo/features/read-mark";
+import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import type {
   SlackBotChannel,
   SlackListedChannel,
@@ -116,6 +117,12 @@ import {
   tasksWorkspaceTokenRepositoriesParamsSchema,
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
+import { WORKSPACE_INTEGRATIONS_READ } from "@repo/features/workspace-integrations-live";
+import {
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
+} from "@repo/features/workspace-live";
 import {
   WORKSPACE_SLUG_PROBLEM,
   type Workspace,
@@ -305,6 +312,13 @@ class LinkReadKey extends Data.Class<{
   readonly number: number;
 }> {}
 
+/** Whether a live read's seal failed, rather than answered. */
+function isFailed<Answer>(
+  sealed: Answer | { readonly failure: string },
+): sealed is { readonly failure: string } {
+  return typeof sealed === "object" && sealed !== null && "failure" in sealed;
+}
+
 /** The key a link's read is kept under, of the place and number it asked. */
 function linkReadKey(asked: {
   readonly workspaceId: string;
@@ -490,7 +504,7 @@ export type TasksClient = Pick<
   | "setParent"
   | "changeRelation"
   | "pinRepository"
-  | "sidebarLive"
+  | "liveRead"
   | "writeTaskSection"
   | "liveRead"
   | "readFile"
@@ -520,14 +534,13 @@ export type TasksClient = Pick<
   /** The account's workspaces, the ones it may join, and their members. */
   workspaces: Pick<
     HostedWorkspaceClient,
-    | "live"
+    | "liveRead"
     | "create"
     | "rename"
     | "setSlug"
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "integrationsLive"
     | "sentryInstall"
     | "sentryDisconnect"
     | "slackBot"
@@ -536,8 +549,6 @@ export type TasksClient = Pick<
     | "slackBotNotifications"
     | "slackBotRepository"
     | "slackBotChannel"
-    | "peopleLive"
-    | "invitationsLive"
     | "photo"
     | "removeMember"
     | "tokenRepositories"
@@ -1434,8 +1445,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const seal = (poll: boolean, after?: string) =>
       userId === undefined
         ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(served(client.workspaces.live(userId, poll, after)), (sealed) =>
-            "ok" in sealed ? (sealed.ok ? sealed.answer : { failure: sealed.failure }) : sealed,
+        : served(
+            client.workspaces.liveRead(WORKSPACES_READ, { userId }, poll ? { after } : undefined),
           );
     /** One seal followed until it stops, which fails it so the backoff seals it again. */
     const attempt = Effect.gen(function* () {
@@ -1505,11 +1516,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       userId: string,
       poll: boolean,
       after: string | undefined,
-    ) => Effect.Effect<
-      WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
-      never,
-      HttpClient.HttpClient
-    >,
+    ) => Effect.Effect<Answer | { readonly failure: string }, never, HttpClient.HttpClient>,
   ): (
     poll: boolean,
     after?: string,
@@ -1518,11 +1525,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return (poll, after) =>
       gate() && userId !== undefined
         ? Effect.map(served(seal(userId, poll, after)), (sealed) => {
-            if (!("ok" in sealed)) return { ...sealed, gone: true };
-            if (sealed.ok) return sealed.answer;
+            if (!isFailed(sealed)) return sealed;
             return {
               failure: sealed.failure,
               gone:
+                sealed.failure === LIVE_SIGNED_OUT.failure ||
                 sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
                 sealed.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
             };
@@ -1544,7 +1551,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     gate,
     seal: (workspaceId) =>
       workspaceSeal((userId, poll, after) =>
-        client.workspaces.peopleLive(workspaceId, userId, poll, after),
+        client.workspaces.liveRead(
+          WORKSPACE_MEMBERS_READ,
+          { userId, workspaceId },
+          poll ? { after } : undefined,
+        ),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
     pool: dependencies.pool,
@@ -1678,13 +1689,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     seal: (workspaceId, userId, poll, after) =>
       gate()
         ? Effect.map(
-            served(client.workspaces.integrationsLive(workspaceId, userId, poll, after)),
+            served(
+              client.workspaces.liveRead(
+                WORKSPACE_INTEGRATIONS_READ,
+                { userId, workspaceId },
+                poll ? { after } : undefined,
+              ),
+            ),
             (sealed) => {
-              if (!("ok" in sealed)) return { ...sealed, gone: true };
-              if (sealed.ok) return sealed.answer;
+              if (!isFailed(sealed)) return sealed;
               return {
                 failure: sealed.failure,
-                gone: sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
+                gone:
+                  sealed.failure === LIVE_SIGNED_OUT.failure ||
+                  sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
               };
             },
           )
@@ -1724,7 +1742,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     gate,
     seal: (workspaceId) =>
       workspaceSeal((userId, poll, after) =>
-        client.workspaces.invitationsLive(workspaceId, userId, poll, after),
+        client.workspaces.liveRead(
+          WORKSPACE_INVITATIONS_READ,
+          { userId, workspaceId },
+          poll ? { after } : undefined,
+        ),
       ),
     tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
     pool: dependencies.pool,
@@ -1817,7 +1839,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const read = githubRead;
     githubAskedAt = yield* Clock.currentTimeMillis;
     const status = yield* served(client.github.status());
-    if (read === githubRead && status.ok) write({ github: status.answer });
+    if (read === githubRead && !("failure" in status)) write({ github: status });
   });
 
   /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
@@ -1881,9 +1903,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const seal = (poll: boolean, after?: string) =>
       userId === undefined
         ? Effect.succeed(LIVE_SIGNED_OUT)
-        : Effect.map(served(client.sidebarLive(userId, poll, after)), (sealed) =>
-            sealed.ok ? sealed.answer : { failure: sealed.failure },
-          );
+        : served(client.liveRead(SIDEBAR_READ, { userId }, poll ? { after } : undefined));
     /** One seal followed until it stops, which fails it so the backoff seals it again. */
     const attempt = Effect.gen(function* () {
       const sealed = yield* seal(false);
@@ -3266,7 +3286,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return GITHUB_PAGE_UNANSWERED;
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        return page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED;
+        return "failure" in page ? GITHUB_PAGE_UNANSWERED : { url: page.url };
       }),
     // The view takes the connection the service answers at once, so Settings
     // reads disconnected without waiting for the next read of it. Note that
@@ -3278,7 +3298,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         githubAskedAt = undefined;
         // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
-        if (!disconnected.ok) {
+        if ("failure" in disconnected) {
           return yield* new ActRefused(
             disconnected.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
               ? { sentence: GITHUB_LAST_SIGN_IN_REFUSAL }
@@ -3288,7 +3308,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // Note that a read started before the answer is made stale, because
         // the status it read may predate the unlink.
         githubRead += 1;
-        write({ github: disconnected.answer });
+        write({ github: disconnected });
       }),
     // An admin read is answered to the caller as the service answered it and
     // held nowhere, since it is other accounts' data, which no view keeps.

@@ -66,6 +66,12 @@ whether the provider accepts it. We never send a saved credential back to your
 device, log it, or include it in analytics, error reports, or screen
 recordings.
 
+A workspace's owners and admins can save environment variables for the
+workspace, which we store sealed the same way. Each of the workspace's cloud
+agents is handed them as environment variables in its sandbox as it starts a
+turn, so the agent can read them, and a value it reads or prints may reach its
+model and its transcript. Agents on your Mac are never handed them.
+
 ### Integrations and connected apps
 
 If you connect an integration (such as Linear, Notion, Sentry, Slack, Gmail,

@@ -11,9 +11,10 @@ import {
   type IntegrationsConfigured,
   type SentryInstallationLiveRow,
   type SlackInstallationLiveRow,
+  WORKSPACE_INTEGRATIONS_READ,
   type WorkspaceIntegrations,
   type WorkspaceIntegrationsLiveAnswer,
-  workspaceIntegrationsLiveRowsSchema,
+  type WorkspaceIntegrationsLiveRows,
   workspaceIntegrationsOfLive,
 } from "@repo/features/workspace-integrations-live";
 import {
@@ -117,9 +118,7 @@ export interface HeldWorkspaceIntegrations extends HeldSlice<string> {
 }
 
 /** The Slack bot's row as its two statements deliver it, its channels' repositories folded in; none while it is not connected. */
-function slackBotRowOf(
-  rows: typeof workspaceIntegrationsLiveRowsSchema.Type,
-): readonly SlackBotRow[] {
+function slackBotRowOf(rows: WorkspaceIntegrationsLiveRows): readonly SlackBotRow[] {
   const [installation] = rows.slackInstallation;
   if (installation === undefined) return [];
   const channelRepositories = Object.fromEntries(
@@ -211,7 +210,7 @@ function followIntegrations(
           },
         },
         first,
-        workspaceIntegrationsLiveRowsSchema,
+        WORKSPACE_INTEGRATIONS_READ.rows,
         (rows) =>
           Effect.gen(function* () {
             yield* sentry.answer(rows.sentryInstallations);

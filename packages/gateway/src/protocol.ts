@@ -420,14 +420,6 @@ export const GATEWAY_METHOD = {
   BROWSER_LIVE_SEND: "browserLive.send",
   BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
   /**
-   * A coding agent's cloud ports forwarded to this Mac's `127.0.0.1`
-   * (`@repo/features/port-forward-acts`), for one agent at a time: how its
-   * forwarding turned on or off, its standing told as
-   * `PORT_FORWARDS_CHANGED`. What a forwarded connection carries never
-   * crosses the Gateway.
-   */
-  PORT_FORWARDS_SET: "portForwards.set",
-  /**
    * A cloud agent's mirror on this Mac (`@repo/host`'s `compose-mirrors.ts`),
    * made where none stands and kept in step from then on, answered with its
    * folder (`{ folder }`) once its worktree stands.
@@ -436,8 +428,6 @@ export const GATEWAY_METHOD = {
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
-  /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
-  MAC_COMMAND_ANSWER: "macCommands.answer",
   ACCOUNT_SNAPSHOT: "account.snapshot",
   ANALYTICS_RECORD: "analytics.record",
 } as const;

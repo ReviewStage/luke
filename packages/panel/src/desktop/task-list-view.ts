@@ -1,4 +1,3 @@
-import { useAtom } from "@effect/atom-react";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -7,8 +6,8 @@ import {
   type TaskGrouping,
   type TaskListView,
 } from "@repo/ui/task-list-model";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { Schema, SchemaTransformation } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
@@ -82,7 +81,7 @@ export interface TaskListViewControl {
 }
 
 /** A fixture run's views, which keep nothing. One for the window, so the sidebar and a person's page, which lists their tasks there, read and change the same view. */
-const stagedViewsAtom = Atom.keepAlive(Atom.make<StoredViews>({}));
+const stagedViewsStore = createStore<StoredViews>({});
 
 /** A view as kept, Me where no Assigned to is. */
 function viewOf(kept: StoredViews[string] | undefined): TaskListView {
@@ -100,7 +99,7 @@ export function useTaskListView(
 ): TaskListViewControl {
   // Note that every surface holding the key draws a choice at once, so the sidebar and a person's page read and change the same view.
   const [kept, keep] = useKept<StoredViews>(KEPT.VIEWS, {});
-  const [stagedViews, setStagedViews] = useAtom(stagedViewsAtom);
+  const stagedViews = useSelector(stagedViewsStore);
   const views = staged ? stagedViews : kept;
   const view = viewOf(workspaceId === undefined ? undefined : views[workspaceId]);
   const choose = (next: TaskListView) => {
@@ -110,7 +109,7 @@ export function useTaskListView(
       [workspaceId]: { grouping: next.grouping, assignee: next.assignedTo },
     };
     if (staged) {
-      setStagedViews(all);
+      stagedViewsStore.setState(() => all);
       return;
     }
     keep(all);

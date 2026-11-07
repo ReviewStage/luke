@@ -571,12 +571,15 @@
     background: var(--ui-color-border-strong);
   }
 
+  /* The phone's bezel, corners, and island are shares of its own width
+     (its holder is the container they measure), so it keeps one shape at
+     any size the devices draw it at. */
   .ui-landing-phone {
     position: relative;
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 393 / 852;
-    padding: 9px;
+    padding: 3.5cqw;
     border-radius: var(--ui-display-phone-radius);
     background: var(--ui-color-sidebar);
     box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
@@ -595,11 +598,11 @@
 
   .ui-landing-phone-island {
     position: absolute;
-    top: 20px;
+    top: 7.9cqw;
     left: 50%;
-    width: 76px;
-    height: 22px;
-    margin-left: -38px;
+    width: 30cqw;
+    height: 8.7cqw;
+    margin-left: -15cqw;
     border-radius: var(--ui-display-island-radius);
     background: var(--ui-color-sidebar);
   }
@@ -1054,29 +1057,42 @@
     border-left: 1px solid var(--ui-color-border);
   }
 
-  /* The devices: the Mac window, with the phone standing over its corner. */
+  /* The devices: the Mac window behind and the phone in front over its
+     lower corner, as a product lineup sets them, one picture scaled as a
+     whole to the stage at every width. The phone stands nine tenths of the
+     window's height, so its app draws at nearly the window's density, the
+     two reading as one set; its foot stands a little below the window's, as
+     a nearer thing does, and a ring of the stage's ground sets its edge
+     apart from the window it covers. The shares follow from that: a 16:10
+     window's height, nine tenths of it, and the phone's 393:852 make the
+     phone 0.26 of the window's width, so a window 86% of the row puts the
+     phone's last 22% at the row's end, a third of it over the window. */
   .ui-landing-stage[data-scene="devices"] {
-    height: 620px;
-    padding: 0;
+    padding: 64px 6% 72px;
   }
 
   .ui-landing-devices {
-    height: 100%;
+    position: relative;
   }
 
   .ui-landing-devices-window {
-    position: absolute;
-    top: 64px;
-    left: 5%;
-    width: 66%;
+    width: 86%;
   }
 
   .ui-landing-devices-phone {
     position: absolute;
-    top: 44px;
-    right: 8%;
+    right: 0;
+    bottom: -4%;
     z-index: 2;
-    width: 254px;
+    width: 22.3%;
+    container-type: inline-size;
+  }
+
+  .ui-landing-devices-phone .ui-landing-phone {
+    box-shadow:
+      inset 0 0 0 1px var(--ui-color-border-strong),
+      0 0 0 2.5cqw var(--ui-color-ground),
+      0 6cqw 16cqw var(--ui-color-shadow-deep);
   }
 
   /* The phone's Inbox: its bar under the status bar's room, its search, its
@@ -1151,7 +1167,19 @@
   }
 
   /* Under 640px of room the page keeps to one column: the Inbox under the
-     words, each stage under its heading, and the phone nearer the window. */
+     words, and each stage under its heading. A
+     window scaled to the column draws its words too small to read, so a
+     stage that holds one alone shows the one moment that sells it instead:
+     the desktop app as it is, laid out at 1280 by 800, cut to that moment's
+     box and scaled so the box spans the stage, about three quarters of the
+     app's size on a phone. It stands in from the stage's top and start, on
+     the drifting dots, its corner the window's, and runs off the stage's
+     end and foot as a wide stage's window runs off its foot; the stage is
+     as tall as the box, so no ground stands empty. A window names its box
+     in its own pixels: where it starts
+     (`--ui-landing-crop-x`, `--ui-landing-crop-y`) and how wide and tall it
+     is (`--ui-landing-crop-w`, `--ui-landing-crop-h`); a margin's percentage
+     is of the stage's width, so each offset is a share of the box's. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
@@ -1216,8 +1244,40 @@
       padding: 28px 5%;
     }
 
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
+      padding: var(--ui-space-24) 0 0 var(--ui-space-20);
+      aspect-ratio: var(--ui-landing-crop-w) / var(--ui-landing-crop-h);
+    }
+
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-scene {
+      overflow: clip;
+      border-top: 1px solid var(--ui-color-border-strong);
+      border-left: 1px solid var(--ui-color-border-strong);
+      border-top-left-radius: var(--ui-display-window-radius);
+    }
+
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-      margin-bottom: -24px;
+      width: calc(100% * 1280 / var(--ui-landing-crop-w));
+      margin: calc(-100% * var(--ui-landing-crop-y) / var(--ui-landing-crop-w)) 0 0
+        calc(-100% * var(--ui-landing-crop-x) / var(--ui-landing-crop-w));
+    }
+
+    /* The Inbox's moment is the ask: the question over its options, the
+       pick, the note, and the send. */
+    .ui-landing-stage[data-scene="inbox"] {
+      --ui-landing-crop-x: 592;
+      --ui-landing-crop-y: 56;
+      --ui-landing-crop-w: 420;
+      --ui-landing-crop-h: 440;
+    }
+
+    /* The task's moment is the hand-off: the agent started and messaged,
+       and its answer, the next one rising from the foot. */
+    .ui-landing-stage[data-scene="agents"] {
+      --ui-landing-crop-x: 268;
+      --ui-landing-crop-y: 0;
+      --ui-landing-crop-w: 420;
+      --ui-landing-crop-h: 345;
     }
 
     .ui-landing-beside {
@@ -1225,35 +1285,7 @@
     }
 
     .ui-landing-stage[data-scene="devices"] {
-      height: 420px;
-    }
-
-    .ui-landing-devices-window {
-      top: 30px;
-      left: 4%;
-      width: 86%;
-    }
-
-    .ui-landing-devices-phone {
-      top: 120px;
-      right: 5%;
-      width: 150px;
-    }
-
-    .ui-landing-phone {
-      padding: 6px;
-      border-radius: var(--ui-display-phone-radius-narrow);
-    }
-
-    .ui-landing-phone-fit {
-      border-radius: var(--ui-display-phone-screen-radius-narrow);
-    }
-
-    .ui-landing-phone-island {
-      top: 12px;
-      width: 44px;
-      height: 13px;
-      margin-left: -22px;
+      padding: 28px 5% 36px;
     }
 
     .ui-landing-close {

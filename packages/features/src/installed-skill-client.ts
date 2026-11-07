@@ -1,27 +1,15 @@
 import { Effect } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import { hostedCall } from "./hosted-call.js";
-import {
-  askLive,
-  HOSTED_DEADLINE,
-  type HostedClient,
-  type HostedFailure,
-  hostedClient,
-} from "./hosted-link.js";
-import type { InstalledSkillsLiveAnswer } from "./installed-skill-live.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
+import { HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 import type {
   installedSkillInstallRequestSchema,
   installedSkillRefusedDataSchema,
 } from "./installed-skill-route-wire.js";
-import {
-  INSTALLED_SKILL_CALL_FAILURE,
-  INSTALLED_SKILL_RENAMES,
-  type InstalledSkillCallFailure,
-} from "./installed-skill-view.js";
+import { INSTALLED_SKILL_CALL_FAILURE, INSTALLED_SKILL_RENAMES } from "./installed-skill-view.js";
 import type { InstalledSkillRefusal } from "./installed-skill-wire.js";
-import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
-import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * installed-skill-client.ts -- the window's side of the skills members install into the app, as the host asks the service for them.
@@ -37,7 +25,7 @@ import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
  * A preview and an install read GitHub on the service before
  * they answer, so they wait as long as a Start does. Each write answers the
  * service's answer whole, the transaction it committed in among it, which
- * the host waits for on the skills it holds live (`installedSkillsLive`).
+ * the host waits for on the skills it holds live (`INSTALLED_SKILLS_READ`).
  */
 
 export interface HostedInstalledSkillClientOptions {
@@ -51,32 +39,7 @@ export interface HostedInstalledSkillClientOptions {
 /** What an install sends: the paste, whose the skills are, and for a source the skills chosen and the commit previewed, for text its name and description. */
 export type InstalledSkillInstallParams = typeof installedSkillInstallRequestSchema.Type;
 
-/** A live read the service did not answer, in the window's own words. */
-export interface InstalledSkillsLiveFailed {
-  readonly failure: InstalledSkillCallFailure;
-}
-
 const UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
-
-/** The refusals the live read names, by the service's own word for each. */
-const REFUSALS: ReadonlyMap<HostedApiError, InstalledSkillCallFailure> = new Map([
-  [HOSTED_API_ERROR.NOT_FOUND, INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.NOT_PERMITTED, INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED],
-  [HOSTED_API_ERROR.INVALID_REQUEST, INSTALLED_SKILL_CALL_FAILURE.INVALID],
-  [HOSTED_API_ERROR.SKILL_NAME_TAKEN, INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN],
-  [
-    HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-    INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  ],
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED, INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED],
-]);
-
-/** The live read's word for a refusal named here, a skill refused by the store's reason for it; nothing for everything else. */
-function failureOf(failed: HostedFailure): InstalledSkillCallFailure | undefined {
-  if (failed._tag !== "HostedRefused") return undefined;
-  if (failed.refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED) return failed.data?.skillRefusal;
-  return REFUSALS.get(failed.refusal);
-}
 
 /** A skill's files refused, as `hostedCall` reads the refusal. */
 interface FilesRefused {
@@ -122,30 +85,9 @@ export class HostedInstalledSkillClient {
     });
   }
 
-  /**
-   * The skills the account sees in the workspace, the workspace's and its
-   * own, sealed for following over Neon Realtime for the account `userId`
-   * names, or with `poll` their rows inline: signed out where the session
-   * is another account's, and why there is none otherwise.
-   */
-  installedSkillsLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    InstalledSkillsLiveAnswer | InstalledSkillsLiveFailed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { workspaceId, [LIVE_USER_QUERY]: userId };
-    return Effect.catch(askLive(this.#hosted.live.installedSkills, read, poll, after), (failed) =>
-      Effect.succeed(
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
-          ? LIVE_SIGNED_OUT
-          : { failure: failureOf(failed) ?? INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
-      ),
-    );
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /** One skill read whole: its `SKILL.md` and every file's path and size. */

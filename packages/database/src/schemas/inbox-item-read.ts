@@ -38,7 +38,7 @@ export const inboxItemRead = pgTable(
      * of their Inbox while this is still ahead and the item has not changed
      * since `remind_through`. Setting a reminder leaves whether it is read
      * alone, and reading it leaves the reminder alone. Null where the member
-     * set none. Note that `snoozed_until`, its name before, stands beside it
+     * set none or canceled it. Note that `snoozed_until`, its name before, stands beside it
      * until a later migration drops it, kept equal by a trigger
      * (`20261105235359_inbox_item_read_remind_expand`), because the release
      * before this one still writes it.

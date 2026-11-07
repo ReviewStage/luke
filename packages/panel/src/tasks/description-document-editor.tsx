@@ -1,4 +1,4 @@
-import { useAtom, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@repo/features/description-edit-model";
 import { DESCRIPTION_ACTOR, TASK_BOUNDS, type Task } from "@repo/features/task-wire";
 import {
@@ -11,9 +11,11 @@ import {
   EditableHeading,
   PageHeader,
   RetryButton,
+  useWait,
 } from "@repo/ui";
 import { openThread, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { markdownClass } from "@repo/ui/markdown-class";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -27,7 +29,6 @@ import {
   PLACEMENT_END,
   type PlacedWords,
 } from "../description-editor/contract.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 import { useEditorPictures } from "./editor-pictures.js";
@@ -82,15 +83,28 @@ const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
 
-/** The pause before the text is handed over, as an atom whose work is the wait; setting it again starts the wait over. */
-const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
-  Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
-);
-
-/** The pause before the title's words are saved, the text's own pause apart, so neither's wait starts the other's over. */
-const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
-  Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
-);
+/**
+ * A pause in the typing the holder starts over at each change, and the stamp
+ * of the change it last ran out on. Note that each holder has its own, so the
+ * title's wait and the text's never start the other's over.
+ */
+function useTypingPause(): {
+  readonly pausedAt: number | undefined;
+  readonly restart: (stamp: number) => void;
+} {
+  const wait = useWait();
+  const pausedOn = useCreateStore<number | undefined>(undefined);
+  return {
+    pausedAt: useSelector(pausedOn),
+    restart: (stamp) =>
+      wait.start(
+        Effect.andThen(
+          Effect.sleep(DRAFT_PAUSE),
+          Effect.sync(() => pausedOn.setState(() => stamp)),
+        ),
+      ),
+  };
+}
 
 /** Whether a click lands on words to edit: not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
 function pressesWords(target: EventTarget): boolean {
@@ -557,7 +571,7 @@ export function EditableTitle({
   const block = useRef<HTMLDivElement>(null);
   const prefetchEditorBundle = usePrefetchEditorBundle();
   const text = useRef<HTMLElement>(null);
-  const [pause, restartPause] = useAtom(titlePauseAtom);
+  const pause = useTypingPause();
   const stamp = useRef(0);
   // ↑ on the text's first line comes back into the title, its caret at the end.
   useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
@@ -631,8 +645,8 @@ export function EditableTitle({
   // A pause that ran out on the newest words saves them.
   useEffect(() => {
     const element = text.current;
-    if (element === null || !typed.current || !AsyncResult.isSuccess(pause)) return;
-    if (!pause.waiting && pause.value === stamp.current) rename(element);
+    if (element === null || !typed.current) return;
+    if (pause.pausedAt === stamp.current) rename(element);
   });
   // Note that a title going while typed in saves its words to the task it
   // was drawn for, because no blur reaches an element taken out of the page.
@@ -678,7 +692,7 @@ export function EditableTitle({
                 echo.current = next === "" ? undefined : next;
                 onDraft(echo.current);
                 stamp.current += 1;
-                restartPause(stamp.current);
+                pause.restart(stamp.current);
               }}
               onBlur={(event) => save(event.currentTarget)}
               onLeave={(way, heading) => {
@@ -716,7 +730,7 @@ function useDraftHandOver(
   hostOf: (section: number, words: string) => EditorHost,
   handed: React.RefObject<string>,
 ): DraftDoors {
-  const [pause, restartPause] = useAtom(draftPauseAtom);
+  const pause = useTypingPause();
   const pending = useRef<{ markdown: string; anchors: EditorAnchors | undefined } | undefined>(
     undefined,
   );
@@ -732,7 +746,7 @@ function useDraftHandOver(
   };
   // A pause that ran out on the newest text hands it over.
   useEffect(() => {
-    if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) flush();
+    if (pause.pausedAt === stamp.current) flush();
   });
   useLayoutEffect(() => {
     door.current.holdWords(flush);
@@ -746,7 +760,7 @@ function useDraftHandOver(
       if (pending.current === undefined) door.current.holdingWords();
       pending.current = { markdown, anchors };
       stamp.current += 1;
-      restartPause(stamp.current);
+      pause.restart(stamp.current);
     },
     onFinish: (section) => {
       flush();

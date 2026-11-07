@@ -1,11 +1,23 @@
-import { Schema as EffectSchema } from "effect";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import { Schema } from "effect";
+import { refuses } from "./contract/base.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+  orderedLiveRows,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
 import type { WorkspaceSentry } from "./sentry-install-wire.js";
-import { countedNumber } from "./service-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { countedNumber, HOSTED_API_ERROR } from "./service-wire.js";
 import type { WorkspaceSlackBot } from "./slack-bot-wire.js";
 
 /**
- * workspace-integrations-live.ts -- one workspace's own integrations as the host follows them over the service's held poll: the statements the service answers, the rows they deliver, and the workspace's Sentry and Slack bot as Settings and an automation's editor draw them.
+ * workspace-integrations-live.ts -- one workspace's own integrations as the host follows them over the service's held poll: the read declared, and the workspace's Sentry and Slack bot as Settings and an automation's editor draw them.
  *
  * The service answers three statements while the reader is a member of the
  * workspace: its active Sentry installations, its Slack bot's installation,
@@ -21,55 +33,71 @@ import type { WorkspaceSlackBot } from "./slack-bot-wire.js";
  * their account's preference, which no row of the workspace carries.
  */
 
-/** One workspace's integrations sealed for following: the address, three statements, and whether this deployment holds each integration. The service answers `not-found` for a workspace the account is no member of. */
-export const workspaceIntegrationsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    sentryInstallations: sealedLiveQuerySchema,
-    slackInstallation: sealedLiveQuerySchema,
-    slackChannelRepositories: sealedLiveQuerySchema,
-  }),
-  sentryConfigured: EffectSchema.Boolean,
-  slackConfigured: EffectSchema.Boolean,
+/**
+ * One workspace's own integrations as the host follows them: three parts,
+ * its active Sentry installations, the first linked first, then by Sentry's
+ * id; its Slack bot's installation; and each Slack channel's default
+ * repository, by Slack's id for the channel. Whether this deployment holds
+ * each integration rides beside them. The service answers `not-found` for
+ * a workspace the account is no member of.
+ */
+export const WORKSPACE_INTEGRATIONS_READ = liveRead({
+  name: LIVE_READ.WORKSPACE_INTEGRATIONS,
+  path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER, workspaceId: LIVE_PARAM.TEXT },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    /** One active Sentry installation: Sentry's id for it, its organization's slug where one was read, and when it was linked. */
+    sentryInstallations: liveRows({
+      row: Schema.Struct({
+        installationId: Schema.String,
+        account: Schema.NullOr(Schema.String),
+        createdAt: countedNumber,
+      }),
+      key: "installationId",
+      order: [
+        ["createdAt", ORDER.ASC],
+        ["installationId", ORDER.ASC],
+      ],
+    }),
+    /** The workspace's Slack bot: the workspace it stands in, the team it is connected to, and the default repository for Slack starts, null for none. */
+    slackInstallation: liveRows({
+      row: Schema.Struct({
+        workspaceId: Schema.String,
+        teamId: Schema.String,
+        teamName: Schema.String,
+        defaultRepository: Schema.NullOr(Schema.String),
+      }),
+      key: "workspaceId",
+      order: [["teamId", ORDER.ASC]],
+    }),
+    /** One Slack channel's default repository, by Slack's id for the channel. */
+    slackChannelRepositories: liveRows({
+      row: Schema.Struct({ channelId: Schema.String, repository: Schema.String }),
+      key: "channelId",
+      order: [["channelId", ORDER.ASC]],
+    }),
+  },
+  beside: { sentryConfigured: Schema.Boolean, slackConfigured: Schema.Boolean },
+  refuses: refuses(HOSTED_API_ERROR.NOT_FOUND),
 });
 
-export type WorkspaceIntegrationsLiveAnswer = typeof workspaceIntegrationsLiveAnswerSchema.Type;
+export type WorkspaceIntegrationsLiveAnswer = LiveReadAnswer<typeof WORKSPACE_INTEGRATIONS_READ>;
 
-/** One active Sentry installation as its statement delivers it: Sentry's id for it, its organization's slug where one was read, and when it was linked. */
-const sentryInstallationLiveRowSchema = EffectSchema.Struct({
-  installationId: EffectSchema.String,
-  account: EffectSchema.NullOr(EffectSchema.String),
-  createdAt: countedNumber,
-});
+export type SentryInstallationLiveRow = LiveRowOf<
+  typeof WORKSPACE_INTEGRATIONS_READ.parts.sentryInstallations
+>;
 
-export type SentryInstallationLiveRow = typeof sentryInstallationLiveRowSchema.Type;
+export type SlackInstallationLiveRow = LiveRowOf<
+  typeof WORKSPACE_INTEGRATIONS_READ.parts.slackInstallation
+>;
 
-/** The workspace's Slack bot as its statement delivers it: the workspace it stands in, the team it is connected to, and the default repository for Slack starts, null for none. */
-const slackInstallationLiveRowSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.String,
-  teamId: EffectSchema.String,
-  teamName: EffectSchema.String,
-  defaultRepository: EffectSchema.NullOr(EffectSchema.String),
-});
+type SlackChannelRepositoryLiveRow = LiveRowOf<
+  typeof WORKSPACE_INTEGRATIONS_READ.parts.slackChannelRepositories
+>;
 
-export type SlackInstallationLiveRow = typeof slackInstallationLiveRowSchema.Type;
-
-/** One Slack channel's default repository as its statement delivers it, by Slack's id for the channel. */
-const slackChannelRepositoryLiveRowSchema = EffectSchema.Struct({
-  channelId: EffectSchema.String,
-  repository: EffectSchema.String,
-});
-
-type SlackChannelRepositoryLiveRow = typeof slackChannelRepositoryLiveRowSchema.Type;
-
-/** A workspace's integrations as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const workspaceIntegrationsLiveRowsSchema = EffectSchema.Struct({
-  sentryInstallations: EffectSchema.Array(sentryInstallationLiveRowSchema),
-  slackInstallation: EffectSchema.Array(slackInstallationLiveRowSchema),
-  slackChannelRepositories: EffectSchema.Array(slackChannelRepositoryLiveRowSchema),
-});
-
-export type WorkspaceIntegrationsLiveRows = typeof workspaceIntegrationsLiveRowsSchema.Type;
+/** A workspace's integrations as Realtime delivers them. */
+export type WorkspaceIntegrationsLiveRows = typeof WORKSPACE_INTEGRATIONS_READ.rows.Type;
 
 /**
  * A workspace's Slack bot as the held read answers it: whether this
@@ -96,11 +124,6 @@ export interface IntegrationsConfigured {
   readonly slackConfigured: boolean;
 }
 
-/** The first linked first, then by Sentry's id, so two linked alike keep one order. */
-function firstLinked(a: SentryInstallationLiveRow, b: SentryInstallationLiveRow): number {
-  return a.createdAt - b.createdAt || (a.installationId < b.installationId ? -1 : 1);
-}
-
 /** The workspace's Sentry as the read answers it: its active installations, the first linked first. */
 function sentryOfLiveRows(
   configured: boolean,
@@ -108,13 +131,12 @@ function sentryOfLiveRows(
 ): WorkspaceSentry {
   return {
     configured,
-    installations: rows
-      .toSorted(firstLinked)
-      .map((row) =>
+    installations: orderedLiveRows(WORKSPACE_INTEGRATIONS_READ.parts.sentryInstallations, rows).map(
+      (row) =>
         row.account === null
           ? { installationId: row.installationId }
           : { installationId: row.installationId, account: row.account },
-      ),
+    ),
   };
 }
 

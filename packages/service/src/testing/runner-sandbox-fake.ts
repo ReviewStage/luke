@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import { RUNNER_ENV, type RunnerConfig } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
@@ -54,8 +54,10 @@ export interface FakeSandbox {
   status: string;
   currentSessionId: string;
   tags: Record<string, string>;
-  /** The image it was created from. */
-  image: string;
+  /** The image it was created from; none for one created from a snapshot. */
+  image: string | undefined;
+  /** The snapshot it was created from; none for one created from an image. */
+  sourceSnapshotId?: string;
   deleted: boolean;
   /** The timeout each session of the sandbox opens with, as its create or a later update set it. */
   timeout: number;
@@ -67,8 +69,6 @@ export interface FakeSandbox {
   createdAt: number;
   /** The snapshot it resumes from, which its last snapshot made; none before one is taken. */
   currentSnapshotId?: string;
-  /** The drives its create mounted, by path, as the create's body carried them. */
-  mounts?: Record<string, { readonly drive: string; readonly mode: string }>;
 }
 
 export interface FakeCommand {
@@ -104,22 +104,26 @@ export interface ReadCommand {
  * A read of a command, as Vercel answers it: a plain read answers no exit
  * until a read that waits (`wait=true`) has seen the command exit, and one
  * that waits records the exit it sees. A command still running holds a
- * waiting read until the reader gives up where `hold` is set, and answers it
- * at once with no exit otherwise, as a hold past the reader's wait ends.
+ * waiting read until the reader gives up where `hold` is set, or until the
+ * command exits where `exits` tells its exits, and answers it at once with
+ * no exit otherwise, as a hold past the reader's wait ends.
  */
 export async function commandRead(
   command: ReadCommand,
   url: URL,
   init: RequestInit,
   hold: boolean,
+  exits?: EventEmitter,
 ): Promise<Response> {
   const waits = url.searchParams.get("wait") === "true";
-  if (waits && command.exitCode !== null) command.recorded = true;
   if (waits && command.exitCode === null && hold) {
     assert.ok(init.signal, "a held read needs a reader that can give up");
-    await once(init.signal, "abort");
-    throw new Error("the reader gave up");
+    if (exits === undefined) await once(init.signal, "abort");
+    // Note that the wait rejects once the reader gives up, which the SDK reads as no answer.
+    else await once(exits, command.id, { signal: init.signal });
+    if (command.exitCode === null) throw new Error("the reader gave up");
   }
+  if (waits && command.exitCode !== null) command.recorded = true;
   const sessionId = /\/sessions\/([^/]+)\//u.exec(url.pathname)?.[1] ?? "";
   return Response.json(
     commandAnswered({
@@ -208,8 +212,14 @@ export function runnerSandboxApi() {
   const failPolicy = { remaining: 0 };
   /** How many network policy updates the API holds next, answering none until the caller gives up. */
   const holdPolicy = { remaining: 0 };
-  /** Whether a read that waits for a running command's exit is held until the reader gives up. */
+  /** Whether a read that waits for a running command's exit is held until the reader gives up or the command exits. */
   const waits = { hold: false };
+  const exits = new EventEmitter();
+  /** The command exits with the code given, unless it already ended, and a read held on it answers. */
+  const exit = (command: FakeCommand, code: number) => {
+    command.exitCode = command.exitCode ?? code;
+    exits.emit(command.id);
+  };
   /**
    * The call to a session at which its sandbox begins to stop, as a launch's
    * end or the sweep stops it a moment before a send reaches it, by the
@@ -232,41 +242,10 @@ export function runnerSandboxApi() {
         ) => Promise<void>)
       | undefined;
   } = {};
-  /** The drives standing, by name. */
-  const drives = new Set<string>();
-  /** Each drive a fork made, by its name, and the drive it was forked from. */
-  const driveForks = new Map<string, string>();
-  /**
-   * The drives of a sandbox deleted while its session ran, which Vercel's
-   * delete answers before that session stops: the next delete of each is
-   * refused as still attached, as Vercel refuses one a few seconds after,
-   * and the one after it goes through.
-   */
-  const releasingDrives = new Set<string>();
-  /** The live running sandbox a drive is mounted in, which Vercel refuses the drive's delete and a second mount for. */
-  const mountedIn = (drive: string) =>
-    sandboxes.find(
-      (each) =>
-        !each.deleted &&
-        each.status === "running" &&
-        Object.values(each.mounts ?? {}).some((mount) => mount.drive === drive),
-    );
-  const driveFound = (name: string) => ({
-    drive: {
-      id: `drv_${name}`,
-      name,
-      projectId: PROJECT,
-      region: "iad1",
-      maxSizeBytes: 2 ** 40,
-      createdAt: 1,
-      updatedAt: 1,
-      ...(mountedIn(name) === undefined
-        ? undefined
-        : { currentSandboxName: mountedIn(name)?.name }),
-    },
-  });
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
+  /** The snapshots that lapsed or were deleted, which a create from one is refused for. */
+  const goneSnapshots = new Set<string>();
   /** The expiration each snapshot was asked with, by its id, as the API's body carried it. */
   const snapshotExpirations = new Map<string, unknown>();
   let next = 0;
@@ -304,12 +283,10 @@ export function runnerSandboxApi() {
       }
       const tagsRefused = sandboxTagsRefusal(asked.tags);
       if (tagsRefused !== undefined) return tagsRefused;
-      const mounts: Record<string, { drive: string; mode: string }> = asked.mounts ?? {};
-      for (const mount of Object.values(mounts)) {
-        if (!drives.has(mount.drive)) return new Response(null, { status: 404 });
-        if (mountedIn(mount.drive) !== undefined) {
-          return Response.json({ error: { code: "conflict" } }, { status: 409 });
-        }
+      const source: string | undefined = asked.source?.snapshotId;
+      // A snapshot that lapsed or was deleted is refused as Vercel refuses it.
+      if (source !== undefined && goneSnapshots.has(source)) {
+        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
       }
       const sandbox: FakeSandbox = {
         name: asked.name,
@@ -317,11 +294,11 @@ export function runnerSandboxApi() {
         currentSessionId: mintSession(),
         tags: asked.tags,
         image: asked.image,
+        ...(source === undefined ? undefined : { sourceSnapshotId: source }),
         deleted: false,
         createdAt: sandboxes.length + 1,
         timeout: asked.timeout,
         resumedWith: [],
-        ...(asked.mounts === undefined ? undefined : { mounts }),
       };
       sandboxes.push(sandbox);
       return Response.json(sandboxFound(listed(sandbox)));
@@ -334,30 +311,6 @@ export function runnerSandboxApi() {
         (each) => !each.deleted && key !== undefined && each.tags[key] === value,
       );
       return Response.json(sandboxesListed(found.map(listed)));
-    }
-    const fork = /^\/api\/v2\/sandboxes\/drives\/([^/]+)\/fork$/u.exec(path);
-    if (method === "POST" && fork !== null) {
-      const source = decodeURIComponent(fork[1] ?? "");
-      if (!drives.has(source)) return new Response(null, { status: 404 });
-      const { name } = await body();
-      drives.add(name);
-      driveForks.set(name, source);
-      return Response.json(driveFound(name));
-    }
-    const drive = /^\/api\/v2\/sandboxes\/drives\/([^/]+)$/u.exec(path);
-    if (drive !== null) {
-      const name = decodeURIComponent(drive[1] ?? "");
-      if (method === "POST") drives.add(name);
-      if (!drives.has(name)) return new Response(null, { status: 404 });
-      if (method === "DELETE") {
-        if (mountedIn(name) !== undefined || releasingDrives.delete(name)) {
-          return Response.json({ error: { code: "drive_attached" } }, { status: 409 });
-        }
-        const found = driveFound(name);
-        drives.delete(name);
-        return Response.json(found);
-      }
-      return Response.json(driveFound(name));
     }
     const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(path);
     if (named !== null) {
@@ -381,9 +334,6 @@ export function runnerSandboxApi() {
         return Response.json({ error: { code: "bad_request" } }, { status: 400 });
       }
       if (method === "DELETE") {
-        if (sandbox.status === "running") {
-          for (const mount of Object.values(sandbox.mounts ?? {})) releasingDrives.add(mount.drive);
-        }
         sandbox.deleted = true;
         return Response.json(sandboxDeleted(listed(sandbox)));
       }
@@ -558,7 +508,7 @@ export function runnerSandboxApi() {
       failCommandReads.remaining -= 1;
       return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
-    return commandRead(command, parsed, init, waits.hold);
+    return commandRead(command, parsed, init, waits.hold, exits);
   };
   /** The network policy a command's session stood at as it started: the last one set for that session by then, none where none was. */
   const policyAtStart = (command: FakeCommand | undefined) =>
@@ -572,10 +522,9 @@ export function runnerSandboxApi() {
     respond,
     policyAtStart,
     sandboxes,
-    drives,
-    driveForks,
     commands,
     snapshots,
+    goneSnapshots,
     snapshotExpirations,
     uploads,
     policies,
@@ -586,6 +535,7 @@ export function runnerSandboxApi() {
     failPolicy,
     holdPolicy,
     waits,
+    exit,
     stopsAt,
     snapshotting,
     hooks,

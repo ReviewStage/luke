@@ -8,13 +8,14 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
+import { ACT_KIND } from "@repo/host/acts";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -235,6 +236,10 @@ test("a link to a message a working agent wrote since its last idle page waits f
     release = resolve;
   });
   const working = { ...AGENT, status: AGENT_STATUS.RUNNING };
+  // A working agent's tab forwards its ports on its own, which the host takes quietly.
+  fakeActPort({
+    [ACT_KIND.PORT_FORWARD_SET]: () => Promise.resolve({ on: true, running: false, ports: [] }),
+  });
   const { container, revealed, redraw } = await drawn(
     undefined,
     [[line("task-1", "Add the invite flow.")], [], [line("msg-7", "Use seven days.")]],
