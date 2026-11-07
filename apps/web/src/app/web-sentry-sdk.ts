@@ -16,7 +16,7 @@ import {
   spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { sentryTracesSampler } from "@repo/features/sentry-tracing";
 import { SENTRY_TUNNEL } from "@repo/features/sentry-tunnel";
 import { sendShownFailure } from "@repo/features/shown-failure";
 import { sentrySendTracer } from "@repo/panel/send-traces";
@@ -134,7 +134,7 @@ export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): 
       // among the web vitals the SDK reports by default.
       browserTracingIntegration({ instrumentPageLoad: false, enableLongAnimationFrame: true }),
     ],
-    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    tracesSampler: sentryTracesSampler,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: (event) =>
       eventWithoutAccessTokens(eventNamingAccount(event, accountId(queryClient))),
