@@ -98,7 +98,7 @@ import {
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { useTerminalsOwner } from "./tasks/use-terminal-session.js";
-import { WindowAccountContext } from "./tasks/window-account.js";
+import { WindowAccountContext, windowAccountOf } from "./tasks/window-account.js";
 import { ToastHost, useToastsOwner } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
@@ -233,8 +233,7 @@ export function App(): React.JSX.Element {
   const fixtureMode = useQuery({ ...appStateQuery, select: selectFixtureMode }).data === true;
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
-  const accountKey =
-    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  const accountKey = windowAccountOf(account);
   // Note that the account's key is read above the window, because every message box's Dictate reads it, and every terminal and cloud Browser tab is held under it.
   // The window's ticks run here, once, for as long as it stands.
   return (
@@ -266,8 +265,7 @@ function AppWindow(): React.JSX.Element {
     useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
   const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   // A picture, and each read keyed by no account, is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
-  const accountKey =
-    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  const accountKey = windowAccountOf(account);
   const queryClient = useQueryClient();
   useEffect(() => {
     void forgetPictures(queryClient);

@@ -33,10 +33,11 @@ import { browserTabsQuery } from "../live-reads.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdBrowserTabs, registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handHostReads, holdBrowserTabs, registryWith, signedInAs } from "../testing/app-state.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
@@ -53,7 +54,7 @@ import {
   type SidePanelControl,
   useSidePanel,
 } from "./use-side-panel.js";
-import { WindowAccountContext } from "./window-account.js";
+import { WindowAccountContext, windowAccountOf } from "./window-account.js";
 
 /**
  * The side panel's cloud Browser tabs: a tab opened here listed until the
@@ -533,6 +534,56 @@ async function pressEnter(): Promise<void> {
   await settle();
 }
 
+/** Hands what it draws the account the window's document signs in, as the window's root hands it. */
+function SignedInHere({ children }: { children: React.ReactNode }): React.ReactElement {
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  return createElement(
+    WindowAccountContext.Provider,
+    { value: windowAccountOf(account) },
+    children,
+  );
+}
+
+/** `element` drawn under the account the window's document signs in. */
+function signedInHere(element: React.ReactElement): React.ReactElement {
+  return createElement(SignedInHere, null, element);
+}
+
+test("a draft's open that answers once another account signed in chooses nothing on its panel", async () => {
+  let answer: (tab: AgentBrowserTab) => void = () => undefined;
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: () =>
+      // SAFETY: the test hands back the wire's own answer, a tab.
+      new Promise((resolve) => {
+        answer = (tab) => resolve({ tab } as never);
+      }),
+  });
+  const handed: AgentBrowserTab[] = [];
+  draw(
+    createElement(
+      WindowAccountContext.Provider,
+      { value: "account-ada" },
+      createElement(CloudBrowserDraftPane, {
+        place: { taskId: TASK },
+        draft: { id: "draft-late", agentId: AGENT_ID },
+        owner: { name: "Invite expiry", icon: createElement("span") },
+        onOpened: (tab) => handed.push(tab),
+        onDiscard: () => undefined,
+      }),
+    ),
+  );
+  writeAppState(signedInAs({ id: "account-ada", email: "ada@example.com", name: "Ada" }));
+  await settle();
+  typeAddress("localhost:3000");
+  await pressEnter();
+
+  writeAppState(signedInAs({ id: "account-grace", email: "grace@example.com", name: "Grace" }));
+  await act(async () => answer({ ...LISTED, id: OTHER_TAB }));
+  await settle();
+
+  assert.deepEqual(handed, []);
+});
+
 test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays as a failure note over the kept address", async () => {
   mountAnnouncer();
   const asked: TasksBrowserTabOpenParams[] = [];
@@ -548,15 +599,17 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   let discarded = 0;
   const owner = { name: "Invite expiry", icon: createElement("span") };
   draw(
-    createElement(CloudBrowserDraftPane, {
-      place: { taskId: TASK },
-      draft: { id: "draft-1", agentId: AGENT_ID },
-      owner,
-      onOpened: (tab) => handed.push(tab),
-      onDiscard: () => {
-        discarded += 1;
-      },
-    }),
+    signedInHere(
+      createElement(CloudBrowserDraftPane, {
+        place: { taskId: TASK },
+        draft: { id: "draft-1", agentId: AGENT_ID },
+        owner,
+        onOpened: (tab) => handed.push(tab),
+        onDiscard: () => {
+          discarded += 1;
+        },
+      }),
+    ),
   );
   await settle();
   assert.equal(document.activeElement, addressField(), "the bar's address is focused");
