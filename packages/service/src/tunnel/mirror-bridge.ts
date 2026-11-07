@@ -113,7 +113,9 @@ const watchFolders = () => {
   }
   for (const folder of folders) {
     if (watched.has(folder)) continue;
-    watched.set(folder, fs.watch(path.join(root, folder), stir));
+    const watcher = fs.watch(path.join(root, folder), stir);
+    watcher.on("error", () => fail("${MIRROR_BRIDGE_STEP.WATCH}"));
+    watched.set(folder, watcher);
   }
 };
 const open = (opened) => {
