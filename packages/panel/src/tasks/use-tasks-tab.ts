@@ -238,7 +238,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
-import { useEndTerminalTab } from "./use-terminal-session.js";
+import { useEndTerminalTab, useHeldTerminalTabs } from "./use-terminal-session.js";
 import { listedAgentIn } from "./use-workspace-agents.js";
 import { sayRestored } from "./version-view.js";
 
@@ -1871,8 +1871,11 @@ export function useTasksTab(input: {
   // The account's experiments, which hold where a link to the description's parts lands.
   const experiments =
     useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
+  const stagedPanel = tasksFixture?.fixtureSidePanel(input.run);
+  // A fixture run's staged Terminal tab is held under the account signed in, as a real open holds it, so it stands.
+  useHeldTerminalTabs(stagedPanel?.terminals);
   const sidePanel = useSidePanel(
-    tasksFixture?.fixtureSidePanel(input.run),
+    stagedPanel,
     inboxView !== undefined
       ? {
           id: inboxTask ?? inboxAgent,

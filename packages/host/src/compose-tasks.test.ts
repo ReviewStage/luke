@@ -1399,7 +1399,8 @@ function subject(
       input: ActInput<(typeof WORKSPACE_ACTS)[Name]>,
     ) => {
       const workspaceActs: HostActTable<typeof WORKSPACE_ACTS> = tasks.acts;
-      const handler: ActHandler<(typeof WORKSPACE_ACTS)[Name]> = workspaceActs[name];
+      // SAFETY: a workspace act is a plain act, never a live follow, so its handler is an `ActHandler`, which a name not yet known cannot narrow to.
+      const handler = workspaceActs[name] as ActHandler<(typeof WORKSPACE_ACTS)[Name]>;
       return Effect.orDie(
         Effect.catchIf(
           handler(input),

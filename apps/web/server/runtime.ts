@@ -3,7 +3,7 @@ import { agentMachinesLayer } from "@repo/service/agents/machine/agent-machines"
 import { deploymentOidcToken } from "@repo/service/agents/vercel-sandbox-api";
 import { agentSandboxDoors } from "@repo/service/agents/workspace-mcp/sandbox-door";
 import { AfterResponse } from "@repo/service/http/after-response";
-import { sentryLayer } from "@repo/service/observability/sentry";
+import { sentryLayer, sentryQueueSent } from "@repo/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@repo/service/runtime";
 import { waitUntil } from "@vercel/functions";
 import { type Context, Effect, Layer, ManagedRuntime } from "effect";
@@ -22,9 +22,12 @@ let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | und
  * root of its own on this runtime, so the request's end interrupts none of
  * it, and handed to Vercel's `waitUntil`, so the instance is not frozen
  * before it ends. The work never fails, and carries the request's services.
+ * Note that what Sentry queued while it ran is sent once it ends, inside the
+ * same `waitUntil`, because the answer's own sending (`sentryReportedFetch`)
+ * left long before, and a frozen instance would drop the rest of its spans.
  */
 const afterResponseLayer = Layer.succeed(AfterResponse, {
-  keep: (work) => Effect.sync(() => waitUntil(runWeb(work))),
+  keep: (work) => Effect.sync(() => waitUntil(runWeb(work).finally(sentryQueueSent))),
 });
 
 /**

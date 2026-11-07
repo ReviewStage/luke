@@ -139,6 +139,12 @@ test("History lists the closed and the archived agents but not one whose tab is 
   assert.deepEqual(opened, [CLOSED.id]);
 });
 
+test("History stands nowhere while every agent's tab is open", async () => {
+  await mount(false, [OPEN.id, CLOSED.id, ARCHIVED.id]);
+
+  assert.equal(document.querySelector('button[aria-label="Agent history"]') === null, true);
+});
+
 test("History leaves out an archived agent whose tab is open, as it does a live one's", async () => {
   await mount(false, [OPEN.id, ARCHIVED.id]);
   await act(async () => button("Agent history").click());

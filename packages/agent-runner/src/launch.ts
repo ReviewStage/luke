@@ -15,6 +15,7 @@ import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
 import type { EventSink } from "./events.js";
 import { RUNNER_ENV, RUNNER_PLACE, type RunnerEnd, type RunnerWakeup } from "./protocol.js";
+import type { LaunchTrace } from "./trace.js";
 
 /** Whether the runner runs on a host its member added (`RUNNER_PLACE.HOST`), as the environment it was started with says. */
 export function runsOnHost(env: Readonly<Record<string, string | undefined>>): boolean {
@@ -42,6 +43,8 @@ export interface LaunchContext<Config> {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly bearer: Redacted.Redacted;
   readonly sink: EventSink;
+  /** The launch's startup as Sentry spans, where the config handed a trace (`trace.ts`). */
+  readonly trace: LaunchTrace;
   /** The runner's own bundle as a command; none where the runner was not started from one, as in a test that names none. */
   readonly self?: RunnerSelf | undefined;
 }

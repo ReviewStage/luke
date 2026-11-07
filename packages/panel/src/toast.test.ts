@@ -24,6 +24,7 @@ import {
   type ToastNotice,
   undoToast,
   useToast,
+  useToastsOwner,
   useWorkingToast,
 } from "./toast.js";
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
@@ -103,25 +104,34 @@ function refusedStart(): ToastNotice {
   };
 }
 
-/** Hands the test the window's way of showing a toast. */
-function Shower(): null {
+/** Hands the test the window's way of showing a toast, the account signed in held as the window's root holds it. */
+function Shower({ account }: { account: string | undefined }): null {
+  useToastsOwner(account);
   show = useToast();
   work = useWorkingToast();
   return null;
 }
 
-/** The toasts, mounted as the window's root mounts them, in a window `height` tall. */
-function mount(height: number): void {
+/** The toasts, mounted as the window's root mounts them, in a window `height` tall, with the account signed in; signs another in on each call after. */
+function mount(height: number, account?: string): (next: string) => void {
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      withQueryClient(
-        createElement(Fragment, null, createElement(Shower), createElement(ToastHost)),
+  const render = (signedIn: string | undefined) =>
+    act(() =>
+      root?.render(
+        withQueryClient(
+          createElement(
+            Fragment,
+            null,
+            createElement(Shower, { account: signedIn }),
+            createElement(ToastHost),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  render(account);
+  return render;
 }
 
 /** A toast that stands until it is dismissed, as an agent's end does. */
@@ -505,6 +515,16 @@ test("an unexpected failure toast's Copy details copies what its report sent, wi
     "The agent could not be stopped.",
     "Messages are limited to 20,000 characters.",
   ]);
+});
+
+test("another account signing in empties the stack at once, the last one's toasts gone without leaving in sight", () => {
+  const signIn = mount(WINDOW.TALL, "ada");
+  act(() => show?.(persisting("Retry the webhook finished")));
+  act(() => show?.(undoToast("Task archived", () => undefined)));
+
+  signIn("grace");
+
+  assert.equal(document.querySelectorAll(".ui-toast").length, 0);
 });
 
 test("an Undo toast says the act in the success tone, and its Undo takes the act back and sends the toast away", () => {

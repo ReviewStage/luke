@@ -32,15 +32,24 @@ import { browserTabsQuery } from "../live-reads.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdBrowserTabs, writeExperiments } from "../testing/app-state.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import {
+  handHostReads,
+  holdBrowserTabs,
+  signedInAs,
+  writeExperiments,
+} from "../testing/app-state.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
   CLOUD_BROWSER_AGENT_RECENT,
+  type CloudBrowserDraft,
   noteOpenedCloudTab,
+  startCloudDraft,
+  useCloudBrowserDrafts,
   useCloudBrowserTabs,
 } from "./cloud-browser-tabs.js";
 import {
@@ -49,6 +58,7 @@ import {
   type SidePanelControl,
   useSidePanel,
 } from "./use-side-panel.js";
+import { WindowAccountContext, windowAccountOf } from "./window-account.js";
 
 /**
  * The side panel's cloud Browser tabs: a tab opened here listed until the
@@ -436,7 +446,7 @@ test("a tab the member opened here is listed before the service lists it, and le
     return null;
   }
 
-  noteOpenedCloudTab({ taskId: TASK }, opened);
+  noteOpenedCloudTab(undefined, { taskId: TASK }, opened);
   draw(createElement(Probe));
   await settle();
   await vi.waitFor(() =>
@@ -459,6 +469,48 @@ test("a tab the member opened here is listed before the service lists it, and le
       [TAB],
     ),
   );
+});
+
+test("a tab opened and a draft started under one account stand for that account alone, and stand again once it signs in again", async () => {
+  const opened: AgentBrowserTab = { ...LISTED, id: OTHER_TAB };
+  holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [LISTED]);
+  let read: readonly AgentBrowserTab[] | undefined;
+  let drafts: readonly CloudBrowserDraft[] = [];
+  function Probe() {
+    read = useCloudBrowserTabs({ taskId: TASK }, true);
+    drafts = useCloudBrowserDrafts({ taskId: TASK }, true);
+    return null;
+  }
+  const signedIn = (account: string) =>
+    createElement(WindowAccountContext.Provider, { value: account }, createElement(Probe));
+
+  noteOpenedCloudTab("ada", { taskId: TASK }, opened);
+  const draft = startCloudDraft("ada", { taskId: TASK }, LISTED.agentId);
+  const panel = draw(signedIn("ada"));
+  await settle();
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB, OTHER_TAB],
+    ),
+  );
+
+  panel.rerender(signedIn("grace"));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB],
+    "the service's list alone",
+  );
+  assert.deepEqual(drafts, []);
+
+  panel.rerender(signedIn("ada"));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB, OTHER_TAB],
+  );
+  assert.deepEqual(drafts, [draft]);
 });
 
 /** The bar's address field. */
@@ -484,6 +536,81 @@ async function pressEnter(): Promise<void> {
   await settle();
 }
 
+/** Hands what it draws the account the window's document signs in, as the window's root hands it. */
+function SignedInHere({ children }: { children: React.ReactNode }): React.ReactElement {
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  return createElement(
+    WindowAccountContext.Provider,
+    { value: windowAccountOf(account) },
+    children,
+  );
+}
+
+/** `element` drawn under the account the window's document signs in. */
+function signedInHere(element: React.ReactElement): React.ReactElement {
+  return createElement(SignedInHere, null, element);
+}
+
+test("a draft's open that answers once another account signed in chooses nothing on its panel, the tab and the draft's end the first account's", async () => {
+  let answer: (tab: AgentBrowserTab) => void = () => undefined;
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: () =>
+      // SAFETY: the test hands back the wire's own answer, a tab.
+      new Promise((resolve) => {
+        answer = (tab) => resolve({ tab } as never);
+      }),
+  });
+  holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => []);
+  const read = new Map<string, readonly string[] | undefined>();
+  const drafts = new Map<string, readonly CloudBrowserDraft[]>();
+  function Probe({ account }: { account: string }) {
+    read.set(
+      account,
+      useCloudBrowserTabs({ taskId: TASK }, true)?.map((tab) => tab.id),
+    );
+    drafts.set(account, useCloudBrowserDrafts({ taskId: TASK }, true));
+    return null;
+  }
+  const draft = startCloudDraft("account-ada", { taskId: TASK }, AGENT_ID);
+  const handed: AgentBrowserTab[] = [];
+  draw(
+    createElement(
+      "div",
+      null,
+      createElement(
+        WindowAccountContext.Provider,
+        { value: "account-ada", key: "account-ada" },
+        createElement(CloudBrowserDraftPane, {
+          place: { taskId: TASK },
+          draft,
+          owner: { name: "Invite expiry", icon: createElement("span") },
+          onOpened: (tab) => handed.push(tab),
+          onDiscard: () => undefined,
+        }),
+        createElement(Probe, { account: "account-ada" }),
+      ),
+      createElement(
+        WindowAccountContext.Provider,
+        { value: "account-grace", key: "account-grace" },
+        createElement(Probe, { account: "account-grace" }),
+      ),
+    ),
+  );
+  writeAppState(signedInAs({ id: "account-ada", email: "ada@example.com", name: "Ada" }));
+  await settle();
+  typeAddress("localhost:3000");
+  await pressEnter();
+
+  writeAppState(signedInAs({ id: "account-grace", email: "grace@example.com", name: "Grace" }));
+  await act(async () => answer({ ...LISTED, id: OTHER_TAB }));
+  await settle();
+
+  assert.deepEqual(handed, []);
+  assert.deepEqual(read.get("account-ada"), [OTHER_TAB], "the tab is the first account's");
+  assert.deepEqual(drafts.get("account-ada"), [], "its draft let go for the tab");
+  assert.notDeepEqual(read.get("account-grace"), [OTHER_TAB], "and no other account's");
+});
+
 test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays as a failure note over the kept address", async () => {
   mountAnnouncer();
   const asked: TasksBrowserTabOpenParams[] = [];
@@ -499,15 +626,17 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   let discarded = 0;
   const owner = { name: "Invite expiry", icon: createElement("span") };
   draw(
-    createElement(CloudBrowserDraftPane, {
-      place: { taskId: TASK },
-      draft: { id: "draft-1", agentId: AGENT_ID },
-      owner,
-      onOpened: (tab) => handed.push(tab),
-      onDiscard: () => {
-        discarded += 1;
-      },
-    }),
+    signedInHere(
+      createElement(CloudBrowserDraftPane, {
+        place: { taskId: TASK },
+        draft: { id: "draft-1", agentId: AGENT_ID },
+        owner,
+        onOpened: (tab) => handed.push(tab),
+        onDiscard: () => {
+          discarded += 1;
+        },
+      }),
+    ),
   );
   await settle();
   assert.equal(document.activeElement, addressField(), "the bar's address is focused");

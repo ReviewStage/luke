@@ -65,6 +65,7 @@ const NO_RUN = {
   cancelRequested: null,
   turnQueuedAt: null,
   turnSettledAt: null,
+  turnLeaseUntil: null,
   turnSessionEnded: null,
   awaitingLineAt: null,
   failureWord: null,

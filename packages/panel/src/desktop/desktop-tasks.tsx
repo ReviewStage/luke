@@ -98,6 +98,7 @@ import {
   TASK_RENAME_SHAPE,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
+import { useWindowAccount } from "../tasks/window-account.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
@@ -416,6 +417,7 @@ function DescriptionDocument({
   away: TaskHeadBack;
 }): React.JSX.Element {
   const { region } = tasks;
+  const account = useWindowAccount();
   // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on the agent's screen (`strip-tabs.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
   const [shownAgentTab, setShownAgentTab] = useState<ShownTab | undefined>(undefined);
@@ -1205,7 +1207,9 @@ function DescriptionDocument({
     const newest = (agentBrowsers ?? [])
       .filter((each) => each.agentId === agentId)
       .toSorted((one, other) => other.createdAt - one.createdAt)[0];
-    openPanelTab(cloudBrowserTab(newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id));
+    openPanelTab(
+      cloudBrowserTab(newest?.id ?? startCloudDraft(account, { taskId: task.id }, agentId).id),
+    );
   };
   // ⌘T on a phone starts New agent at once, since no "+" stands in sight to drop its menu.
   const newAgentOnPhone = () => {

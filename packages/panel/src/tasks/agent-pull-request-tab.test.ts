@@ -2492,7 +2492,7 @@ function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
 }
 
 test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads and the checks once shown", async () => {
-  const failure = { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const failure = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
   const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
   const tab = await draw(
     controlAnswering({
@@ -2623,7 +2623,7 @@ test("the pill wears what was published of the checks only for the pull request 
   const control = {
     ...controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, number: 43 } }),
-      checks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
+      checks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     }),
   };
   const tab = await draw(control);
@@ -4061,7 +4061,7 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
         reads += 1;
         return Promise.resolve(
           reads === 1
-            ? { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
+            ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
             : { labels: [], users: [{ login: "priyan", bot: false }], teams: [] },
         );
       },

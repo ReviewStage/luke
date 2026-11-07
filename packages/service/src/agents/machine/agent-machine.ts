@@ -35,6 +35,7 @@
  * machine that did not answer.
  */
 
+import type { LaunchPath } from "@repo/agent-runner/protocol";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
@@ -251,6 +252,8 @@ export interface OpenedPlace {
   readonly checkoutPath: string;
   /** The checkout's last step, which the launch's `ready` runs: nothing where the open left nothing to do. */
   readonly finishCheckout: Effect.Effect<void, { readonly _tag: string }>;
+  /** How the place came to stand, as the launch's trace names it; none on a machine that opens every place one way. */
+  readonly path?: LaunchPath;
 }
 
 /** What a launch starts the runner with, and what it waits on before it does. */

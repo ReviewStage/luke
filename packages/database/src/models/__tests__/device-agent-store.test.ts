@@ -34,7 +34,6 @@ import {
   deviceAgentLinesWaiting,
   deviceAgentRequestAnswer,
   deviceAgentRequestsWaiting,
-  lapsedDeviceAgentLaunches,
   latestDeviceAgentLaunch,
   liveDeviceAgents,
   openDeviceAgentLaunches,
@@ -669,7 +668,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
   );
 
   it.effect(
-    "a lapsed device's open launches are read bounded and settled once, claimed or waiting, while a device that beat since, or settled its own, keeps it",
+    "a lapsed device's open launch is settled once, claimed or waiting, while a device that beat since, or settled its own, keeps it",
     () =>
       Effect.gen(function* () {
         const away = yield* openAccount();
@@ -698,10 +697,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           0,
         );
         const seenBefore = new Date((yield* Clock.currentTimeMillis) - 5 * 60_000);
-        const ours = new Set([away.userId, back.userId, settledByDevice.userId]);
 
-        const read = yield* lapsedDeviceAgentLaunches(seenBefore, 10_000);
-        const bounded = yield* lapsedDeviceAgentLaunches(seenBefore, 1);
         const settled = yield* settleLapsedDeviceAgentLine(away.userId, waiting.id, seenBefore);
         const again = yield* settleLapsedDeviceAgentLine(away.userId, waiting.id, seenBefore);
         const beaten = yield* settleLapsedDeviceAgentLine(back.userId, kept.id, seenBefore);
@@ -711,17 +707,6 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           seenBefore,
         );
 
-        assert.deepEqual(
-          read
-            .filter((each) => ours.has(each.userId))
-            .map(({ id, deviceName }) => [id, deviceName]),
-          [
-            [claimed.id, "Studio"],
-            [waiting.id, "Studio"],
-          ],
-          "only the lapsed device's open launches, oldest first, with its name",
-        );
-        assert.equal(bounded.length, 1);
         assert.deepEqual(settled, Option.some({ agentId: away.agentId }));
         assert.ok(Option.isNone(again), "a line settled once is not settled again");
         assert.deepEqual(

@@ -50,9 +50,9 @@ export const DEVICE_AGENT_SERVICE = {
   /** How often a held read looks again where the sync hub cannot wake it. */
   POLL: Duration.millis(500),
   /**
-   * How long a row may wait before it is withdrawn: past a coding agent's
-   * longest turn (`TURN_ABANDON`'s twenty-five hours), so a line a Mac away
-   * that long would take is one whose turn was already settled lost.
+   * How long a row may wait before it is withdrawn: past a day, so a line a
+   * Mac away that long would take is one whose turn its lease long since
+   * read as lost (`@repo/database/models/turn-lease`).
    */
   EXPIRY: Duration.hours(26),
 } as const;
@@ -167,9 +167,8 @@ export function claimedDeviceAgentLine(
 
 /**
  * The turn a launch's message waits on, queued where its runner never
- * opened one, for the settle after it to end, whether its Mac settled the
- * launch or the lease sweep took it from a Mac gone quiet
- * (`../maintenance/device-lease-sweep.ts`): where no stop was queued after
+ * opened one, for the settle after it to end, as its Mac settled the
+ * launch: where no stop was queued after
  * the launch, which the service itself ended, and the conversation holds no
  * turn queued since the launch was written. Note that a native turn is
  * queued by its harness's first event (`native-events/runner-events-app.ts`),
@@ -202,7 +201,7 @@ export const queuedUnopenedTurn = (
  * of the agent's still under way, whose runner posted no END before it
  * ended, as when the app quit or the Mac's switch went off mid-turn, is
  * settled lost (`settleRunnerLostTurns`) and the agent offers Continue
- * rather than running until `TURN_ABANDON`. A launch whose runner ended
+ * rather than running until its lease runs out. A launch whose runner ended
  * before it opened a turn, as one its Mac settled unstarted, first has the
  * turn its message waits on queued (`queuedUnopenedTurn`), as a launch that
  * failed before its runner is (`coder-host/runner-sessions.ts`'s

@@ -161,10 +161,10 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.jso
 `packages/service/src/maintenance/maintenance-sweep.ts`) under the deployment's own
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
-stamped deleted seven days ago, settles as abandoned every turn still running
-past its bound (`packages/database/src/models/abandoned-turns.ts`'s
-`TURN_ABANDON`: an hour after it started, or twenty-five hours for an
-agent's turn, whose one turn is its whole run).
+stamped deleted seven days ago. A turn whose runner went quiet is no sweep's:
+its lease (`packages/database/src/models/turn-lease.ts`) runs out, readers take
+it as lost, and the next touch of the agent settles it
+(`packages/service/src/agents/coder-host/lapsed-runner.ts`).
 
 ## Testing
 

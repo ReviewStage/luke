@@ -8,19 +8,12 @@ import {
   agentArchiveRequestSchema,
   agentBeforeSchema,
   agentCallIdSchema,
-  agentChangesAnswerSchema,
   agentMessageRequestSchema,
   agentMessagesAnswerSchema,
-  agentOverviewChecksAnswerSchema,
-  agentOverviewConversationAnswerSchema,
-  agentOverviewPullRequestAnswerSchema,
-  agentPageAnswerSchema,
   agentPinRequestSchema,
-  agentPullRequestAnswerSchema,
   agentQueueChangeSchema,
   agentReadRequestSchema,
   agentRenameRequestSchema,
-  agentReviewOptionsAnswerSchema,
   agentServersRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
@@ -29,6 +22,7 @@ import {
   refusedDeviceSchema,
 } from "./agent-wire.js";
 import { accountContract } from "./contract/account.js";
+import { agentPullRequestsContract } from "./contract/agent-pull-requests.js";
 import { agentsContract } from "./contract/agents.js";
 import { dictationContract } from "./contract/dictation.js";
 import { githubTokenContract } from "./contract/github-token.js";
@@ -61,14 +55,9 @@ import {
   providerKeyKindSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
-import {
-  pullRequestActionRequestSchema,
-  pullRequestViewedAnswerSchema,
-  pullRequestWriteAnswerSchema,
-} from "./pull-request-write-wire.js";
+import { pullRequestActionRequestSchema } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
-import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
  * agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -204,6 +193,50 @@ const AGENT_ROW_CALLS = {
   },
 };
 
+/**
+ * How a call that reads only its agent gone as its own failure reads its
+ * refusals: every other refusal its procedure declares no answer, as the
+ * table it read its refusals through before read every one it did not
+ * name. A key already written under is left as it is, since the host reads
+ * a keyed write taken already by it (`keyed-write.ts`).
+ */
+export const AGENT_NOT_FOUND_RENAMES = {
+  [HOSTED_API_ERROR.NOT_PERMITTED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+} as const;
+
+/**
+ * How the window reads a change to a pull request and its files viewed: as
+ * a call that reads only its agent gone does, but that a repository out of
+ * reach is a failure it offers access for (`pull-request-writes.tsx`),
+ * though the client reads it as no answer, as it always has.
+ */
+const {
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: _reachOffered,
+  ...PULL_REQUEST_WRITE_VIEW_RENAMES
+} = AGENT_NOT_FOUND_RENAMES;
+
+/** One agent read as its page, stopped, taken back, its changes, tools, and review options read, and its pull request read and changed, as the agent client asks them through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_PAGE_CALLS = {
+  agents: {
+    read: agentsContract.read,
+    stop: agentsContract.stop,
+    rewind: agentsContract.rewind,
+    changes: agentsContract.changes,
+    reviewOptions: agentsContract.reviewOptions,
+    workspaceTools: agentsContract.workspaceTools,
+  },
+  agentPullRequests: agentPullRequestsContract,
+};
+
 /** How a member's answer, close, or read state written reads a key already written under: no answer, as the table each read its refusals through before read every refusal it did not name. */
 export const AGENT_INBOX_WRITE_RENAMES = {
   [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
@@ -237,8 +270,9 @@ const AGENT_MESSAGE_CALLS = {
 /**
  * Why a coding-agent call answered nothing a window can draw: the failures
  * the account's own procedures, its hosts', the agent rows' and Starts', and
- * the messages' and the inbox's declare (`AGENT_ACCOUNT_CALLS`,
- * `AGENT_HOST_CALLS`, `AGENT_ROW_CALLS`, `AGENT_MESSAGE_CALLS`), among them
+ * the messages' and the inbox's, and an agent's page's and its pull
+ * request's declare (`AGENT_ACCOUNT_CALLS`, `AGENT_HOST_CALLS`,
+ * `AGENT_ROW_CALLS`, `AGENT_MESSAGE_CALLS`, `AGENT_PAGE_CALLS`), among them
  * no answer at all (`unanswered`), the task, agent, workspace, or host not one
  * the account holds (`not-found`), one only another member may act on
  * (`not-permitted`), a model or effort the service does not offer now
@@ -261,6 +295,7 @@ export const AGENT_CALL_FAILURE = {
   ...failureSetOf(AGENT_HOST_CALLS),
   ...failureSetOf(AGENT_ROW_CALLS, { as: AGENT_ROW_RENAMES }),
   ...failureSetOf(AGENT_MESSAGE_CALLS, { as: AGENT_INBOX_WRITE_RENAMES }),
+  ...failureSetOf(AGENT_PAGE_CALLS, { as: AGENT_NOT_FOUND_RENAMES }),
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
@@ -707,7 +742,7 @@ export const agentPageParamsSchema = EffectSchema.Struct({
 export type AgentPageParams = typeof agentPageParamsSchema.Type;
 
 /** One agent as its own page, as the window hears it: the agent, or why there is no answer. */
-export const agentPageAnswerViewSchema = EffectSchema.Union([agentPageAnswerSchema, failed]);
+export const agentPageAnswerViewSchema = answerView(agentsContract.read);
 
 export type AgentPageAnswerView = typeof agentPageAnswerViewSchema.Type;
 
@@ -751,57 +786,60 @@ export const pullRequestPartParamsSchema = EffectSchema.Struct({
 export type PullRequestPartParams = typeof pullRequestPartParamsSchema.Type;
 
 /** What the agent published, as the window hears it: its branch and pull request as GitHub holds them, or why there is no answer. */
-export const agentPullRequestAnswerViewSchema = EffectSchema.Union([
-  agentPullRequestAnswerSchema,
-  failed,
-]);
+export const agentPullRequestAnswerViewSchema = answerView(agentPullRequestsContract.pullRequest, {
+  as: AGENT_NOT_FOUND_RENAMES,
+});
 
 export type AgentPullRequestAnswerView = typeof agentPullRequestAnswerViewSchema.Type;
 
 /** One agent's changes, as the window hears them: its pull request's files, why there are none yet, or why there is no answer. */
-export const agentChangesAnswerViewSchema = EffectSchema.Union([agentChangesAnswerSchema, failed]);
+export const agentChangesAnswerViewSchema = answerView(agentsContract.changes, {
+  as: AGENT_NOT_FOUND_RENAMES,
+});
 
 export type AgentChangesAnswerView = typeof agentChangesAnswerViewSchema.Type;
 
 /** One agent's pull request itself as its overview draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
-export const agentOverviewPullRequestAnswerViewSchema = EffectSchema.Union([
-  agentOverviewPullRequestAnswerSchema,
-  failed,
-]);
+export const agentOverviewPullRequestAnswerViewSchema = answerView(
+  agentPullRequestsContract.overviewPullRequest,
+  {
+    as: AGENT_NOT_FOUND_RENAMES,
+  },
+);
 
 export type AgentOverviewPullRequestAnswerView =
   typeof agentOverviewPullRequestAnswerViewSchema.Type;
 
 /** The checks on one agent's pull request's head, as the window hears them: the checks, why there are none yet, or why there is no answer. */
-export const agentOverviewChecksAnswerViewSchema = EffectSchema.Union([
-  agentOverviewChecksAnswerSchema,
-  failed,
-]);
+export const agentOverviewChecksAnswerViewSchema = answerView(
+  agentPullRequestsContract.overviewChecks,
+  {
+    as: AGENT_NOT_FOUND_RENAMES,
+  },
+);
 
 export type AgentOverviewChecksAnswerView = typeof agentOverviewChecksAnswerViewSchema.Type;
 
 /** One agent's pull request's conversation, as the window hears it: the conversation, why there is none yet, or why there is no answer. */
-export const agentOverviewConversationAnswerViewSchema = EffectSchema.Union([
-  agentOverviewConversationAnswerSchema,
-  failed,
-]);
+export const agentOverviewConversationAnswerViewSchema = answerView(
+  agentPullRequestsContract.overviewConversation,
+  {
+    as: AGENT_NOT_FOUND_RENAMES,
+  },
+);
 
 export type AgentOverviewConversationAnswerView =
   typeof agentOverviewConversationAnswerViewSchema.Type;
 
 /** Which of our own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
-export const agentWorkspaceToolsAnswerViewSchema = EffectSchema.Union([
-  workspaceToolsAnswerSchema,
-  failed,
-]);
+export const agentWorkspaceToolsAnswerViewSchema = answerView(agentsContract.workspaceTools);
 
 export type AgentWorkspaceToolsAnswerView = typeof agentWorkspaceToolsAnswerViewSchema.Type;
 
 /** What the reviewer and label pickers of an agent's Pull request tab offer, as the window hears it: the labels, users, and teams, or why there is no answer. */
-export const agentReviewOptionsAnswerViewSchema = EffectSchema.Union([
-  agentReviewOptionsAnswerSchema,
-  failed,
-]);
+export const agentReviewOptionsAnswerViewSchema = answerView(agentsContract.reviewOptions, {
+  as: AGENT_NOT_FOUND_RENAMES,
+});
 
 export type AgentReviewOptionsAnswerView = typeof agentReviewOptionsAnswerViewSchema.Type;
 
@@ -815,18 +853,16 @@ export const agentPullRequestActionParamsSchema = EffectSchema.Struct({
 export type AgentPullRequestActionParams = typeof agentPullRequestActionParamsSchema.Type;
 
 /** How GitHub took a change to an agent's pull request, as the window hears it: made, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
-export const agentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
-  pullRequestWriteAnswerSchema,
-  failed,
-]);
+export const agentPullRequestWriteAnswerViewSchema = answerView(agentPullRequestsContract.action, {
+  as: PULL_REQUEST_WRITE_VIEW_RENAMES,
+});
 
 export type AgentPullRequestWriteAnswerView = typeof agentPullRequestWriteAnswerViewSchema.Type;
 
 /** Which of an agent's pull request's files the member marked viewed on GitHub, as the window hears it: each file's mark, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
-export const agentPullRequestViewedAnswerViewSchema = EffectSchema.Union([
-  pullRequestViewedAnswerSchema,
-  failed,
-]);
+export const agentPullRequestViewedAnswerViewSchema = answerView(agentPullRequestsContract.viewed, {
+  as: PULL_REQUEST_WRITE_VIEW_RENAMES,
+});
 
 export type AgentPullRequestViewedAnswerView = typeof agentPullRequestViewedAnswerViewSchema.Type;
 

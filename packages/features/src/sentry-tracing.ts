@@ -18,6 +18,7 @@
  * it off `SentSendTrace`, which the act port sets for the call it came with.
  */
 
+import type { TracesSamplerSamplingContext } from "@sentry/core";
 import { Context, Predicate } from "effect";
 
 /** The share of traces kept: enough to read start-up and page-load times by, not every one. */
@@ -62,6 +63,22 @@ export const SENTRY_TRACE_HEADER = {
   TRACE: "sentry-trace",
   BAGGAGE: "baggage",
 } as const;
+
+/** The kinds of send span, for telling a send's span from every other by its name. */
+const SEND_SPAN_NAMES: ReadonlySet<string> = new Set(Object.values(SENTRY_SEND_SPAN));
+
+/**
+ * The clients' `tracesSampler`: a send's span is kept every time, and every
+ * other trace by `SENTRY_TRACES_SAMPLE_RATE`, or by its parent's decision
+ * where it has one. Note that a send is rare and the trace through the
+ * service is what it is for, so a sampled-out send would leave nothing to read.
+ */
+export function sentryTracesSampler({
+  name,
+  inheritOrSampleWith,
+}: TracesSamplerSamplingContext): number {
+  return SEND_SPAN_NAMES.has(name) ? 1 : inheritOrSampleWith(SENTRY_TRACES_SAMPLE_RATE);
+}
 
 /** A send's trace, as Sentry's `getTraceData` answered it for the send's span. */
 export interface SendTrace {
