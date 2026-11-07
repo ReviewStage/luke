@@ -5,11 +5,19 @@ import {
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@repo/features/agent-wire";
-import { RUN_ON_MAC_REASON, RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
-import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
 import {
+  MAC_COMMAND_MODE_LABEL,
+  MAC_COMMAND_MODE_LIST,
+  MAC_COMMANDS_LABEL,
+  type MacCommandMode,
+} from "@repo/settings";
+import {
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
   ChipName,
-  GearIcon,
+  ChoiceBar,
+  type ChoiceItem,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -24,12 +32,13 @@ import {
 } from "@repo/ui";
 import { type Actor, actorName, personActor } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
+import { useMutation } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { settingMutation } from "../act-mutations.js";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { type RunOnMacRead, useRunOnMac } from "./run-on-mac.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
@@ -78,6 +87,11 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
+/** This Mac's command setting's choices, as Settings › This Mac words them. */
+const MAC_COMMAND_CHOICES: readonly ChoiceItem<MacCommandMode>[] = MAC_COMMAND_MODE_LIST.map(
+  (mode) => ({ value: mode, label: MAC_COMMAND_MODE_LABEL[mode] }),
+);
+
 /** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
   CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
@@ -95,9 +109,10 @@ function runOnMacStands(read: RunOnMacRead): string {
  * device: the Mac's glyph wearing its standing's dot, green while it
  * listens and gray while it is offline or off in Settings, beside
  * "run_on_mac" and its owner's person chip, "You" for the reader. Where it
- * is the reader's own Mac that this Mac's Settings turned off, a row under
- * it opens Settings › This Mac. The chip takes no focus, so a reader hears
- * the same after "Cloud". Note that the
+ * is the reader's own Mac and the window reads on one, this Mac's command
+ * setting stands under it as Settings › This Mac offers it (Ask every time,
+ * Always allow, Never), changed there and then. The chip takes no focus, so
+ * a reader hears the same after "Cloud". Note that the
  * Mac is named by its owner, since any of their Macs that listens runs the
  * commands; nothing is said while it is read, or for an agent offered none.
  */
@@ -112,7 +127,7 @@ function CloudChip({
 }): React.JSX.Element {
   const read = useRunOnMac(agentId, (userId) => userId === readerId);
   const { members, former } = useMemberDirectory();
-  const openSettings = useOpenSettings();
+  const { mutate: writeSetting } = useMutation(settingMutation());
   const owner: Actor | undefined =
     read.standing === undefined
       ? undefined
@@ -149,11 +164,15 @@ function CloudChip({
                 </ActorLine>
               }
             />
-            {read.reason === RUN_ON_MAC_REASON.SETTINGS_OFF ? (
-              <HoverCardRow
-                glyph={<GearIcon />}
-                label={OPEN_SETTINGS_LABEL}
-                onPress={() => openSettings({ page: SETTINGS_VIEW.THIS_MAC })}
+            {read.mode !== undefined && read.standing?.owner.userId === readerId ? (
+              <ChoiceBar<MacCommandMode>
+                label={MAC_COMMANDS_LABEL}
+                items={MAC_COMMAND_CHOICES}
+                value={read.mode}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
+                size={CHOICE_BAR_SIZE.COMPACT}
+                stretch
+                onChange={(mode) => writeSetting({ field: "macCommands", value: mode })}
               />
             ) : null}
           </>

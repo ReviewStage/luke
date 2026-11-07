@@ -3,16 +3,22 @@
 import assert from "node:assert/strict";
 import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@repo/features/workspace-tools-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
-import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
-import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handBeats, handHostReads, handSettings, stateWith } from "../testing/app-state.js";
+import {
+  handBeats,
+  handHostReads,
+  handSettings,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { AgentPlace } from "./agent-place.js";
@@ -46,9 +52,6 @@ const DEVICE = "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d15";
 
 const AGENT_ID = "7a1c4e9b-2f3d-4b6a-8c5e-1d0f9a8b7c6e";
 
-/** Every place the box's presses opened Settings at. */
-let opened: SettingsLink[] = [];
-
 /** The reader's own account. */
 const READER = "user-reader";
 
@@ -70,8 +73,9 @@ async function placeOf(
   never = false,
 ): Promise<string> {
   clear();
-  opened = [];
   fakeActPort({});
+  // Note that the bridge is laid afresh, so a case's settings never reach the next.
+  handState({});
   if (never) {
     const { run } = stateWith({}, {});
     handSettings(
@@ -94,11 +98,7 @@ async function placeOf(
     root.render(
       onRegistry(
         registry,
-        createElement(
-          OpenSettingsProvider,
-          { value: (link) => opened.push(link) },
-          createElement(AgentPlace, { agent: { id: AGENT_ID, ...agent }, readerId: READER }),
-        ),
+        createElement(AgentPlace, { agent: { id: AGENT_ID, ...agent }, readerId: READER }),
       ),
     ),
   );
@@ -182,25 +182,47 @@ test("a cloud agent's card names a teammate's Mac, offline where none of theirs 
   );
 });
 
-/** The card's press that opens Settings, where it offers one. */
-function openSettingsRow(): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll<HTMLButtonElement>("button.ui-hover-card-row")].find(
-    (row) => row.textContent === "Open Settings",
+/** This Mac's command setting as the card offers it; none where the card offers none. */
+function macSetting(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    '[role="radiogroup"][aria-label="Let agents run commands on this Mac"]',
   );
 }
 
-test("a Mac set to let no agent run commands is off in Settings on the reader's own Mac alone, which the card opens, a teammate's offline", async () => {
+test("a Mac set to let no agent run commands is off in Settings on the reader's own Mac alone, whose card changes it there, a teammate's offline", async () => {
   const away = { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY } as const;
   assert.deepEqual(
     await runOnMacRowOf({ ...away, owner: { userId: READER, name: "Ada Lovelace" } }, true),
     ["You", "Off in Settings"],
   );
-  act(() => (openSettingsRow() ?? assert.fail("the card offers Open Settings")).click());
-  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.THIS_MAC }]);
+  const setting = macSetting() ?? assert.fail("the card offers this Mac's setting");
+  assert.equal(setting.querySelector('[aria-checked="true"]')?.textContent, "Never");
+  const written: unknown[] = [];
+  const settings = (await appBridge().requestAppState()).settings ?? assert.fail("settings held");
+  fakeActPort({
+    [ACT_KIND.SETTING_UPDATE]: (payload) => {
+      written.push(payload);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED, settings });
+    },
+  });
+  act(() =>
+    (
+      [...setting.querySelectorAll<HTMLButtonElement>("button")].find(
+        (choice) => choice.textContent === "Ask every time",
+      ) ?? assert.fail("the setting offers Ask every time")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(written, [{ field: "macCommands", value: MAC_COMMAND_MODE.ASK }]);
 
   assert.deepEqual(
     await runOnMacRowOf({ ...away, owner: { userId: "user-charles", name: "Charles Pan" } }, true),
     ["Charles Pan", "Offline"],
   );
-  assert.equal(openSettingsRow(), undefined, "a teammate's Mac is no Settings of this Mac's");
+  assert.equal(macSetting(), null, "a teammate's Mac is no setting of this Mac's");
+  assert.deepEqual(
+    await runOnMacRowOf({ ...away, owner: { userId: READER, name: "Ada Lovelace" } }),
+    ["You", "Offline"],
+    "a Mac whose Settings let agents run commands is only offline",
+  );
 });

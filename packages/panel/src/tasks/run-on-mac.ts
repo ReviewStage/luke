@@ -1,7 +1,7 @@
 import { type RunOnMacReason, runOnMacReason } from "@repo/features/workspace-tools-model";
 import type { RunOnMacStanding } from "@repo/features/workspace-tools-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
-import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
+import { HOST_CAPABILITY, MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import { useQuery } from "@tanstack/react-query";
 import { workspaceToolsQuery } from "../live-reads.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
@@ -13,9 +13,10 @@ import { appStateQuery, selectCapability } from "../use-app-state.js";
  * (`LIVE_READ.WORKSPACE_TOOLS`), asking as it is first held and again
  * whenever a window comes forward, which is how the developer comes back
  * from Settings or from opening the app on their Mac; each answer stands
- * until the next lands, and one held lately draws at once. Whether this
- * Mac's Settings let no agent run commands on it is the window's own to
- * say, and counts only where the Mac is the reader's own, on a Mac.
+ * until the next lands, and one held lately draws at once. What this Mac's
+ * Settings let agents do with commands (`MAC_COMMAND_MODE`) is the window's
+ * own to say, read only on a Mac, and turns `run_on_mac` off only where
+ * the Mac is the reader's own.
  */
 
 /** Where an agent's `run_on_mac` stands, as the card reads it. */
@@ -24,11 +25,13 @@ export interface RunOnMacRead {
   readonly standing: RunOnMacStanding | undefined;
   /** Why `run_on_mac` is off for the agent; nothing where it is on or not yet known. */
   readonly reason: RunOnMacReason | undefined;
+  /** What this Mac's Settings let agents do with commands; nothing where the window reads on no Mac. */
+  readonly mode: MacCommandMode | undefined;
 }
 
-/** Whether this window's Settings let no agent run commands on its Mac, which tells its readers only as that turns. */
-const selectMacCommandsNever = (state: AppStateSnapshot): boolean =>
-  state.settings?.stored.macCommands === MAC_COMMAND_MODE.NEVER;
+/** What this window's Settings let agents do with commands on its Mac, which tells its readers only as that turns. */
+const selectMacCommands = (state: AppStateSnapshot): MacCommandMode =>
+  state.settings?.stored.macCommands ?? MAC_COMMAND_MODE.ASK;
 
 /** The agent's `run_on_mac`, held for as long as the caller is drawn; `mine` says whether a Mac is the reader's own. */
 export function useRunOnMac(agentId: string, mine: (userId: string) => boolean): RunOnMacRead {
@@ -36,12 +39,15 @@ export function useRunOnMac(agentId: string, mine: (userId: string) => boolean):
   const onMac =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.MAC_COMMANDS) }).data ===
     true;
-  const never = useQuery({ ...appStateQuery, select: selectMacCommandsNever }).data === true;
+  const stored = useQuery({ ...appStateQuery, select: selectMacCommands }).data;
+  const mode = onMac ? (stored ?? MAC_COMMAND_MODE.ASK) : undefined;
   return {
     standing,
     reason: runOnMacReason({
-      settingsOff: onMac && never && standing !== undefined && mine(standing.owner.userId),
+      settingsOff:
+        mode === MAC_COMMAND_MODE.NEVER && standing !== undefined && mine(standing.owner.userId),
       standing,
     }),
+    mode,
   };
 }
