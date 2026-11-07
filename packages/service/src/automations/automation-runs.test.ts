@@ -26,7 +26,7 @@ import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store
 import { readMessageByClientId, sentLineStands } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { createTask, readTask } from "@repo/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import type { ConversationTarget } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
 import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
 import { turns } from "@repo/database/schemas/storage";
@@ -60,11 +60,9 @@ import { TASK_STATUS } from "@repo/features/task-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { steerAgent } from "../agents/coder-host/steer.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   SESSION_CANCEL_OUTCOME,
