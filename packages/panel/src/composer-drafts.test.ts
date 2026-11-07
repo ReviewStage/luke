@@ -148,6 +148,14 @@ function leaveWindow(): void {
   });
 }
 
+/** Closes the window standing, its document ending (`pagehide`), as a reload or a relaunch does. */
+function closeWindow(): void {
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+}
+
 const DEAN = { id: "user-dean", email: "dean@example.com" } as const;
 const SAM = { id: "user-sam", email: "sam@example.com" } as const;
 
@@ -349,7 +357,7 @@ test("a draft outlasts a reload of the window, words and mark alike", async () =
   await before.show(INVITES);
   typeInComposer(before.container, "Expire invites after a week");
   await settle();
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  closeWindow();
 
   const after = openWindow();
   await after.show(BILLING);
@@ -360,7 +368,7 @@ test("a draft outlasts a reload of the window, words and mark alike", async () =
 
 /** Closes the window standing and opens it afresh, signed in as `account`. */
 function signedIn(account: { readonly id: string; readonly email: string }): void {
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  closeWindow();
   const Owner = () => {
     useDraftsOwner(account);
     return null;
@@ -410,6 +418,28 @@ test("lines a window holds for an account are drawn for no other signing in to i
   assert.deepEqual(lines.store.state, []);
 
   signIn(ada);
+  assert.deepEqual(lines.store.state, [{ id: "refused-1" }]);
+});
+
+test("lines a window holds for an account stay once the window draws itself again as the same account", () => {
+  const lines = heldLines<{ readonly id: string }>();
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+  const Owner = () => {
+    useDraftsOwner(ada);
+    return null;
+  };
+  const drawWindow = () => {
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    act(() => root.render(withQueryClient(createElement(Owner))));
+    return root;
+  };
+
+  const first = drawWindow();
+  lines.set(() => [{ id: "refused-1" }]);
+  // The window's root draws itself again in the same document, as a boundary recovering from a throw does.
+  act(() => first.unmount());
+  drawWindow();
   assert.deepEqual(lines.store.state, [{ id: "refused-1" }]);
 });
 
@@ -482,7 +512,7 @@ test("a draft is its account's: another signing in on the same Mac meets none of
   assert.equal(app.box(), "");
   await app.show(BILLING, { account: SAM });
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  closeWindow();
 
   const relaunched = openWindow();
   await relaunched.show(INVITES, { account: SAM });

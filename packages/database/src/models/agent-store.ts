@@ -1388,7 +1388,7 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
 const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX] as const;
 
 /** The turn statuses a turn ends in; a queued or running one has not ended. */
-export const ENDED_TURN_STATUSES = [
+const ENDED_TURN_STATUSES = [
   TURN_STATUS.SETTLED,
   TURN_STATUS.CANCELED,
   TURN_STATUS.FAILED,

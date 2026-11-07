@@ -10,7 +10,7 @@ import {
   type LiveSocketAsk,
   liveSocketAnswerSchema,
 } from "@repo/features/live-wire";
-import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { type Cause, type Context, Effect, Option, Queue, Schema, Stream } from "effect";
 import type { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -80,11 +80,11 @@ const hostSocket = Effect.gen(function* () {
 
 /** The tasks a task list answer lists, by id. */
 function listedTasks(answer: LiveSocketAnswer): readonly string[] {
-  const listed = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(JSON.parse(answer.body));
-  const rows = Schema.decodeUnknownSync(taskListLiveRowsSchema)({
+  const listed = Schema.decodeUnknownSync(TASK_LIST_READ.answer)(JSON.parse(answer.body));
+  const rows = Schema.decodeUnknownSync(TASK_LIST_READ.rows)({
     plans: listed.queries.plans.rows,
     agents: listed.queries.agents.rows,
-    issues: listed.queries.issues.rows,
+    issues: listed.queries.issues?.rows,
   });
   return rows.plans.map((plan) => plan.id);
 }

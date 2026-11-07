@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  LIVE_COUNT,
-  type LiveStatement,
-  liveKeysIn,
-  liveLatest,
-  liveSelection,
-  liveStatementOf,
-} from "@repo/database/core/live-statement";
+import { LIVE_COUNT, liveKeysIn } from "@repo/database/core/live-statement";
 import {
   Database,
   type DatabaseServices,
@@ -58,6 +51,7 @@ import {
   inboxAttachmentAddress,
   inboxPictureDestination,
 } from "@repo/features/inbox-attachment-link";
+import { ACCOUNT_INBOX_READ, INBOX_ITEMS_READ, SCOPE_INBOX_PARTS } from "@repo/features/inbox-live";
 import {
   INBOX_ASK_STATUS,
   INBOX_BOUNDS,
@@ -102,6 +96,7 @@ import {
 import { type AnyPgColumn, type AnyPgTable, alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { columnAs, liveRowsStatement, outerJoined } from "../live/live-read-binding.js";
 import type { SyncMoved } from "../sync/live-query.js";
 
 /**
@@ -1473,145 +1468,157 @@ const findAgentsWithItems = SqlSchema.findAll({
     ),
 });
 
-/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape. */
-export interface AccountInboxLiveStatements {
-  readonly items: LiveStatement;
-  readonly planless: LiveStatement;
-  readonly plans: LiveStatement;
-  readonly automations: LiveStatement;
-  readonly agents: LiveStatement;
-}
-
 /**
  * What waits on the developer across the account, written for Neon Realtime:
  * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
  * `accountTasklessItems`, `accountInboxTasks`, and
  * `accountInboxAutomations`, and `accountInboxAgents`, each item unread or not for the account as they say it, each
- * column under the key `account-inbox-wire.ts` reads it by and each instant
+ * column under the key `ACCOUNT_INBOX_READ` declares it by and each instant
  * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
+ * The account's failed runs are its binding's own (`../live/reads/account-inbox.ts`).
  */
-export function accountInboxLiveStatements(
-  userId: string,
-  repositoryless: boolean,
-): Option.Option<AccountInboxLiveStatements> {
-  const items = queryBuilder
-    .select(
-      liveSelection(
-        {
-          id: inboxItem.id,
-          planId: inboxItem.taskId,
-          agentId: inboxItem.agentId,
-          agentTitle: agentTable.title,
-          agentModel: agentTable.model,
-          startedBy: agentTable.userId,
-          waitsOn: WAITS_ON,
-          title: inboxItem.title,
-          revision: inboxItem.revision,
-          unread: unreadFor(userId),
-          asking: ASKING,
-        },
-        {
-          postedAt: inboxItem.postedAt,
-          updatedAt: inboxItem.updatedAt,
-          ...liveReminderFor(userId),
-        },
-      ),
-    )
-    .from(inboxItem)
-    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-    .where(accountWaiting(userId));
-  const planless = queryBuilder
-    .select(
-      liveSelection(
-        {
-          id: inboxItem.id,
-          agentId: inboxItem.agentId,
-          agentTitle: agentTable.title,
-          agentModel: agentTable.model,
-          startedBy: agentTable.userId,
-          waitsOn: WAITS_ON,
-          automationId: automation.id,
-          automationName: automation.name,
-          repository: agentTable.repository,
-          workspaceId: agentTable.organizationId,
-          title: inboxItem.title,
-          revision: inboxItem.revision,
-          unread: unreadFor(userId),
-          asking: ASKING,
-        },
-        {
-          postedAt: inboxItem.postedAt,
-          updatedAt: inboxItem.updatedAt,
-          ...liveReminderFor(userId),
-        },
-      ),
-    )
-    .from(inboxItem)
-    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-    .leftJoin(
-      automation,
-      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
-    )
-    .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless)));
-  const plans = queryBuilder
-    .select({
-      ...liveSelection({ planId: inboxItem.taskId }),
-      items: LIVE_COUNT.as("items"),
-      toDo: toDoCount(userId).as("toDo"),
-      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
-    })
-    .from(inboxItem)
-    .where(and(isNotNull(inboxItem.taskId), itemVisibleTo(userId)))
-    .groupBy(inboxItem.taskId);
-  const automations = queryBuilder
-    .select({
-      ...liveSelection({ automationId: automation.id }),
-      items: LIVE_COUNT.as("items"),
-      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
-    })
-    .from(inboxItem)
-    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-    .leftJoin(
-      automation,
-      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
-    )
-    .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
-    .groupBy(automation.id);
-  const agents = queryBuilder
-    .select({
-      ...liveSelection({ agentId: agentTable.id, ...AGENT_HOLDING_NAMING }),
-      items: LIVE_COUNT.as("items"),
-      toDo: toDoCount(userId).as("toDo"),
-      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
-    })
-    .from(inboxItem)
-    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
-    .leftJoin(
-      automation,
-      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
-    )
-    .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)))
-    .groupBy(agentTable.id, automation.id);
-  return Option.all({
-    items: liveStatementOf(items),
-    planless: liveStatementOf(planless),
-    plans: liveStatementOf(plans),
-    automations: liveStatementOf(automations),
-    agents: liveStatementOf(agents),
-  });
+export function accountInboxLiveStatements(userId: string, repositoryless: boolean) {
+  const { parts } = ACCOUNT_INBOX_READ;
+  const items = liveRowsStatement(
+    parts.items,
+    {
+      ordered: false,
+      columns: {
+        id: inboxItem.id,
+        // Note that a waiting item stands on a task (`accountWaiting`).
+        planId: sql<string>`${inboxItem.taskId}`,
+        agentId: inboxItem.agentId,
+        agentTitle: agentTable.title,
+        agentModel: agentTable.model,
+        startedBy: agentTable.userId,
+        waitsOn: WAITS_ON,
+        title: inboxItem.title,
+        revision: inboxItem.revision,
+        unread: unreadFor(userId),
+        asking: ASKING,
+      },
+      instants: {
+        postedAt: inboxItem.postedAt,
+        updatedAt: inboxItem.updatedAt,
+        ...liveReminderFor(userId),
+      },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(inboxItem)
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
+        .where(accountWaiting(userId)),
+  );
+  const planless = liveRowsStatement(
+    parts.planless,
+    {
+      ordered: false,
+      columns: {
+        id: inboxItem.id,
+        agentId: inboxItem.agentId,
+        agentTitle: agentTable.title,
+        agentModel: agentTable.model,
+        startedBy: agentTable.userId,
+        waitsOn: WAITS_ON,
+        automationId: outerJoined(automation.id),
+        automationName: outerJoined(automation.name),
+        repository: agentTable.repository,
+        workspaceId: sql<string | null>`${agentTable.organizationId}`,
+        title: inboxItem.title,
+        revision: inboxItem.revision,
+        unread: unreadFor(userId),
+        asking: ASKING,
+      },
+      instants: {
+        postedAt: inboxItem.postedAt,
+        updatedAt: inboxItem.updatedAt,
+        ...liveReminderFor(userId),
+      },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(inboxItem)
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
+        .leftJoin(
+          automation,
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
+        )
+        .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless))),
+  );
+  const plans = liveRowsStatement(
+    parts.plans,
+    {
+      ordered: false,
+      columns: {
+        // Note that a grouped item stands on a task (`isNotNull` below).
+        planId: columnAs<string>(inboxItem.taskId),
+        items: LIVE_COUNT,
+        toDo: toDoCount(userId),
+      },
+      instants: { updatedAt: sql<Date>`max(${inboxItem.updatedAt})` },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(inboxItem)
+        .where(and(isNotNull(inboxItem.taskId), itemVisibleTo(userId)))
+        .groupBy(inboxItem.taskId),
+  );
+  const automations = liveRowsStatement(
+    parts.automations,
+    {
+      ordered: false,
+      columns: { automationId: outerJoined(automation.id), items: LIVE_COUNT },
+      instants: { updatedAt: sql<Date>`max(${inboxItem.updatedAt})` },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(inboxItem)
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
+        .leftJoin(
+          automation,
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
+        )
+        .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
+        .groupBy(automation.id),
+  );
+  const agents = liveRowsStatement(
+    parts.agents,
+    {
+      ordered: false,
+      columns: {
+        agentId: agentTable.id,
+        ...AGENT_HOLDING_NAMING,
+        automationId: outerJoined(automation.id),
+        automationName: outerJoined(automation.name),
+        workspaceId: sql<string | null>`${agentTable.organizationId}`,
+        items: LIVE_COUNT,
+        toDo: toDoCount(userId),
+      },
+      instants: { updatedAt: sql<Date>`max(${inboxItem.updatedAt})` },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(inboxItem)
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
+        .leftJoin(
+          automation,
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
+        )
+        .where(
+          and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)),
+        )
+        .groupBy(agentTable.id, automation.id),
+  );
+  return { items, planless, plans, automations, agents };
 }
 
-/**
- * The statements a plan's or an agent's inbox is subscribed to live: its
- * open items and its latest settled ones, as one result, and the threads
- * and files they carry, each its own.
- */
-export interface ScopeInboxLiveStatements {
-  readonly items: LiveStatement;
-  readonly messages: LiveStatement;
-  readonly files: LiveStatement;
-}
+/** A message of an item's thread as its live row declares it, which each of its columns, an expression of the thread's union, is typed to. */
+type LiveMessageRow = (typeof SCOPE_INBOX_PARTS.messages.row)["Encoded"];
 
 /** A scope's thread read under its own name, so a message's latest siblings are read beside it. */
 const sibling = alias(inboxMessage, "sibling");
@@ -1633,7 +1640,7 @@ const sibling = alias(inboxMessage, "sibling");
  * aggregates, because `jsonb_agg` and `jsonb_build_object` are only stable
  * and Realtime refuses any function that is not immutable.
  */
-function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveStatements> {
+function scopeLiveStatements(scope: InboxScope) {
   const latestSettled = queryBuilder
     .select({ id: inboxItem.id })
     .from(inboxItem)
@@ -1650,10 +1657,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
 }
 
 /** The items `read` names, whole as a scope's inbox carries them, with their threads and files, each unread or not for the reader (`scopeLiveStatements`). */
-function itemsLiveStatements(
-  readerId: string,
-  read: SQL | undefined,
-): Option.Option<ScopeInboxLiveStatements> {
+function itemsLiveStatements(readerId: string, read: SQL | undefined) {
   const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
   const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
   const latest = queryBuilder
@@ -1680,92 +1684,91 @@ function itemsLiveStatements(
       ),
     ),
   );
-  const items = liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: inboxItem.id,
-            agentId: inboxItem.agentId,
-            key: inboxItem.key,
-            revision: inboxItem.revision,
-            version: inboxItem.version,
-            title: inboxItem.title,
-            needsReply: inboxItem.needsReply,
-            status: inboxItem.status,
-            startedBy: inboxItem.userId,
-            startedByName: INBOX_ITEM_COLUMNS.startedByName,
-            waitsOn: WAITS_ON,
-            waitsOnName: WAITS_ON_NAME,
-            addressed: ADDRESSED,
-            answeredBy: inboxItem.answeredBy,
-            answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
-            closedReason: inboxItem.closedReason,
-            closedBy: inboxItem.closedBy,
-            closedByName: INBOX_ITEM_COLUMNS.closedByName,
-            openAskMessageId: inboxItem.openAskMessageId,
-            unread: unreadFor(readerId),
-            markedUnread: markedUnreadFor(readerId),
-          },
-          {
-            postedAt: inboxItem.postedAt,
-            updatedAt: inboxItem.updatedAt,
-            ...liveReminderFor(readerId),
-            // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
-            settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
-          },
-        ),
-      )
-      .from(inboxItem)
-      .where(read),
+  const items = liveRowsStatement(
+    SCOPE_INBOX_PARTS.items,
+    {
+      ordered: false,
+      columns: {
+        id: inboxItem.id,
+        agentId: inboxItem.agentId,
+        key: inboxItem.key,
+        revision: inboxItem.revision,
+        version: inboxItem.version,
+        title: inboxItem.title,
+        needsReply: inboxItem.needsReply,
+        status: inboxItem.status,
+        startedBy: inboxItem.userId,
+        startedByName: INBOX_ITEM_COLUMNS.startedByName,
+        waitsOn: WAITS_ON,
+        waitsOnName: WAITS_ON_NAME,
+        addressed: ADDRESSED,
+        answeredBy: inboxItem.answeredBy,
+        answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
+        closedReason: inboxItem.closedReason,
+        closedBy: inboxItem.closedBy,
+        closedByName: INBOX_ITEM_COLUMNS.closedByName,
+        openAskMessageId: inboxItem.openAskMessageId,
+        unread: unreadFor(readerId),
+        markedUnread: markedUnreadFor(readerId),
+      },
+      instants: {
+        postedAt: inboxItem.postedAt,
+        updatedAt: inboxItem.updatedAt,
+        ...liveReminderFor(readerId),
+        // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
+        settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
+      },
+    },
+    (selection) => queryBuilder.select(selection).from(inboxItem).where(read),
   );
-  const messages = liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: MESSAGE.id,
-            itemId: qualified(inboxMessage, inboxMessage.itemId),
-            author: MESSAGE.author,
-            userId: MESSAGE.userId,
-            name: sql`(select "name" from ${user} where ${user.id} = ${MESSAGE.userId})`,
-            text: MESSAGE.text,
-            ask: MESSAGE.ask,
-            answers: MESSAGE.answers,
-            // The key a member's message was sent under, to that member alone, as `storedItem` hands it.
-            clientKey: sql`case when ${MESSAGE.userId} = ${readerId} then ${MESSAGE.clientKey} end`,
-          },
-          { createdAt: MESSAGE.createdAt },
-        ),
-      )
-      .from(inboxMessage)
-      .where(latestMessage),
+  const messages = liveRowsStatement(
+    SCOPE_INBOX_PARTS.messages,
+    {
+      ordered: false,
+      columns: {
+        id: sql<LiveMessageRow["id"]>`${MESSAGE.id}`,
+        itemId: sql<LiveMessageRow["itemId"]>`${qualified(inboxMessage, inboxMessage.itemId)}`,
+        author: sql<LiveMessageRow["author"]>`${MESSAGE.author}`,
+        userId: sql<LiveMessageRow["userId"]>`${MESSAGE.userId}`,
+        name: sql<
+          LiveMessageRow["name"]
+        >`(select "name" from ${user} where ${user.id} = ${MESSAGE.userId})`,
+        text: sql<LiveMessageRow["text"]>`${MESSAGE.text}`,
+        ask: sql<LiveMessageRow["ask"]>`${MESSAGE.ask}`,
+        answers: sql<LiveMessageRow["answers"]>`${MESSAGE.answers}`,
+        // The key a member's message was sent under, to that member alone, as `storedItem` hands it.
+        clientKey: sql<
+          string | null
+        >`case when ${MESSAGE.userId} = ${readerId} then ${MESSAGE.clientKey} end`,
+      },
+      instants: { createdAt: sql<Date>`${MESSAGE.createdAt}` },
+    },
+    (selection) => queryBuilder.select(selection).from(inboxMessage).where(latestMessage),
   );
-  const files = liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          attachmentId: attachment.id,
-          messageId: attachment.inboxMessageId,
-          name: attachment.name,
-          mediaType: attachment.contentType,
-          position: attachment.position,
-        }),
-      )
-      .from(attachment)
-      .where(
-        inArray(
-          attachment.inboxMessageId,
-          queryBuilder.select({ id: MESSAGE.id }).from(inboxMessage).where(latestMessage),
+  const files = liveRowsStatement(
+    SCOPE_INBOX_PARTS.files,
+    {
+      ordered: false,
+      columns: {
+        attachmentId: attachment.id,
+        messageId: attachment.inboxMessageId,
+        name: columnAs<string>(attachment.name),
+        mediaType: attachment.contentType,
+        position: attachment.position,
+      },
+    },
+    (selection) =>
+      queryBuilder
+        .select(selection)
+        .from(attachment)
+        .where(
+          inArray(
+            attachment.inboxMessageId,
+            queryBuilder.select({ id: MESSAGE.id }).from(inboxMessage).where(latestMessage),
+          ),
         ),
-      ),
   );
-  return Option.all({ items, messages, files });
-}
-
-/** The statements the account's inbox items are subscribed to live: where each item stands, and those changed since the reader's instant whole. */
-export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
-  readonly stamps: LiveStatement;
+  return { items, messages, files };
 }
 
 /**
@@ -1781,24 +1784,14 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
  * because a live read measures nothing from it, and that a stamp still
  * carries `channelId`, the item's workspace in its place, because a desktop
  * from before the inbox's channels were removed decodes a stamp without it
- * as no stamp: the key goes with the minimum supported desktop version. None
- * where a statement names a value Realtime cannot carry.
+ * as no stamp: the key goes with the minimum supported desktop version.
  */
-export function accountItemsLiveStatements(
-  userId: string,
-  since: Date,
-  settledSince: Date,
-): Option.Option<AccountItemsLiveStatements> {
+export function accountItemsLiveStatements(userId: string, since: Date, settledSince: Date) {
   return accountItemsOf(userId, settledSince, sql`true`, gte(inboxItem.updatedAt, since));
 }
 
 /** The account's items `narrowed` keeps, as `accountItemsLiveStatements` reads them, those `changed` keeps among them whole. */
-function accountItemsOf(
-  userId: string,
-  settledSince: Date,
-  narrowed: SQL,
-  changed: SQL,
-): Option.Option<AccountItemsLiveStatements> {
+function accountItemsOf(userId: string, settledSince: Date, narrowed: SQL, changed: SQL) {
   const carried = and(
     // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
@@ -1809,35 +1802,27 @@ function accountItemsOf(
     ),
     narrowed,
   );
-  const stamps = liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: inboxItem.id,
-            planId: inboxItem.taskId,
-            agentId: inboxItem.agentId,
-            revision: inboxItem.revision,
-            version: inboxItem.version,
-            status: inboxItem.status,
-            unread: unreadFor(userId),
-            waitsOn: WAITS_ON,
-            channelId: inboxItem.organizationId,
-            messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
-          },
-          { updatedAt: inboxItem.updatedAt, ...liveReminderFor(userId) },
-        ),
-      )
-      .from(inboxItem)
-      .where(carried),
+  const stamps = liveRowsStatement(
+    INBOX_ITEMS_READ.parts.stamps,
+    {
+      ordered: false,
+      columns: {
+        id: inboxItem.id,
+        planId: inboxItem.taskId,
+        agentId: inboxItem.agentId,
+        revision: inboxItem.revision,
+        version: inboxItem.version,
+        status: inboxItem.status,
+        unread: unreadFor(userId),
+        waitsOn: WAITS_ON,
+        channelId: inboxItem.organizationId,
+        messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
+      },
+      instants: { updatedAt: inboxItem.updatedAt, ...liveReminderFor(userId) },
+    },
+    (selection) => queryBuilder.select(selection).from(inboxItem).where(carried),
   );
-  return Option.map(
-    Option.all({
-      stamps,
-      changed: itemsLiveStatements(userId, and(carried, changed)),
-    }),
-    ({ stamps, changed }) => ({ stamps, ...changed }),
-  );
+  return { stamps, ...itemsLiveStatements(userId, and(carried, changed)) };
 }
 
 /** The tables whose moved rows name the tasks and agents whose items they move. */
@@ -1880,30 +1865,19 @@ function movedItems(moved: SyncMoved): SQL {
  * The account's inbox items narrowed to those what moved past a reader's
  * sync id could move, every part of them, `stamps` among them, and each
  * moved item whole with its thread's messages and files, which the reader
- * takes in place of what it holds of the item; none where a statement
- * names a value Realtime cannot carry.
+ * takes in place of what it holds of the item.
  */
-export function accountItemsDeltaStatements(
-  userId: string,
-  settledSince: Date,
-  moved: SyncMoved,
-): Option.Option<AccountItemsLiveStatements> {
+export function accountItemsDeltaStatements(userId: string, settledSince: Date, moved: SyncMoved) {
   return accountItemsOf(userId, settledSince, movedItems(moved), sql`true`);
 }
 
 /** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
-export function taskInboxLiveStatements(
-  userId: string,
-  taskId: string,
-): Option.Option<ScopeInboxLiveStatements> {
+export function taskInboxLiveStatements(userId: string, taskId: string) {
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
 }
 
 /** One agent's inbox written for Neon Realtime, as `memberAgentInboxItems` reads it. */
-export function memberAgentInboxLiveStatements(
-  userId: string,
-  agentId: string,
-): Option.Option<ScopeInboxLiveStatements> {
+export function memberAgentInboxLiveStatements(userId: string, agentId: string) {
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 

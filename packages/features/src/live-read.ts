@@ -18,8 +18,15 @@
  * leave out (`LIVE_PARAM.OPTIONAL_ID`), read as text and bound as the id it
  * spells, or not found where it spells none, or a value the service binds itself and no query
  * names (`LIVE_PARAM.SERVED`), such as an instant read from its clock. The mode adds the fields a reader polls
- * with (`LIVE_POLL`): every read takes `poll` and `after`, and a cursor read
- * `cursor` too.
+ * with (`LIVE_POLL`): every read takes `poll` and `after`, a cursor read
+ * `cursor` too, and a delta read `sync`, each of which a reader asks with
+ * beside its params (`LiveReadAsked`).
+ *
+ * A read may be held on some of its parts alone (`heldOn`), so a poll that
+ * only narrowed the others is held still, and may answer a reader that
+ * keeps fewer of its parts than it answers (`olderParts`), which is held as
+ * one that keeps every part is. A part a service before it never answered
+ * is optional (`optional`), in the answer and in the rows alike.
  *
  * A part's rows are an Effect Schema struct, decoded on its encoded side as
  * Postgres answers them, so a field the build does not know is read
@@ -36,8 +43,8 @@ import type { HOSTED_ERRORS } from "./contract/errors.js";
 import { LIVE_POLL, sealedLiveQuerySchema } from "./live-wire.js";
 import type { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
-/** How a live read answers a wake: run again and answered whole where its rows moved, or its cursor parts answered past the reader's cursor. */
-export const LIVE_MODE = { SNAPSHOT: "snapshot", CURSOR: "cursor" } as const;
+/** How a live read answers a wake: run again and answered whole where its rows moved, its cursor parts answered past the reader's cursor, or what moved past the reader's sync id answered alone. */
+export const LIVE_MODE = { SNAPSHOT: "snapshot", CURSOR: "cursor", DELTA: "delta" } as const;
 
 export type LiveMode = (typeof LIVE_MODE)[keyof typeof LIVE_MODE];
 
@@ -81,7 +88,19 @@ const MODE_FIELDS = {
     [LIVE_POLL.AFTER]: Schema.optionalKey(Schema.String),
     [LIVE_POLL.CURSOR]: Schema.optionalKey(Schema.String),
   },
+  [LIVE_MODE.DELTA]: {
+    [LIVE_POLL.QUERY]: Schema.optionalKey(Schema.Literal(LIVE_POLL.ON)),
+    [LIVE_POLL.AFTER]: Schema.optionalKey(Schema.String),
+    [LIVE_POLL.SYNC]: Schema.optionalKey(Schema.String),
+  },
 } as const;
+
+/** The field a reader asks a read with beside its params, by its mode: where it holds a cursor read's cursor parts, or the sync id it holds a delta read's rows at. */
+type ModeAsked<Mode extends LiveMode> = Mode extends typeof LIVE_MODE.CURSOR
+  ? { readonly [LIVE_POLL.CURSOR]?: string }
+  : Mode extends typeof LIVE_MODE.DELTA
+    ? { readonly [LIVE_POLL.SYNC]?: string }
+    : unknown;
 
 /** A path the hosted service answers at. */
 type HostedServicePath = (typeof HOSTED_SERVICE_PATH)[keyof typeof HOSTED_SERVICE_PATH];
@@ -89,11 +108,13 @@ type HostedServicePath = (typeof HOSTED_SERVICE_PATH)[keyof typeof HOSTED_SERVIC
 /** One field of a row and which way the rows stand by it. */
 type LiveOrderBy<Row extends Schema.Top> = readonly [keyof Row["Encoded"] & string, Order];
 
-/** One part's rows: their schema, a struct read on the encoded side Postgres answers, the field that keys each, and the order they stand in. */
-export interface LiveRows<Row extends Schema.Top> {
+/** One part's rows: their schema, a struct read on the encoded side Postgres answers, the field that keys each, the order they stand in, and whether a service before the part answers none. */
+export interface LiveRows<Row extends Schema.Top, Optional extends boolean = false> {
   readonly row: Row;
   readonly key: keyof Row["Encoded"] & string;
   readonly order: readonly LiveOrderBy<Row>[];
+  /** Whether the part is absent from a service before it, in the answer and the rows alike; a reader that reads it reads its absence as no rows. */
+  readonly optional?: Optional;
 }
 
 /** Any part's rows, whatever their fields. */
@@ -101,6 +122,7 @@ export interface AnyLiveRows {
   readonly row: Schema.Top;
   readonly key: string;
   readonly order: readonly (readonly [string, Order])[];
+  readonly optional?: boolean;
 }
 
 /** A read's parts, by name. */
@@ -109,22 +131,42 @@ type LiveParts = Readonly<Record<string, AnyLiveRows>>;
 /** A read's params, by the key its query and its statements name each under. */
 type LiveParams = Readonly<Record<string, LiveParam>>;
 
-/** The read's query: its params' fields and its mode's. */
-type InputFields<Params extends LiveParams, Mode extends LiveMode> = {
+/** A field of the answer or the rows for one part: optional where the part is (`optional`). */
+type PartField<Part extends AnyLiveRows, Field extends Schema.Constraint> = [
+  NonNullable<Part["optional"]>,
+] extends [true]
+  ? Schema.optionalKey<Field>
+  : Field;
+
+/** The fields a read's query reads some of its params under, narrower than the text their kind reads. */
+type QueryFields<Params extends LiveParams> = Readonly<
+  Partial<Record<keyof Params & string, Schema.Top>>
+>;
+
+/** The read's query: its params' fields, each as its kind reads it or as the read narrows it, and its mode's. */
+type InputFields<
+  Params extends LiveParams,
+  Mode extends LiveMode,
+  Query extends QueryFields<Params>,
+> = {
   readonly [Key in keyof Params as Params[Key] extends AskedParam
     ? Key
-    : never]: (typeof PARAM_FIELD)[Params[Key] & AskedParam];
+    : never]: Key extends keyof Query
+    ? Query[Key] & Schema.Top
+    : (typeof PARAM_FIELD)[Params[Key] & AskedParam];
 } & (typeof MODE_FIELDS)[Mode];
 
 /** The read's answer: the address it was sealed at, each part's sealed statement, and the fields beside them. */
 type AnswerFields<Parts extends LiveParts, Beside extends Schema.Struct.Fields> = {
   readonly url: Schema.String;
-  readonly queries: Schema.Struct<{ readonly [Part in keyof Parts]: typeof sealedLiveQuerySchema }>;
+  readonly queries: Schema.Struct<{
+    readonly [Part in keyof Parts]: PartField<Parts[Part], typeof sealedLiveQuerySchema>;
+  }>;
 } & Beside;
 
 /** Each part's rows as its statement delivers them. */
 type RowsFields<Parts extends LiveParts> = {
-  readonly [Part in keyof Parts]: Schema.$Array<Parts[Part]["row"]>;
+  readonly [Part in keyof Parts]: PartField<Parts[Part], Schema.$Array<Parts[Part]["row"]>>;
 };
 
 /** The refusals any procedure may answer, as the one map declares them. */
@@ -138,17 +180,24 @@ interface LiveReadSpec<
   Parts extends LiveParts,
   Beside extends Schema.Struct.Fields,
   Refuses extends Partial<typeof HOSTED_ERRORS>,
+  Query extends QueryFields<Params>,
 > {
   /** The read's key in the live contract and in app state (`LIVE_READ`). */
   readonly name: Name;
   readonly path: HostedServicePath;
   readonly params: Params;
+  /** The fields its query reads some params under, where its query refuses any value but these, as a query that names a literal does; each kind's own field where left out. */
+  readonly query?: Query;
   readonly mode: Mode;
   readonly parts: Parts;
   /** The fields the answer carries beside its statements, which no statement can, such as one read from the request. */
   readonly beside?: Beside;
   /** The refusals the read answers beyond those any procedure may (`refuses`). */
   readonly refuses?: Refuses;
+  /** The parts a poll is held on alone, where its other parts narrow on what the reader's own query names, such as the items changed since its `since`; every part where left out. */
+  readonly heldOn?: readonly (keyof Parts & string)[];
+  /** The parts a reader that keeps fewer than every part keeps, an older build or one that drops a part it no longer reads, whose `after` is the digest over those alone; a poll is answered only where the rows moved past it over these too. */
+  readonly olderParts?: readonly (keyof Parts & string)[];
 }
 
 /** A declared live read: what it names, and the schemas derived from it. */
@@ -159,6 +208,7 @@ export interface LiveReadDeclaration<
   Parts extends LiveParts = LiveParts,
   Beside extends Schema.Struct.Fields = Schema.Struct.Fields,
   Refuses extends Partial<typeof HOSTED_ERRORS> = Partial<typeof HOSTED_ERRORS>,
+  Query extends QueryFields<Params> = QueryFields<Params>,
 > {
   readonly name: Name;
   readonly path: HostedServicePath;
@@ -166,10 +216,14 @@ export interface LiveReadDeclaration<
   readonly mode: Mode;
   readonly parts: Parts;
   readonly beside: Beside;
+  /** The parts a poll is held on alone; every part where none is named. */
+  readonly heldOn: readonly (keyof Parts & string)[] | undefined;
+  /** The parts a reader that keeps fewer than every part keeps, where any such reader stands. */
+  readonly olderParts: readonly (keyof Parts & string)[] | undefined;
   /** Every refusal the read's procedure declares: any procedure's and its own. */
   readonly errors: AnyRefusals & Refuses;
   /** The query the read is asked with. */
-  readonly input: Schema.Struct<InputFields<Params, Mode>>;
+  readonly input: Schema.Struct<InputFields<Params, Mode, Query>>;
   /** The answer the service seals. */
   readonly answer: Schema.Struct<AnswerFields<Parts, Beside>>;
   /** Each part's rows, as a poll delivers them inline and Realtime delivers them. */
@@ -184,6 +238,8 @@ export interface AnyLiveRead {
   readonly mode: LiveMode;
   readonly parts: LiveParts;
   readonly beside: Schema.Struct.Fields;
+  readonly heldOn: readonly string[] | undefined;
+  readonly olderParts: readonly string[] | undefined;
   readonly errors: Partial<typeof HOSTED_ERRORS>;
   readonly input: Schema.Top;
   readonly answer: Schema.Top;
@@ -198,20 +254,21 @@ export type LiveReadParams<Read extends AnyLiveRead> = Readonly<
 /** The params a read's query may leave out. */
 type OptionalParam = typeof LIVE_PARAM.OPTIONAL_TEXT | typeof LIVE_PARAM.OPTIONAL_ID;
 
-/** The params a reader asks a read with, each as text: every one but those the service binds itself, and those its query may leave out left out where it does. */
-export type LiveReadAsked<Read extends AnyLiveRead> = Readonly<
-  {
-    [Key in keyof Read["params"] & string as Read["params"][Key] extends
-      | typeof LIVE_PARAM.SERVED
-      | OptionalParam
-      ? never
-      : Key]: string;
-  } & {
-    [Key in keyof Read["params"] & string as Read["params"][Key] extends OptionalParam
-      ? Key
-      : never]?: string;
-  }
->;
+/** The params a reader asks a read with, each as text: every one but those the service binds itself, and those its query may leave out left out where it does; and the field its mode asks with beside them, where it holds one (`ModeAsked`). */
+export type LiveReadAsked<Read extends AnyLiveRead> = ModeAsked<Read["mode"]> &
+  Readonly<
+    {
+      [Key in keyof Read["params"] & string as Read["params"][Key] extends
+        | typeof LIVE_PARAM.SERVED
+        | OptionalParam
+        ? never
+        : Key]: string;
+    } & {
+      [Key in keyof Read["params"] & string as Read["params"][Key] extends OptionalParam
+        ? Key
+        : never]?: string;
+    }
+  >;
 
 /** A read's answer as the service hands it and the client reads it. */
 export type LiveReadAnswer<Read extends AnyLiveRead> = Read["answer"]["Type"];
@@ -233,9 +290,16 @@ function mapped<Key extends string, From, To>(
   ) as Record<Key, To>;
 }
 
-/** One part's rows declared: their schema, their key, and their order. */
-export function liveRows<Row extends Schema.Top>(rows: LiveRows<Row>): LiveRows<Row> {
+/** One part's rows declared: their schema, their key, their order, and whether a service before them answers none. */
+export function liveRows<Row extends Schema.Top, const Optional extends boolean = false>(
+  rows: LiveRows<Row, Optional>,
+): LiveRows<Row, Optional> {
   return rows;
+}
+
+/** A part's field of the answer or the rows, optional where the part is. */
+function partField(rows: AnyLiveRows, field: Schema.Top): Schema.Top {
+  return rows.optional === true ? Schema.optionalKey(field) : field;
 }
 
 /**
@@ -250,22 +314,28 @@ export function liveRead<
   const Parts extends LiveParts,
   const Beside extends Schema.Struct.Fields = Readonly<Record<never, never>>,
   const Refuses extends Partial<typeof HOSTED_ERRORS> = Readonly<Record<never, never>>,
+  const Query extends QueryFields<Params> = Readonly<Record<never, never>>,
 >(
-  spec: LiveReadSpec<Name, Params, Mode, Parts, Beside, Refuses>,
-): LiveReadDeclaration<Name, Params, Mode, Parts, Beside, Refuses> {
+  spec: LiveReadSpec<Name, Params, Mode, Parts, Beside, Refuses, Query>,
+): LiveReadDeclaration<Name, Params, Mode, Parts, Beside, Refuses, Query> {
   for (const [part, rows] of Object.entries<AnyLiveRows>(spec.parts)) {
     if (rows.order.length === 0)
       throw new Error(`the live read ${spec.name}'s ${part} names no order`);
   }
+  if (spec.mode === LIVE_MODE.CURSOR && spec.heldOn !== undefined)
+    throw new Error(`the live read ${spec.name} follows a cursor, so it is held on every part`);
   // SAFETY: an absent `beside` and `refuses` are the empty records their defaults name.
   const beside = (spec.beside ?? {}) as Beside;
   const own = (spec.refuses ?? {}) as Refuses;
+  const query: Readonly<Record<string, Schema.Top | undefined>> = spec.query ?? {};
   const params = Object.fromEntries(
     Object.entries<LiveParam>(spec.params).flatMap(([key, param]) =>
-      param === LIVE_PARAM.SERVED ? [] : [[key, PARAM_FIELD[param]]],
+      param === LIVE_PARAM.SERVED ? [] : [[key, query[key] ?? PARAM_FIELD[param]]],
     ),
   );
-  const queries = mapped(spec.parts, () => sealedLiveQuerySchema);
+  const queries = mapped<string, AnyLiveRows, Schema.Top>(spec.parts, (rows) =>
+    partField(rows, sealedLiveQuerySchema),
+  );
   return {
     name: spec.name,
     path: spec.path,
@@ -273,10 +343,12 @@ export function liveRead<
     mode: spec.mode,
     parts: spec.parts,
     beside,
+    heldOn: spec.heldOn,
+    olderParts: spec.olderParts,
     errors: { ...refuses(...ANY_PROCEDURE_REFUSALS), ...own },
     // SAFETY: the fields are those `InputFields`, `AnswerFields`, and `RowsFields` name, built from the same records.
     input: Schema.Struct({ ...params, ...MODE_FIELDS[spec.mode] }) as unknown as Schema.Struct<
-      InputFields<Params, Mode>
+      InputFields<Params, Mode, Query>
     >,
     answer: Schema.Struct({
       url: Schema.String,
@@ -284,7 +356,9 @@ export function liveRead<
       ...beside,
     }) as unknown as Schema.Struct<AnswerFields<Parts, Beside>>,
     rows: Schema.Struct(
-      mapped<string, AnyLiveRows, Schema.Top>(spec.parts, (rows) => Schema.Array(rows.row)),
+      mapped<string, AnyLiveRows, Schema.Top>(spec.parts, (rows) =>
+        partField(rows, Schema.Array(rows.row)),
+      ),
     ) as unknown as Schema.Struct<RowsFields<Parts>>,
   };
 }

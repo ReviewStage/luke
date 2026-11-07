@@ -9,7 +9,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 
 /**
@@ -21,8 +20,6 @@ import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
 interface MaintenanceSweeps {
-  /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, and the cloud agents' past their sandbox's, a sweep's worth. */
-  sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
@@ -49,7 +46,6 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 }
 
 interface MaintenanceSweepAnswer {
-  deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
@@ -89,10 +85,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
   const now = yield* Clock.currentTimeMillis;
   return {
-    deviceWarmRunners: yield* isolated(
-      "sweepDeviceWarmRunners",
-      sweeps.sweepDeviceWarmRunners(now),
-    ),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
     portShares: yield* isolated("sweepPortShares", sweeps.sweepPortShares(now)),

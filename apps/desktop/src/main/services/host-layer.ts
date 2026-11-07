@@ -11,6 +11,7 @@ import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
   type DuplicateGatewayMethod,
+  type DuplicateHostAct,
   Environment,
   type HostAssemblyTag,
   hostAssemblyLayer,
@@ -33,6 +34,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
 import { thisMacHostLayer } from "../native/this-mac-host";
 import type { DesktopConfig } from "./desktop-config";
+import { mainSentryTracer } from "./telemetry-service";
 
 interface HostSeamDependencies {
   config: DesktopConfig;
@@ -65,7 +67,8 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     // A forwarded cloud port is listened on at 127.0.0.1 alone, over `node:net`.
     Layer.succeed(LoopbackListener, listenOnLoopbackOverNet),
     // Cloud agents' mirrors stand beside the local agents' clones under the member's own home, `~/.vespin`.
-    Layer.succeed(MirrorPlatform, mirrorPlatform(os.homedir())),
+    // Each mirror's attempts are traced on main's Sentry.
+    Layer.succeed(MirrorPlatform, { ...mirrorPlatform(os.homedir()), tracer: mainSentryTracer }),
     thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Its consent is a loopback on this Mac: the browser hands the
@@ -96,7 +99,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
  */
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
-): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod> {
+): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod | DuplicateHostAct> {
   const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
     // The desktop runs every platform concern: it is the host they were written for.

@@ -552,6 +552,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           tokenUrl: TOKEN_URL,
           installedSkills: "/opt/agent/installed-skills",
           warm: true,
+          warmForMs: 7 * 60_000,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);

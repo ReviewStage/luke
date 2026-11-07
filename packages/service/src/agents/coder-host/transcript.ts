@@ -880,7 +880,7 @@ export interface TranscriptNow {
  * The transcript past the cursor as it stands, never held, with whether
  * `transcriptPast` would have held on it and, where it would, how soon the
  * clock alone may end that: for a reader that follows the transcript's live
- * statements (`transcript-live.ts`) and reads again once they move.
+ * statements (`../../live/reads/agent-transcript.ts`) and reads again once they move.
  */
 export function transcriptNow(
   target: ConversationTarget,

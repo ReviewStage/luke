@@ -13,6 +13,7 @@ import {
 import {
   ALL_CLIENT_CAPABILITIES,
   type DuplicateGatewayMethod,
+  type DuplicateHostAct,
   HostAssemblyTag,
   type HostTag,
   hostCapabilities,
@@ -207,7 +208,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
 export function composeDesktop(
   config: DesktopConfig,
   quit: DesktopQuit,
-): Layer.Layer<DesktopTag | HostTag, DuplicateGatewayMethod> {
+): Layer.Layer<DesktopTag | HostTag, DuplicateGatewayMethod | DuplicateHostAct> {
   const keychain = createKeychainService();
   const hostAssembly = hostAssemblyLayerFor({ config, cipher: keychain.cipher });
 

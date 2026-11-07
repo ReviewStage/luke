@@ -25,13 +25,19 @@ import {
 import type { DescriptionEditAnswer } from "@repo/features/description-edit";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
-import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
+import {
+  LIVE_READ,
+  LIVE_SIGNED_OUT,
+  type LiveRead,
+  type SealedLiveQueryWire,
+} from "@repo/features/live-wire";
 import type { PageVersion } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { AGENT_PAGES_READ, TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import type {
@@ -84,7 +90,6 @@ import {
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
-  GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
@@ -92,7 +97,7 @@ import { type EntityPool, entityPool } from "@repo/sync";
 import type { WireRecord, WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Result } from "effect";
+import { Data, Deferred, Duration, Effect, FiberMap, Result, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { type AppDescriptionDocuments, type AppHostRead, NO_KEYS_HELD } from "../app-state.js";
 import { composeTasks, type TasksClient } from "../compose-tasks.js";
@@ -100,7 +105,9 @@ import { composeWorkspaces, type WorkspacesClient } from "../compose-workspaces.
 import {
   type ActInput,
   type ActOutput,
+  type FollowKey,
   type TASKS_ACTS,
+  type TASKS_FOLLOWS,
   WORKSPACE_ACTS,
 } from "../contract/index.js";
 import type { EntityStore } from "../entity-store.js";
@@ -138,6 +145,8 @@ export const MARKED_AT = 5_000;
 
 /** The service as a table of tasks the test edits between beats. */
 export interface FakeService extends TasksClient, WorkspacesClient {
+  /** The task list's live read, by the sync id the follow asks past: its answer, or why not. */
+  listLive: (userId: string | undefined, sync: string | undefined) => Effect.Effect<unknown>;
   tasks: Task[];
   /** Each task's comment threads, by task id, and every comment write asked, in order. */
   threads: Record<string, DescriptionCommentThread[]>;
@@ -516,15 +525,6 @@ export function fakeService(tasks: Task[]): FakeService {
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
     >(["plans", "agents", "issues"]),
   };
-  /** A live read's answer as the service's call answers it: the read, or why it answered none. */
-  const called = <Answer, Failure extends string>(
-    read: Effect.Effect<Answer | { readonly failure: Failure }>,
-  ): Effect.Effect<TaskCallResult<Answer, Failure>> =>
-    Effect.map(read, (answer) =>
-      typeof answer === "object" && answer !== null && "failure" in answer
-        ? { ok: false as const, failure: answer.failure }
-        : { ok: true as const, answer: answer as Answer },
-    );
   /** A live read first asked, or polled past `after`. */
   const asked = <Part extends string, Refused extends { readonly failure: string }>(
     read: PolledLive<Part, Refused>,
@@ -1097,10 +1097,16 @@ export function fakeService(tasks: Task[]): FakeService {
     // A declared live read answers as its follow asks it: first, or polled past `after`; the sidebar as the service holds it, a poll not counted among the reads; the record of a task with none is not found, every other read unanswered.
     liveRead: ((
       read: { readonly name: string },
-      params: { readonly id: string; readonly page?: string },
+      params: {
+        readonly id: string;
+        readonly page?: string;
+        readonly userId?: string;
+        readonly sync?: string;
+      },
       poll?: { readonly after?: string | undefined },
     ) =>
       Effect.suspend((): Effect.Effect<unknown> => {
+        if (read.name === TASK_LIST_READ.name) return service.listLive(params.userId, params.sync);
         if (read.name === SIDEBAR_READ.name) {
           if (poll === undefined) service.reads.push("sidebar-live");
           return asked(live.sidebar, poll !== undefined, poll?.after);
@@ -1113,19 +1119,17 @@ export function fakeService(tasks: Task[]): FakeService {
       })) as TasksClient["liveRead"],
     // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
     listLive: (_userId, sync) =>
-      Effect.suspend(() => {
-        if (sync === undefined) return called(Effect.succeed(live.list.first()));
+      Effect.suspend((): Effect.Effect<unknown> => {
+        if (sync === undefined) return Effect.succeed(live.list.first());
         if (sync === "") {
           service.liveListReads += 1;
           const whole = live.list.first();
-          return called(
-            Effect.succeed("failure" in whole ? whole : listBySyncId(whole, undefined, listAt)),
+          return Effect.succeed(
+            "failure" in whole ? whole : listBySyncId(whole, undefined, listAt),
           );
         }
-        return called(
-          Effect.map(live.list.poll(sync), (answer) =>
-            "failure" in answer ? answer : listBySyncId(answer, sync, listAt),
-          ),
+        return Effect.map(live.list.poll(sync), (answer) =>
+          "failure" in answer ? answer : listBySyncId(answer, sync, listAt),
         );
       }),
     open: (taskId) =>
@@ -1323,10 +1327,10 @@ export function subject(
   } = {},
 ) {
   return Effect.gen(function* () {
-    /** Every event the composer emitted besides the view, by its kind. */
-    const pushed: [GatewayEventKind, WireValue][] = [];
+    /** Every event the composer emitted besides the view, by its kind, a live follow's slice by the slice it is told on. */
+    const pushed: [GatewayEventKind | LiveRead, WireValue][] = [];
     const told: TasksView[] = [];
-    /** Every other event the host emitted, in order. */
+    /** Every other event the host emitted, in order, a live follow's slice by the slice it is told on. */
     const events: { readonly kind: string; readonly payload: WireValue }[] = [];
     const waiters: {
       wanted: (view: TasksView) => boolean;
@@ -1343,6 +1347,13 @@ export function subject(
       // Note that the id the host mints for a task it starts is the one the service answers it under.
       createId: () => INVITES,
       emit: (kind: GatewayEventKind, payload: WireValue) => {
+        if (kind === GATEWAY_EVENT.LIVE_READ_CHANGED) {
+          // SAFETY: a live follow's slice is told as its name and the slice whole (`liveTold`).
+          const { read, held } = payload as unknown as { read: LiveRead; held: WireValue };
+          pushed.push([read, held]);
+          events.push({ kind: read, payload: held });
+          return;
+        }
         if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
           pushed.push([kind, payload]);
           events.push({ kind, payload });
@@ -1411,6 +1422,38 @@ export function subject(
       // SAFETY: a Gateway method is called with a record, as its overload takes.
       return Effect.orDie(handler(params as WireRecord, context));
     }
+    /** The windows' holds on the Tasks tab's live follows, each one fiber standing until let go, as a window's stream stands. */
+    const windowHolds = yield* FiberMap.make<WindowHold>();
+    /** The follow `name`'s handler, by a name not yet known. */
+    const followOf = (name: keyof typeof TASKS_FOLLOWS) =>
+      // SAFETY: every Tasks follow's handler holds and asks again by its own key, which the overloads below pair with its name.
+      tasks.acts[name] as unknown as {
+        readonly hold: (key: unknown) => Effect.Effect<void, never, Scope.Scope>;
+        readonly retry?: (key: unknown) => Effect.Effect<void>;
+      };
+    /** Holds `name`'s read at `key` as a window's stream does, until `unfollow`; a hold that stands already holds nothing anew. */
+    const follow = <Name extends keyof typeof TASKS_FOLLOWS>(
+      name: Name,
+      key: FollowKey<(typeof TASKS_FOLLOWS)[Name]>,
+    ) =>
+      Effect.asVoid(
+        FiberMap.run(
+          windowHolds,
+          windowHoldOf(name, key),
+          Effect.scoped(Effect.andThen(followOf(name).hold(key), Effect.never)),
+          { onlyIfMissing: true },
+        ),
+      );
+    /** Lets go the window's hold of `name`'s read at `key`. */
+    const unfollow = <Name extends keyof typeof TASKS_FOLLOWS>(
+      name: Name,
+      key: FollowKey<(typeof TASKS_FOLLOWS)[Name]>,
+    ) => FiberMap.remove(windowHolds, windowHoldOf(name, key));
+    /** Asks `name`'s read at `key` again, as its Try again does. */
+    const retry = <Name extends keyof typeof TASKS_FOLLOWS>(
+      name: Name,
+      key: FollowKey<(typeof TASKS_FOLLOWS)[Name]>,
+    ) => followOf(name).retry?.(key) ?? Effect.void;
     /** One of the workspaces' acts, as the act port answers it: its value, or the sentence it was refused in. */
     const act = <Name extends keyof typeof WORKSPACE_ACTS>(
       name: Name,
@@ -1457,8 +1500,7 @@ export function subject(
         yield* nextPoll(settled);
       });
     /** Holds a task's description as the window does while it has the task open. */
-    const holdDescription = (taskId: string) =>
-      call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId });
+    const holdDescription = (taskId: string) => follow("TASKS_DOCUMENT_FOLLOW", { taskId });
     /** Opens a task as the window's press does, the window then holding its description, and lets the description's read land. */
     const openTask = (taskId: string) =>
       Effect.tap(call("TASKS_SELECT", { taskId }), () =>
@@ -1466,9 +1508,7 @@ export function subject(
       );
     /** The descriptions the host holds for the windows as it last told them (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
     const descriptions = (): AppDescriptionDocuments => {
-      const told = pushed.findLast(
-        ([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
-      );
+      const told = pushed.findLast(([kind]) => kind === LIVE_READ.DESCRIPTION_DOCUMENT);
       // SAFETY: the host tells its held descriptions whole as this event's payload.
       return (told?.[1] ?? NO_KEYS_HELD) as AppDescriptionDocuments;
     };
@@ -1487,6 +1527,9 @@ export function subject(
       reset,
       call,
       act,
+      follow,
+      unfollow,
+      retry,
       told,
       pushed,
       events,
@@ -1503,6 +1546,14 @@ export function subject(
       description,
     };
   });
+}
+
+/** A window's hold on one of the Tasks tab's live follows: the follow's name, and the key it holds. */
+class WindowHold extends Data.Class<{ readonly name: string; readonly [field: string]: unknown }> {}
+
+/** `name`'s hold at `key`, equal to another of the same follow and the same key, field by field. */
+function windowHoldOf(name: string, key: object): WindowHold {
+  return new WindowHold({ ...key, name });
 }
 
 /** Every step a live follow has to take, taken. */

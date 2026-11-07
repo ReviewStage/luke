@@ -7,19 +7,21 @@ import { TOPIC } from "@repo/database/sync/notification";
 import { defineSyncTable, type SyncTable } from "@repo/database/sync/sync-table";
 import { SYNC_TABLES } from "@repo/database/sync/tables";
 import { getTestDB, installSyncTables } from "@repo/database/testing";
+import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { hostedContract } from "@repo/features/contract";
-import { LIVE_MODE } from "@repo/features/live-read";
+import { LIVE_MODE, LIVE_PARAM, liveRead, liveRows, ORDER } from "@repo/features/live-read";
 import { liveDigestOf } from "@repo/features/live-wire";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { Clock, Duration, Effect, Fiber, Layer, Option, Queue } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Queue, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { liveQueryParts } from "../live/live-procedures.js";
+import { type AnyBoundRead, bindLiveRead } from "../live/live-read-binding.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
 import { BOUND_READS, LIVE_QUERIES } from "./live-queries.js";
-import { defineLiveQuery, type LiveQuery, type SyncMoved } from "./live-query.js";
+import type { SyncMoved } from "./live-query.js";
 import { Sync } from "./watch.js";
 
 /**
@@ -65,15 +67,27 @@ const probeDB = Layer.provideMerge(
   getTestDB(),
 );
 
-/** A toy read of one task's probe rows, standing in for a view's own; `sql` reads them, its one placeholder the task. */
+/** A toy read of one task's probe rows, declared under a real read's name and path, standing in for a view's own. */
+const PROBE_DECLARATION = liveRead({
+  name: "taskHistory",
+  path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY,
+  params: { taskId: LIVE_PARAM.TEXT },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    rows: liveRows({
+      row: Schema.Struct({ id: Schema.String, note: Schema.NullOr(Schema.String) }),
+      key: "id",
+      order: [["id", ORDER.ASC]],
+    }),
+  },
+});
+
+/** The toy read bound: `sql` reads its rows, its one placeholder the task. */
 const probeQuery = (sql: string) =>
-  defineLiveQuery({
-    name: "taskHistory",
-    params: ["taskId"],
+  bindLiveRead(PROBE_DECLARATION, {
     reads: [probeSync],
     topics: ({ taskId }) => [[TOPIC.TASK, taskId]],
-    statements: ({ taskId }) => Option.some({ rows: { sql, params: [taskId] } }),
-    mode: LIVE_MODE.SNAPSHOT,
+    statements: ({ taskId }) => ({ rows: Option.some({ sql, params: [taskId] }) }),
   });
 
 const PROBE_READ = probeQuery(
@@ -203,7 +217,7 @@ const genericPlanOf = (statement: string) =>
  * one is answered, and a read in delta mode narrowed to a key of every kind
  * it narrows by, as a reader past a sync id is.
  */
-const faultsOf = (query: LiveQuery) =>
+const faultsOf = (query: AnyBoundRead) =>
   Effect.gen(function* () {
     const params = Object.fromEntries(query.params.map((param) => [param, randomUUID()]));
     const past = query.cursor === undefined ? [] : [(yield* query.cursor.standing(params)).next];
@@ -280,7 +294,7 @@ const onHub = <A, E, R>(
     );
   });
 
-it("every live procedure answers one registered read, and a bound read's procedure is its declaration's", () => {
+it("every live procedure answers one bound read, and a bound read's procedure is its declaration's", () => {
   assert.deepEqual(
     [...LIVE_QUERIES.keys()].toSorted(),
     Object.keys(hostedContract.live).toSorted(),

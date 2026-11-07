@@ -652,6 +652,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           allowedDomains: [],
           installedSkills: "/opt/agent/installed-skills",
           warm: true,
+          warmForMs: 7 * 60_000,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
@@ -1706,7 +1707,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a warm call on an agent whose sandbox stopped resumes it and launches its runner warm with no message, and a message past its turn's window while it is on screen reaches that runner as a line",
+    "a warm call on an agent whose sandbox stopped resumes it and launches its runner warm with no message, the next writes that runner a warm line, and a message past its turn's window while it is on screen reaches it as a line",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1725,8 +1726,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           reason: RUNNER_END.IDLED,
         }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
         assert.equal(ended, RUNNER_ENDED.STOPPED);
-        const record = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
-        assert.equal(record.commandId, null, "its END took the runner off its record");
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
@@ -1739,6 +1738,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.warm, true);
+        yield* sessions.warm(opened.sessionId, agent.conversationId);
+        assert.equal(api.commands.length, 2, "the second warm call launched nothing");
         // The agent's turn ended past the window, but a client had it on screen since.
         yield* (yield* Database).insert(turns).values({
           userId,
@@ -1761,11 +1762,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           since: new Date(0),
           limit: 10,
         });
+        const lines = read.map((line) => JSON.parse(line.text) as InputLine);
         assert.deepEqual(
-          read.flatMap((line) => {
-            const parsed = JSON.parse(line.text) as InputLine;
-            return parsed.type === INPUT_LINE.MESSAGE ? [developerContent(parsed)] : [];
-          }),
+          lines.filter((line) => line.type === INPUT_LINE.WARM),
+          [{ type: INPUT_LINE.WARM }],
+        );
+        assert.deepEqual(
+          lines.flatMap((line) =>
+            line.type === INPUT_LINE.MESSAGE ? [developerContent(line)] : [],
+          ),
           [[{ type: "text", text: "Now the emails." }]],
         );
       }),

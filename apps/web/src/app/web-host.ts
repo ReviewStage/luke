@@ -58,6 +58,7 @@ import {
   type CookieSessionDoor,
   cookieAccountSourceLayer,
   type DuplicateGatewayMethod,
+  type DuplicateHostAct,
   Environment,
   HOST_PLATFORM_CONCERN,
   HostAssemblyTag,
@@ -370,7 +371,6 @@ function portDependencies(
       },
     },
     tasks: {
-      host,
       acts: operator.acts,
       colorCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
@@ -521,7 +521,7 @@ const composedWeb = (
  */
 export function composeWeb(
   options: WebHostOptions,
-): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
+): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod | DuplicateHostAct> {
   const { httpClient, fork, linkPlatform } = options;
   // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
   const tab = tabLeave();

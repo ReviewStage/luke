@@ -42,7 +42,6 @@ import {
   RUNNER_PLACE,
   RUNNER_RELEASE,
   RUNNER_UNANSWERED,
-  RUNNER_WARM,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -530,17 +529,41 @@ it.effect(
     }),
 );
 
-it.effect("a warm launch nobody retires ends as idled at its cap", () =>
+it.effect("a warm launch nobody retires ends as idled once the window it was handed passes", () =>
   Effect.gen(function* () {
+    const warmForMs = 5 * 60 * 1_000;
     const service = fakeService();
     const { write, run } = yield* launch(SHORT_TURN, service);
-    yield* write(WARM_CONFIG);
+    yield* write({ ...WARM_CONFIG, warmForMs });
     yield* write(FIRST_MESSAGE);
     yield* untilIdles(service, 1);
-    yield* TestClock.adjust(Duration.millis(RUNNER_WARM.IDLE_CAP_MS - 1));
+    yield* TestClock.adjust(Duration.millis(warmForMs - 1));
     assert.equal(run.pollUnsafe(), undefined);
 
     yield* TestClock.adjust(Duration.millis(1));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+  }),
+);
+
+it.effect("a warm line runs a warm launch's window again from now", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    const { write, run } = yield* launch(SHORT_TURN, service);
+    yield* write({ ...WARM_CONFIG, warmForMs: 60_000 });
+    yield* write(FIRST_MESSAGE);
+    yield* untilIdles(service, 1);
+    yield* TestClock.adjust(Duration.seconds(50));
+    yield* write({ type: INPUT_LINE.WARM });
+    // The input loop's fiber takes the line, which leaves nothing to wait on but its turn to run.
+    for (let step = 0; step < 50; step += 1) yield* Effect.yieldNow;
+    yield* TestClock.adjust(Duration.seconds(50));
+    const ended = () =>
+      service.applied.some(({ message }) => "type" in message && message.type === RUNNER_EVENT.END);
+    for (let step = 0; step < 500 && !ended(); step += 1) yield* Effect.yieldNow;
+    assert.equal(ended(), false, "the warm line kept it past its first window");
+
+    yield* TestClock.adjust(Duration.seconds(10));
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
   }),

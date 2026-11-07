@@ -16,14 +16,14 @@ import {
 import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
 import {
   SENTRY_PROFILE_SESSION_SAMPLE_RATE,
-  SENTRY_TRACES_SAMPLE_RATE,
+  sentryTracesSampler,
 } from "@repo/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@repo/host";
 import type { AppStateStore } from "@repo/host/client";
 import type { EffectDesktopService } from "@repo/host/desktop-service";
 import type { SentryEnvironment } from "@repo/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
-import { Effect, Exit, type Layer, Scope, Stream } from "effect";
+import { Effect, Exit, type Layer, Option, Scope, Stream, Tracer } from "effect";
 import {
   type CpuSummary,
   sampleProcessCpu,
@@ -71,7 +71,7 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
     release: PACKAGED_SENTRY_RELEASE,
     environment,
-    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    tracesSampler: sentryTracesSampler,
     enableRendererProfiling: Math.random() < SENTRY_PROFILE_SESSION_SAMPLE_RATE,
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
@@ -80,6 +80,95 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 }
+
+/** Sentry's status code for a span that ended in error, as its SDK writes it. */
+const SPAN_STATUS_ERROR = 2;
+
+/** The span attributes main's tracer passes on, by their prefix; every other, a stack trace's among them, stays behind. */
+const KEPT_ATTRIBUTE_PREFIXES = ["agent.", "mirror."] as const;
+
+/** An attribute's value as Sentry keeps one: a string, a number, or a boolean. */
+function keptValue(key: string, value: unknown): string | number | boolean | undefined {
+  if (!KEPT_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix))) return undefined;
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? value
+    : undefined;
+}
+
+/** One of Effect's spans as one of main's Sentry spans. */
+class MainSentrySpan implements Tracer.Span {
+  readonly _tag = "Span";
+  readonly name: string;
+  readonly parent: Option.Option<Tracer.AnySpan>;
+  readonly annotations: Tracer.Span["annotations"];
+  readonly links: Tracer.SpanLink[];
+  readonly kind: Tracer.SpanKind;
+  readonly sampled: boolean;
+  readonly attributes = new Map<string, unknown>();
+  status: Tracer.SpanStatus;
+
+  constructor(
+    readonly sentry: Sentry.Span,
+    options: Parameters<Tracer.Tracer["span"]>[0],
+  ) {
+    this.name = options.name;
+    this.parent = options.parent;
+    this.annotations = options.annotations;
+    this.links = options.links;
+    this.kind = options.kind;
+    this.sampled = sentry.isRecording();
+    this.status = { _tag: "Started", startTime: options.startTime };
+  }
+
+  get spanId(): string {
+    return this.sentry.spanContext().spanId;
+  }
+
+  get traceId(): string {
+    return this.sentry.spanContext().traceId;
+  }
+
+  end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
+    if (Exit.isFailure(exit)) this.sentry.setStatus({ code: SPAN_STATUS_ERROR });
+    this.sentry.end(Number(endTime / 1_000_000n));
+    this.status = { _tag: "Ended", startTime: this.status.startTime, endTime, exit };
+  }
+
+  attribute(key: string, value: unknown): void {
+    this.attributes.set(key, value);
+    const kept = keptValue(key, value);
+    if (kept !== undefined) this.sentry.setAttribute(key, kept);
+  }
+
+  event(): void {}
+
+  addLinks(links: readonly Tracer.SpanLink[]): void {
+    for (const link of links) this.links.push(link);
+  }
+}
+
+/**
+ * Effect's spans as main's Sentry spans, for what is handed it rather than
+ * main's whole runtime: the cloud agents' mirrors (`@repo/host`'s
+ * `MirrorPlatform`). A span with no parent of this tracer's starts a trace
+ * of its own, which `sentryTracesSampler` keeps every time for a mirror's
+ * roots. Note that only the attributes named `agent.*` and `mirror.*` are
+ * passed on, so a stack trace Effect sets, or any attribute a span beneath
+ * sets, never leaves.
+ */
+export const mainSentryTracer: Tracer.Tracer = Tracer.make({
+  span: (options) => {
+    const parent = Option.getOrUndefined(options.parent);
+    const start = () =>
+      Sentry.startInactiveSpan({
+        name: options.name,
+        startTime: Number(options.startTime / 1_000_000n),
+        parentSpan: parent instanceof MainSentrySpan ? parent.sentry : null,
+      });
+    const sentry = parent instanceof MainSentrySpan ? start() : Sentry.startNewTrace(start);
+    return new MainSentrySpan(sentry, options);
+  },
+});
 
 /**
  * Main's Sentry, as a failed launch reports through it. What it captures

@@ -8,8 +8,9 @@
  *
  * The window's drafts owner (`useDraftsOwner`) stands, no one signed in, in
  * a root of its own from the first tree a test draws here until the test
- * ends, so what one test typed, attached, or held unsent is let go before
- * the next, as the window's root going lets it go.
+ * ends, when the test's window leaves (`pagehide`), so what one test typed,
+ * attached, or held unsent is let go before the next, as a window's
+ * document ending lets it go.
  */
 
 import type { AppStateSnapshot } from "@repo/host/app-state";
@@ -86,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   testQueryClient.clear();
+  if (draftsRoot !== undefined) act(() => window.dispatchEvent(new Event("pagehide")));
   act(() => draftsRoot?.unmount());
   draftsRoot = undefined;
 });

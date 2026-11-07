@@ -1,5 +1,10 @@
 import { CALL_FAULT } from "@repo/features";
 import {
+  AGENT_TRANSCRIPT_READ,
+  type AgentTranscriptLiveAnswer,
+  type AgentTranscriptLiveRows,
+} from "@repo/features/agent-transcript-live";
+import {
   AGENT_CALL_FAILURE,
   type AgentMessagesAnswerView,
   type AgentTranscriptPage,
@@ -15,8 +20,6 @@ import {
 } from "@repo/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts } from "@repo/features/failure-facts";
 import {
-  type AgentTranscriptLiveAnswer,
-  agentTranscriptLiveRowsSchema,
   LIVE_SIGNED_OUT,
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
@@ -192,7 +195,7 @@ export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing, 
  * here alone, so it needs no hash, and the host loads where no `node:`
  * module does.
  */
-function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
+function digestOf(rows: AgentTranscriptLiveRows): string {
   const parts = {
     turns: rows.turns,
     conversation: rows.conversation.map(({ id, title }) => ({ id, title })),
@@ -223,7 +226,7 @@ function canonical(value: unknown): string {
 }
 
 /** The window's messages as the rows draw them, with the sequences they span. */
-function drawnOf(rows: typeof agentTranscriptLiveRowsSchema.Type): Drawn {
+function drawnOf(rows: AgentTranscriptLiveRows): Drawn {
   const seqs = rows.window.map((row) => row.seq);
   const revisions = rows.conversation.map((row) => row.revision);
   const queue = (rows.queueRevision ?? []).map((row) => row.revision);
@@ -321,7 +324,7 @@ export function transcriptFollows<Key = TranscriptKey>(
             decodedLiveRows(
               { poll: (after, cursor) => Effect.map(seal(true, after, cursor), followedAnswer) },
               followedRead(first.value),
-              agentTranscriptLiveRowsSchema,
+              AGENT_TRANSCRIPT_READ.rows,
               joinedWindowRows,
             ),
             (decoded) =>

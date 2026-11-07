@@ -29,10 +29,9 @@
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall we set, so its `firewall` does nothing, and nothing
- * to stop, resume, or throw away, since a warm runner is retired by the service
- * under its lease, settling its line: past its window by the sweep
- * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it,
- * or at its IDLE where its device waits to update
+ * to stop, resume, or throw away, since a warm runner ends itself past its
+ * window, settling its line, or is retired by the service under its lease:
+ * by a message sent past it, or at its IDLE where its device waits to update
  * (`../coder-host/runner-sessions.ts`); the agent's folder goes from its
  * device only once the agent is archived (`../device-discard.ts`).
  * `wrote` reads whether a write was queued after the runner's launch line,

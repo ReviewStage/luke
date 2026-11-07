@@ -28,7 +28,9 @@
  * Code's background work outlives a `result`. A turn that is over ends the
  * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
  * IDLE and keeps the launch up (`RUNNER_WARM`) for the service's next message,
- * until the service retires it or its cap ends it as `idled`. One interrupted
+ * until the service or its host retires it or its warm window ends it as
+ * `idled`; a `warm` line runs that window again from now, and such a launch is
+ * warm from its start too. One interrupted
  * after the service's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
@@ -1010,6 +1012,9 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
       yield* Effect.logWarning("agent-runner: skipped a retire for a launch at work");
       return undefined;
     }
+    // Note that a warm launch's window is its wait for the next signal, which this one already ran again from now.
+    case INPUT_LINE.WARM:
+      return undefined;
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
       // Note that a line naming either speed key says both, the one it leaves out being off.
@@ -1255,10 +1260,10 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   );
   const outcome = yield* Effect.gen(function* () {
     for (;;) {
-      // A warm launch waits at most its cap for the next signal, and ends where none came.
+      // A warm launch waits at most its window for the next signal, and ends where none came.
       const next = launch.warm
         ? yield* Queue.take(signals).pipe(
-            Effect.timeoutOption(Duration.millis(RUNNER_WARM.IDLE_CAP_MS)),
+            Effect.timeoutOption(Duration.millis(config.warmForMs ?? RUNNER_WARM.IDLE_CAP_MS)),
           )
         : Option.some(yield* Queue.take(signals));
       if (Option.isNone(next)) return ended(RUNNER_END.IDLED);

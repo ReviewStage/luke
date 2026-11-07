@@ -61,12 +61,12 @@
  * bearer and throws the place away. Nothing here streams: the runner posts its
  * events to the service itself.
  *
- * `warm` launches the runner with no message where none runs, for an agent a
- * client has on screen, past its answer, so the next message goes into the
- * running session as a line; the agent stays warm for its machine's window
- * past the later of its turn's end and the last such call
- * (`CODER.RUNNER_WARM`), past which the warm sweep retires its runner
- * (`retireWarmRunner`).
+ * `warm`, for an agent a client has on screen, writes a runner that runs a
+ * `warm` line, which runs its warm window again from now, or launches the
+ * runner with no message where none runs, past its answer, so the next
+ * message goes into the running session as a line. The agent stays warm for
+ * its machine's window past the later of its turn's end and the last such
+ * call (`CODER.RUNNER_WARM`), past which its runner ends itself.
  *
  * At a launch's end (`runnerEnded`, which the events route calls on the
  * runner's END event) the place is stopped unless a developer's Terminal
@@ -548,10 +548,10 @@ function launchFingerprint(
  * Whether the agent's turn ended, and it was last on screen (`warm`),
  * longer ago than the warm window of the machine given
  * (`CODER.RUNNER_WARM`), so we have closed or are closing it, and the runner
- * may soon end itself at its own idle cap. Never where the window is zero,
- * whose runner is launched to end at its turn's end. An ended turn with no
- * settle time stamped reads as ended long ago, as the sweep reads it. When
- * it was on screen is read only for a turn that ended past the window.
+ * may soon end itself (`CODER.RUNNER_WARM_SLACK`). Never where the window
+ * is zero, whose runner is launched to end at its turn's end. An ended turn
+ * with no settle time stamped reads as ended long ago. When it was on
+ * screen is read only for a turn that ended past the window.
  */
 function pastWarmWindow(
   machine: AgentMachineKind,
@@ -919,8 +919,10 @@ export const runnerSessions = <
                   .config(agent, layout, resume, firstSequence, rewindBefore)
                   .pipe(Effect.withSpan("web/runnerConfig"));
                 // Note that a runner stays warm past the agent's turn only on a machine with a warm
-                // window (`CODER.RUNNER_WARM`), for its sweep to retire.
-                const warm = !Duration.isZero(CODER.RUNNER_WARM[place.running.machine]);
+                // window (`CODER.RUNNER_WARM`), ending itself once it passes.
+                const window = CODER.RUNNER_WARM[place.running.machine];
+                const warm = !Duration.isZero(window);
+                const warmForMs = Duration.toMillis(Duration.sum(window, CODER.RUNNER_WARM_SLACK));
                 return {
                   config: {
                     ...config,
@@ -929,7 +931,7 @@ export const runnerSessions = <
                       ? { transcriptsUrl: options.transcriptsUrl }
                       : undefined),
                     ...(fork ? { fork } : undefined),
-                    ...(warm ? { warm } : undefined),
+                    ...(warm ? { warm, warmForMs } : undefined),
                     ...(trace === undefined ? undefined : { trace }),
                   },
                   rewind,
@@ -1867,18 +1869,25 @@ export const runnerSessions = <
       });
 
     /**
-     * An agent on screen made warm, under its runner lease: where none of
-     * its turns runs and no runner runs, the runner launched with no message
-     * (`launchedWithoutMessage`), warm from its start, for the next message
-     * to go into its running session as a line. A turn that runs has a
-     * runner of its own, or one the sweep settles as lost.
+     * An agent on screen kept warm, under its runner lease, where none of its
+     * turns runs: a runner that runs is written a `warm` line, which runs its
+     * warm window again from now, and where none runs, the runner is launched
+     * with no message (`launchedWithoutMessage`), warm from its start, for the
+     * next message to go into its running session as a line. A turn that runs
+     * has a runner of its own, whose IDLE arms a window of its own.
      */
     const warmHolding = (sessionId: string, agent: Agent) =>
       Effect.gen(function* () {
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
-        if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return undefined;
-        return yield* launchedWithoutMessage(sessionId, agent);
+        if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return;
+        const found = yield* firstPlace(machine, userId, sessionId);
+        if (Option.isNone(found) || found.value.agentId !== agent.id) return;
+        const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
+        if (live !== undefined) {
+          return yield* deliveredTo(machine, userId, agent.id, live, [{ type: INPUT_LINE.WARM }]);
+        }
+        yield* launchedWithoutMessage(sessionId, agent);
       });
 
     /**
@@ -2410,29 +2419,6 @@ export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (ret
   return yield* holdingRunner(retiring.agentId, retiredHolding(machine, retiring));
 });
 
-/**
- * A warm runner a sweep found past its machine's window retired as
- * `retireWarmRunner` retires one, in whatever session its place runs now,
- * but only where no other call holds the agent's runner lease: whether the
- * line was written, or none at once where a call holds the lease, so the
- * sweep passes the agent by until its next minute rather than waiting out
- * `CODER.RUNNER_LEASE.WAIT` behind a send. A send that holds the lease
- * either took the runner, which then reads as at work, or found it gone and
- * relaunched.
- */
-export const retireWarmRunnerIfFree = Effect.fn("web/retireWarmRunnerIfFree")(function* (
-  retiring: Omit<WarmRunner, "running">,
-) {
-  const machine = yield* deploymentLifecycle;
-  const found = yield* firstPlace(machine, retiring.userId, retiring.sessionId);
-  const running = Option.getOrUndefined(found)?.running;
-  if (running === undefined) return Option.some(false);
-  return yield* holdingRunnerIfFree(
-    retiring.agentId,
-    retiredHolding(machine, { ...retiring, running: running.running }),
-  );
-});
-
 /** How a launch's end left its place. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",
@@ -2478,15 +2464,14 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
  * runner retired at once (`retireWarmRunner`) where its device last beat
  * that it waits to switch release (`HOST_UPDATE.WAITING`), so a host waiting
  * to update goes idle as its last turn ends. It otherwise stays warm for the
- * next message, and is retired past its window by the sweep
- * (`../../maintenance/device-warm-sweep.ts`) or by a message sent past it
- * (`sendHolding`). Retiring under the runner lease is what keeps a message
+ * next message, and past its window ends itself or is retired by a message
+ * sent past it (`sendHolding`). Retiring under the runner lease is what keeps a message
  * sent at the turn's end: one a send wrote first is taken by the runner,
  * which still reads its stdin, and one sent after finds the runner no
  * longer told of and relaunches. Nothing for a sandbox's runner, which
- * stays warm for its window while the developer has it on screen, for the
- * same sweep to retire, nor for an IDLE older than the launch its place runs
- * now. Answers whether the retire line was written.
+ * stays warm for its window while the developer has it on screen and ends
+ * itself past it, nor for an IDLE older than the launch its place runs now.
+ * Answers whether the retire line was written.
  */
 export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerEnding) {
   const machine = yield* deploymentLifecycle;
@@ -2533,16 +2518,6 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   const { launch, running, agentId } = found.value;
   if (launch !== undefined && ending.sequence < launch.firstSequence) return RUNNER_ENDED.STALE;
   if (running === undefined) return RUNNER_ENDED.STALE;
-  // A sandbox's record tells of its runner no longer once it ended, so the warm sweep passes it by.
-  // Note that a Mac's record is its launch and stop lines, which its own end settles.
-  if (found.value.machine === AGENT_MACHINE.VERCEL && agentId !== undefined) {
-    yield* machine.recordRunner(
-      recordOf(found.value, ending.target.userId, agentId),
-      launch === undefined
-        ? { kind: RUNNER_RECORD.NONE }
-        : { kind: RUNNER_RECORD.LAUNCHED, mark: launch },
-    );
-  }
   if (
     launch?.linesRead === true &&
     agentId !== undefined &&

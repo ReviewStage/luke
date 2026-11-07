@@ -11,14 +11,14 @@ import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { user } from "@repo/database/schemas/auth";
-import { conversations, messages, turns } from "@repo/database/schemas/storage";
+import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { AgentImage } from "../agents/coder-host/agent-image.js";
@@ -183,24 +183,6 @@ export const warmLocalAgent = Effect.gen(function* () {
 });
 
 export type WarmLocalAgent = Effect.Success<typeof warmLocalAgent>;
-
-/** A line of the developer's that no turn took yet, written as the store writes it before it hands the line to the agent's sessions. */
-export const lineWritten = (warm: WarmLocalAgent, text: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const now = yield* DateTime.nowAsDate;
-    yield* db.insert(messages).values({
-      id: randomUUID(),
-      userId: warm.userId,
-      conversationId: warm.agent.conversationId,
-      seq: 1,
-      clientId: randomUUID(),
-      role: MESSAGE_ROLE.USER,
-      parts: [{ type: "text", text }],
-      createdAt: now,
-      placedAt: now,
-    });
-  });
 
 /** What the agent's Mac has yet to take, line by line: a message line by the text it carries, any other by its kind. */
 export const linesWaiting = (warm: WarmLocalAgent) =>

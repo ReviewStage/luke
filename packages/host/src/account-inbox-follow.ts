@@ -1,12 +1,12 @@
 import type { AccountInboxAnswer } from "@repo/features/account-inbox-wire";
-import type { InboxItem } from "@repo/features/inbox-wire";
 import {
+  ACCOUNT_INBOX_READ,
   type AccountInboxLiveAnswer,
   type AccountInboxLiveRows,
-  accountInboxLiveRowsSchema,
   accountInboxOfLiveRows,
   nextFailedRunExpiry,
-} from "@repo/features/live-wire";
+} from "@repo/features/inbox-live";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import type { EntityPool, HeldRows } from "@repo/sync";
 import { Clock, Duration, Effect, Queue, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import {
@@ -251,7 +251,7 @@ export function accountInboxes(
             },
           },
           first,
-          accountInboxLiveRowsSchema,
+          ACCOUNT_INBOX_READ.rows,
           (rows) =>
             Effect.suspend(() => {
               taken(rows);

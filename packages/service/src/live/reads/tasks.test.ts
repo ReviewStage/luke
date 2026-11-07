@@ -62,9 +62,9 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { agentsOfTask, pullRequestsOfTask } from "@repo/features/task-agents-model";
 import {
   agentPullRequestsOfLiveRows,
+  TASK_LIST_READ,
   taskAgentPinsOfLiveRows,
   taskAgentsOfLiveRows,
-  taskListLiveRowsSchema,
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
 } from "@repo/features/task-list-live";
@@ -85,11 +85,11 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { agentSummary, summaryAccounts, summaryDevices } from "../agents/coder-host/status.js";
-import { continuedByOf, standingsOf } from "../agents/coder-host/stop.js";
-import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
-import { TURN_FAILURE } from "../core.js";
-import { taskListLiveStatements } from "./task-list-live.js";
+import { agentSummary, summaryAccounts, summaryDevices } from "../../agents/coder-host/status.js";
+import { continuedByOf, standingsOf } from "../../agents/coder-host/stop.js";
+import { listTasklessAgents, withTaskAgents } from "../../agents/task-agents.js";
+import { TURN_FAILURE } from "../../core.js";
+import { tasksRead } from "./tasks.js";
 
 /**
  * The plan list's live statements against the held read it stands in for:
@@ -209,8 +209,8 @@ const runLive = (statement: LiveStatement) =>
 /** The rows the live statements deliver to the account, decoded as the desktop decodes them. */
 const liveRowsOf = (userId: string) =>
   Effect.gen(function* () {
-    const statements = Option.getOrThrow(taskListLiveStatements(userId));
-    return yield* Schema.decodeUnknownEffect(taskListLiveRowsSchema)({
+    const statements = Option.getOrThrow(tasksRead.statements({ userId }));
+    return yield* Schema.decodeUnknownEffect(TASK_LIST_READ.rows)({
       plans: yield* runLive(statements.plans),
       agents: yield* runLive(statements.agents),
     });
@@ -413,7 +413,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
 
   it.effect("call only functions Postgres marks immutable, as Realtime requires", () =>
     Effect.gen(function* () {
-      const { plans, agents, issues } = Option.getOrThrow(taskListLiveStatements("user-immutable"));
+      const { plans, agents, issues } = Option.getOrThrow(
+        tasksRead.statements({ userId: "user-immutable" }),
+      );
       assert.deepEqual(yield* mutableFunctionsOf(plans), []);
       assert.deepEqual(yield* mutableFunctionsOf(agents), []);
       assert.deepEqual(yield* mutableFunctionsOf(issues), []);

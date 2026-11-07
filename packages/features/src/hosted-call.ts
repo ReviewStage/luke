@@ -14,7 +14,8 @@
  *
  * A live read may be polled (`poll`): asked for its rows inline, and, past
  * where they last stood (`after`), held until they move, under the held
- * deadline. `askLiveRead` asks a declared live read (`live-read.ts`) so.
+ * deadline. `askLiveRead` asks a declared live read (`live-read.ts`) so,
+ * past a sync id it names (`LIVE_POLL.SYNC`) under the held deadline too.
  */
 
 import type { ORPCError } from "@orpc/client";
@@ -152,10 +153,14 @@ export function askLiveRead<Read extends AnyLiveRead, As extends HostedRenames =
     ORPCErrorFromErrorMap<Read["errors"]>
   >;
   // SAFETY: a read's params are the fields of its input its mode's poll fields stand beside, each as text.
-  const input = params as LivePollInput;
+  const input = params as LivePollInput & { readonly [LIVE_POLL.SYNC]?: string };
+  // Note that a read past a sync id is held by the service until something moves, polled or not, so it travels under the held deadline, as a poll past `after` does.
+  const sync = input[LIVE_POLL.SYNC];
+  const held = sync !== undefined && sync !== "";
   return hostedCall(procedure, input, {
     live: true,
     ...(poll === undefined ? {} : { poll }),
+    ...(held ? { deadline: HOSTED_DEADLINE.HELD } : {}),
     ...(as === undefined ? {} : { as }),
   });
 }
