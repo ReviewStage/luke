@@ -1,5 +1,7 @@
 import { type ContractedRouter, onError, type Router } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import { SentSendTrace, sendTraceOf } from "@repo/features/sentry-tracing";
+import { Context } from "effect";
 import {
   type actContract,
   HOST_ACTS,
@@ -128,6 +130,10 @@ export interface ActPortDependencies {
  * does not draw. That failure is logged here, in main, before it is replaced.
  * The host's procedures sit beside the platform's own, and together they
  * answer every kind of the contract.
+ *
+ * A call a window sent for a press carries the press's trace as Sentry's
+ * own headers, which are set as the call's `SentSendTrace`, so a hosted ask
+ * it makes continues that trace (`@repo/features/hosted-link`).
  */
 export function createActPortHandler<Sender>(
   dependencies: ActPortDependencies,
@@ -157,6 +163,12 @@ export function actPortHandlerOf<Sender>(
 ): ActPortHandler<Sender> {
   return new RPCHandler<ActPortContext<Sender>>(router, {
     interceptors: [
+      ({ next, request, context, ...options }) => {
+        const trace = sendTraceOf(request.headers);
+        if (trace === undefined) return next();
+        const services = Context.add(context["effect/context"], SentSendTrace, trace);
+        return next({ ...options, request, context: { ...context, "effect/context": services } });
+      },
       async ({ next, procedure }) => {
         try {
           return await next();
