@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { AGENT_STATUS, type AgentPage } from "@repo/features/agent-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -508,4 +509,48 @@ test("a link to a workspace the reader has since left, opened after a not-found 
   await settle();
 
   assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/acme", true]);
+});
+
+test("a move from one open task to another keeps the task's page drawn, never its loading frame", async () => {
+  const { document: _document, ...one } = { ...DOCUMENT_TASK, workspaceId: ACME.id };
+  const other = { ...one, id: "b2000002-0000-4000-8000-0000000000f9", name: "Other", number: 77 };
+  const openOn = (taskId: string): AppStateSnapshot => ({
+    ...stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          workspaces: [ACME],
+          tasks: [one, other],
+          activeTaskId: taskId,
+        },
+        access: { admin: false, pending: true },
+      },
+    ),
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: {
+      [one.id]: { rows: { task: { ...DOCUMENT_TASK, workspaceId: ACME.id } } },
+      [other.id]: { rows: { task: { ...DOCUMENT_TASK, ...other } } },
+    },
+  });
+  first = openOn(one.id);
+  const router = await drawWindow(`/acme/task/${one.id}`);
+  // Every frame drawn while reading a task, which a loaded task's page never draws.
+  const reading: string[] = [];
+  const observer = new MutationObserver(() => {
+    if (document.querySelector(".desktop-main")?.textContent?.includes("Reading the task")) {
+      reading.push(router.history.location.pathname);
+    }
+  });
+  observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+
+  await act(async () => {
+    for (const listener of listeners) listener(structuredClone(openOn(other.id)));
+    // Note that the router offers a route's loading frame on a clock of its own, which a real wait lets run.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  await settle();
+  observer.disconnect();
+
+  assert.equal(router.history.location.pathname, "/acme/task/77");
+  assert.deepEqual(reading, [], "no loading frame drawn on the way");
 });

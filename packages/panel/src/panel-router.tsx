@@ -57,7 +57,6 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
-  TaskRouteLoading,
   UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
@@ -70,7 +69,6 @@ import {
   useRouteAccess,
   versionHistoryRouteStands,
   workspaceRouteStands,
-  workspacesReadFor,
 } from "./route-gates.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
@@ -206,23 +204,17 @@ const boardRoute = createRoute({
 }).lazy(() => import("./desktop/board-route.lazy.js").then((loaded) => loaded.boardLazyRoute));
 
 /**
- * A task's place, which the window's state draws (`StatePlace`). A link to
- * it is read against the account's workspaces, so as the window loads at
- * it the route waits on their read, its own frame standing at once as a
- * lazy route's does, rather than the window resting anywhere else
- * meanwhile. Note that the frame is the task's loading page alone, never
- * the place itself, because a move onto the route shows it for the turn
- * the wait takes even once the workspaces are read, and the task's page
- * drawn there would be drawn twice.
+ * A task's own place (`ROUTED_PLACE.TASK`), which the window's state draws
+ * (`StatePlace`). A link to it is read against the account's workspaces, so
+ * as the window loads at it the place draws the task's loading frame until
+ * they are read, rather than the window resting anywhere else meanwhile.
+ * Note that the wait is the place's own rather than a `loader`'s, because a
+ * move from one task to another is a new match of the route, whose pending
+ * frame would stand in for the task's page and draw it anew on every move.
  */
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "task/$taskId",
-  loader: ({ context, abortController }) =>
-    workspacesReadFor(context.queryClient, abortController.signal),
-  pendingComponent: TaskRouteLoading,
-  pendingMs: 0,
-  pendingMinMs: 0,
   component: StatePlace,
 });
 
