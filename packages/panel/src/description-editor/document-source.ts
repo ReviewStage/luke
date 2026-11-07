@@ -197,14 +197,24 @@ function reprinted(manager: MarkdownManager, node: PmNode): string {
   return node.type.name === "blockquote" ? markdown.replace(ESCAPED_ALERT, "$1[!$2]") : markdown;
 }
 
-/** One block as it would be written now: its source while it is the node it opened as, re-printed otherwise. */
-function blockMarkdown(manager: MarkdownManager, node: PmNode, held: HeldSources): string {
-  return held.sources.get(node) ?? reprinted(manager, node) + BLOCK_GAP;
-}
-
 /** Whether a block is a paragraph holding nothing: a line the developer left blank. */
 function blankLine(node: PmNode): boolean {
   return node.type.name === "paragraph" && node.childCount === 0;
+}
+
+/** Whether a block is a blank line the developer laid in, rather than one the text opened with. */
+function leftBlank(node: PmNode, held: HeldSources): boolean {
+  return !held.sources.has(node) && blankLine(node);
+}
+
+/**
+ * One block as it would be written now: its source while it is the node it
+ * opened as, a blank line laid in as TipTap's own mark for an empty
+ * paragraph, and re-printed otherwise.
+ */
+function blockMarkdown(manager: MarkdownManager, node: PmNode, held: HeldSources): string {
+  if (leftBlank(node, held)) return BLANK_LINE + BLOCK_GAP;
+  return held.sources.get(node) ?? reprinted(manager, node) + BLOCK_GAP;
 }
 
 /**
@@ -217,10 +227,8 @@ function blankLine(node: PmNode): boolean {
  * empty text stays empty.
  */
 export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: HeldSources): string {
-  const left = doc.children.map((node) => !held.sources.has(node) && blankLine(node));
-  const blocks = doc.children.map((node, index) =>
-    left[index] ? BLANK_LINE + BLOCK_GAP : blockMarkdown(manager, node, held),
-  );
+  const left = doc.children.map((node) => leftBlank(node, held));
+  const blocks = doc.children.map((node) => blockMarkdown(manager, node, held));
   // Note that a new block that writes nothing, a picture still being kept, writes no blank line either.
   const worded = doc.children.map(
     (node, index) => held.sources.has(node) || (!left[index] && blocks[index]?.trim() !== ""),

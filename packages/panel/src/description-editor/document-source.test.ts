@@ -265,6 +265,20 @@ test("a blank line left between paragraphs is saved as one the read view draws, 
   );
 });
 
+test("Vespin's block merged in after a blank line the developer left is laid into the open editor", () => {
+  const { editor, handedOver, took } = opened("One.\n");
+  editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
+  editor.commands.enter();
+  editor.commands.enter();
+  editor.commands.insertContent("Two.");
+  const sent = handedOver();
+  const merged = sent.replace("Two.", "By Vespin.\n\nTwo.");
+
+  took(sent, merged);
+
+  assert.equal(handedOver(), merged);
+});
+
 test("a checked empty task item inside a checklist stays one when a later item is edited", () => {
   const text = "- [ ] first\n- [x] &nbsp;\n- [ ] last\n";
   const { host, editor, handedOver } = opened(text);

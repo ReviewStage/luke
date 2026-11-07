@@ -3319,6 +3319,11 @@ test("Enter submits the review from its words, while Shift+Enter only adds a lin
   pressInBox(panel, { key: "Enter", shiftKey: true }, "Review comment");
   await settle();
   assert.deepEqual(changes, [], "Shift+Enter sends nothing");
+  assert.deepEqual(
+    boxEditor(panel, "Review comment").state.doc.children.map((block) => block.textContent),
+    ["Looks right.", ""],
+    "Shift+Enter adds a line",
+  );
   pressInBox(panel, { key: "Enter", isComposing: true, keyCode: 229 }, "Review comment");
   await settle();
   assert.deepEqual(changes, [], "nor does an input method's Enter");
