@@ -47,6 +47,7 @@ import {
   type WorkspaceMember,
   type WorkspacePhotoType,
   workspaceCreateRequestSchema,
+  workspaceDeleteRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -495,6 +496,23 @@ export class HostedWorkspaceClient {
         (answer) => answer.workspaceId,
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
+    );
+  }
+
+  /** The owner deletes the workspace, answering the workspace deleted; an answer naming another workspace is no answer. */
+  delete(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceDeleteRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.map(
+      resultOf(
+        hostedCall(this.#hostedInSession.workspaces.delete, admitted),
+        (answer) => answer.workspaceId,
+      ),
+      (deleted) => (deleted.ok && deleted.answer !== workspaceId ? UNANSWERED : deleted),
     );
   }
 

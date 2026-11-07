@@ -53,6 +53,7 @@ const handle = hostedFetch({
       ),
     workspaces,
     members,
+    deleteWorkspace: UNREACHED,
   }),
 });
 

@@ -9,6 +9,7 @@ import { makeSignature } from "better-auth/crypto";
 import { admin, bearer, organization as organizationPlugin } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, Option } from "effect";
+import { workspaceDeleteCall, workspaceDeletionSteps } from "../accounts/deletion-hooks.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
   ADMIN_OPTIONS,
@@ -16,6 +17,7 @@ import {
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
+  workspaceDeletion,
 } from "../auth/auth-policy.js";
 import { supportAccess } from "../auth/support-access.js";
 
@@ -25,7 +27,9 @@ import { supportAccess } from "../auth/support-access.js";
  * The plugin writes through its own adapter and the store reads through
  * `database`, the same PGlite, so a test sees the plugin's real rows: the
  * organization and owner a create makes, and the member an add makes, and a
- * session answers its user's `role` as the deployment's does. A
+ * session answers its user's `role` as the deployment's does. A workspace's
+ * delete runs the deployment's own deletion hooks, on the services of the
+ * fiber that asks it (`deleteWorkspace`). A
  * member write is the plugin's own call under a session, which
  * `sessionBearerOf` mints for an account and signs as the bearer plugin
  * hands one out, so the plugin reads it back exactly as it reads the Mac's.
@@ -49,7 +53,10 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     session: SESSION_COOKIE_CACHE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     plugins: [
-      organizationPlugin(ORGANIZATION_OPTIONS),
+      organizationPlugin({
+        ...ORGANIZATION_OPTIONS,
+        organizationHooks: workspaceDeletion(workspaceDeletionSteps),
+      }),
       bearer(SESSION_BEARER),
       admin(ADMIN_OPTIONS),
       supportAccess(),
@@ -80,6 +87,7 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     api: plugin.api,
     seams: workspaceSeams(plugin.api),
     members: memberSeams(plugin.api),
+    deleteWorkspace: workspaceDeleteCall(plugin.api),
     resolveSessionUserId,
     sessionBearerOf,
     sessionCookieOf,

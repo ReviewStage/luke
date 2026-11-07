@@ -33,6 +33,7 @@ import {
   Chip,
   ChipName,
   CONFIRM_LOSS,
+  ConfirmConsequences,
   ConfirmDialog,
   DIALOG_TONE,
   Dialog,
@@ -219,6 +220,18 @@ const LEAVE_WORDS = {
     name === undefined
       ? "Your own workspace isn't affected."
       : `Your own workspace, ${name}, isn't affected.`,
+} as const;
+
+/** What the owner's delete says: its press, its running verb, its row's line, and what goes for everyone and what stays installed. */
+const DELETE_WORDS = {
+  PRESS: "Delete",
+  VERB: "Delete workspace",
+  RUNNING: "Deleting",
+  LINE: "Deletes it and everything in it for every member. This can't be undone.",
+  GONE: "Its tasks, agents and their transcripts, automations, memory, and invitations are deleted for everyone.",
+  AGENTS: "Agents still working in it stop.",
+  INSTALLED:
+    "The GitHub App, the Slack bot, and the Sentry integration stay installed on GitHub, Slack, and Sentry. Remove them there if you no longer need them.",
 } as const;
 
 /** The role changes in a member's ⋯, the owner's alone. */
@@ -690,14 +703,16 @@ function MemberLeave({
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       >
-        <ul className="leave-consequences m-0 pl-ui-16 text-body text-muted-foreground [&>li+li]:mt-ui-4">
-          <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
-          <li>{LEAVE_WORDS.AGENTS}</li>
-          {automationsLine === undefined ? null : <li>{automationsLine}</li>}
-          {/* An invitation is the workspace's, so one an admin sent outlives their leaving; a member sends none. */}
-          {workspace.role === WORKSPACE_ROLE.ADMIN ? <li>{LEAVE_WORDS.INVITATIONS}</li> : null}
-          <li>{LEAVE_WORDS.OWN(ownName)}</li>
-        </ul>
+        <ConfirmConsequences
+          lines={[
+            LEAVE_WORDS.TASKS(workspace.name),
+            LEAVE_WORDS.AGENTS,
+            ...(automationsLine === undefined ? [] : [automationsLine]),
+            // An invitation is the workspace's, so one an admin sent outlives their leaving; a member sends none.
+            ...(workspace.role === WORKSPACE_ROLE.ADMIN ? [LEAVE_WORDS.INVITATIONS] : []),
+            LEAVE_WORDS.OWN(ownName),
+          ]}
+        />
       </ConfirmDialog>
     </>
   );
@@ -850,10 +865,83 @@ function OwnerLeave({
 }
 
 /**
+ * The owner's delete of a team workspace: drawn as Leave is, its name, a
+ * line saying what goes, and the red button, which asks first and waits on
+ * the workspace's name typed, since it is deleted for every member and
+ * nobody can bring it back. A delete the service carried turns the window
+ * to the personal workspace, as a leave does; a refusal, an agent still
+ * starting its turn or offline among them, is said in the dialog, which
+ * stays open to try again.
+ */
+function WorkspaceDelete({
+  workspace,
+  onDeleted,
+}: {
+  workspace: Workspace;
+  onDeleted: () => void;
+}): React.JSX.Element {
+  const { mutateAsync: sendWorkspaceDelete, ...deleting } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_DELETE),
+  );
+  const workspaceId = workspace.id;
+  const deleteAct = useConfirmAct(deleting, {
+    send: () => sendWorkspaceDelete({ workspaceId }).then(onDeleted),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
+  const removal = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    deleteAct,
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_DELETE),
+  );
+  return (
+    <>
+      <SettingsRow
+        label={
+          <>
+            Delete <ReplayMask>{workspace.name}</ReplayMask>
+          </>
+        }
+        description={DELETE_WORDS.LINE}
+      >
+        {() => (
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            busy={removal.busy}
+            busyLabel={DELETE_WORDS.RUNNING}
+            onClick={removal.ask}
+          >
+            {DELETE_WORDS.PRESS}
+          </Button>
+        )}
+      </SettingsRow>
+      <ConfirmDialog
+        open
+        confirm={removal}
+        gate={workspace.name}
+        question={{
+          title: `Delete ${workspace.name}?`,
+          body: DELETE_WORDS.LINE,
+          verb: DELETE_WORDS.VERB,
+          running: DELETE_WORDS.RUNNING,
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+          replayUnmasked: true,
+          titleReplayMasked: true,
+        }}
+      >
+        <ConfirmConsequences
+          lines={[DELETE_WORDS.GONE, DELETE_WORDS.AGENTS, DELETE_WORDS.INSTALLED]}
+        />
+      </ConfirmDialog>
+    </>
+  );
+}
+
+/**
  * The page's last group, the way out of the workspace: a member's or an
- * admin's leave, or the owner's, which waits on a handover; none for the
- * owner of the account's own first workspace, which cannot be left or
- * handed over.
+ * admin's leave, or the owner's, which waits on a handover, and under it the
+ * owner's delete; none for the owner of the account's own first workspace,
+ * which cannot be left, handed over, or deleted.
  */
 function LeaveGroup({
   workspace,
@@ -872,7 +960,10 @@ function LeaveGroup({
   return (
     <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
-        <OwnerLeave workspace={workspace} members={members} />
+        <>
+          <OwnerLeave workspace={workspace} members={members} />
+          <WorkspaceDelete workspace={workspace} onDeleted={onLeft} />
+        </>
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
@@ -1654,7 +1745,7 @@ export interface WorkspaceSettingsControl {
   workspaces: readonly Workspace[];
   /** The workspace the sidebar lists, which the page shows; absent before the workspaces are read. */
   workspaceId: string | undefined;
-  /** Lands the window on the account's own workspace, at rest with no task open, once a workspace is left. */
+  /** Lands the window on the account's own workspace, at rest with no task open, once a workspace is left or deleted. */
   onLeft: (workspaceId: string) => void;
   /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
   listFailed: boolean;

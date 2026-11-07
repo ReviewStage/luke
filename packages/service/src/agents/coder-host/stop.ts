@@ -34,7 +34,7 @@ import {
   describeUnreachable,
   SESSION_CANCEL_OUTCOME,
 } from "../sessions/agent-sessions.js";
-import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
+import { failedCallRefusal, routedSessions, sessionsRouter } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
   agentStatusOf,
@@ -262,6 +262,11 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: Agent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   yield* stoppedTurn(writer, account, agent);
+  yield* endedOrNotReady(agent);
+});
+
+/** Refused as not ready where the agent still reads as starting or running once its Stop has gone out. */
+const endedOrNotReady = /* @__PURE__ */ Effect.fnUntraced(function* (agent: Agent) {
   const status = yield* statusOf(agent);
   if (status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -271,26 +276,58 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** How many agents a task's archive or delete reads or stops at once: under the web pool's five connections, so one request leaves room for the rest of its instance. */
 const AGENT_STOP_CONCURRENCY = 3;
 
-/**
- * Every agent stopped for good, as `stoppedForGood` stops each, a few at
- * once; the first refusal answered once every Stop has settled.
- * Note that no Stop is cut off by another's refusal, because one cut off
- * between the harness's cancel and the row's stamp would leave a turn canceled
- * that the row still reads as running.
- */
+/** Every agent stopped for good, as `stoppedForGood` stops each, a few at once (`everySettled`). */
 export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   account: string,
   agents: readonly Agent[],
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  const stops = yield* Effect.forEach(
-    agents,
-    (agent) => Effect.exit(stoppedForGood(writer, account, agent)),
-    { concurrency: AGENT_STOP_CONCURRENCY },
-  );
-  const refused = stops.find(Exit.isFailure);
-  if (refused !== undefined) return yield* refused;
+  yield* everySettled(agents, (agent) => stoppedForGood(writer, account, agent));
 });
+
+/**
+ * Every agent stopped for good as its own starter would stop it, a few at
+ * once, as a workspace's delete stops them, the first refusal answered once
+ * every Stop has settled. Note that each is reached through its starter's
+ * account (`sessionsRouter`) rather than the owner's, because the owner
+ * deletes every agent of the workspace, one on a member's own GitHub it
+ * cannot see among them, and that no plan's writers are asked
+ * (`admitsPlanWriter`), because the agent goes with the workspace whoever
+ * pays for it.
+ */
+export const everyStoppedByStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Effect.Effect<StoreWriter>,
+  agents: readonly Agent[],
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  const sessionsOf = yield* sessionsRouter;
+  yield* everySettled(agents, (agent) =>
+    Effect.andThen(
+      canceledTurn(Effect.succeed(sessionsOf(agent.userId)), writer, agent),
+      endedOrNotReady(agent),
+    ),
+  );
+});
+
+/**
+ * Each agent's Stop, a few at once, the first refusal answered once every
+ * one has settled. Note that no Stop is cut off by another's refusal,
+ * because one cut off between the harness's cancel and the row's stamp
+ * would leave a turn canceled that the row still reads as running.
+ */
+function everySettled(
+  agents: readonly Agent[],
+  stop: (
+    agent: Agent,
+  ) => Effect.Effect<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient>,
+): Effect.Effect<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    const stops = yield* Effect.forEach(agents, (agent) => Effect.exit(stop(agent)), {
+      concurrency: AGENT_STOP_CONCURRENCY,
+    });
+    const refused = stops.find(Exit.isFailure);
+    if (refused !== undefined) return yield* refused;
+  });
+}
 
 /** Whether `stoppedForGood` would stop every agent rather than refuse one, each read as `stopsForGood` reads it, a few at once. */
 export const everyStopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (

@@ -422,6 +422,8 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_TRANSFER: "/api/workspaces/transfer",
   /** The account leaves a workspace it does not own (POST). */
   WORKSPACES_LEAVE: "/api/workspaces/leave",
+  /** The owner deletes a workspace that is not an account's first, with everything in it (POST). */
+  WORKSPACES_DELETE: "/api/workspaces/delete",
   /**
    * A workspace's pending invitations, to an owner or an admin (GET, the
    * workspace named in `workspace-invitation-wire.ts`'s

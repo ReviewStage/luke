@@ -4,6 +4,7 @@ import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire"
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceDeleteParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -169,6 +170,13 @@ export const WORKSPACE_ACTS = declaredActs({
     input: tasksWorkspaceLeaveParamsSchema,
     output: EffectSchema.Void,
     refusal: "Could not leave that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_DELETE: hostAct({
+    input: tasksWorkspaceDeleteParamsSchema,
+    output: EffectSchema.Void,
+    refusal: "Could not delete that workspace on this system.",
     panelOnly: true,
     door: ACT.REMOTE_WORK,
   }),

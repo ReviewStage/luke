@@ -397,3 +397,9 @@ export const workspaceTokenRepositoryRequestSchema = EffectSchema.Struct({
 
 /** The workspace the account left. */
 export const workspaceLeaveAnswerSchema = workspaceLeaveRequestSchema;
+
+/** Its owner deleting a workspace (POST), answered with the workspace deleted. */
+export const workspaceDeleteRequestSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+/** The workspace the owner deleted. */
+export const workspaceDeleteAnswerSchema = workspaceDeleteRequestSchema;

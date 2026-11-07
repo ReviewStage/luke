@@ -89,6 +89,7 @@ import {
 import {
   formerMemberSchema,
   workspaceCreateRequestSchema,
+  workspaceDeleteRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -1018,6 +1019,19 @@ export const tasksWorkspaceLeaveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceLeaveAnswer = typeof tasksWorkspaceLeaveAnswerSchema.Type;
+
+/** Its owner deleting a workspace, as the window asks it: the workspace. */
+export const tasksWorkspaceDeleteParamsSchema = workspaceDeleteRequestSchema;
+
+export type TasksWorkspaceDeleteParams = typeof tasksWorkspaceDeleteParamsSchema.Type;
+
+/** A delete, as the window hears it: deleted, the view's list then without it, or why not. */
+export const tasksWorkspaceDeleteAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ deleted: EffectSchema.Literal(true) }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceDeleteAnswer = typeof tasksWorkspaceDeleteAnswerSchema.Type;
 
 /** An invitation, as the window asks for it: the workspace, the address, and the role. */
 export const tasksWorkspaceInviteParamsSchema = workspaceInviteRequestSchema;

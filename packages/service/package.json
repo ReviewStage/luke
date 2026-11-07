@@ -7,6 +7,7 @@
   "exports": {
     "./accounts/account-person": "./src/accounts/account-person.js",
     "./accounts/account-seams": "./src/accounts/account-seams.js",
+    "./accounts/deletion-hooks": "./src/accounts/deletion-hooks.js",
     "./accounts/models-procedures": "./src/accounts/models-procedures.js",
     "./accounts/workspace-invitations-procedures": "./src/accounts/workspace-invitations-procedures.js",
     "./accounts/own-api-key": "./src/accounts/own-api-key.js",

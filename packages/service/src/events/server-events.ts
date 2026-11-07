@@ -306,6 +306,7 @@ export const SERVER_WORKSPACE_MEMBER_ACTION = {
   LEAVE: "leave",
   RENAME: "rename",
   INVITE_CANCEL: "invite_cancel",
+  DELETE: "delete",
 } as const;
 
 /** What was done to an automation that is counted: a change, a toggle among them, or a delete. */
