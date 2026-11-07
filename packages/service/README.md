@@ -2622,7 +2622,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs five sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs four sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2632,7 +2632,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
 - `deviceWarmRunners`: local runners left warm past their device's window.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `agentQueues`: unpaused queues of idle agents handed on.
 - `syncLog`: the sync log's transactions older than its keep pruned.
 
 No sweep settles a turn whose runner went quiet. Every post a runner makes,
@@ -2640,6 +2639,9 @@ its heartbeat among them, pushes on its open turns' lease
 (`packages/database/src/models/turn-lease.ts`); every reader takes a turn
 past its lease as its runner lost, and the agent's next touch (a message, a
 Stop, an open of it) settles it (`src/agents/coder-host/lapsed-runner.ts`).
+Nor does one hand on an agent's queue: every settle of a turn, whichever
+path made it, hands the queue on through the store writer's settled-turn
+listener (`src/agents/coder-host/settled-turns.ts`).
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance

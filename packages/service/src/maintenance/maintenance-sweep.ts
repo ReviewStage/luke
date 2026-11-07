@@ -27,8 +27,6 @@ interface MaintenanceSweeps {
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
-  sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
 }
@@ -55,8 +53,6 @@ interface MaintenanceSweepAnswer {
   purged: Swept<number>;
   deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
-  agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
 }
@@ -99,7 +95,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       sweeps.sweepDeviceWarmRunners(now),
     ),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
   };
 });
