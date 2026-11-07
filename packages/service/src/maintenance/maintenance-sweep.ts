@@ -39,6 +39,8 @@ interface MaintenanceSweeps {
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
+  /** Closes the shared ports' links no one has visited for their idle bound, holding the rest's sandboxes, answering how many closed. */
+  sweepPortShares: (now: number) => SweepRead<number>;
 }
 
 /**
@@ -71,6 +73,8 @@ interface MaintenanceSweepAnswer {
   agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
+  /** Shared ports' links closed for going unvisited. */
+  portShares: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -116,6 +120,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
+    portShares: yield* isolated("sweepPortShares", sweeps.sweepPortShares(now)),
   };
 });
 

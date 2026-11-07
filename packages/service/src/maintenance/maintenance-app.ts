@@ -21,6 +21,7 @@ import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
+import { sweepPortShares } from "./port-share-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
 const SWEEP_MONITOR: CronMonitor = {
@@ -71,6 +72,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
+    sweepPortShares: (now) => sweepPortShares(new Date(now)),
   });
 });
 
