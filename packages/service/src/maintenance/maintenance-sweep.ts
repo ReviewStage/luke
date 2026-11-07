@@ -47,8 +47,6 @@ interface MaintenanceSweeps {
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
-  /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
-  purgeStaleFirewalls: (now: number) => SweepRead<number>;
 }
 
 /**
@@ -85,8 +83,6 @@ interface MaintenanceSweepAnswer {
   agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
-  /** Firewall records of sandbox sessions long ended, dropped. */
-  staleFirewalls: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -135,7 +131,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
-    staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
   };
 });
 

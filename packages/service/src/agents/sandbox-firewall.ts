@@ -16,8 +16,8 @@
  * ring for that account and session alone (`provider-key-seal.ts`), and
  * every write sends them beside what it gathered. A launch keeps them before
  * it writes, and nothing else changes them; they stand on the firewall until
- * the sandbox stops, and the scheduled sweep drops the row once its session
- * is long gone. With nothing to carry, the policy is the open internet.
+ * the sandbox stops, and the agent's next launch in another session deletes
+ * the row. With nothing to carry, the policy is the open internet.
  *
  * Two writers that compose from the same sources send the same policy, so
  * whichever lands last is right; a GitHub credential minted twice is two

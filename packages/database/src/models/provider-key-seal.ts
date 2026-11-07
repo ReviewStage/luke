@@ -44,9 +44,10 @@ import { Redacted, Result, Schema } from "effect";
  * purposes of their own
  * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
  * beside them, so the seal opens for no other session's row. The rewrap
- * does not visit those rows either: the sweep drops each a day and an hour
- * after it was last written, so a version stays in the ring that long past
- * the rewrap that moved every other row off it.
+ * does not visit those rows either: no session runs a day and an hour past
+ * its row's last write, so a version stays in the ring that long past the
+ * rewrap that moved every other row off it, and a row still sealed under it
+ * then is one no read reaches, its session long stopped.
  *
  * A pending ChatGPT device-code login's codes, which together claim the
  * sign-in at OpenAI, are sealed the same way for the fifteen minutes the

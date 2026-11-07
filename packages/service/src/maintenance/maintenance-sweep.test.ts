@@ -41,7 +41,6 @@ interface Recorded {
   automated: number[];
   pictures: number[];
   syncLog: number[];
-  staleFirewalls: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -56,7 +55,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     automated: [],
     pictures: [],
     syncLog: [],
-    staleFirewalls: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -113,11 +111,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.syncLog.push(now);
         return 5;
       }),
-    purgeStaleFirewalls: (now) =>
-      Effect.sync(() => {
-        recorded.staleFirewalls.push(now);
-        return 7;
-      }),
     ...overrides,
   };
   return { options, recorded };
@@ -148,7 +141,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
     });
   }),
 );
@@ -174,7 +166,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -187,7 +178,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
     });
   }),
 );
@@ -205,7 +195,6 @@ it.effect(
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.equal(answer.body.syncLog, 5);
-      assert.equal(answer.body.staleFirewalls, 7);
       const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -219,7 +208,6 @@ it.effect(
         automated: [instant],
         pictures: [instant],
         syncLog: [instant],
-        staleFirewalls: [instant],
       });
     }),
 );
@@ -250,7 +238,6 @@ it.effect(
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(recorded.syncLog.length, 1);
-      assert.equal(recorded.staleFirewalls.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );
