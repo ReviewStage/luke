@@ -71,43 +71,6 @@ published.
 
 ## 0.28.0 — 2026-11-07
 
-### An Inbox that counts what waits on you
-
-Everything that waits on you now shows as one orange figure, on the Inbox,
-Home, ⌘K, the show-sidebar button, and the Dock badge, and each count
-matches what Open lists. Selecting threads takes over the Inbox's head with a
-Gmail-style box and menu, a right-click acts on every chosen thread, and
-Resolve is one word with Undo everywhere. Any thread can be snoozed, read
-state stays apart from snooze, and a reminder says when it is due.
-([#7189](https://github.com/ReviewStage/vespin/pull/7189),
-[#7202](https://github.com/ReviewStage/vespin/pull/7202),
-[#7243](https://github.com/ReviewStage/vespin/pull/7243),
-[#7276](https://github.com/ReviewStage/vespin/pull/7276),
-[#7280](https://github.com/ReviewStage/vespin/pull/7280),
-[#7281](https://github.com/ReviewStage/vespin/pull/7281),
-[#7283](https://github.com/ReviewStage/vespin/pull/7283),
-[#6990](https://github.com/ReviewStage/vespin/pull/6990),
-[#7019](https://github.com/ReviewStage/vespin/pull/7019))
-
-### An agent's threads in its card
-
-When an agent has threads waiting, a bar over its message box counts them,
-and they open inside the agent's own card, its Inbox beside the chosen
-thread.
-([#7173](https://github.com/ReviewStage/vespin/pull/7173),
-[#7272](https://github.com/ReviewStage/vespin/pull/7272),
-[#7401](https://github.com/ReviewStage/vespin/pull/7401))
-
-### Review a page in one message
-
-Comments on a page can wait in a review instead of reaching the agent one at
-a time: start a review from a comment, edit or delete what is pending in
-place, and send it all from Review as one message.
-([#7030](https://github.com/ReviewStage/vespin/pull/7030),
-[#7261](https://github.com/ReviewStage/vespin/pull/7261),
-[#7265](https://github.com/ReviewStage/vespin/pull/7265),
-[#7307](https://github.com/ReviewStage/vespin/pull/7307))
-
 ### Cloud agents on your Mac
 
 A cloud agent's files mirror onto your Mac, and the Terminal's Local tabs
@@ -125,11 +88,15 @@ plug in the message box shows what is forwarded.
 [#7216](https://github.com/ReviewStage/vespin/pull/7216),
 [#7292](https://github.com/ReviewStage/vespin/pull/7292))
 
-### Several repositories
+### Review a page in one message
 
-A cloud agent can work in other repositories beside its own, each checked out
-beside it and picked together in New task's repository chip.
-([#7117](https://github.com/ReviewStage/vespin/pull/7117))
+Comments on a page can wait in a review instead of reaching the agent one at
+a time: start a review from a comment, edit or delete what is pending in
+place, and send it all from Review as one message.
+([#7030](https://github.com/ReviewStage/vespin/pull/7030),
+[#7261](https://github.com/ReviewStage/vespin/pull/7261),
+[#7265](https://github.com/ReviewStage/vespin/pull/7265),
+[#7307](https://github.com/ReviewStage/vespin/pull/7307))
 
 ### The Vespin CLI
 
@@ -143,8 +110,33 @@ agents. Settings › Vespin CLI installs it from the Mac app and signs it in.
 [#6983](https://github.com/ReviewStage/vespin/pull/6983),
 [#7168](https://github.com/ReviewStage/vespin/pull/7168))
 
+### Several repositories
+
+A cloud agent can work in other repositories beside its own, each checked out
+beside it and picked together in New task's repository chip.
+([#7117](https://github.com/ReviewStage/vespin/pull/7117))
+
 ### Improvements
 
+- Counts of what waits on you draw as one orange figure on the Inbox, Home, ⌘K,
+  the show-sidebar button, and the Dock badge, each matching what Open lists
+  ([#7276](https://github.com/ReviewStage/vespin/pull/7276),
+  [#7280](https://github.com/ReviewStage/vespin/pull/7280),
+  [#7281](https://github.com/ReviewStage/vespin/pull/7281),
+  [#7283](https://github.com/ReviewStage/vespin/pull/7283))
+- Selecting Inbox threads takes over its head with a Gmail-style box and menu, a
+  right-click acts on every chosen thread, and Resolve comes with Undo
+  ([#7189](https://github.com/ReviewStage/vespin/pull/7189),
+  [#7243](https://github.com/ReviewStage/vespin/pull/7243),
+  [#7202](https://github.com/ReviewStage/vespin/pull/7202))
+- Any Inbox thread can be snoozed, and read state stays apart from snooze
+  ([#6990](https://github.com/ReviewStage/vespin/pull/6990),
+  [#7019](https://github.com/ReviewStage/vespin/pull/7019))
+- An agent's waiting threads are counted over its message box and open inside
+  its card
+  ([#7173](https://github.com/ReviewStage/vespin/pull/7173),
+  [#7272](https://github.com/ReviewStage/vespin/pull/7272),
+  [#7401](https://github.com/ReviewStage/vespin/pull/7401))
 - Codex runs on a ChatGPT plan you connect with a device code, Business plans
   included
   ([#7032](https://github.com/ReviewStage/vespin/pull/7032),
