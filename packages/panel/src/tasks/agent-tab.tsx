@@ -116,6 +116,7 @@ import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { useBusyPress } from "../settings/busy-press.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
@@ -168,6 +169,7 @@ import {
   type StartingLaunch,
   slackLineOf,
   TRY_AGAIN_LABEL,
+  TRYING_AGAIN_LABEL,
   type TurnStretch,
   teammateStarter,
   threadLineOf,
@@ -3157,21 +3159,30 @@ export function StartingAgentTab({
 
 /**
  * Try again on a failed end line (`endLineOffersTryAgain`), pressed once:
- * the line it sends takes the end line's place, and a line that did not go
- * draws the end line, and so a fresh press, again.
+ * the lines it sends again, or its own line where none was lost, take the
+ * end line's place, and a press the service refused offers it again.
  */
-function TryAgainPress({ onPress }: { onPress: () => void }): React.JSX.Element {
+function TryAgainPress({ onPress }: { onPress: () => Promise<boolean> }): React.JSX.Element {
   // Note that the press is kept in a ref as well as drawn, so a second press before the draw sends nothing.
   const pressed = useRef(false);
   const [sent, setSent] = useState(false);
-  const press = () => {
-    if (pressed.current) return;
+  const press = useBusyPress(() => {
+    if (pressed.current) return undefined;
     pressed.current = true;
-    setSent(true);
-    onPress();
-  };
+    return onPress().then((took) => {
+      pressed.current = took;
+      setSent(took);
+    });
+  });
   return (
-    <Button variant={BUTTON_VARIANT.OUTLINE} icon={<GLYPH.RETRY />} disabled={sent} onClick={press}>
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      icon={<GLYPH.RETRY />}
+      busy={press.busy}
+      busyLabel={TRYING_AGAIN_LABEL}
+      disabled={sent}
+      onClick={press.onPress}
+    >
       {TRY_AGAIN_LABEL}
     </Button>
   );
@@ -3407,7 +3418,7 @@ function AgentTabBody({
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
           ) : triesAgain ? (
-            <TryAgainPress onPress={() => composer.sendWords(RETRY_LINE)} />
+            <TryAgainPress onPress={() => control.onRetry(agent.id, RETRY_LINE)} />
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}

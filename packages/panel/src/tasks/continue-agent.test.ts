@@ -201,6 +201,8 @@ async function drawnTab(input: {
   repository?: string;
   /** Takes each message the tab sends, by its words, answering as the service does; none answers it as unanswered. */
   onMessage?: (text: string) => Promise<AgentAgentAnswer>;
+  /** Takes each Try again the tab asks of the service, by the words it carries, answering whether the service took it; none answers it refused. */
+  onRetry?: (words: string) => Promise<boolean>;
   /** Whether Bring your own host is on, which Move to stands behind. */
   ownHost?: boolean;
   /** Takes each copy the tab makes, by its words. */
@@ -255,6 +257,7 @@ async function drawnTab(input: {
     onMessage: (_agentId, text) =>
       input.onMessage?.(text) ??
       Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onRetry: (_agentId, words) => input.onRetry?.(words) ?? Promise.resolve(false),
   });
   // Note that what the agent published is laid over the transcripts' host, which it hands everything else on to.
   const parts = handHostReads({});
@@ -555,11 +558,16 @@ test("a failed end line's row ends on Try again where a message carries the agen
   );
 });
 
-test("a turn failed on its sandbox ends on Try again, which sends the agent one line in place of Continue however often pressed", async () => {
+test("a turn failed on its sandbox ends on Try again, which asks the service to send again once however often pressed, writes no line of its own, and stands again where refused", async () => {
+  const retried: string[] = [];
   const sent: string[] = [];
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
     failure: AGENT_FAILURE.SANDBOX,
+    onRetry: (words) => {
+      retried.push(words);
+      return Promise.resolve(false);
+    },
     onMessage: (text) => {
       sent.push(text);
       return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
@@ -577,7 +585,10 @@ test("a turn failed on its sandbox ends on Try again, which sends the agent one 
   });
   await settle();
 
-  assert.deepEqual(sent, ["Try again"]);
+  assert.deepEqual(retried, ["Try again"]);
+  assert.deepEqual(sent, []);
+  assert.equal(tab.lines("Try again").length, 0);
+  assert.equal(press.disabled, false, "a refused Try again is offered again");
 });
 
 test("a message to an ended agent says to continue it in a new one, while a Start refused alike still says to start one", () => {

@@ -9,6 +9,7 @@ import {
   type RunTurnOrigin,
   STEP_START_PART,
   settledToolPart,
+  TURN_FAILURE,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
@@ -55,7 +56,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   Cause,
@@ -73,7 +74,12 @@ import {
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  MESSAGE_SENDER,
+  type MessageSender,
+  messageSenderSchema,
+} from "../storage-vocabulary.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -400,6 +406,21 @@ type AwaitingLineWritten = Result.Result<
   typeof NO_CONVERSATION | typeof CONVERSATION_BUSY | MessageRefused
 >;
 
+/** One of the developer's lines the agent's failed turn never took, as a resend of it hands it to its dispatch: the row, the id its runner names it back by, its parts, and who sent it. */
+export interface LostLine {
+  readonly id: string;
+  readonly clientId: string;
+  readonly parts: StoredUIMessage["parts"];
+  readonly sender: MessageSender | null;
+  readonly senderUserId: string | null;
+}
+
+/** What resending lost lines did: the rows the runtime took, in order, stopping at the first it did not; or a refusal. */
+type LostLinesResent = Result.Result<
+  readonly string[],
+  typeof NO_CONVERSATION | typeof CONVERSATION_BUSY
+>;
+
 /**
  * The line a turn received and the turn that received it: as the retired
  * runtime's relay read it off its stream, by its text parts joined (`attached-files.ts`);
@@ -487,6 +508,23 @@ export interface StoreWriter {
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
+  /**
+   * Hands the runtime again, one at a time in the order written, the
+   * developer's lines the agent's failed turn never took (`findLostLines`),
+   * each under the conversation's dispatch claim as `writeAwaitingLine` hands
+   * a new one, through the dispatch given, which is handed the line's row:
+   * the row is moved to the end of the conversation as written now before
+   * its hand-over, so it reads as awaiting the turn the hand-over opens, and
+   * put back where it stood where the runtime did not take it, which ends the
+   * resend there. The row keeps its client id, which the runtime names back
+   * as it takes the line, so the turn takes the row itself, and no line is
+   * written twice. Answers the rows the runtime took, none where no line
+   * was lost.
+   */
+  resendLostLines(
+    target: ConversationTarget,
+    dispatch: (line: LostLine) => Effect.Effect<boolean>,
+  ): Write<LostLinesResent>;
 }
 
 /** The plan's turn origin for each origin the brain's stream names: each is written as reported. */
@@ -2032,6 +2070,208 @@ function recordedLine(
   );
 }
 
+/** A newer turn of the conversation than the one the read is at: the rows the newest-turn condition reads by. */
+const newerTurn = alias(turns, "newer_turn");
+
+/** A line of the developer's a turn took past the one the read is at. */
+const takenLater = alias(messages, "taken_later");
+
+/**
+ * The developer's lines of a coding agent's conversation that the agent's
+ * failed turn never took, oldest first: user rows no turn owns and no
+ * hand-over withdrew, written before the newest turn was queued where that
+ * turn failed and not for its session's end, which a new agent mends, and
+ * past every line a turn took, so a line some turn took without the store
+ * hearing it is never handed again. A line a turn received under another row
+ * (`noReceiptOfLine`) and a line typed into a call are left out, as the take
+ * leaves them out.
+ */
+const findLostLines = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    clientId: Schema.String,
+    parts: StoredPartsColumnSchema,
+    sender: Schema.NullOr(messageSenderSchema),
+    senderUserId: Schema.NullOr(Schema.String),
+  }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          clientId: messages.clientId,
+          parts: messages.parts,
+          sender: messages.sender,
+          senderUserId: messages.senderUserId,
+        })
+        .from(messages)
+        .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+        .innerJoin(
+          turns,
+          and(
+            eq(turns.conversationId, messages.conversationId),
+            eq(turns.status, TURN_STATUS.FAILED),
+            sql`${turns.failure} is distinct from ${TURN_FAILURE.SESSION_ENDED}`,
+            gt(turns.queuedAt, messages.createdAt),
+          ),
+        )
+        .where(
+          and(
+            eq(messages.userId, key.userId),
+            eq(messages.conversationId, key.conversationId),
+            eq(conversations.kind, CONVERSATION_KIND.AGENT),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            isNull(messages.turnId),
+            isNull(messages.withdrawnAt),
+            sql`${SPOKEN_VOICE_SESSION_ID} is null`,
+            noReceiptOfLine(),
+            notExists(
+              queryBuilder
+                .select({ id: newerTurn.id })
+                .from(newerTurn)
+                .where(
+                  and(
+                    eq(newerTurn.conversationId, turns.conversationId),
+                    gt(newerTurn.queuedAt, turns.queuedAt),
+                  ),
+                ),
+            ),
+            notExists(
+              queryBuilder
+                .select({ id: takenLater.id })
+                .from(takenLater)
+                .where(
+                  and(
+                    eq(takenLater.conversationId, messages.conversationId),
+                    eq(takenLater.role, MESSAGE_ROLE.USER),
+                    isNotNull(takenLater.turnId),
+                    gt(takenLater.seq, messages.seq),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .orderBy(asc(messages.seq)),
+    ),
+});
+
+/** Where a line stands in its conversation: its place, and the instants it was written and placed at. */
+const LinePlaceSchema = Schema.Struct({
+  seq: Schema.Number,
+  createdAt: Schema.Date,
+  placedAt: Schema.Date,
+});
+
+type LinePlace = typeof LinePlaceSchema.Type;
+
+/** A line's place, where it still stands awaiting its turn: no turn took it and no hand-over withdrew it. */
+const findAwaitingPlace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
+  Result: LinePlaceSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ seq: messages.seq, createdAt: messages.createdAt, placedAt: messages.placedAt })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, key.conversationId),
+            eq(messages.id, key.id),
+            isNull(messages.turnId),
+            isNull(messages.withdrawnAt),
+          ),
+        ),
+    ),
+});
+
+/** A line no turn took moved to a place, as written then. */
+const placeAwaitingLine = SqlSchema.void({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    id: Schema.String,
+    place: LinePlaceSchema,
+  }),
+  execute: ({ conversationId, id, place }) =>
+    Database.use((db) =>
+      db
+        .update(messages)
+        .set(place)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.id, id),
+            isNull(messages.turnId),
+          ),
+        ),
+    ),
+});
+
+/** A lost line's hand-over begun: the dispatch claim it runs under, and where the line stood before it was moved to the end. */
+type ResendClaimed = Result.Result<
+  Option.Option<{ readonly claim: string; readonly was: LinePlace }>,
+  typeof NO_CONVERSATION | typeof CONVERSATION_BUSY
+>;
+
+/**
+ * A lost line moved to the end of its conversation as written now, and the
+ * conversation's dispatch claim taken for its hand-over, under the row lock:
+ * so the line reads as awaiting the turn its hand-over opens, which the turn
+ * that failed was queued before, and the turn's work is drawn after it.
+ * Nothing where the line no longer awaits, a turn having taken it meanwhile.
+ * Readers holding an older cursor read the transcript afresh
+ * (`markLineWithdrawn`), since the row left its place.
+ */
+const claimResend = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  id: string,
+  place: number,
+): Effect.fn.Return<ResendClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
+  const { conversationId } = context.target;
+  if (yield* dispatchClaimStands(conversationId, place)) return yield* new DispatchClaimHeld();
+  const was = yield* findAwaitingPlace({ conversationId, id });
+  if (Option.isNone(was)) return Result.succeed(Option.none());
+  const seq = yield* allocateMessageSeq(context);
+  yield* placeAwaitingLine({
+    conversationId,
+    id,
+    place: { seq, createdAt: context.now, placedAt: context.now },
+  });
+  yield* markLineWithdrawn({ conversationId });
+  const claim = yield* takeDispatchClaim(conversationId, place, id);
+  return Result.succeed(Option.some({ claim, was: was.value }));
+});
+
+/**
+ * What a lost line's hand-over answered, written as `recordedLine` writes a
+ * send's: the claim released, and a line the runtime did not take put back
+ * where it stood, as written then, rather than withdrawn, so a resend
+ * refused leaves the transcript as it found it and the line there to resend.
+ */
+function recordedResend(
+  target: ConversationTarget,
+  id: string,
+  claimed: { readonly claim: string; readonly was: LinePlace },
+  taken: boolean,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    recordedWithinExpiry(
+      client.withTransaction(
+        Effect.gen(function* () {
+          yield* releaseDispatchClaim(target.conversationId, claimed.claim);
+          if (taken) return;
+          yield* placeAwaitingLine({
+            conversationId: target.conversationId,
+            id,
+            place: claimed.was,
+          });
+          yield* markLineWithdrawn({ conversationId: target.conversationId });
+        }),
+      ),
+    ),
+  );
+}
+
 const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   take: AwaitingLineTake,
@@ -2231,6 +2471,48 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     });
   }
 
+  /**
+   * The lost lines handed over again, as `resendLostLines` says: each claimed
+   * (`claimResend`), handed over with no transaction open within the
+   * dispatch's deadline, and recorded (`recordedResend`); a line a turn took
+   * meanwhile is passed over. A hand-over that dies releases the claim and
+   * leaves the line where it was moved, as a send's leaves its line standing.
+   */
+  function resentLines(
+    target: ConversationTarget,
+    dispatch: (line: LostLine) => Effect.Effect<boolean>,
+  ): Write<LostLinesResent> {
+    return Effect.gen(function* () {
+      const lines = yield* findLostLines(target);
+      const taken: string[] = [];
+      for (const line of lines) {
+        const claimed = yield* waitingOutDispatchClaim(target.conversationId, (place) =>
+          locked<ResendClaimed, DispatchClaimHeld>(
+            target,
+            (context) => claimResend(context, line.id, place),
+            () => Result.fail(NO_CONVERSATION),
+          ),
+        ).pipe(
+          Effect.catchTag("DispatchClaimHeld", () =>
+            Effect.succeed<ResendClaimed>(Result.fail(CONVERSATION_BUSY)),
+          ),
+        );
+        if (Result.isFailure(claimed)) return Result.fail(claimed.failure);
+        if (Option.isNone(claimed.success)) continue;
+        const held = claimed.success.value;
+        const went = yield* dispatchedWithinDeadline(dispatch(line), target.conversationId).pipe(
+          Effect.tapCause(() =>
+            Effect.ignore(releaseDispatchClaim(target.conversationId, held.claim)),
+          ),
+        );
+        yield* recordedResend(target, line.id, held, went);
+        if (!went) break;
+        taken.push(line.id);
+      }
+      return Result.succeed(taken);
+    });
+  }
+
   /** The write itself, once the conversation's row is locked or found absent: its instant read once, its journals landed after it. */
   function lockedWrite<A, E>(
     target: ConversationTarget,
@@ -2278,6 +2560,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       Effect.uninterruptible(dispatchedLine(target, line, dispatch)),
     takeAwaitingLine: (target, take) =>
       underConversation(target, (context) => takeAwaitingLine(context, take)),
+    resendLostLines: (target, dispatch) => Effect.uninterruptible(resentLines(target, dispatch)),
   };
 
   return Effect.flatMap(toolsRefusingUnknownOutcome(tools), (refusing) =>

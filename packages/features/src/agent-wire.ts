@@ -806,12 +806,15 @@ export const agentStartRequestOnWire = (request: AgentStartRequest) =>
  * sees it at its next step and a call still generating is cut short and
  * run again with it, or opens a turn where none runs. The answer is the
  * agent's summary with its status read after the message was taken, which
- * is running.
+ * is running. Lines the agent's failed turn never took are sent again ahead
+ * of the words; a retry, a failed turn's Try again, sends its words only
+ * where no line was lost, since those lines are what it asks to send again.
  */
 export const agentMessageRequestSchema = EffectSchema.Struct({
   text: messageWordsSchema,
   clientKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
   attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
+  retry: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type AgentMessageRequest = typeof agentMessageRequestSchema.Type;
