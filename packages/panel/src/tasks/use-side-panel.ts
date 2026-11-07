@@ -2247,10 +2247,13 @@ export function useSidePanel(
     () => DRAWN_KINDS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
     [tabs, seen],
   );
-  // The task as the strip draws it: as seen, under the agent its column shows now.
+  // The task as the strip draws it: as seen, under the agent its column shows now. Note that
+  // the agent is taken only once the task seen is the task asked for, because the render a
+  // task changes in still draws the task left, whose strip another task's agent would empty.
   const shownTask = useMemo(
-    () => (seen.agent === task.agent ? seen : { ...seen, agent: task.agent }),
-    [seen, task.agent],
+    () =>
+      seen.id !== task.id || seen.agent === task.agent ? seen : { ...seen, agent: task.agent },
+    [seen, task.id, task.agent],
   );
   const drawn = useMemo(
     () => ({
