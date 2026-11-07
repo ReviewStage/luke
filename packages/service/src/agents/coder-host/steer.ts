@@ -651,7 +651,8 @@ const lostLineMessage = (target: ConversationTarget, agent: Agent, line: LostLin
  * not take (`StoreWriter`'s `resendLostLines`). Each hand-over is admitted
  * as a send is, read as it runs, and only where a line was lost, so a send
  * to an agent that lost none reads nothing past the one read of its lines.
- * Answers how many went; fails with the refusal that stopped one.
+ * Answers how many went; fails with the refusal that stopped one, or as an
+ * outage where none was said.
  */
 export const resendLostLines = /* @__PURE__ */ Effect.fn("web/resendLostLines")(function* (
   agentSessions: AgentSessions<TypedTurn>,
@@ -698,8 +699,12 @@ export const resendLostLines = /* @__PURE__ */ Effect.fn("web/resendLostLines")(
   if (Result.isFailure(resent)) {
     return yield* Effect.fail(REFUSAL_OF_UNWRITTEN_LINE[resent.failure.refusal]);
   }
-  if (outcome.refused !== undefined) return yield* Effect.fail(outcome.refused);
-  return resent.success.length;
+  // Note that a resend stopped with no refusal said, as a hand-over past its deadline, is an outage,
+  // because words sent after it would reach the agent ahead of the line it still lost.
+  if (resent.success.stopped) {
+    return yield* Effect.fail(outcome.refused ?? HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return resent.success.taken.length;
 });
 
 /**

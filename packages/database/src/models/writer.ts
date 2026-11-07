@@ -415,9 +415,9 @@ export interface LostLine {
   readonly senderUserId: string | null;
 }
 
-/** What resending lost lines did: the rows the runtime took, in order, stopping at the first it did not; or a refusal. */
+/** What resending lost lines did: the rows the runtime took, in order, and whether one it did not take, or whose hand-over ran past its deadline, stopped the resend there; or a refusal. */
 type LostLinesResent = Result.Result<
-  readonly string[],
+  { readonly taken: readonly string[]; readonly stopped: boolean },
   typeof NO_CONVERSATION | typeof CONVERSATION_BUSY
 >;
 
@@ -519,7 +519,7 @@ export interface StoreWriter {
    * resend there. The row keeps its client id, which the runtime names back
    * as it takes the line, so the turn takes the row itself, and no line is
    * written twice. Answers the rows the runtime took, none where no line
-   * was lost.
+   * was lost, and whether a line not taken stopped the resend.
    */
   resendLostLines(
     target: ConversationTarget,
@@ -2133,7 +2133,8 @@ const findLostLines = SqlSchema.findAll({
                 .where(
                   and(
                     eq(newerTurn.conversationId, turns.conversationId),
-                    gt(newerTurn.queuedAt, turns.queuedAt),
+                    // Note that turns queued at one instant are told apart by id, as the turn reader orders them, so one turn is the newest.
+                    sql`(${newerTurn.queuedAt}, ${newerTurn.id}) > (${turns.queuedAt}, ${turns.id})`,
                   ),
                 ),
             ),
@@ -2506,10 +2507,10 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
           ),
         );
         yield* recordedResend(target, line.id, held, went);
-        if (!went) break;
+        if (!went) return Result.succeed({ taken, stopped: true });
         taken.push(line.id);
       }
-      return Result.succeed(taken);
+      return Result.succeed({ taken, stopped: false });
     });
   }
 

@@ -16,12 +16,14 @@ import { sessionKey } from "@repo/runtime/vocabulary";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { TOOL_PART_STATE } from "@repo/wire/ui-messages";
-import { Effect, Metric, Option, Ref, Result, Schema } from "effect";
+import { Duration, Effect, Metric, Option, Ref, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
+import { settleRunnerLostTurns } from "../abandoned-turns.js";
 import { lineSendersOf } from "../agent-store.js";
 import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -490,6 +492,46 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
             kind: MESSAGE_SENDER.APP,
           },
         );
+      }),
+  );
+  it.effect(
+    "a line a failed turn never took is handed over again to its owner's resend alone, never to another account's naming the same conversation",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        yield* writer.writeAwaitingLine(
+          target,
+          { text: "Draft the plan.", clientKey: "plan", sender: { kind: MESSAGE_SENDER.APP } },
+          Effect.succeed(true),
+        );
+        // The launch fails after the line was written, as the service writes it: a turn queued and settled failed.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: turnId,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 1000, "the sandbox failed");
+        const handed: string[] = [];
+        const dispatch = (line: { readonly clientId: string }) =>
+          Effect.sync(() => {
+            handed.push(line.clientId);
+            return true;
+          });
+
+        const other = { userId: `user-${randomUUID()}`, conversationId: target.conversationId };
+        const theirs = yield* writer.resendLostLines(other, dispatch);
+        const handedToOther = [...handed];
+        const owners = yield* writer.resendLostLines(target, dispatch);
+
+        assert.ok(Result.isSuccess(theirs));
+        assert.deepEqual(theirs.success, { taken: [], stopped: false });
+        assert.deepEqual(handedToOther, []);
+        assert.ok(Result.isSuccess(owners));
+        assert.equal(owners.success.taken.length, 1);
+        assert.deepEqual(handed, [sentLineId("plan")]);
       }),
   );
 });
