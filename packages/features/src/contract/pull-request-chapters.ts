@@ -28,7 +28,7 @@ import {
   pullRequestChaptersRequestSchema,
 } from "../pull-request-chapters-wire.js";
 import { HOSTED_API_ERROR } from "../service-wire.js";
-import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 import { numberedQuerySchema } from "./github.js";
 
 /** A Generate reads no body; it may send an empty one, and nothing larger. */
@@ -87,9 +87,18 @@ const generateProcedure = declaredProcedure.errors(
   ),
 );
 
+/**
+ * What a read refuses beyond what any procedure may: the agent or the
+ * workspace not one the account reaches, and the repository out of the
+ * App's reach (`pull-request-chapters-procedures.ts`).
+ */
+const readProcedure = declaredProcedure.errors(
+  refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+);
+
 export const pullRequestChaptersContract = {
   /** The workspace's newest chapters for the pull request the number names. */
-  read: hostedProcedure
+  read: readProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: PULL_REQUEST_CHAPTERS_PATH.AGENT }))
     .input(pullRequestChaptersReadRequestSchema)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),
@@ -106,7 +115,7 @@ export const pullRequestChaptersContract = {
     .input(generateInput)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),
   /** The workspace's newest chapters for the pull request its repository and number name. */
-  repositoryRead: hostedProcedure
+  repositoryRead: readProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: PULL_REQUEST_CHAPTERS_PATH.REPOSITORY }))
     .input(numberedQuerySchema)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),

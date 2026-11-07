@@ -6,14 +6,20 @@
  * property allowlist rather than from what arrived; so the procedure takes
  * the body as it came and the handler reads it. A batch it took is answered
  * 202, as it always was.
+ *
+ * Beyond what any procedure may refuse, a batch past the analytics
+ * project's quota is refused as quota exhausted, and one the project did not
+ * take, or never answered, as an upstream error (`events.ts`); a deployment
+ * that names no project is unavailable.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { productEventsAnswerSchema } from "../analytics/product-events.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, refuses } from "./base.js";
 
 /** Bigger than a full batch of allowlisted events can be, and refused before it is read. */
 export const EVENTS_MAXIMUM_BODY_BYTES = 16_384;
@@ -22,7 +28,8 @@ export const EVENTS_MAXIMUM_BODY_BYTES = 16_384;
 const ACCEPTED_STATUS = 202;
 
 export const eventsContract = {
-  record: hostedProcedure
+  record: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.QUOTA_EXHAUSTED, HOSTED_API_ERROR.UPSTREAM_ERROR))
     .meta(bodyCap(EVENTS_MAXIMUM_BODY_BYTES))
     .meta(
       openapi({

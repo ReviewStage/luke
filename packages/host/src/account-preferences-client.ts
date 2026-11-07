@@ -1,5 +1,6 @@
 import type { CallCredential } from "@repo/features";
 import type { AccountPreferencesAnswerWire } from "@repo/features/account-wire";
+import { hostedCall } from "@repo/features/hosted-call";
 import { askHosted, type HostedClient, hostedClient } from "@repo/features/hosted-link";
 import {
   type AccountPreferences,
@@ -90,7 +91,10 @@ export class AccountPreferencesClient {
   }
 
   readPreferences(): Effect.Effect<AccountPreferencesAnswer | undefined> {
-    return this.#over(askHosted(this.#hosted.account.preferences, undefined));
+    return hostedCall(this.#hosted.account.preferences, undefined).pipe(
+      Effect.map((answer) => ("failure" in answer ? undefined : answerOf(answer))),
+      Effect.provide(this.#client),
+    );
   }
 
   writePreferences(

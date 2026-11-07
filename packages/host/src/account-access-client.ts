@@ -12,6 +12,7 @@
  */
 import type { CallCredential } from "@repo/features";
 import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
+import { hostedCall } from "@repo/features/hosted-call";
 import {
   askHosted,
   type HostedClient,
@@ -56,17 +57,19 @@ export class AccountAccessClient {
 
   /** What the signed-in account may open; nothing for any failure. */
   readAccess(): Effect.Effect<AppAccessSlice> {
-    return askHosted(this.#hosted.account.access, undefined).pipe(
+    return hostedCall(this.#hosted.account.access, undefined).pipe(
       Effect.map(
-        (answer): AppAccessSlice => ({
-          admin: answer.admin,
-          ...(typeof answer.supportAccessUntil === "number"
-            ? { supportAccessUntil: answer.supportAccessUntil }
-            : undefined),
-        }),
+        (answer): AppAccessSlice =>
+          // A read that failed is settled as no admin, not left pending, so nothing waits on it.
+          "failure" in answer
+            ? { admin: false }
+            : {
+                admin: answer.admin,
+                ...(typeof answer.supportAccessUntil === "number"
+                  ? { supportAccessUntil: answer.supportAccessUntil }
+                  : undefined),
+              },
       ),
-      // A read that failed is settled as no admin, not left pending, so nothing waits on it.
-      Effect.orElseSucceed((): AppAccessSlice => ({ admin: false })),
       Effect.provide(this.#client),
     );
   }

@@ -11,14 +11,19 @@
  * refused (`exactInput`), but for the preferences write, whose parts the
  * service has always read one by one and whose other keys it passes over.
  *
- * The procedures a coding agent's settings call declare their own
- * refusals (`declaredProcedure`): the preferences write, the provider keys,
- * and the account's ChatGPT sign-in refuse only as any procedure may, the
- * key ring a deployment holds among them, but that a device-code login is
- * braked as quota exhausted, and its start refused as an upstream error
- * where OpenAI gave no code; a memories read or forget refuses a workspace
- * the account is not in as not found and a memory it may not forget as not
- * permitted. The rest still declare the whole map (`hostedProcedure`).
+ * Each declares its own refusals (`declaredProcedure`): the deletion, the
+ * preferences, the access, the provider keys, and the account's ChatGPT
+ * sign-in refuse only as any procedure may, the key ring a deployment holds
+ * among them, but that a device-code login is braked as quota exhausted,
+ * and its start refused as an upstream error where OpenAI gave no code; a
+ * memories read or forget refuses a workspace the account is not in as not
+ * found and a memory it may not forget as not permitted. A memory's keep
+ * and search are refused as off while the member has Memory off, and a
+ * workspace the account is not in as not found; a keep also refuses a
+ * correction of a memory gone as not found, words that look like a
+ * credential, and one past the workspace's bound, and is refused under its
+ * method by a service from before it, which served the path's read and
+ * forget alone.
  *
  * The outputs are the wire schemas flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
@@ -56,7 +61,7 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { HOSTED_API_ERROR } from "../service-wire.js";
 import { workspaceIdSchema } from "../task-wire.js";
-import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /** A key's save is a provider and a key bounded at 512 characters, so a body past this is not one. */
 const PROVIDER_KEY_BODY_BYTES = 2_048;
@@ -68,17 +73,17 @@ const MEMORY_SAVE_BODY_BYTES = 4_096;
 const CHATGPT_DEVICE_LOGIN_BODY_BYTES = 512;
 
 export const accountContract = {
-  delete: hostedProcedure
+  delete: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_DELETE }))
     .output(EffectSchema.flip(accountDeleteAnswerSchema)),
-  preferences: hostedProcedure
+  preferences: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
   writePreferences: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .input(accountPreferencesWriteSchema)
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
-  access: hostedProcedure
+  access: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_ACCESS }))
     .output(EffectSchema.flip(accountAccessAnswerSchema)),
   providerKeys: declaredProcedure
@@ -135,12 +140,22 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(memoriesAnswerSchema)),
-  saveMemory: hostedProcedure
+  saveMemory: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.MEMORY_OFF,
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.MEMORY_CREDENTIAL,
+        HOSTED_API_ERROR.MEMORY_FULL,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      ),
+    )
     .meta(bodyCap(MEMORY_SAVE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES }))
     .input(exactInput(memorySaveRequestSchema))
     .output(EffectSchema.flip(memorySaveAnswerSchema)),
-  searchMemories: hostedProcedure
+  searchMemories: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.MEMORY_OFF, HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES_SEARCH }))
     .input(
       EffectSchema.Struct({

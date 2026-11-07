@@ -9,9 +9,9 @@
  * schema; every output is its wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
  *
- * The member's writes and an item's home each declare their own refusals
- * (`declaredProcedure`); the three held reads still declare every refusal
- * (`hostedProcedure`).
+ * Every procedure declares its own refusals (`declaredProcedure`): of the
+ * three held reads, the account's refuses only as any procedure may, and a
+ * task's or an agent's refuses one the account does not reach as not found.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -37,14 +37,7 @@ import {
 } from "../inbox-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { HOSTED_API_ERROR } from "../service-wire.js";
-import {
-  bodyCap,
-  declaredProcedure,
-  exactBodyInput,
-  exactInput,
-  hostedProcedure,
-  refuses,
-} from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, exactInput, refuses } from "./base.js";
 
 /** A nod is a revision and a key, so a few hundred bytes hold it. */
 const NOD_BODY_BYTES = 1_024;
@@ -146,7 +139,7 @@ const pastCursorSchema = EffectSchema.Struct({
 });
 
 export const inboxContract = {
-  account: hostedProcedure
+  account: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.INBOX }))
     .input(
       EffectSchema.Struct({
@@ -158,11 +151,13 @@ export const inboxContract = {
       }),
     )
     .output(EffectSchema.flip(accountInboxAnswerSchema)),
-  task: hostedProcedure
+  task: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.TASK }))
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
-  agent: hostedProcedure
+  agent: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.AGENT }))
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
