@@ -23,7 +23,6 @@ import {
   PinIcon,
   ProgressCount,
   TaskStatusMark,
-  Tooltip,
   TooltipCard,
   UserIcon,
 } from "@repo/ui";
@@ -66,13 +65,6 @@ const CATALOG_SUB_TASKS = [
   { name: "Let a sender send it again", key: "ACME-45", status: TASK_STATUS.TODO },
   { name: "Count accepted invitations", key: "ACME-46", status: TASK_STATUS.TODO },
   { name: "Document the invite API", key: "ACME-47", status: TASK_STATUS.BACKLOG },
-] as const;
-
-/** A server's tools, each hanging what it does from a row that opens nothing. */
-const CATALOG_TOOLS = [
-  { title: "List issues", summary: "List the team's issues." },
-  { title: "Read an issue", summary: "Read one issue." },
-  { title: "Comment", summary: "Comment on an issue." },
 ] as const;
 
 /** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
@@ -356,38 +348,12 @@ function HoverCards(): React.JSX.Element {
             }
           />
           <Carded
-            label="Tools"
-            card={
-              <HoverCard>
-                <HoverCardHead glyph={<PinIcon />} name="Linear" sub="3 tools" />
-                <HoverCardRule />
-                <HoverCardList label="Linear tools">
-                  {CATALOG_TOOLS.map(({ title, summary }) => (
-                    <li key={title}>
-                      <Tooltip
-                        label={title}
-                        card={
-                          <HoverCard>
-                            <HoverCardHead name={title} />
-                            <HoverCardNote>{summary}</HoverCardNote>
-                          </HoverCard>
-                        }
-                      >
-                        <HoverCardRow glyph={null} label={title} />
-                      </Tooltip>
-                    </li>
-                  ))}
-                </HoverCardList>
-              </HoverCard>
-            }
-          />
-          <Carded
             label="Long body"
             card={
               <HoverCard>
-                <HoverCardHead glyph={<PinIcon />} name="Linear" sub="7 tools" />
+                <HoverCardHead glyph={<PinIcon />} name="Linear" sub="7 agents" />
                 <HoverCardRule />
-                {/* Note that a body that is no list, as a server's tools are, scrolls and fades as a list does. */}
+                {/* Note that a body that is no list scrolls and fades as a list does. */}
                 <HoverCardScroll>
                   {CATALOG_AGENTS.map((name) => (
                     <HoverCardRow key={name} glyph={<DocumentIcon />} label={name} />

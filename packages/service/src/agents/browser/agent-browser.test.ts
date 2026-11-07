@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { CDP_FAILURE, type CdpFailure } from "@repo/features/browser-cdp";
 import { Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { keptAfterResponse } from "../../http/after-response.js";
 import {
   agentBrowserTestLayer,
   FAKE_BRIDGE,
@@ -15,6 +16,7 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../../testing/agent-browser-fake.js";
+import { SANDBOX_STATUS } from "../vercel-sandbox-api.js";
 import {
   AgentBrowser,
   agentBrowserOver,
@@ -46,6 +48,7 @@ function browserOver(
   return {
     service: agentBrowserOver(sandbox.api, fakeBridgePty(peer, bridge), FAKE_IMAGE),
     ran: sandbox.ran,
+    sandbox: sandbox.api,
   };
 }
 
@@ -314,25 +317,33 @@ it.effect("a resume whose snapshot is gone is given up on at once, saying so", (
 );
 
 it.effect(
-  "a reopen whose image is still being prepared is given up on once the open stops waiting on it",
+  "a reopen whose image is still being prepared answers starting at once, and the open kept past the answer brings the sandbox up once the image is ready",
   () =>
     Effect.gen(function* () {
       const peer = yield* fakeCdpPeer();
-      const { service } = browserOver(peer, {
+      const { service, sandbox } = browserOver(peer, {
         status: "stopped",
         named: true,
         resumeUnavailable: 400,
         resumeCode: "image_not_ready",
+        resumeRefusals: 2,
       });
+      const kept = keptAfterResponse();
 
-      const opening = yield* Effect.forkChild(Effect.flip(service.ensure(SESSION)));
-      // Note that the open asks again every 10 s for 3 min, and the clock moves no further, so a
-      // resume tried again after it would never answer.
-      yield* TestClock.adjust(Duration.minutes(3));
-      const unreachable = yield* Fiber.join(opening);
+      // Note that the clock has not moved yet, so an open that waited on the image here would never answer.
+      const unreachable = yield* Effect.flip(service.ensure(SESSION)).pipe(
+        Effect.provide(kept.layer),
+      );
+      const opening = yield* Effect.forkChild(kept.run);
+      yield* TestClock.adjust(Duration.seconds(10));
+      yield* Fiber.join(opening);
+      // Read before the next open, which would resume the sandbox itself where the kept open failed.
+      const [opened] = yield* sandbox.listTagged(SESSION);
+      const standing = yield* service.ensure(SESSION);
 
-      assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE);
-      assert.equal(unreachable.status, 400);
+      assert.equal(unreachable.reason, BROWSER_UNREACHABLE.STARTING);
+      assert.equal(opened?.status, SANDBOX_STATUS.RUNNING);
+      assert.deepEqual(standing, { sandboxSessionId: FAKE_SANDBOX.RESUMED_SESSION, started: true });
     }),
 );
 

@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { TURN_ABANDON } from "@repo/database/models/abandoned-turns";
 import {
   awaitingLinesOfReached,
   latestTurnsOfReached,
@@ -110,6 +109,8 @@ const CLAIM_WINDOW_MS = 10 * 60_000;
 const AUTOMATION_RUNS = {
   /** The window the daily cap counts started runs over. */
   CAP_WINDOW: Duration.days(1),
+  /** How far back the runs whose agents may still be at work are read: a day and an hour, past the longest an automation's agent works. */
+  AT_WORK_WINDOW_MS: 25 * 60 * 60 * 1000,
 } as const;
 
 /** A run as it is acted on: a webhook's body, or an integration event's summary, beside it where the read that found it carried one. */
@@ -484,8 +485,8 @@ const steerClaimed = Effect.fnUntraced(function* (
  * so a run waits on that agent's own work as on its earlier runs'.
  */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
-  // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
-  const since = new Date(now - TURN_ABANDON.AGENT_AFTER_MS);
+  // Note that a run older than `AT_WORK_WINDOW_MS` is not read, so the read stays bounded.
+  const since = new Date(now - AUTOMATION_RUNS.AT_WORK_WINDOW_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null

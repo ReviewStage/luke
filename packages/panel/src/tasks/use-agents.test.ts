@@ -30,6 +30,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ActedResult } from "../act.js";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
@@ -108,11 +109,18 @@ async function settle(): Promise<void> {
   await settleFrames();
 }
 
+/** No one signed in to the window, whose drafts it reads, as the window's root holds them. */
+function NoOneSignedIn(): null {
+  useDraftsOwner(undefined);
+  return null;
+}
+
 /**
  * Mounts the hook over a service the test scripts act by act: each kind
  * answers from its own queue of answers, and every ask is written down. The
- * window's toast stands beside it, its atoms on `registry`, one of its own,
- * as a window's, where none is given.
+ * window's toast and its drafts owner stand beside it, its atoms on
+ * `registry`, one of its own, as a window's, where none is given, so an
+ * unmount closes the window, files and all.
  */
 function mount(
   initial: Standing,
@@ -174,7 +182,13 @@ function mount(
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
     },
     mount: async () => {
-      const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
+      const surface = createElement(
+        Fragment,
+        null,
+        createElement(NoOneSignedIn),
+        createElement(Probe),
+        createElement(ToastHost),
+      );
       act(() => root.render(onRegistry(registry, surface)));
       await settle();
     },

@@ -5,15 +5,20 @@
  * task (`task-files.ts`), and a version's HTML is answered inside JSON, so no
  * page is ever a document of the service's origin; a browser's frame is sent
  * on to the sandbox's own site for it (`page-frame.ts`).
+ *
+ * Each declares the one refusal its handler answers
+ * (`packages/service/src/agents/agent-pages-procedures.ts`) beyond those any
+ * procedure may: an agent, a page, or a version out of reach as not found.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { pageFrameAnswerSchema } from "../page-frame.js";
-import { taskPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
+import { taskPagesAnswerSchema, taskPageVersionAnswerSchema } from "../page-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { declaredProcedure, refuses } from "./base.js";
 
 const PAGES_PATH = `${HOSTED_SERVICE_PATH.AGENTS}/{id}/pages` as const;
 
@@ -29,17 +34,20 @@ const agentPageVersionSchema = EffectSchema.Struct({
 
 export const agentPagesContract = {
   /** The agent's own pages, each by its newest version, the most recently written first. */
-  list: hostedProcedure
+  list: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: PAGES_PATH }))
     .input(agentParamsSchema)
     .output(EffectSchema.flip(taskPagesAnswerSchema)),
   /** One version of one of the agent's own pages, with its HTML. */
-  version: hostedProcedure
+  version: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${PAGES_PATH}/{page}/versions/{version}` }))
     .input(agentPageVersionSchema)
     .output(EffectSchema.flip(taskPageVersionAnswerSchema)),
   /** One version of one of the agent's own pages as a browser's frame loads it, answered as a plan's page frame is (`task-files.ts`). */
-  frame: hostedProcedure
+  frame: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(
       openapi({
         method: HTTP_METHOD.GET,

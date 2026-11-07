@@ -1,4 +1,3 @@
-import { useAtom } from "@effect/atom-react";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
 import { automationTriggerText } from "@repo/features/automation-list-model";
@@ -52,6 +51,7 @@ import {
   comboboxOptionId,
   DocumentIcon,
   ErrorState,
+  forkEffect,
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
@@ -87,9 +87,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -115,7 +114,6 @@ import { inboxItemsQuery, inboxItemsRetryMutation } from "../live-reads.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import { QUERY_ROOT } from "../query-keys.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
@@ -1691,30 +1689,29 @@ interface WordsTyped {
 }
 
 /**
- * Words once they have stood the pause, as an atom whose work is the wait:
- * setting it again starts the wait over, so only the newest words rest.
- */
-const restAtom = () =>
-  rendererRuntime.fn((typed: WordsTyped) => Effect.as(Effect.sleep(SEARCH_PAUSE), typed));
-
-/**
  * Whether the typing has rested on the words of the `@` word at `wordAt`,
- * which no words always have. Note that the rest is forgotten once the
- * words go, so words typed again, in this word or another, wait afresh.
+ * which no words always have. The words rest once they have stood the
+ * pause, a wait of this reader's own that new words start over, so only
+ * the newest rest. Note that the rest is forgotten once the words go, so
+ * words typed again, in this word or another, wait afresh.
  */
 function useRested(wordAt: number | undefined, words: string | undefined): boolean {
-  const [atom] = useState(restAtom);
-  const [rested, rest] = useAtom(atom);
+  const rested = useCreateStore<WordsTyped | undefined>(undefined);
   useEffect(() => {
-    rest(wordAt === undefined || words === undefined ? Atom.Reset : { wordAt, words });
-  }, [wordAt, words, rest]);
-  return (
-    words === undefined ||
-    (AsyncResult.isSuccess(rested) &&
-      !rested.waiting &&
-      rested.value.wordAt === wordAt &&
-      rested.value.words === words)
-  );
+    if (wordAt === undefined || words === undefined) {
+      rested.setState(() => undefined);
+      return;
+    }
+    const typed = { wordAt, words };
+    return forkEffect(
+      Effect.andThen(
+        Effect.sleep(SEARCH_PAUSE),
+        Effect.sync(() => rested.setState(() => typed)),
+      ),
+    );
+  }, [wordAt, words, rested]);
+  const restedOn = useSelector(rested);
+  return words === undefined || (restedOn?.wordAt === wordAt && restedOn?.words === words);
 }
 
 /**

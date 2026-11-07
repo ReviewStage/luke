@@ -158,6 +158,25 @@ export const RUNNER_HARNESS = {
 } as const;
 export type RunnerHarness = (typeof RUNNER_HARNESS)[keyof typeof RUNNER_HARNESS];
 
+/**
+ * How a message reached its runner, as the launch's trace names it: a place
+ * created from its source agent's snapshot, its repository's base snapshot,
+ * or the agents' image; one resumed from its own snapshot; the runner
+ * launched again in a place still up; a place made anew where the one found
+ * was gone; or a runner already up. The last four are spelled as the
+ * service's hand-off event spells them (`SERVER_HANDOFF_PATH`).
+ */
+export const LAUNCH_PATH = {
+  SOURCE_SNAPSHOT: "source_snapshot",
+  BASE_SNAPSHOT: "base_snapshot",
+  IMAGE: "image",
+  RESUMED: "resumed",
+  RELAUNCHED: "relaunched",
+  FRESH: "fresh",
+  WARM: "warm",
+} as const;
+export type LaunchPath = (typeof LAUNCH_PATH)[keyof typeof LAUNCH_PATH];
+
 /** The reasoning efforts the pinned SDK takes, as its `EffortLevel` spells them. */
 export const EFFORT = {
   LOW: "low",

@@ -808,7 +808,7 @@ function fetchedReads(
       focus,
       fetch: (agentId) =>
         Effect.map(asked(client.workspaceTools(agentId)), (answer) =>
-          "runOnMac" in answer ? Option.some(answer) : Option.none(),
+          "failure" in answer ? Option.none() : Option.some(answer),
         ),
       tell: (held: AppWorkspaceTools) =>
         kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),

@@ -333,8 +333,8 @@ const FoldSchema = Schema.Struct({
 
 /**
  * The account's agents pinned to the devices folded, pinned to the one they
- * fold into, each runner's bearer retired as the lease sweep retires a gone
- * runner's, since any runner one was handed ran on a device folded; their
+ * fold into, each runner's bearer retired as a lapsed runner's settle retires a
+ * gone runner's, since any runner one was handed ran on a device folded; their
  * conversations.
  */
 const moveAgents = SqlSchema.findAll({

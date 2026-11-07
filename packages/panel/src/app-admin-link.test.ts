@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
+import { AGENT_STATUS, type AgentPage } from "@repo/features/agent-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@repo/features/link-grammar";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
@@ -38,8 +39,9 @@ import { type TestWindowRouter, windowRouter } from "./testing/window-router.js"
  * no admin opens nothing. A person's page loaded under a workspace the
  * reader is not in, as a reload of another's address is, opens the same
  * person under the workspace listed, as a link to them does, and a link
- * to the Automations page, the Board, or the Inbox already standing leaves it
- * standing. A link to an Inbox item, however it was written, opens the item
+ * to the Automations page, the Board, the Inbox, or an agent's page already
+ * standing leaves it standing. An agent's link pressed in an Inbox item lands
+ * in one step from it. A link to an Inbox item, however it was written, opens the item
  * at its own address.
  */
 
@@ -199,6 +201,7 @@ test.each([
   ["the Board", "/acme/tasks", { kind: LINK_PLACE.BOARD }],
   ["the Inbox", "/acme/inbox", { kind: LINK_PLACE.INBOX }],
   ["an Inbox item", "/acme/inbox/item-1", { kind: LINK_PLACE.INBOX_ITEM, itemId: "item-1" }],
+  ["an agent's page", "/acme/agent/agent-9", { kind: LINK_PLACE.AGENT, agentId: "agent-9" }],
   [
     "a task's version",
     "/acme/task/7/version/3",
@@ -299,4 +302,56 @@ test("a version history loaded on a task number the service finds nothing for gi
     asked.filter((act) => act.kind === ACT_KIND.TASKS_SELECT).map((act) => act.payload),
     [{ taskId: "9999" }],
   );
+});
+
+/** An agent of Acme's task numbered 7, which no list the window holds names, as the service reads its page. */
+const SEVEN_AGENT: AgentPage = {
+  id: "agent-of-seven",
+  planId: ACME_SEVEN.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Retry the relay",
+  createdAt: 1,
+  status: AGENT_STATUS.COMPLETED,
+  turnId: null,
+  automationId: null,
+  workspaceId: ACME.id,
+  repository: null,
+};
+
+test("an agent's link pressed in an Inbox item, its task not open, lands on the agent's tab in one step from the item", async () => {
+  fakeActPortAnswering((request) =>
+    request.kind === ACT_KIND.AGENTS_PAGE
+      ? Promise.resolve({ agent: SEVEN_AGENT })
+      : request.kind === ACT_KIND.TASKS_SELECT
+        ? Promise.resolve(true)
+        : Promise.reject(refusedOnPort("Not here.")),
+  );
+  first = WITH_SEVEN;
+  const router = await drawWindow("/acme/inbox/item-1");
+  await settle();
+  const before = router.addresses().slice(0, router.at() + 1);
+
+  act(() =>
+    showLink?.({ workspace: "acme", place: { kind: LINK_PLACE.AGENT, agentId: SEVEN_AGENT.id } }),
+  );
+  await settle();
+
+  const after = router.addresses().slice(0, router.at() + 1);
+  assert.deepEqual(after.slice(0, before.length), before, "the Inbox item stays the step behind");
+  assert.equal(after.length, before.length + 1, `one step, not through Home: ${after.join(" → ")}`);
+});
+
+test("a tab landing on an agent's address, its link opened as it lands, stands the page in the one step it landed on", async () => {
+  const router = await drawWindow("/acme");
+  const steps = router.addresses().length;
+
+  act(() => {
+    router.history.push("/acme/agent/agent-9");
+    showLink?.({ workspace: "acme", place: { kind: LINK_PLACE.AGENT, agentId: "agent-9" } });
+  });
+  await settle();
+
+  assert.equal(router.history.location.pathname, "/acme/agent/agent-9");
+  assert.equal(router.addresses().length, steps + 1, router.addresses().join(" → "));
 });

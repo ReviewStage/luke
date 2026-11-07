@@ -1,5 +1,5 @@
 /**
- * workspace-tools-model.ts -- whether `run_on_mac` is on for an agent and why not, as its MCP popover says it.
+ * workspace-tools-model.ts -- whether `run_on_mac` is on for an agent and why not, as the card its Runs on chip hangs says it.
  *
  * `run_on_mac` is on for an agent unless one of three things stops it,
  * said in this order: this Mac's Settings › This Mac lets no agent run
@@ -12,7 +12,6 @@
  * beside another that listens still runs the agent's commands there.
  */
 
-import { PRODUCT_NAME } from "./product-name.js";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./workspace-tools-wire.js";
 
 /** Why `run_on_mac` is off for an agent, the service's reason and the one this Mac knows first. */
@@ -23,10 +22,10 @@ export const RUN_ON_MAC_REASON = {
 
 export type RunOnMacReason = (typeof RUN_ON_MAC_REASON)[keyof typeof RUN_ON_MAC_REASON];
 
-/** What we say of each reason, in the hint over the popover's `run_on_mac off`. */
+/** What the dot on the Mac a card names says of each reason. */
 export const RUN_ON_MAC_REASON_WORDS = {
-  [RUN_ON_MAC_REASON.SETTINGS_OFF]: "Turned off in Settings › This Mac",
-  [RUN_ON_MAC_REASON.MAC_AWAY]: `${PRODUCT_NAME} isn't open on the Mac this agent's commands run on, or it stopped listening.`,
+  [RUN_ON_MAC_REASON.SETTINGS_OFF]: "Off in Settings",
+  [RUN_ON_MAC_REASON.MAC_AWAY]: "Offline",
 } as const satisfies Record<RunOnMacReason, string>;
 
 /** What decides whether `run_on_mac` is on: this Mac's setting, where the reader may be told it, and the service's answer. */

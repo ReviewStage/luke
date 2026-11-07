@@ -52,6 +52,8 @@ const runAgentFields = {
   cancelRequested: EffectSchema.NullOr(EffectSchema.Boolean),
   turnQueuedAt: EffectSchema.NullOr(countedNumber),
   turnSettledAt: EffectSchema.NullOr(countedNumber),
+  /** Until when the newest turn's runner is held to be at work; absent from a statement before it was carried. */
+  turnLeaseUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   turnSessionEnded: EffectSchema.NullOr(EffectSchema.Boolean),
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
   failureWord: EffectSchema.NullOr(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
@@ -181,9 +183,7 @@ export type AutomationRunsLiveRows = typeof AUTOMATION_RUNS_READ.rows.Type;
 
 export type AutomationWorkspaceRunsLiveRows = typeof AUTOMATION_WORKSPACE_RUNS_READ.rows.Type;
 
-type RunAgentRow = {
-  readonly [Key in keyof typeof runAgentFields]: (typeof runAgentFields)[Key]["Type"];
-};
+type RunAgentRow = EffectSchema.Struct<typeof runAgentFields>["Type"];
 
 /** The newest turn as the status rule reads it; none where the agent has none. */
 function turnOf(row: RunAgentRow): StatusTurn | undefined {
@@ -195,6 +195,7 @@ function turnOf(row: RunAgentRow): StatusTurn | undefined {
         queuedAt: row.turnQueuedAt ?? row.agentCreatedAt ?? 0,
         settledAt: row.turnSettledAt,
         sessionEnded: row.turnSessionEnded === true,
+        leaseUntil: row.turnLeaseUntil ?? undefined,
       };
 }
 

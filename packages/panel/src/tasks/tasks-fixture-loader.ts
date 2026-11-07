@@ -100,7 +100,7 @@ export function loadTasksFixture(): Promise<void> {
 /**
  * Hands the fixture the Query client the window's document is written into,
  * and answers what takes it back: the subscription writing it hands it on
- * as it mounts (`useAppStateSubscription`), so an act staged by a fixture
+ * as it starts (`followAppState`), so an act staged by a fixture
  * run reads the run from the cache rather than a copy of its own.
  */
 export function handFixtureClient(client: QueryClient): () => void {

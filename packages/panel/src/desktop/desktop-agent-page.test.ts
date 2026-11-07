@@ -44,16 +44,23 @@ import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { changesTab, STRIP_TAB_KIND, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { MESSAGE_ROLE } from "@repo/wire";
+import {
+  type AnyRouter,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, Fragment } from "react";
+import { act, createContext, createElement, Fragment, type ReactElement, useContext } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -101,7 +108,7 @@ import { ToastHost } from "../toast.js";
 // within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
-import { DesktopAgentPage } from "./desktop-agent-page.js";
+import { AgentRoutePage } from "./desktop-agent-page.js";
 
 /**
  * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
@@ -406,6 +413,42 @@ function handOrigin(): void {
   });
 }
 
+/** What the agent's route draws in a test, handed to its route as it is drawn. */
+const RoutedPage = createContext<ReactElement | null>(null);
+
+function RoutedPageElement(): ReactElement | null {
+  return useContext(RoutedPage);
+}
+
+/** A router standing at the agent's own address, its route the window's agent route by id (`panel-router.tsx`), made and read before each test. */
+let agentRouter: AnyRouter | undefined;
+
+beforeEach(async () => {
+  const top = createRootRoute();
+  const places = createRoute({ getParentRoute: () => top, id: "places" });
+  const workspace = createRoute({ getParentRoute: () => places, path: "/$workspace" });
+  const agent = createRoute({
+    getParentRoute: () => workspace,
+    path: "agent/$agentId",
+    component: RoutedPageElement,
+  });
+  agentRouter = createRouter({
+    routeTree: top.addChildren([places.addChildren([workspace.addChildren([agent])])]),
+    history: createMemoryHistory({ initialEntries: [`/acme/agent/${AGENT_ID}`] }),
+  });
+  await agentRouter.load();
+});
+
+/** `page` drawn by the agent's route at the agent's own address, so the page reads its agent from the address as the window's does. */
+function onAgentRoute(page: ReactElement): ReactElement {
+  const router = agentRouter ?? assert.fail("the agent's route stands");
+  return createElement(
+    RoutedPage.Provider,
+    { value: page },
+    createElement(RouterProvider, { router }),
+  );
+}
+
 /**
  * The page of the agent, standing in the task's place, as the window's
  * tasks control holds it, the task list carrying `listed` as `listStatus`
@@ -424,14 +467,15 @@ function mount(
   document.body.append(container);
   root = createRoot(container);
   const draw = () => {
-    const page = createElement(DesktopAgentPage, {
-      tasks: withList({
-        ...tasks,
-        listedPullRequests: tasks.listedPullRequests ?? listedPublished(),
+    const page = onAgentRoute(
+      createElement(AgentRoutePage, {
+        tasks: withList({
+          ...tasks,
+          listedPullRequests: tasks.listedPullRequests ?? listedPublished(),
+        }),
+        away,
       }),
-      agentId: AGENT_ID,
-      away,
-    });
+    );
     root?.render(
       onRegistry(
         registry,
@@ -639,9 +683,8 @@ function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(undefined, { id: AGENT_ID, holds: {} }, agents, [], [], agents);
   drawnPanel = sidePanel;
-  return createElement(DesktopAgentPage, {
+  return createElement(AgentRoutePage, {
     tasks: withList({ ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() }),
-    agentId: AGENT_ID,
   });
 }
 
@@ -672,7 +715,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
   await settle();
 
   const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
@@ -720,13 +763,12 @@ function PagesPage(): React.JSX.Element {
   );
   drawnPanel = sidePanel;
   const base = tasksControl({});
-  return createElement(DesktopAgentPage, {
+  return createElement(AgentRoutePage, {
     tasks: withList({
       ...base,
       sidePanel,
       agentView: { ...base.agentView, agentId: AGENT_ID, pages: [FUNNEL] },
     }),
-    agentId: AGENT_ID,
   });
 }
 
@@ -748,7 +790,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PagesPage))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PagesPage)))));
   await settle();
   act(() => drawnPanel?.onToggle());
   await settle();
@@ -866,7 +908,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
   await settle();
   return container;
 }
@@ -1162,7 +1204,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   const page = document.createElement("div");
   document.body.append(page);
   root = createRoot(page);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
   await settle();
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
@@ -1793,11 +1835,10 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   );
 });
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+/** A registry for a window whose waits run on this clock, as the window's run on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
+  serveEffectsOn(Context.make(Clock.Clock, clock));
+  return AtomRegistry.make();
 }
 
 /** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */

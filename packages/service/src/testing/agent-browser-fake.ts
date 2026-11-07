@@ -266,6 +266,8 @@ export interface FakeSandboxScenario {
   readonly resumeUnavailable?: number;
   /** The error code Vercel's body names on that refusal, where it names one. */
   readonly resumeCode?: string;
+  /** How many resumes are refused before one is answered, as an image whose preparation finishes; every one where unsaid. */
+  readonly resumeRefusals?: number;
   /** Whether the sandbox stands under its session's name (`agentSandboxName`), which a reopen goes through `getOrCreate` for; under a UUID where unsaid. */
   readonly named?: true;
   /** Whether its snapshot is gone, so a `getOrCreate` deletes it and makes it again. */
@@ -308,8 +310,10 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     scenario.unavailable === undefined
       ? undefined
       : Effect.fail(new SandboxUnavailable({ status: scenario.unavailable }));
+  let refusedResumes = 0;
   const resumeRefused = () =>
-    scenario.resumeUnavailable === undefined
+    scenario.resumeUnavailable === undefined ||
+    refusedResumes++ >= (scenario.resumeRefusals ?? Number.POSITIVE_INFINITY)
       ? undefined
       : Effect.fail(
           new SandboxUnavailable({

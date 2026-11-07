@@ -33,7 +33,7 @@ import { keepWriteReceipt, writeReceiptStands } from "@repo/database/models/writ
 import { IDEMPOTENCY_KEY } from "@repo/features";
 import { hostedContract } from "@repo/features/contract";
 import { Context, Effect, Option, References, Result, Tracer } from "effect";
-import { Headers, HttpTraceContext } from "effect/http";
+import { Headers } from "effect/http";
 import {
   admittedHostVersion,
   hostCallerOf,
@@ -51,6 +51,7 @@ import {
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { callerTrace } from "../observability/caller-trace.js";
 import type { WebServices } from "../runtime.js";
 
 /** How long a write's idempotency key is held after it was taken (`writeReceiptMiddleware`): thirty days. */
@@ -82,12 +83,13 @@ interface HostedSessionCaller extends HostedCaller {
 
 /**
  * Every procedure runs under a server span named by its path, whose parent
- * is the caller's trace as its `traceparent` names it, and every log line it
+ * is the caller's trace as its `sentry-trace` names it, or its `traceparent`
+ * where it sent none (`observability/caller-trace.ts`), and every log line it
  * writes carries its path as `procedure`, so a store failure
  * (`http/store-failure.ts`) names the route it was met on, and the span's
  * trace id as `traceId`, so a caller's failure report and the server's lines
- * for the same call are found by one id. A request with no `traceparent`, or
- * one that does not parse, starts a trace of its own.
+ * for the same call are found by one id. A request naming no trace, or one
+ * that does not parse, starts a trace of its own.
  *
  * Note that the caller's trace is read for correlation alone: its trace id is
  * continued and its sampling flag followed, as Sentry's own propagation does
@@ -106,7 +108,7 @@ const procedureTraced = middlewareGen<HostedContext, WithEffectContext<WebServic
   next,
 }) {
   const procedure = path.join(".");
-  const caller = HttpTraceContext.w3c(Headers.fromInput(context.request.headers));
+  const caller = callerTrace(Headers.fromInput(context.request.headers));
   const options = { kind: "server", parent: Option.getOrUndefined(caller) } as const;
   return yield* Effect.useSpan(procedure, options, (span) => {
     const services = context["effect/context"];

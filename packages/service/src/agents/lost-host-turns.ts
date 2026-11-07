@@ -5,7 +5,7 @@
  * host on the same Mac (`@repo/database/models/host-store`). Either way its
  * secret is refused from now on, so no runner there can end the turns its
  * agents had running, and without this they would read as running until
- * `TURN_ABANDON`.
+ * their lease runs out (`@repo/database/models/turn-lease`).
  */
 
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
@@ -27,7 +27,7 @@ export interface LostHostTurns {
  * settled (`settleRunnerLostTurns`), and only those, because a turn the
  * agent begins after its host was removed is its new host's. A failure is
  * logged and nothing more, because the host is already removed and a retry
- * would find no host to remove; the sweep's bound settles whatever was left.
+ * would find no host to remove; whatever was left lapses with its lease.
  */
 export const settleLostHostTurns = (lost: readonly LostHostTurns[]) =>
   Effect.gen(function* () {

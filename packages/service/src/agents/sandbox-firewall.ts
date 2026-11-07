@@ -414,7 +414,7 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           storeUnavailable("the firewall's launch could not be read"),
         );
         yield* sent(session, sources, launch?.swaps ?? NO_SWAPS);
-      }),
+      }).pipe(Effect.withSpan("web/writeSandboxFirewall")),
     keepLaunch: (session, launch) =>
       Effect.gen(function* () {
         const ring = yield* keyRing;
@@ -427,6 +427,9 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           },
           yield* DateTime.nowAsDate,
         );
-      }).pipe(storeUnavailable("the firewall's launch could not be kept")),
+      }).pipe(
+        storeUnavailable("the firewall's launch could not be kept"),
+        Effect.withSpan("web/keepFirewallLaunch"),
+      ),
   };
 }

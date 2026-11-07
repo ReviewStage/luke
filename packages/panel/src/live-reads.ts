@@ -793,7 +793,7 @@ function writeLiveReads(client: QueryClient): void {
  * Keeps every live read current and followed on `client`: each write of the
  * document written into the live reads' queries (`writeLiveReads`), and each
  * read the panel holds followed while its query is active, as the module's
- * header says. Mounted once at each root beside `AppStateSubscription`, and
+ * header says. Mounted once at each root, which follows the document (`followAppState`), and
  * beside a test's own client (`testing/copy-feedback.ts`).
  */
 export function useLiveReadSubscription(): void {

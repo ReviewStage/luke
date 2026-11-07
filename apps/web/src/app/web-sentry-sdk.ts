@@ -16,9 +16,10 @@ import {
   spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { sentryTracesSampler } from "@repo/features/sentry-tracing";
 import { SENTRY_TUNNEL } from "@repo/features/sentry-tunnel";
 import { sendShownFailure } from "@repo/features/shown-failure";
+import { sentrySendTracer } from "@repo/panel/send-traces";
 import { appStateQuery } from "@repo/panel/use-app-state";
 import {
   browserTracingIntegration,
@@ -27,9 +28,12 @@ import {
   getActiveSpan,
   getClient,
   getCurrentScope,
+  getTraceData,
   init,
   logger,
   startBrowserTracingPageLoadSpan,
+  startNewTrace,
+  startSpan,
   withStreamedSpan,
 } from "@sentry/browser";
 import type { QueryClient } from "@tanstack/react-query";
@@ -110,7 +114,11 @@ function accountId(queryClient: QueryClient): string | undefined {
  * failure the panel showed is sent as a log line, and as an issue besides
  * where nothing named it (`@repo/features/shown-failure`). Each event and log
  * line names the account signed in as it leaves, by its id alone, as
- * Sentry's user (`@repo/features/sentry-account`). Every envelope is posted
+ * Sentry's user (`@repo/features/sentry-account`). A send the developer
+ * presses is a span of its own, whose trace its act carries to the tab's
+ * host and on to the service (`@repo/panel/send-traces`), because the
+ * host's requests leave through a `fetch` it held before this SDK patched
+ * it. Every envelope is posted
  * to a path on the tab's own origin, which passes it on to Sentry, because
  * tracker blockers refuse Sentry's own host (`@repo/features/sentry-tunnel`).
  */
@@ -126,7 +134,7 @@ export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): 
       // among the web vitals the SDK reports by default.
       browserTracingIntegration({ instrumentPageLoad: false, enableLongAnimationFrame: true }),
     ],
-    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    tracesSampler: sentryTracesSampler,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: (event) =>
       eventWithoutAccessTokens(eventNamingAccount(event, accountId(queryClient))),
@@ -146,5 +154,6 @@ export function initWebSentry(build: WebSentryBuild, queryClient: QueryClient): 
     },
     reportShownFailure: (report) =>
       sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
+    traceSend: sentrySendTracer({ startNewTrace, startSpan, getTraceData }),
   };
 }

@@ -1,5 +1,6 @@
 import type { NativeAgentSessions } from "@repo/service/agents/coder-host/runtime-sessions";
 import { cookieOriginGuard } from "@repo/service/http/origin-guard";
+import { withSentryTraceparent } from "@repo/service/observability/caller-trace";
 import { sentryReportedFetch } from "@repo/service/observability/sentry";
 import { type Route, traceIdAnnotated, type WebRoutes } from "@repo/service/route";
 import type { WebServices } from "@repo/service/runtime";
@@ -65,7 +66,9 @@ export function routeFromWebServices(
  * already the platform's to record, and a URL we wrote to our own output is
  * a place a token in a query could land. Every line a route writes carries
  * its request's trace id (`traceIdAnnotated`), the caller's where its
- * `traceparent` named one.
+ * `sentry-trace` or `traceparent` named one: the router continues
+ * `traceparent` alone, so a caller's Sentry trace is handed it as one
+ * (`withSentryTraceparent`).
  */
 export function routeFromHttpRouter(
   routes: WebRoutes<WebServices>,
@@ -76,6 +79,6 @@ export function routeFromHttpRouter(
       disableLogger: true,
       middleware: traceIdAnnotated,
     });
-    return (incoming: Request) => handler(incoming, context);
+    return (incoming: Request) => handler(withSentryTraceparent(incoming), context);
   }, beside);
 }

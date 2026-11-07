@@ -187,6 +187,7 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
+import { useWindowAccount } from "../tasks/window-account.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab } from "./main-tabs.js";
@@ -480,7 +481,7 @@ export function useColumnFocus(): ColumnFocus {
 /** No worker's tab stands but a delegated one's, which its agent's open tab keeps (`drawsSubagent`). */
 const NO_SUBAGENTS: readonly string[] = [];
 
-/** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
+/** The "+" menu's sections after the fixed kinds. */
 export const ADD_SECTION = {
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
@@ -665,8 +666,8 @@ export function showPullRequest(
 /**
  * What a "+" menu hangs on its rows beyond their looks, the cards the
  * tabs of the same things hang (`stripTabs`): where the panel's own "+" is
- * drawn, it hands what those cards read; the summary and ⌘K, which hang
- * theirs themselves, hand none.
+ * drawn, it hands what those cards read; ⌘K, which hangs its own, hands
+ * none.
  */
 export interface PanelCards {
   readonly agents: AgentsControl;
@@ -767,9 +768,8 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 }
 
 /**
- * What the panel may open, as its "+" menu offers it, the task's summary
- * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
- * every one for the "+" and those the task has used for the summary. Each
+ * What the panel may open, as its "+" menu offers it and ⌘K finds it: the
+ * fixed kinds given. Each
  * row wears its tab's own look (`tab-look.tsx`). Picking a row whose tab is
  * open chooses that tab rather than opening another, as a browser's tab
  * search does, so no row says it is open. Then, under Pull requests,
@@ -934,6 +934,8 @@ export function panelEntries(input: {
  */
 export function panelOffers(input: {
   holder: SidePanelHolder;
+  /** The account signed in, whose cloud Browser draft the "+" starts. */
+  account: string | undefined;
   taskId: string;
   panel: SidePanelControl;
   agents: AgentsControl;
@@ -949,7 +951,7 @@ export function panelOffers(input: {
   plan?: PlanStanding | undefined;
   cards: PanelCards;
 }): AddEntry[] {
-  const { holder, taskId, panel, agents, onNewTerminal, cards } = input;
+  const { holder, account, taskId, panel, agents, onNewTerminal, cards } = input;
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.heldIds }),
   );
@@ -990,7 +992,9 @@ export function panelOffers(input: {
     browsers: {
       agents: cloudOffers,
       onAgent: (agentId: string) =>
-        panel.onChoose(cloudBrowserTab(startCloudDraft(holderPlaceOf(holder, taskId), agentId).id)),
+        panel.onChoose(
+          cloudBrowserTab(startCloudDraft(account, holderPlaceOf(holder, taskId), agentId).id),
+        ),
       listed: input.listedBrowsers,
       onOpen: (id: string) => panel.onChoose(cloudBrowserTab(id)),
     },
@@ -1081,6 +1085,8 @@ function stripTabs(input: {
   thread: boolean;
   /** Who each agent's pull request names, as its Changes tab last read them. */
   people: ReadonlyMap<string, HeldPeople>;
+  /** The account signed in, whose cloud Browser draft a closed draft's tab lets go. */
+  account: string | undefined;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, locals, held } =
     input;
@@ -1236,7 +1242,7 @@ function stripTabs(input: {
             }),
           }),
           close: () => {
-            if ("draft" in drawn) discardCloudDraft(input.pagePlace, drawn.id);
+            if ("draft" in drawn) discardCloudDraft(input.account, input.pagePlace, drawn.id);
             panel.onClose(tab);
           },
         },
@@ -1394,7 +1400,9 @@ function PanelTabs({
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const people = useChangesPeopleOf(useMemo(() => changes.map((tab) => tab.changes), [changes]));
+  const account = useWindowAccount();
   const kinds = stripTabs({
+    account,
     panel,
     unread,
     agents,
@@ -2693,12 +2701,13 @@ export function SidePanel({
   };
   // The "+" offers a new tab in each of the holder's coding agents' cloud browsers, the one viewed first.
   const viewedAgent = shownAgent ?? (panel.tab === undefined ? undefined : agentOfTab(panel.tab));
+  const account = useWindowAccount();
   const cloudDrafts = {
     onOpened: (draftId: string, opened: AgentBrowserTab) => {
-      discardCloudDraft(cloudPlace, draftId);
+      discardCloudDraft(account, cloudPlace, draftId);
       panel.onChoose(cloudBrowserTab(opened.id));
     },
-    onDiscard: (draftId: string) => discardCloudDraft(cloudPlace, draftId),
+    onDiscard: (draftId: string) => discardCloudDraft(account, cloudPlace, draftId),
   };
   // A page's tab stands while the place it stands on lists the page: the panel's own, as the
   // panel's pages, or, for a tab of another place its strip draws, that place's own pages.
@@ -2778,6 +2787,7 @@ export function SidePanel({
   );
   const offers = panelOffers({
     holder,
+    account,
     taskId,
     panel,
     agents,

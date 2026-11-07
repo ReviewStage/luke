@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
@@ -10,6 +9,7 @@ import { type Failure, remedyLabel } from "@repo/features/failure-remedy";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { STATUS_TONE } from "@repo/ui";
 import { sentLineId } from "@repo/wire/host-ids";
+import { useSelector } from "@tanstack/react-store";
 import { useEffect, useRef, useState } from "react";
 import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
@@ -24,7 +24,7 @@ import {
   type SentLine,
   unreadSentLines,
 } from "./agent-model.js";
-import { type FailedLine, failedLinesAtom, failedLinesOf } from "./failed-lines.js";
+import { type FailedLine, failedLines as failedLinesHeld, failedLinesOf } from "./failed-lines.js";
 
 /**
  * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, the messages on their way, the ones that did not go, and the lines sent that the transcript has not read back.
@@ -276,8 +276,8 @@ export function useAgentComposer(input: {
 }): HeldComposer {
   const { agentId, messages } = input;
   const kept = useDraft({ kind: DRAFT_PLACE.AGENT, planId: input.taskId, agentId });
-  const failedLines = useAtomValue(failedLinesAtom);
-  const keepFailed = useAtomSet(failedLinesAtom);
+  const failedLines = useSelector(failedLinesHeld.store);
+  const keepFailed = failedLinesHeld.set;
   const [held, setHeld] = useState<Held>(() => fresh(agentId, failedLinesOf(failedLines, agentId)));
   if (held.agentId !== agentId) setHeld(fresh(agentId, failedLinesOf(failedLines, agentId)));
   // The lines as last drawn, which an answer landing later reads.

@@ -130,7 +130,7 @@ function fixtureOptions(transport: Transport): SentryOptions {
     ...sentryOptions(),
     dsn: FIXTURE_SENTRY_DSN,
     environment: "test",
-    tracesSampleRate: 1.0,
+    tracesSampler: () => 1,
     transport,
   };
 }

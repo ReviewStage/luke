@@ -1,4 +1,3 @@
-import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { connectionHealth } from "@repo/features/integration-health";
 import { SIGN_IN_ACTION } from "@repo/features/integration-sign-in";
 import {
@@ -7,8 +6,6 @@ import {
   INTEGRATION_STATUS,
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
-import { PRODUCT_NAME } from "@repo/features/product-name";
-import { RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
 import {
   AccountWords,
   AnchoredPopover,
@@ -18,8 +15,6 @@ import {
   CHIP_WIDTH,
   Chip,
   GearIcon,
-  GLYPH_INK,
-  GlyphSlot,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -35,7 +30,6 @@ import {
   POPOVER_PANEL_LOOK,
   PopoverPanel,
   PROVIDER_MARK_SIZE,
-  ProductMark,
   ProviderMark,
   SCROLL_SIZE,
   ScrollArea,
@@ -64,14 +58,11 @@ import {
   serversOnWords,
   switchedServers,
 } from "@repo/ui/agent-servers-model";
-import { ICON_SIZE } from "@repo/ui/icons";
-import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   cloneElement,
   createContext,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -81,7 +72,6 @@ import { useIntegrationGrant } from "../integration-grant.js";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { useIntegrationTools } from "../integration-tools.js";
 import { revealWithin } from "../scroll-within.js";
-import { useWorkspaceTools, type WorkspaceToolsDoor } from "./agent-workspace-tools.js";
 
 /**
  * agent-servers.tsx -- the MCP servers row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each.
@@ -92,15 +82,12 @@ import { useWorkspaceTools, type WorkspaceToolsDoor } from "./agent-workspace-to
  * same popover from its field's chip, hung from the chip's trailing edge
  * (`AgentServersButton`, `@repo/ui`'s `AnchoredPopover`). Either way it is
  * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search
- * field first, then, for a started agent, our own tools under Built in,
- * then the servers under Connected, which counts how many this agent has
- * on, and Not connected (`agent-servers-model.ts`), each section under
- * `@repo/ui`'s `MenuSection`, and Manage in Settings pinned at the foot.
- * An agent is handed a server's every tool or none, so the popover lists
- * servers alone, never their tools. The app's row is its mark, its name,
- * `run_on_mac off` in the attention tone where it is, its reason in a hint
- * (`agent-workspace-tools.ts`), and Always on in a switch's place, since
- * its tools cannot be turned off. A connected server's row ends with this
+ * field first, then the servers under Connected, which counts how many this
+ * agent has on, and Not connected (`agent-servers-model.ts`), each section
+ * under `@repo/ui`'s `MenuSection`, and Manage in Settings pinned at the
+ * foot. An agent is handed a server's every tool or none, so the popover
+ * lists servers alone, never their tools, and our own tools, which no
+ * agent can be denied, not at all. A connected server's row ends with this
  * agent's switch, which a press anywhere on the row flips; one whose server
  * answered why it lists no tools says why beside its name and ends with
  * Reconnect; one not connected ends with Connect, which sends the browser
@@ -132,8 +119,6 @@ export interface AgentServersControl {
   readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
-  /** The started agent whose own tools, the app's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
-  readonly workspace?: WorkspaceToolsDoor | undefined;
 }
 
 /** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
@@ -146,13 +131,6 @@ const GITHUB = INTEGRATION_PROVIDER.GITHUB;
  */
 const SERVERS_SCROLL_CLASS = "flex max-h-servers-list flex-col";
 
-/** What stands at a row's end in the muted detail type: the app's Always on. */
-const SERVER_COUNT_CLASS =
-  "agent-servers-count flex-none whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums";
-
-/** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
-const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
-
 /** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
@@ -163,13 +141,6 @@ const SERVERS_NONE = "No MCP servers available";
 const SEARCH = {
   PLACEHOLDER: "Search MCP servers",
   NONE: "No MCP servers match",
-} as const;
-
-/** What the app's own row says. */
-const WORKSPACE_WORDS = {
-  SECTION: "Built in",
-  ALWAYS_ON: "Always on",
-  RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
 } as const;
 
 /** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
@@ -344,48 +315,6 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** The product's mark, at a provider mark's seat. */
-function AppMark(): React.JSX.Element {
-  return (
-    <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
-      <ProductMark small />
-    </GlyphSlot>
-  );
-}
-
-/** What stands at the end of the app's row in a switch's place: its tools cannot be turned off. */
-function AlwaysOn(): React.JSX.Element {
-  return (
-    <span className={SERVER_END_CLASS}>
-      <span className={SERVER_COUNT_CLASS}>{WORKSPACE_WORDS.ALWAYS_ON}</span>
-    </span>
-  );
-}
-
-/** The app's own row, heading the popover for a started agent: its mark, its name, `run_on_mac off` with why where it is, and Always on. */
-function WorkspaceRow({ door }: { door: WorkspaceToolsDoor }): React.JSX.Element {
-  const { reason } = useWorkspaceTools(door);
-  return (
-    <ListRow
-      leading={<AppMark />}
-      title={
-        <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
-          <ServerName name={PRODUCT_NAME} />
-          {reason !== undefined ? (
-            <OneLine
-              hint={wholeWordsHint(RUN_ON_MAC_REASON_WORDS[reason])}
-              className="agent-servers-problem flex-auto text-caption-inline text-attention"
-            >
-              {WORKSPACE_WORDS.RUN_ON_MAC_OFF}
-            </OneLine>
-          ) : null}
-        </span>
-      }
-      actions={<AlwaysOn />}
-    />
-  );
-}
-
 /** What makes a row the highlighted one, where the pointer coming onto it moves the highlight. */
 const RowHighlight = createContext<(() => void) | undefined>(undefined);
 
@@ -448,14 +377,6 @@ function ServersPopover({
     .flatMap((group) => group.rows)
     .filter((row) => row.kind !== SERVER_ROW.QUIET);
   const at = Math.min(highlight, Math.max(picks.length - 1, 0));
-  // The app's row heads the list while it stands: for an agent, and found by the search.
-  const workspaceShown =
-    servers.workspace !== undefined && matchesTokens([PRODUCT_NAME], searchTokens(query));
-
-  // The field takes focus as the popover opens, unless its owner leaves the keyboard where it was.
-  useEffect(() => {
-    if (takesFocus) field.current?.focus();
-  }, [takesFocus]);
 
   useLayoutEffect(() => {
     const row = document.getElementById(`${rowsId}-${at}`);
@@ -601,6 +522,8 @@ function ServersPopover({
       look={POPOVER_PANEL_LOOK.MENU}
       title={SERVERS_LABEL}
       takesFocus={takesFocus}
+      // Note that the panel hands the field the focus each time it opens, a reopening while it fades out among them.
+      initialFocus={field}
       onDismiss={onBack}
       onLeave={onLeave}
       onExited={onExited}
@@ -623,15 +546,8 @@ function ServersPopover({
             <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
               <div ref={moving} className="agent-servers-list p-menu-inset">
                 <ListMotion root={moving}>
-                  {workspaceShown && servers.workspace !== undefined ? (
-                    <MenuSection heading={WORKSPACE_WORDS.SECTION}>
-                      <List label={WORKSPACE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
-                        <WorkspaceRow door={servers.workspace} />
-                      </List>
-                    </MenuSection>
-                  ) : null}
                   {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-                  {rows.length > 0 && groups.length === 0 && !workspaceShown ? (
+                  {rows.length > 0 && groups.length === 0 ? (
                     <ServersNote words={SEARCH.NONE} />
                   ) : null}
                   {groups.map((group) =>
