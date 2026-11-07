@@ -21,6 +21,7 @@ import {
 } from "./hosted-link.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
+import { SentSendTrace } from "./sentry-tracing.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://app.test";
@@ -358,5 +359,34 @@ it.effect(
       );
       assert.equal(traceId, traceOf(failure), "the server continues the trace the report names");
       assert.equal(flags, "00", "an ask past the sample rate is sent unsampled, not untraced");
+    }),
+);
+
+it.effect(
+  "an ask a press began sends the press's trace as Sentry's headers, sampled as the press was",
+  () =>
+    Effect.gen(function* () {
+      const pressed = {
+        sentryTrace: "771a43a4192642f0b136d5159a501700-b7ad6b7169203331-1",
+        baggage: "sentry-trace_id=771a43a4192642f0b136d5159a501700,sentry-sampled=true",
+      };
+      const recording = recordingHttpClient(
+        () => new Response("", { status: HTTP_STATUS.SERVER_ERROR }),
+      );
+
+      const failure = yield* Effect.flip(
+        Effect.provide(askModels(account(["token-1"])), recording.layer).pipe(
+          Effect.provideService(Random.Random, drawing(0.99)),
+          Effect.provideService(SentSendTrace, pressed),
+        ),
+      );
+
+      const headers = recording.requests[0]?.headers;
+      assert.equal(headers?.get("sentry-trace"), pressed.sentryTrace);
+      assert.equal(headers?.get("baggage"), pressed.baggage);
+      const [, traceId, , flags] = (headers?.get("traceparent") ?? "").split("-");
+      assert.equal(traceId, "771a43a4192642f0b136d5159a501700");
+      assert.equal(failure.traceId, traceId, "the report names the press's trace");
+      assert.equal(flags, "01", "the press's sampling stands over the draw's");
     }),
 );

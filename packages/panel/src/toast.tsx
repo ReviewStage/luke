@@ -77,7 +77,7 @@ import {
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { createStore, useSelector } from "@tanstack/react-store";
 import { Clock, Duration, Effect } from "effect";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { appPlatform } from "./app-platform.js";
 import { failureOfConnection, reportShownFailure, type ShownFailure } from "./failure-report.js";
@@ -201,6 +201,7 @@ const TOAST_STEP = {
   DISMISS: "dismiss",
   WITHDRAW: "withdraw",
   ROOM: "room",
+  CLEAR: "clear",
 } as const;
 
 type ToastStep =
@@ -215,7 +216,8 @@ type ToastStep =
       readonly notice: KeptNotice;
     }
   | { readonly kind: typeof TOAST_STEP.WITHDRAW; readonly subject: string }
-  | { readonly kind: typeof TOAST_STEP.ROOM; readonly room: number };
+  | { readonly kind: typeof TOAST_STEP.ROOM; readonly room: number }
+  | { readonly kind: typeof TOAST_STEP.CLEAR };
 
 /**
  * A toast standing, numbered among those shown so a new one is drawn anew,
@@ -406,6 +408,8 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
     }
     case TOAST_STEP.ROOM:
       return crowd({ ...stack, room: step.room }, now);
+    case TOAST_STEP.CLEAR:
+      return { ...stack, shown: [], waiting: [] };
   }
 }
 
@@ -484,6 +488,20 @@ function lifeFrom(step: ToastStep): Effect.Effect<void> {
 /** Moves the stack on by `step`, calling off the wait the step before it left. */
 function stepToasts(step: ToastStep): void {
   toastLife.start(lifeFrom(step));
+}
+
+/**
+ * Empties the stack as another account signs in, every toast standing or
+ * waiting gone at once rather than leaving in sight, because what the last
+ * account was told is its own; nothing on the window's first draw.
+ */
+export function useToastsOwner(account: string | undefined): void {
+  const last = useRef(account);
+  useEffect(() => {
+    if (last.current === account) return;
+    last.current = account;
+    stepToasts({ kind: TOAST_STEP.CLEAR });
+  }, [account]);
 }
 
 /**

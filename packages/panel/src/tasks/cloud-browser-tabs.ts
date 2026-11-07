@@ -20,7 +20,9 @@
  * whose browser it is to open in, and opens nothing until its bar opens an
  * address (`cloud-browser-pane.tsx`). The tab the service then answers is
  * listed from that moment until the held list first lists it, so the panel
- * lands on it before Realtime has told it.
+ * lands on it before Realtime has told it. Both are the account's signed in
+ * as they were made (`window-account.ts`), so another account signing in
+ * finds none of them, and the first finds its own again.
  */
 
 import {
@@ -33,6 +35,7 @@ import { Store, useSelector } from "@tanstack/react-store";
 import { Duration } from "effect";
 import { useEffect } from "react";
 import { browserTabsQuery } from "../live-reads.js";
+import { useWindowAccount } from "./window-account.js";
 
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);
@@ -53,40 +56,78 @@ export interface CloudBrowserDraft {
 /** A holder with no draft, the same array every render. */
 const NO_DRAFTS: readonly CloudBrowserDraft[] = [];
 
-/** The tabs this window opened, by the holder's id, that the held list has not listed yet; a new map at each change. */
-const opened = new Store<ReadonlyMap<string, readonly AgentBrowserTab[]>>(new Map());
+/** One account's tabs this window opened that the held list has not listed yet, and its drafts, each by the holder's id; a new map at each change. */
+interface AccountTabs {
+  readonly opened: ReadonlyMap<string, readonly AgentBrowserTab[]>;
+  readonly drafts: ReadonlyMap<string, readonly CloudBrowserDraft[]>;
+}
 
-/** The drafts this window holds, by the holder's id, in the order asked for; a new map at each change. */
-const drafts = new Store<ReadonlyMap<string, readonly CloudBrowserDraft[]>>(new Map());
+/** An account that opened nothing here. */
+const NOTHING_HERE: AccountTabs = { opened: new Map(), drafts: new Map() };
 
-/** Notes a tab the member opened in an agent's browser from the holder's panel, listed until the held list lists it. */
-export function noteOpenedCloudTab(place: BrowserTabsPlace, tab: AgentBrowserTab): void {
+/** Every account's tabs and drafts, by the account signed in as they were made, none for no account; a new map at each change. */
+const held = new Store<ReadonlyMap<string | undefined, AccountTabs>>(new Map());
+
+/** One account's tabs and drafts. */
+function ownedOf(
+  all: ReadonlyMap<string | undefined, AccountTabs>,
+  account: string | undefined,
+): AccountTabs {
+  return all.get(account) ?? NOTHING_HERE;
+}
+
+/** Changes one account's tabs and drafts. */
+function changeOwned(
+  account: string | undefined,
+  change: (owned: AccountTabs) => AccountTabs,
+): void {
+  held.setState((all) => new Map(all).set(account, change(ownedOf(all, account))));
+}
+
+/** Notes a tab the member opened in an agent's browser from the holder's panel under the account, listed until the held list lists it. */
+export function noteOpenedCloudTab(
+  account: string | undefined,
+  place: BrowserTabsPlace,
+  tab: AgentBrowserTab,
+): void {
   const key = browserTabsPlaceId(place);
-  opened.setState((held) => {
-    const standing = (held.get(key) ?? NO_TABS).filter((each) => each.id !== tab.id);
-    return new Map(held).set(key, [...standing, tab]);
+  changeOwned(account, (owned) => {
+    const standing = (owned.opened.get(key) ?? NO_TABS).filter((each) => each.id !== tab.id);
+    return { ...owned, opened: new Map(owned.opened).set(key, [...standing, tab]) };
   });
 }
 
-/** A draft of a tab in the coding agent's browser on the holder's panel, held after any it holds already. */
-export function startCloudDraft(place: BrowserTabsPlace, agentId: string): CloudBrowserDraft {
+/** A draft of a tab in the coding agent's browser on the holder's panel under the account, held after any it holds already. */
+export function startCloudDraft(
+  account: string | undefined,
+  place: BrowserTabsPlace,
+  agentId: string,
+): CloudBrowserDraft {
   const key = browserTabsPlaceId(place);
   const draft = { id: crypto.randomUUID(), agentId };
-  drafts.setState((held) => new Map(held).set(key, [...(held.get(key) ?? NO_DRAFTS), draft]));
+  changeOwned(account, (owned) => ({
+    ...owned,
+    drafts: new Map(owned.drafts).set(key, [...(owned.drafts.get(key) ?? NO_DRAFTS), draft]),
+  }));
   return draft;
 }
 
-/** Lets go of a draft: discarded, or opened as a tab of its own. */
-export function discardCloudDraft(place: BrowserTabsPlace, draftId: string): void {
+/** Lets go of one of the account's drafts: discarded, or opened as a tab of its own. */
+export function discardCloudDraft(
+  account: string | undefined,
+  place: BrowserTabsPlace,
+  draftId: string,
+): void {
   const key = browserTabsPlaceId(place);
-  const held = drafts.state.get(key) ?? NO_DRAFTS;
-  if (!held.some((each) => each.id === draftId)) return;
-  drafts.setState((all) =>
-    new Map(all).set(
+  const drafts = ownedOf(held.state, account).drafts.get(key) ?? NO_DRAFTS;
+  if (!drafts.some((each) => each.id === draftId)) return;
+  changeOwned(account, (owned) => ({
+    ...owned,
+    drafts: new Map(owned.drafts).set(
       key,
-      held.filter((each) => each.id !== draftId),
+      drafts.filter((each) => each.id !== draftId),
     ),
-  );
+  }));
 }
 
 /** The holder's drafts in the order asked for; none where `listing` is off, as for the listed tabs. */
@@ -94,9 +135,10 @@ export function useCloudBrowserDrafts(
   place: BrowserTabsPlace | undefined,
   listing: boolean,
 ): readonly CloudBrowserDraft[] {
+  const account = useWindowAccount();
   const key = place === undefined ? undefined : browserTabsPlaceId(place);
-  const read = useSelector(drafts, (all) =>
-    key === undefined ? NO_DRAFTS : (all.get(key) ?? NO_DRAFTS),
+  const read = useSelector(held, (all) =>
+    key === undefined ? NO_DRAFTS : (ownedOf(all, account).drafts.get(key) ?? NO_DRAFTS),
   );
   return listing ? read : NO_DRAFTS;
 }
@@ -123,15 +165,18 @@ export function useCloudBrowserTabs(
   listing: boolean,
 ): readonly AgentBrowserTab[] | undefined {
   const listed = useQuery(browserTabsQuery(listing ? place : undefined)).data;
+  const account = useWindowAccount();
   const key = place === undefined ? undefined : browserTabsPlaceId(place);
-  const mine = useSelector(opened, (all) =>
-    key === undefined ? NO_TABS : (all.get(key) ?? NO_TABS),
+  const mine = useSelector(held, (all) =>
+    key === undefined ? NO_TABS : (ownedOf(all, account).opened.get(key) ?? NO_TABS),
   );
   useEffect(() => {
     if (key === undefined || listed === undefined || mine.length === 0) return;
     const left = mine.filter((tab) => !listed.some((each) => each.id === tab.id));
-    if (left.length < mine.length) opened.setState((held) => new Map(held).set(key, left));
-  }, [key, listed, mine]);
+    if (left.length < mine.length) {
+      changeOwned(account, (owned) => ({ ...owned, opened: new Map(owned.opened).set(key, left) }));
+    }
+  }, [account, key, listed, mine]);
   if (!listing) return NO_TABS;
   if (listed === undefined) return mine.length === 0 ? undefined : mine;
   return withOpened(listed, mine);

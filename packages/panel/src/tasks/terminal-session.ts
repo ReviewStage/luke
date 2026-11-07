@@ -239,6 +239,23 @@ export class TerminalSession {
     this.#screen = undefined;
   }
 
+  /**
+   * The port and the screen let go, the shell left running where it runs,
+   * as another account takes the window: nothing printed or typed in it
+   * stands, and the session asks again for the same shell once its screen
+   * next has room.
+   */
+  detach(): void {
+    if (this.#port !== undefined) this.#port.onmessage = null;
+    this.#letGo();
+    this.#typed = [];
+    this.#size = undefined;
+    this.#shown = false;
+    this.#screen?.dispose();
+    this.#screen = undefined;
+    this.#enter({ kind: TERMINAL_STATE.CONNECTING });
+  }
+
   #open(size: TerminalSize): void {
     this.link.open?.(size).then(
       (opened) => {
@@ -349,58 +366,93 @@ export const TERMINAL_KIND = {
 
 export type TerminalKind = (typeof TERMINAL_KIND)[keyof typeof TERMINAL_KIND];
 
+/** One account's sessions, by kind, then by the agent, then by the terminal's own key. */
+type SessionsHeld = Map<TerminalKind, Map<string, Map<string, TerminalSession>>>;
+
 /**
- * The sessions a window holds, by kind, then by the agent, then by the
- * terminal's own key, and the listener that hands them their ports while
- * any stands. Note that it is a plain object rather than a store, because a
- * session is no value to draw: it holds the screen the bytes go to.
+ * The sessions a window holds, by account, then by kind, then by the agent,
+ * then by the terminal's own key, and the listener that hands them their
+ * ports while any stands. Note that it is a plain object rather than a
+ * store, because a session is no value to draw: it holds the screen the
+ * bytes go to. A session is its account's: another account signing in
+ * detaches every one (`own`), its shell left running, and the first finds
+ * them again.
  */
 export class TerminalSessions {
-  readonly #held = new Map<TerminalKind, Map<string, Map<string, TerminalSession>>>();
+  readonly #held = new Map<string | undefined, SessionsHeld>();
+  /** The account signed in, whose sessions alone stand attached. */
+  #account: string | undefined;
   #stopHearing: (() => void) | undefined;
 
   #every(): TerminalSession[] {
-    return [...this.#held.values()].flatMap((agents) =>
-      [...agents.values()].flatMap((held) => [...held.values()]),
+    return [...this.#held.values()].flatMap((kinds) =>
+      [...kinds.values()].flatMap((agents) =>
+        [...agents.values()].flatMap((shells) => [...shells.values()]),
+      ),
     );
   }
 
-  /** The session a terminal holds, made with `make` the first time it is asked for. */
+  /** The session an account's terminal holds, made with `make` the first time it is asked for. */
   session(
+    account: string | undefined,
     kind: TerminalKind,
     agentId: string,
     key: string,
     make: () => TerminalSession,
   ): TerminalSession {
-    const agents = this.#held.get(kind) ?? new Map<string, Map<string, TerminalSession>>();
-    this.#held.set(kind, agents);
+    const kinds = this.#held.get(account) ?? (new Map() as SessionsHeld);
+    this.#held.set(account, kinds);
+    const agents = kinds.get(kind) ?? new Map<string, Map<string, TerminalSession>>();
+    kinds.set(kind, agents);
     const held = agents.get(agentId) ?? new Map<string, TerminalSession>();
     agents.set(agentId, held);
     const found = held.get(key);
     if (found !== undefined) return found;
     const made = make();
     held.set(key, made);
-    // Each shell's port goes to the session that asked for it.
-    this.#stopHearing ??= onTerminalPort((ticket, port) =>
-      this.#every()
-        .find((each) => each.takes(ticket.agentId, ticket.terminalId))
-        ?.attached(port),
-    );
+    // Each shell's port goes to the session that asked for it; one none waits for is let go, which main hears as the detach.
+    this.#stopHearing ??= onTerminalPort((ticket, port) => {
+      const taker = this.#every().find((each) => each.takes(ticket.agentId, ticket.terminalId));
+      if (taker === undefined) port.close();
+      else taker.attached(port);
+    });
     return made;
   }
 
-  /** Ends the sessions of an agent's terminals given, or every one of its kind with none given, as their tabs close. */
-  end(kind: TerminalKind, agentId: string, keys?: readonly string[]): void {
-    const held = this.#held.get(kind)?.get(agentId);
+  /** Ends the sessions of an account's agent's terminals given, or every one of its kind with none given, as their tabs close. */
+  end(
+    account: string | undefined,
+    kind: TerminalKind,
+    agentId: string,
+    keys?: readonly string[],
+  ): void {
+    const agents = this.#held.get(account)?.get(kind);
+    const held = agents?.get(agentId);
     if (held === undefined) return;
     for (const key of keys ?? [...held.keys()]) {
       held.get(key)?.dispose();
       held.delete(key);
     }
-    if (held.size === 0) this.#held.get(kind)?.delete(agentId);
+    if (held.size === 0) agents?.delete(agentId);
     if (this.#every().length > 0) return;
     this.#stopHearing?.();
     this.#stopHearing = undefined;
+  }
+
+  /**
+   * The account signed in from now on: every session of another account
+   * detached, never ended, so no shell is killed, and kept until that
+   * account signs in again and its tabs draw them.
+   */
+  own(account: string | undefined): void {
+    if (account === this.#account) return;
+    this.#account = account;
+    for (const [owner, kinds] of this.#held) {
+      if (owner === account) continue;
+      for (const agents of kinds.values()) {
+        for (const shells of agents.values()) for (const each of shells.values()) each.detach();
+      }
+    }
   }
 
   /** Lets every session go, as the window closes. */

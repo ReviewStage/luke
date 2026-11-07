@@ -42,6 +42,7 @@ import {
 import type { SidePanelControl } from "./use-side-panel.js";
 import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
 import { useSandboxOpen } from "./use-workspace-agents.js";
+import { useWindowAccount } from "./window-account.js";
 
 /**
  * use-terminal-session.ts -- one terminal tab's shell, in its agent's cloud sandbox or on this Mac in the agent's mirror: opened at the screen's first size and attached for the tab's life; and the doors that open such a tab and end its shell as it closes.
@@ -101,6 +102,41 @@ export function makeTerminals(): Terminals {
 
 /** The terminals the doors under it read: the window's own unless a provider hands others. */
 export const TerminalsContext = createContext<Terminals>(makeTerminals());
+
+/**
+ * Detaches every session of an account but the one signed in, its shell
+ * left running, and puts its lists on top in storage, as another account
+ * takes the window; the account's lists and sessions are read under it at
+ * each door (`window-account.ts`).
+ */
+export function useTerminalsOwner(account: string | undefined): void {
+  const { held, sessions } = useContext(TerminalsContext);
+  useLayoutEffect(() => {
+    sessions.own(account);
+    held.own(account);
+  }, [held, sessions, account]);
+}
+
+/**
+ * Holds the terminals of the tabs given in the window's lists under the
+ * account signed in, each one not held yet minted as a real open mints it,
+ * so its tab stands: a fixture run's staged Terminal tabs, which no open
+ * minted.
+ */
+export function useHeldTerminalTabs(tabs: readonly TerminalStripTab[] | undefined): void {
+  const { held } = useContext(TerminalsContext);
+  const account = useWindowAccount();
+  useLayoutEffect(() => {
+    for (const tab of tabs ?? []) {
+      const shells = held.of(account, TERMINAL_KIND.CLOUD, tab.terminal);
+      if (shells.some((each) => each.shell === tab.shell)) continue;
+      held.set(account, TERMINAL_KIND.CLOUD, tab.terminal, [
+        ...shells,
+        { shell: tab.shell, title: tab.title },
+      ]);
+    }
+  }, [held, account, tabs]);
+}
 
 /** A cloud state from the host's word for it. */
 function cloudStateOf(
@@ -164,12 +200,19 @@ function refusedOrGone(refused: TerminalRefusal, onGone: () => void): TerminalSt
 }
 
 /** The shell's id written onto its terminal in the window's list, so a reload attaches to it again. */
-function holdShellId(held: TerminalsHeld, agentId: string, shell: string, terminal: string): void {
+function holdShellId(
+  held: TerminalsHeld,
+  account: string | undefined,
+  agentId: string,
+  shell: string,
+  terminal: string,
+): void {
   held.set(
+    account,
     TERMINAL_KIND.CLOUD,
     agentId,
     held
-      .of(TERMINAL_KIND.CLOUD, agentId)
+      .of(account, TERMINAL_KIND.CLOUD, agentId)
       .map((each) => (each.shell === shell ? { ...each, terminal } : each)),
   );
 }
@@ -182,6 +225,7 @@ function holdShellId(held: TerminalsHeld, agentId: string, shell: string, termin
  */
 function cloudLink(
   held: TerminalsHeld,
+  account: string | undefined,
   agentId: string,
   shell: string,
   onGone: () => void,
@@ -191,7 +235,7 @@ function cloudLink(
     open: async () => {
       const made = await askAct(ACT_KIND.TERMINAL_CREATE, { agentId });
       if ("failure" in made) return { state: refusedOrGone(made.failure, onGone) };
-      holdShellId(held, agentId, shell, made.terminal.id);
+      holdShellId(held, account, agentId, shell, made.terminal.id);
       return { terminalId: made.terminal.id };
     },
     attach: (terminalId, size) =>
@@ -274,10 +318,15 @@ function tabOf(kind: TerminalKind, agentId: string, held: HeldShell): ShellTab {
 }
 
 /** A new terminal of the kind minted in the window's list after the agent's others, and its tab. */
-function mintedTab(held: TerminalsHeld, kind: TerminalKind, agentId: string): ShellTab {
-  const shells = held.of(kind, agentId);
+function mintedTab(
+  held: TerminalsHeld,
+  account: string | undefined,
+  kind: TerminalKind,
+  agentId: string,
+): ShellTab {
+  const shells = held.of(account, kind, agentId);
   const made: HeldShell = { shell: crypto.randomUUID(), title: nextShellTitle(kind, shells) };
-  held.set(kind, agentId, [...shells, made]);
+  held.set(account, kind, agentId, [...shells, made]);
   return tabOf(kind, agentId, made);
 }
 
@@ -288,14 +337,15 @@ function mintedTab(held: TerminalsHeld, kind: TerminalKind, agentId: string): Sh
  */
 export function useCloudTerminalTab(): (agentId: string) => ShellTab {
   const { held } = useContext(TerminalsContext);
+  const account = useWindowAccount();
   return useCallback(
     (agentId) => {
-      const newest = held.of(TERMINAL_KIND.CLOUD, agentId).at(-1);
+      const newest = held.of(account, TERMINAL_KIND.CLOUD, agentId).at(-1);
       return newest === undefined
-        ? mintedTab(held, TERMINAL_KIND.CLOUD, agentId)
+        ? mintedTab(held, account, TERMINAL_KIND.CLOUD, agentId)
         : tabOf(TERMINAL_KIND.CLOUD, agentId, newest);
     },
-    [held],
+    [held, account],
   );
 }
 
@@ -306,6 +356,7 @@ export function useTerminalTabSession(
   onGone: () => void,
 ): TerminalView {
   const { held, sessions } = useContext(TerminalsContext);
+  const account = useWindowAccount();
   const { kind, agentId, shell } = shellOf(tab);
   // Note that the close is read through a ref, because the tab hands a new one each render, and its terminal outlives it.
   const gone = useRef(onGone);
@@ -314,15 +365,16 @@ export function useTerminalTabSession(
   });
   const session = useMemo(
     () =>
-      sessions.session(kind, agentId, shell, () =>
+      sessions.session(account, kind, agentId, shell, () =>
         kind === TERMINAL_KIND.CLOUD
           ? new TerminalSession(
-              cloudLink(held, agentId, shell, () => gone.current()),
-              held.of(TERMINAL_KIND.CLOUD, agentId).find((each) => each.shell === shell)?.terminal,
+              cloudLink(held, account, agentId, shell, () => gone.current()),
+              held.of(account, TERMINAL_KIND.CLOUD, agentId).find((each) => each.shell === shell)
+                ?.terminal,
             )
           : new TerminalSession(localLink(agentId), undefined),
       ),
-    [held, sessions, kind, agentId, shell],
+    [held, sessions, account, kind, agentId, shell],
   );
   const view = useTerminalView(session, shown);
   const sandboxOpen = useSandboxOpen(kind === TERMINAL_KIND.CLOUD ? agentId : null);
@@ -365,15 +417,16 @@ export function useOpenTerminalTab(
   onShown: () => void,
 ): (agentId: string, fresh: boolean) => void {
   const { held: kept } = useContext(TerminalsContext);
+  const account = useWindowAccount();
   const { onChoose, terminals, locals, viewedAt } = sidePanel;
   return useCallback(
     (agentId, fresh) => {
-      const held = kept.of(kind, agentId);
+      const held = kept.of(account, kind, agentId);
       const open = (kind === TERMINAL_KIND.CLOUD ? terminals : locals).filter(
         (tab) => shellOf(tab).agentId === agentId,
       );
       if (fresh || held.length === 0) {
-        onChoose(mintedTab(kept, kind, agentId));
+        onChoose(mintedTab(kept, account, kind, agentId));
       } else if (open.length > 0) {
         const at = (tab: ShellTab) =>
           viewedAt.find((each) => sameTab(each.tab, tab))?.at ?? Number.NEGATIVE_INFINITY;
@@ -383,7 +436,7 @@ export function useOpenTerminalTab(
       }
       onShown();
     },
-    [kind, kept, onChoose, terminals, locals, viewedAt, onShown],
+    [kind, kept, account, onChoose, terminals, locals, viewedAt, onShown],
   );
 }
 
@@ -393,16 +446,18 @@ export function useOpenTerminalTab(
  */
 export function useEndTerminalTab(): (tab: ShellTab) => void {
   const { held, sessions } = useContext(TerminalsContext);
+  const account = useWindowAccount();
   return useCallback(
     (tab) => {
       const { kind, agentId, shell } = shellOf(tab);
       held.set(
+        account,
         kind,
         agentId,
-        held.of(kind, agentId).filter((each) => each.shell !== shell),
+        held.of(account, kind, agentId).filter((each) => each.shell !== shell),
       );
-      sessions.end(kind, agentId, [shell]);
+      sessions.end(account, kind, agentId, [shell]);
     },
-    [held, sessions],
+    [held, sessions, account],
   );
 }

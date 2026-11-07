@@ -210,6 +210,7 @@ import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
+import { useWindowAccount } from "../tasks/window-account.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useExperimentsIn, useWorkspaceExperiment } from "../workspace-experiments.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
@@ -936,6 +937,8 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 
 /** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
+  /** The account signed in, whose cloud Browser draft a row starts. */
+  readonly account: string | undefined;
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
   readonly onNewLocal: ((agentId: string) => void) | undefined;
 }
@@ -998,6 +1001,7 @@ function agentRows(
         panel: tasks.sidePanel,
         agents: tasks.agents,
         pages,
+        account: doors.account,
         onNewTerminal: doors.onNewTerminal,
         onNewLocal: doors.onNewLocal,
         viewedAgent: undefined,
@@ -2173,6 +2177,7 @@ export function CommandPalette({
     useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
   );
   const offerDoors: PanelOfferDoors = {
+    account: useWindowAccount(),
     onNewTerminal:
       useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
       true

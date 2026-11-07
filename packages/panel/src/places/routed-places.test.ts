@@ -59,6 +59,8 @@ test.each([
   ["/acme/automation/automation-1/runs", ROUTED_PLACE.AUTOMATIONS],
   ["/acme/task/7/version/3", ROUTED_PLACE.VERSION_HISTORY],
   ["/acme/inbox/item-1", ROUTED_PLACE.INBOX],
+  ["/acme/agent/agent-1", ROUTED_PLACE.AGENT],
+  ["/acme/agent/agent-1/changes", undefined],
   ["/acme/task/7", undefined],
   ["/app", undefined],
 ] as const)("%s stands on its routed place, where it is one", (address, place) => {
@@ -70,6 +72,7 @@ test.each([
   ["a Settings page an experiment off holds", "/acme/settings/memory", ACCESS],
   ["a version history with Descriptions off", "/acme/task/7/versions", ACCESS],
   ["the Inbox under a workspace the reader is not in", "/left/inbox", ACCESS],
+  ["an agent's page under a workspace the reader is not in", "/left/agent/agent-1", ACCESS],
 ] as const)("the gate refuses %s, which Back passes over", (_refused, address, access) => {
   assert.equal(stepStands(address, access), false);
 });
@@ -135,9 +138,16 @@ test("each place over the plan names its step for itself, and Admin's as the pla
     titled({ inboxView: { ...base.inboxView, open: true, narrowed: TASK_ID } }, "INBOX"),
     { label: "Inbox", detail: "Auth refactor" },
   );
+  assert.deepEqual(titled({ agentView: { ...base.agentView, agentId: "agent-1" } }, "AGENT"), {
+    label: "Agent",
+  });
   assert.deepEqual(titled({ boundFor: TASK_ID }, "VERSION_HISTORY"), {
     label: "Auth refactor",
     detail: "Version history",
   });
   assert.deepEqual(titled({}, "ADMIN"), { label: "Home" });
+});
+
+test("Back still reaches an agent's page once another workspace is listed than the one its address names", () => {
+  assert.equal(stepStands("/acme/agent/a", ACCESS, { ...THERE, listed: () => false }), true);
 });

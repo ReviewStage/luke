@@ -43,15 +43,11 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * since looking at an agent never unarchives it. Each press puts the
  * panel away. An agent whose tab stands open is in the bar already, so it
  * is not listed; ⌘K still finds every agent. While nothing is closed or
- * archived the button stays, disabled, saying so, so the bar never shifts as
- * agents' tabs are closed and opened again.
+ * archived the button stands nowhere, since it would open nothing.
  */
 
 /** What the button and its panel are called. */
 const HISTORY_LABEL = "Agent history";
-
-/** What the button says while it has nothing to list. */
-const NOTHING_TO_LIST = "No closed or archived agents";
 
 /** What the search field says and is called. */
 const SEARCH_LABEL = "Search agents";
@@ -237,23 +233,26 @@ export function AgentHistory({
   shown: boolean;
   /** Opens an agent's tab in the column, a closed one's or an archived one's. */
   onOpenAgent: (agentId: string) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement | null>(null);
   const { closed, archived } = historyAgents(main, agents);
-  const empty = closed.length === 0 && archived.length === 0;
-  // Note that the panel goes with the page it hangs from, and with its last row.
-  const standing = open && shown && !empty;
+  // Note that the button goes with its last row, putting its panel away so it never comes back
+  // open, and the panel goes with the page it hangs from.
+  if (closed.length === 0 && archived.length === 0) {
+    if (open) setOpen(false);
+    return null;
+  }
+  const standing = open && shown;
   return (
     <ReplayUnmask>
       <PopoverIconButton
         icon={<GLYPH.HISTORY />}
         label={HISTORY_LABEL}
         title={HISTORY_LABEL}
-        hint={empty ? NOTHING_TO_LIST : HISTORY_LABEL}
+        hint={HISTORY_LABEL}
         open={standing}
         onOpenChange={(next) => setOpen(next)}
-        disabled={empty}
         initialFocus={search}
       >
         <HistoryPanel

@@ -84,12 +84,7 @@ import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
-import {
-  agentsControl,
-  listedAgent,
-  tasksControl,
-  UNPINNED_SUMMARY,
-} from "../testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -1745,12 +1740,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   act(() =>
-    root.render(
-      onRegistry(
-        registry,
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
-    ),
+    root.render(onRegistry(registry, createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))),
   );
   // The document arrives a few microtasks after the window first draws.
   await settle();
@@ -1793,7 +1783,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
     root.render(
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        createElement(DesktopTasks, { looks: NO_LOOKS, tasks }),
       ),
     ),
   );
@@ -1947,7 +1937,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
     });
   };
   for (const tasks of [onPage(true), onPage(false)]) {
-    openPalette(tasks);
+    // The agent's page is the router's, which offers the page's links (`places/routed-places.ts`).
+    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, ROUTED_PLACE.AGENT);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -2070,6 +2061,10 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
     }),
     undefined,
     { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
+    undefined,
+    undefined,
+    undefined,
+    ROUTED_PLACE.AGENT,
   );
   act(() => {
     runAppCommand(APP_COMMAND.COPY_LINK);
@@ -2774,7 +2769,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
           { value: room },
           createElement(Looker, { looked: DOCUMENT_TASK }),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             room,
             away: { label: "Tasks", onPress: () => undefined },

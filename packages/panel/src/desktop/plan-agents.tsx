@@ -20,7 +20,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * The agents stand under a group head, Agents and how many, which folds
  * them, folded where the page asks, the same shape every group of
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
- * task's agent as its "+" row and the summary draw it (`agentEntries`),
+ * task's agent as its "+" row draws it (`agentEntries`),
  * drawn as a person's page draws its agents too (`agent-list-row.tsx`): its
  * tab's glyph, which gives way to the working mark while it works, its
  * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, each

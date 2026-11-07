@@ -68,6 +68,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
 import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
+import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
@@ -389,6 +390,7 @@ function mount(
       // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
       boardView: useBoardRoute({ onClose: leaveRouted, onStay: () => undefined }),
       personView: usePersonRoute({ onClose: leaveRouted, onStay: () => undefined }),
+      agentView: useAgentRoute({ onClose: leaveRouted, onStay: () => undefined }),
       automationsView,
       versionHistoryView,
       inboxView,
@@ -2085,6 +2087,83 @@ test("a workspace's Board link opens in the workspace its step names, and one na
     [tab.control().workspace?.id, tab.control().unknownWorkspace.open],
     [ACME.id, true],
   );
+});
+
+test("an agent's page opened over a workspace not there for the reader takes its place", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
+  assert.equal(tab.control().unknownWorkspace.open, true);
+
+  act(() => tab.control().agentView.onOpen("agent-9"));
+  assert.equal(tab.control().unknownWorkspace.open, false);
+  assert.equal(tab.control().agentView.agentId, "agent-9");
+});
+
+test("the Inbox opened over a workspace not there for the reader takes its place", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
+  assert.equal(tab.control().unknownWorkspace.open, true);
+
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().unknownWorkspace.open, false);
+  assert.equal(tab.control().inboxView.open, true);
+});
+
+test("a start refused after another agent's page was opened leaves that page standing rather than the one the start was pressed on", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().agentView.onOpen("agent-a"));
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Sweep the tests.",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  };
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed });
+  });
+  act(() => tab.control().agentView.onOpen("agent-b"));
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+
+  assert.equal(tab.control().agentView.agentId, "agent-b");
+});
+
+test("a start refused after the Board was opened leaves the Board standing rather than the agent's page the start was pressed on", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().agentView.onOpen("agent-a"));
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Sweep the tests.",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  };
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed });
+  });
+  act(() => tab.control().boardView.onOpen());
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+
+  assert.equal(tab.control().boardView.open, true);
+  assert.equal(tab.control().agentView.agentId, undefined);
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", async () => {
@@ -3994,17 +4073,6 @@ it.effect(
       assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agentTab(AGENT_ID), agentTab(UNSEEN_ID)]);
     }),
 );
-
-test("an agent's page under Admin is off screen, so main hears no agent shown while Admin stands over it", async () => {
-  const tab = mount({ shown: true });
-  act(() => tab.control().agentView.onOpen("agent-under-admin"));
-  await settle();
-  assert.equal(tab.shownAgents.at(-1), "agent-under-admin");
-
-  tab.stand({ admin: true });
-  await settle();
-  assert.equal(tab.shownAgents.at(-1), null);
-});
 
 test("Admin opened while a page holds unsaved work waits on the leave question, and opens once it is answered", () => {
   const tab = mount({ shown: true });

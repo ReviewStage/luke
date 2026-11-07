@@ -161,10 +161,14 @@ export function nativeAgentSessionsLayer(
         mcpUrl: new URL(WORKSPACE_MCP_PATH, origin).href,
         transcriptsUrl: new URL(RUNNER_TRANSCRIPTS_PATH, origin).href,
         integrations: (agent) =>
-          nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
+          nativeIntegrations(account, agent, origin).pipe(
+            Effect.provideContext(context),
+            Effect.withSpan("web/nativeIntegrations"),
+          ),
         instructions: (agent, place) =>
           nativeCoderInstructions(account, agent, harness, place).pipe(
             Effect.provideContext(context),
+            Effect.withSpan("web/nativeCoderInstructions"),
           ),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
         nextSequence: (conversationId) =>
