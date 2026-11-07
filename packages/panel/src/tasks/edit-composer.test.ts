@@ -173,6 +173,9 @@ test("a file taken off before an Escape stays off when Edit opens the line again
   first.close();
 
   // A window of its own, as a relaunch opens, which finds the draft's words and none of its files.
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
   const again = await opened(LINE, undefined, "Also email the inviter.");
   pressInComposer(again.container, "Enter");
   await settle();
@@ -197,6 +200,9 @@ test("one of two like files taken off stays off after a relaunch, and the other 
   pressInComposer(first.container, "Escape");
   first.close();
 
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
   const again = await opened(twice, undefined, "Also email the inviter.");
   pressInComposer(again.container, "Enter");
   await settle();
