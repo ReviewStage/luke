@@ -152,6 +152,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import type { LinkRead } from "../places/link-reads.js";
 import { PLACE_BINDING, useTaskAsk } from "../places/place-binding.js";
 import type { RoutedPlace } from "../places/routed-places.js";
 import { taskAtOf, taskOfAt } from "../places/task-step.js";
@@ -1437,6 +1438,8 @@ export function useTasksTab(input: {
   place: RoutedPlace | undefined;
   /** Reads how many times the developer arrived on another page of the window (`usePlaceArrivals`). */
   arrivals: () => number;
+  /** Begins a link's read of the service, answering whether it is still the window's to act on (`places/link-reads.ts`). */
+  linkReads: LinkRead;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1510,6 +1513,12 @@ export function useTasksTab(input: {
   const navigations = useRef(0);
   // How many times the developer arrived on another page of the window, as the binding counts them (`places/place-binding.ts`).
   const { arrivals } = input;
+  // A link's read of the service stands until any later navigation: a select, start, or switch counted here, or any move of the window to another page.
+  const linkRead = () => {
+    const mine = navigations.current;
+    const unmoved = input.linkReads();
+    return () => navigations.current === mine && unmoved();
+  };
   // What stood where a door was pressed, a workspace not there, an agent's page, the Inbox, and, where `history` says, a
   // version history, each by where its address stood, which a refusal of the move stands again where the developer went
   // nowhere since the press, the press's own move, `moved`, aside; the place a refusal leaves standing otherwise is the
@@ -3632,9 +3641,9 @@ export function useTasksTab(input: {
       return;
     }
     navigations.current += 1;
-    const mine = navigations.current;
+    const current = linkRead();
     const opened = (taskId: string | undefined) => {
-      if (navigations.current !== mine) return;
+      if (!current()) return;
       openPlace(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
     };
     queryClient.fetchQuery(taskByNumberQueryOptions(link.workspace, number)).then(
@@ -3665,9 +3674,9 @@ export function useTasksTab(input: {
       openOnTask(open, place);
     else if (listed !== undefined) openFoundAgent(listed, place, home);
     else {
-      const mine = navigations.current;
+      const current = linkRead();
       readAgentById(queryClient, place.agentId).then((agent) => {
-        if (navigations.current !== mine) return;
+        if (!current()) return;
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) openAgentPage(place.agentId, home);
         else openFoundAgent(agent, place, home);
@@ -3720,9 +3729,9 @@ export function useTasksTab(input: {
       standInbox(at, { ...standing, opened: true });
       if ("taskId" in standing || "agentId" in standing) return;
     }
-    const mine = navigations.current;
+    const current = linkRead();
     readInboxItemHome(queryClient, place.itemId).then((home) => {
-      if (navigations.current !== mine) return;
+      if (!current()) return;
       if (home === undefined) {
         standInbox(inboxIn(listedWorkspace?.id, undefined), { itemId: place.itemId, opened: true });
         return;
@@ -3748,9 +3757,9 @@ export function useTasksTab(input: {
       openInboxItemOn(workspace, place, open);
     else if (listed !== undefined) openInboxItemOn(workspace, place, listed.planId);
     else {
-      const mine = navigations.current;
+      const current = linkRead();
       readAgentById(queryClient, place.agentId).then((agent) => {
-        if (navigations.current !== mine) return;
+        if (!current()) return;
         openInboxItemOn(workspace, place, agent?.planId ?? null);
       });
     }

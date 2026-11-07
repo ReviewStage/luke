@@ -36,6 +36,7 @@ import {
   PERSON_AWAY,
   TASK_AWAY,
   UNKNOWN_WORKSPACE_AWAY,
+  UNMOVED_LINK_READS,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -238,6 +239,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       taskView: TASK_AWAY,
       place: undefined,
       arrivals: NO_ARRIVALS,
+      linkReads: UNMOVED_LINK_READS,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }

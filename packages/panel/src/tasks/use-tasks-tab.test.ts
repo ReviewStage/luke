@@ -76,6 +76,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
+import { useLinkReads } from "../places/link-reads.js";
 import { PLACE_BINDING, usePlaceArrivals, usePlaceBinding } from "../places/place-binding.js";
 import { useWindowPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -416,6 +417,7 @@ function mount(
       taskView: useTaskRoute(),
       place: here.place,
       arrivals: usePlaceArrivals(),
+      linkReads: useLinkReads(),
     });
     // The place standing and the task bound follow each other, as the window's root keeps them; with no history beside
     // the tab, the task bound's own place stands by its own door rather than as its step is written.
@@ -1646,6 +1648,61 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
     "a link to the item standing missing asks the service again",
   );
 });
+
+test.each([
+  [
+    "an Inbox item named by its id alone",
+    ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+    { agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id },
+    { kind: LINK_PLACE.INBOX_ITEM, itemId: "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6" },
+  ],
+  [
+    "a task named by its number",
+    ACT_KIND.TASKS_FIND,
+    { taskId: "alerts" },
+    { kind: LINK_PLACE.TASK, planId: "42" },
+  ],
+  [
+    "an agent named alone",
+    ACT_KIND.AGENTS_PAGE,
+    {
+      agent: {
+        ...RUNNING_AGENT,
+        id: OTHER_TASK_ID,
+        planId: "alerts",
+        automationId: null,
+        workspaceId: ACME.id,
+        repository: null,
+      },
+    },
+    { kind: LINK_PLACE.AGENT, agentId: OTHER_TASK_ID },
+  ],
+] as const)(
+  "a link to %s whose read lands after an Inbox row was chosen leaves the row chosen",
+  async (_read, kind, answer, place: LinkPlace) => {
+    const answers: Array<() => void> = [];
+    const tab = mount(
+      { shown: true, tasks: TWO_WORKSPACES },
+      {
+        [kind]: () => new Promise((resolve) => answers.push(() => resolve(answer))),
+        [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      },
+    );
+    await settle();
+    act(() => tab.control().inboxView.onOpen());
+    act(() => tab.control().onOpenLink({ workspace: "acme", place }));
+    const row = { taskId: "notes", itemId: "thread", opened: true } as const;
+    act(() => tab.control().inboxView.onChoose(row));
+    await act(async () => {
+      await vi.waitFor(() => assert.ok(answers.length > 0));
+      answers[0]?.();
+    });
+    await settle();
+
+    assert.equal(tab.control().inboxView.open, true);
+    assert.deepEqual(tab.control().inboxView.chosen, row);
+  },
+);
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {});

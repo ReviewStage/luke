@@ -490,6 +490,9 @@ export const TASK_AWAY: TaskRoute = {
 /** No arrival counted, for a tab drawn with no router, whose window never moves. */
 export const NO_ARRIVALS = (): number => 0;
 
+/** A link read that always stands, for a tab drawn with no router, whose window never moves. */
+export const UNMOVED_LINK_READS = (): (() => boolean) => () => true;
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
