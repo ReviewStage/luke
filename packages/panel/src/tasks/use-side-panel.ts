@@ -43,6 +43,7 @@ import {
   TAB_PIN,
   untitledStripTab,
 } from "./strip-tab-kinds.js";
+import { useWindowAccount } from "./window-account.js";
 
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -1922,6 +1923,16 @@ function stagesOpened(
   }
 }
 
+/** The state with no Terminal or Local tab open or chosen, as another account signs in. */
+function withoutShellTabs(held: HeldState): HeldState {
+  const chosen = held.tab;
+  const shell =
+    chosen !== undefined &&
+    !isFixedTab(chosen) &&
+    (chosen.kind === STRIP_TAB_KIND.TERMINAL || chosen.kind === STRIP_TAB_KIND.LOCAL);
+  return { ...held, terminals: [], locals: [], ...(shell ? { tab: undefined } : undefined) };
+}
+
 /** A staged state made whole as a kept one is, with the file, page, and Terminal tabs and the Pull request views it stages open, and its file, page, or Terminal tab shown where it names one. */
 function stagedHeld(staged: StagedSidePanel): HeldState {
   const {
@@ -2152,6 +2163,15 @@ export function useSidePanel(
     },
     [stage],
   );
+  // A terminal is its account's (`terminal-held.ts`): another account signing
+  // in closes the last one's Terminal and Local tabs, whose shells run on, and
+  // that account opens them again from its lists, as after a reload.
+  const account = useWindowAccount();
+  const [tabsOf, setTabsOf] = useState(account);
+  if (tabsOf !== account) {
+    setTabsOf(account);
+    update(withoutShellTabs);
+  }
   const shownFor = (holds: TaskHolds) =>
     shownIn(state, {
       task: { id: taskId, holds },

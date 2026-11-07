@@ -97,6 +97,8 @@ import {
 } from "./tasks/use-description-editing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
+import { useTerminalsOwner } from "./tasks/use-terminal-session.js";
+import { WindowAccountContext } from "./tasks/window-account.js";
 import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
@@ -233,11 +235,15 @@ export function App(): React.JSX.Element {
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
-  // Note that the account's key is read above the window, because every message box's Dictate reads it.
+  // Note that the account's key is read above the window, because every message box's Dictate reads it, and every terminal and cloud Browser tab is held under it.
   // The window's ticks run here, once, for as long as it stands.
   return (
     <TimeTicks>
-      <OpenAiKeyProvider account={accountKey}>{landed ? <AppWindow /> : null}</OpenAiKeyProvider>
+      <OpenAiKeyProvider account={accountKey}>
+        <WindowAccountContext.Provider value={accountKey}>
+          {landed ? <AppWindow /> : null}
+        </WindowAccountContext.Provider>
+      </OpenAiKeyProvider>
     </TimeTicks>
   );
 }
@@ -268,6 +274,8 @@ function AppWindow(): React.JSX.Element {
     void forgetAccountReads(queryClient);
     forgetUndo();
   }, [queryClient, accountKey]);
+  // A terminal is its account's: another account signing in detaches the last one's, whose shells run on, and that account finds them again.
+  useTerminalsOwner(accountKey);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // So are the description words a task was left with: another account signing in lets go of them.

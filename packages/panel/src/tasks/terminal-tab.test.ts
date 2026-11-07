@@ -36,8 +36,10 @@ import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js
 import { agentsControl } from "../testing/tasks-control.js";
 import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
 import { TerminalTab } from "./terminal-tab.js";
-import { useEndTerminalTab } from "./use-terminal-session.js";
+import { useEndTerminalTab, useTerminalsOwner } from "./use-terminal-session.js";
+import { WindowAccountContext } from "./window-account.js";
 
 /**
  * One of an agent's cloud terminal tabs as the developer meets it: a shell
@@ -73,20 +75,21 @@ const TAB: TerminalStripTab = terminalTab(
   "Cloud 1",
 );
 
-/** Keeps the window's cloud terminals for the agent, as a page before a reload left them in session storage. */
-function keep(shells: readonly HeldShell[]): void {
+/** Keeps the window's cloud terminals for the agent, of the account or of none, as a page before a reload left them in session storage. */
+function keep(shells: readonly HeldShell[], account?: string): void {
   window.sessionStorage.setItem(
     "vespin.terminals",
-    JSON.stringify({ cloud: { [AGENT.id]: shells }, local: {} }),
+    JSON.stringify([{ account, terminals: { cloud: { [AGENT.id]: shells }, local: {} } }]),
   );
 }
 
-/** The agent's cloud terminals as the window keeps them in its session storage. */
-function kept(): readonly HeldShell[] {
-  const all: { cloud?: Record<string, readonly HeldShell[]> } = JSON.parse(
-    window.sessionStorage.getItem("vespin.terminals") ?? "{}",
-  );
-  return all.cloud?.[AGENT.id] ?? [];
+/** The agent's cloud terminals of the account, or of none, as the window keeps them in its session storage. */
+function kept(account?: string): readonly HeldShell[] {
+  const all: readonly {
+    account?: string;
+    terminals: { cloud: Record<string, readonly HeldShell[]> };
+  }[] = JSON.parse(window.sessionStorage.getItem("vespin.terminals") ?? "[]");
+  return all.find((each) => each.account === account)?.terminals.cloud[AGENT.id] ?? [];
 }
 
 /** A shell as the sandbox answers it. */
@@ -259,7 +262,7 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted, shown or not, with what it draws, and the door that ends it as its × does. */
-async function mount(shown = true, still = true) {
+async function mount(shown = true, still = true, account?: string) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -278,7 +281,13 @@ async function mount(shown = true, still = true) {
     end = useEndTerminalTab();
     return null;
   };
-  const render = (on: boolean) => {
+  // The account signed in, as the window's root hands it on.
+  const Owner = ({ of }: { of: string | undefined }) => {
+    useTerminalsOwner(of);
+    return null;
+  };
+  let signedIn = account;
+  const render = (on: boolean, drawn = true) => {
     const tab = createElement(TerminalTab, {
       tab: TAB,
       agents,
@@ -294,7 +303,20 @@ async function mount(shown = true, still = true) {
           registry,
           onTerminals(
             terminals,
-            onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+            createElement(
+              WindowAccountContext.Provider,
+              { value: signedIn },
+              onSideBundles(
+                FITTED,
+                createElement(
+                  Fragment,
+                  null,
+                  createElement(Owner, { of: signedIn }),
+                  drawn ? tab : null,
+                  createElement(Ender),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -309,8 +331,15 @@ async function mount(shown = true, still = true) {
   };
   return {
     container,
+    terminals,
     render: async (on: boolean) => {
       render(on);
+      await settle();
+    },
+    /** Another account signs in, the tab drawn for it or not, as a strip that held it would. */
+    signIn: async (next: string, drawn: boolean) => {
+      signedIn = next;
+      render(true, drawn);
       await settle();
     },
     /** Closes the tab, as its × does. */
@@ -388,6 +417,56 @@ test("closing the tab ends its shell in the sandbox, its port closed and its ter
   assert.equal(port.closed(), true);
   assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_KILL), { agentId: AGENT.id, terminalId: MADE });
   assert.deepEqual(kept(), []);
+});
+
+test("another account signing in detaches the tab's shell and ends none: its port closes, and that account holds none of the first's terminals", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+
+  await tab.signIn("grace", false);
+
+  assert.equal(port.closed(), true, "the window let go of the shell's port");
+  assert.deepEqual(tab.kinds(before), [], "no shell was ended, and none started");
+  assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
+  assert.deepEqual(kept("ada"), [{ shell: TAB.shell, title: "Cloud 1", terminal: MADE }]);
+});
+
+test("while another account is signed in, nothing the first's shell says reaches the window, and nothing typed reaches that shell", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "attached" });
+
+  // Note that the tab stays drawn, as a strip that still held it would draw it.
+  await tab.signIn("grace", true);
+  await tab.type("a", 65);
+  port.say({ type: "state", state: "exited", code: 0 });
+  await settle();
+
+  assert.deepEqual(
+    port.posted.filter((message) => message.type === "input"),
+    [],
+  );
+  assert.notEqual(tab.standing(), "· exited", "the first account's shell said nothing here");
+});
+
+test("the first account signing in again finds its terminal, which attaches to the same shell, starting none", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  main.post(MADE).say({ type: "state", state: "attached" });
+  await tab.signIn("grace", false);
+  const before = main.sent.length;
+
+  await tab.signIn("ada", true);
+
+  assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
+  assert.equal((lastPayload(ACT_KIND.TERMINAL_ATTACH) as { terminalId: string }).terminalId, MADE);
+  assert.deepEqual(tab.terminals.held.of("ada", TERMINAL_KIND.CLOUD, AGENT.id), [
+    { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
+  ]);
 });
 
 test("a tab shown over a stopped sandbox resumes it, saying it is connecting, and one that stops while the tab is hidden waits until it is shown", async () => {

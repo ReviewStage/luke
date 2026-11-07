@@ -13,7 +13,8 @@ import { TERMINAL_KIND, type TerminalKind } from "./terminal-session.js";
  * the id its sandbox answered for its shell, which runs on in tmux, so its
  * tab attaches to it again; a Local shell ends with the page, so its tab
  * opens a fresh one. Note that every list is kept under one key, nested by
- * kind and then by the agent's id, because a key is never built from an id.
+ * account, then by kind, then by the agent's id, because a key is never
+ * built from an id.
  * It holds ids and names, never a byte a shell printed. A terminal leaves
  * its list as its tab closes. The lists are one TanStack `Store` the window
  * holds (`use-terminal-session.ts`'s `TerminalsContext`), read from storage
@@ -49,63 +50,94 @@ const heldShellsSchema = Schema.Struct({
 
 type HeldShells = typeof heldShellsSchema.Type;
 
-const heldShellsJson = Schema.fromJsonString(heldShellsSchema);
+/** One account's terminals, or those of the window with no account signed in, which names none. */
+const ownedShellsSchema = Schema.Struct({
+  account: Schema.optional(Schema.String),
+  terminals: heldShellsSchema,
+});
+
+/** Every account's terminals, as the window keeps them. */
+const keptShellsJson = Schema.fromJsonString(Schema.Array(ownedShellsSchema));
+
+/** Each account's terminals, by the account's key, none for no account signed in. */
+type ShellsByAccount = ReadonlyMap<string | undefined, HeldShells>;
 
 /** No terminal held. */
 const NONE_HELD: HeldShells = { [TERMINAL_KIND.CLOUD]: {}, [TERMINAL_KIND.LOCAL]: {} };
 const NOTHING_HELD: readonly HeldShell[] = [];
 
 /** What the window kept before a reload, or nothing where it kept none, it no longer reads, or storage refuses. */
-function readHeld(): HeldShells {
+function readHeld(): ShellsByAccount {
   try {
-    const kept = Schema.decodeUnknownOption(heldShellsJson)(
+    const kept = Schema.decodeUnknownOption(keptShellsJson)(
       window.sessionStorage.getItem(HELD_KEY),
     );
-    return Option.getOrElse(kept, () => NONE_HELD);
+    return new Map(
+      Option.getOrElse(kept, () => []).map((each) => [each.account, each.terminals] as const),
+    );
   } catch {
-    return NONE_HELD;
+    return new Map();
   }
 }
 
 /** Keeps the window's terminals for the next reload; a write that fails costs only the list a reload reads. */
-function writeHeld(held: HeldShells): void {
+function writeHeld(accounts: ShellsByAccount): void {
+  const kept = [...accounts].map(([account, terminals]) =>
+    account === undefined ? { terminals } : { account, terminals },
+  );
   try {
-    window.sessionStorage.setItem(HELD_KEY, Schema.encodeSync(heldShellsJson)(held));
+    window.sessionStorage.setItem(HELD_KEY, Schema.encodeSync(keptShellsJson)(kept));
   } catch {
     // A reload then forgets the window's terminals.
   }
 }
 
-/** Every terminal a window holds, by kind, then by agent: what it kept before a reload, read as it is made, then each list written through to storage. */
+/** One account's terminals. */
+function ownedOf(accounts: ShellsByAccount, account: string | undefined): HeldShells {
+  return accounts.get(account) ?? NONE_HELD;
+}
+
+/**
+ * Every terminal a window holds, by account, then by kind, then by agent:
+ * what it kept before a reload, read as it is made, then each list written
+ * through to storage.
+ */
 export class TerminalsHeld {
   /** The lists themselves; written only through `set`, which keeps storage in step. */
-  readonly all = new Store<HeldShells>(readHeld());
+  readonly all = new Store<ShellsByAccount>(readHeld());
 
-  /** One kind's terminals of one agent, oldest first. */
-  of(kind: TerminalKind, agentId: string): readonly HeldShell[] {
-    return this.all.state[kind][agentId] ?? NOTHING_HELD;
+  /** One kind's terminals of one agent of the account, oldest first. */
+  of(account: string | undefined, kind: TerminalKind, agentId: string): readonly HeldShell[] {
+    return ownedOf(this.all.state, account)[kind][agentId] ?? NOTHING_HELD;
   }
 
-  /** Sets one kind's terminals of one agent, written through to the window's session storage. */
-  set(kind: TerminalKind, agentId: string, shells: readonly HeldShell[]): void {
-    const all = this.all.state;
-    const { [agentId]: _was, ...others } = all[kind];
+  /** Sets one kind's terminals of one agent of the account, written through to the window's session storage. */
+  set(
+    account: string | undefined,
+    kind: TerminalKind,
+    agentId: string,
+    shells: readonly HeldShell[],
+  ): void {
+    const owned = ownedOf(this.all.state, account);
+    const { [agentId]: _was, ...others } = owned[kind];
     const next = {
-      ...all,
+      ...owned,
       [kind]: shells.length === 0 ? others : { ...others, [agentId]: shells },
     };
-    writeHeld(next);
-    this.all.setState(() => next);
+    const accounts = new Map(this.all.state).set(account, next);
+    writeHeld(accounts);
+    this.all.setState(() => accounts);
   }
 }
 
-/** One kind's terminals of one agent the window holds, oldest first, as a component reads them. */
+/** One kind's terminals of one agent the window holds for the account, oldest first, as a component reads them. */
 export function useHeldShells(
   held: TerminalsHeld,
+  account: string | undefined,
   kind: TerminalKind,
   agentId: string,
 ): readonly HeldShell[] {
-  return useSelector(held.all, (all) => all[kind][agentId] ?? NOTHING_HELD);
+  return useSelector(held.all, (all) => ownedOf(all, account)[kind][agentId] ?? NOTHING_HELD);
 }
 
 /** The name a new terminal takes: its kind's word and the next number past every name of that shape the agent's terminals of the kind hold. */

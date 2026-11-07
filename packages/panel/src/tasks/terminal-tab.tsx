@@ -33,6 +33,7 @@ import {
 import type { TerminalKind } from "./terminal-session.js";
 import type { AgentsControl } from "./use-agents.js";
 import { type ShellTab, TerminalsContext, useTerminalTabSession } from "./use-terminal-session.js";
+import { useWindowAccount } from "./window-account.js";
 
 /**
  * terminal-tab.tsx -- one terminal tab, "Cloud 1" in the agent's own sandbox or "Local 1" on this Mac in the agent's mirrored files: its shell's screen, under a bar naming the agent and where the connection stands.
@@ -224,6 +225,11 @@ export function TerminalCount({
   kind: TerminalKind;
   agentId: string;
 }): React.JSX.Element {
-  const count = useHeldShells(useContext(TerminalsContext).held, kind, agentId).length;
+  const count = useHeldShells(
+    useContext(TerminalsContext).held,
+    useWindowAccount(),
+    kind,
+    agentId,
+  ).length;
   return <>{count === 0 ? null : `${count} ${count === 1 ? "terminal" : "terminals"}`}</>;
 }

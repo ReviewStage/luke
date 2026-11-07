@@ -41,7 +41,10 @@ import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
   CLOUD_BROWSER_AGENT_RECENT,
+  type CloudBrowserDraft,
   noteOpenedCloudTab,
+  startCloudDraft,
+  useCloudBrowserDrafts,
   useCloudBrowserTabs,
 } from "./cloud-browser-tabs.js";
 import {
@@ -50,6 +53,7 @@ import {
   type SidePanelControl,
   useSidePanel,
 } from "./use-side-panel.js";
+import { WindowAccountContext } from "./window-account.js";
 
 /**
  * The side panel's cloud Browser tabs: a tab opened here listed until the
@@ -439,7 +443,7 @@ test("a tab the member opened here is listed before the service lists it, and le
     return null;
   }
 
-  noteOpenedCloudTab({ taskId: TASK }, opened);
+  noteOpenedCloudTab(undefined, { taskId: TASK }, opened);
   draw(createElement(Probe));
   await settle();
   await vi.waitFor(() =>
@@ -462,6 +466,48 @@ test("a tab the member opened here is listed before the service lists it, and le
       [TAB],
     ),
   );
+});
+
+test("a tab opened and a draft started under one account stand for that account alone, and stand again once it signs in again", async () => {
+  const opened: AgentBrowserTab = { ...LISTED, id: OTHER_TAB };
+  holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [LISTED]);
+  let read: readonly AgentBrowserTab[] | undefined;
+  let drafts: readonly CloudBrowserDraft[] = [];
+  function Probe() {
+    read = useCloudBrowserTabs({ taskId: TASK }, true);
+    drafts = useCloudBrowserDrafts({ taskId: TASK }, true);
+    return null;
+  }
+  const signedIn = (account: string) =>
+    createElement(WindowAccountContext.Provider, { value: account }, createElement(Probe));
+
+  noteOpenedCloudTab("ada", { taskId: TASK }, opened);
+  const draft = startCloudDraft("ada", { taskId: TASK }, LISTED.agentId);
+  const panel = draw(signedIn("ada"));
+  await settle();
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB, OTHER_TAB],
+    ),
+  );
+
+  panel.rerender(signedIn("grace"));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB],
+    "the service's list alone",
+  );
+  assert.deepEqual(drafts, []);
+
+  panel.rerender(signedIn("ada"));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB, OTHER_TAB],
+  );
+  assert.deepEqual(drafts, [draft]);
 });
 
 /** The bar's address field. */

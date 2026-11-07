@@ -14,6 +14,7 @@ import {
   type SidePanelControl,
   useSidePanel,
 } from "./use-side-panel.js";
+import { WindowAccountContext } from "./window-account.js";
 
 const TASK = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const OTHER_TASK = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
@@ -43,6 +44,8 @@ interface Stood {
   taskAgents: readonly string[] | undefined;
   /** Whether the plan holds nothing yet, so its strip draws no tab. */
   bare?: boolean;
+  /** The account signed in, none for no account. */
+  account?: string;
 }
 
 /** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands. */
@@ -63,7 +66,16 @@ function launch(stood: Stood) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
+  const render = (held: Stood) =>
+    act(() =>
+      root.render(
+        createElement(
+          WindowAccountContext.Provider,
+          { value: held.account },
+          createElement(Probe, { held }),
+        ),
+      ),
+    );
   render(stood);
   return {
     control: () => {
@@ -170,6 +182,16 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().terminals, []);
   assert.equal(second.control().tab, undefined);
+});
+
+test("another account signing in closes the last one's Terminal tabs, leaving its other tabs", () => {
+  const panel = launch({ task: TASK, taskAgents: [AGENT], account: "ada" });
+  act(() => panel.control().onChoose(changesTab(AGENT)));
+  act(() => panel.control().onChoose(CLOUD));
+  panel.render({ task: TASK, taskAgents: [AGENT], account: "grace" });
+  assert.deepEqual(panel.control().terminals, []);
+  assert.deepEqual(panel.control().strip, [changesTab(AGENT)]);
+  assert.deepEqual(panel.control().tab, changesTab(AGENT));
 });
 
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name", () => {

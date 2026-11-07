@@ -85,6 +85,7 @@ import {
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
 import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
+import { useWindowAccount } from "./window-account.js";
 
 /**
  * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
@@ -810,12 +811,14 @@ export function CloudBrowserDraftPane({
   onOpened: (tab: AgentBrowserTab) => void;
   onDiscard: () => void;
 }): React.JSX.Element {
+  // A draft is drawn for the account that holds it alone, so the tab it opens is noted as that account's.
+  const account = useWindowAccount();
   // Note that the draft stays opening once a tab answers, because `onOpened` replaces it with that tab.
   const opened = useMutation({
     ...actMutation(ACT_KIND.TASKS_BROWSER_TAB_OPEN),
     onSuccess: (answer) => {
       if (!("tab" in answer)) return;
-      noteOpenedCloudTab(place, answer.tab);
+      noteOpenedCloudTab(account, place, answer.tab);
       onOpened(answer.tab);
     },
   });
