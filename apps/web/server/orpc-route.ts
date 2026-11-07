@@ -2,6 +2,7 @@
 
 import { memberSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
 import { accountProcedureSeams } from "@repo/service/accounts/account-seams";
+import { workspaceDeleteCall } from "@repo/service/accounts/deletion-hooks";
 import { supportAccessCalls } from "@repo/service/accounts/support-access-calls";
 import { hostedAdminSeams } from "@repo/service/admin/admin-route";
 import { agentBrowserServices } from "@repo/service/agents/browser/agent-browser";
@@ -77,6 +78,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   sessionSandboxes: sessionSandboxesLayer,
   keepAwake,
   members: memberSeams(auth.api),
+  deleteWorkspace: workspaceDeleteCall(auth.api),
 };
 
 /** The deployment's hosted oRPC route. */

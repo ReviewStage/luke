@@ -454,6 +454,7 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(stored));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
+    case ACT_KIND.WORKSPACE_DELETE:
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY:
       layTokenRepositories(request.payload.workspaceId);
@@ -1341,7 +1342,7 @@ const leaveGroup = (page: HTMLElement) =>
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.LEAVE}"]`,
   );
 
-/** What the leave group's one row says under its name. */
+/** What the leave group's first row says under its name. */
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
@@ -1419,7 +1420,7 @@ test("the leave names the automations the reader made where the service says who
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
     await settle();
     const said = () =>
-      [...dialog().querySelectorAll(".leave-consequences li")].map((li) => li.textContent);
+      [...dialog().querySelectorAll(".confirm-consequences li")].map((li) => li.textContent);
     await vi.waitFor(() => assert.equal(read(said()), true));
     const lines = said();
     act(() => button(dialog(), "Cancel").click());
@@ -1487,7 +1488,7 @@ test("an admin's leave says the invitations they sent stay valid, and a member's
     const { page } = await mount({ ...ACME, role });
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
     await settle();
-    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
+    const lines = [...dialog().querySelectorAll(".confirm-consequences li")].map(
       (li) => li.textContent,
     );
     act(() => button(dialog(), "Cancel").click());
@@ -1528,7 +1529,7 @@ test("a member leaves after confirming, which names what stays and what stops, a
   const leaveRow = leaveGroup(member.page) ?? assert.fail("no leave");
   const line = leaveLine(leaveRow);
   act(() => button(leaveRow, "Leave").click());
-  const named = [...dialog().querySelectorAll(".leave-consequences li")].map(
+  const named = [...dialog().querySelectorAll(".confirm-consequences li")].map(
     (li) => li.textContent,
   );
   await confirm("Leave acme");
@@ -1551,6 +1552,35 @@ test("a member leaves after confirming, which names what stays and what stops, a
 
   const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   assert.deepEqual(buttons(owner.page, "Leave"), []);
+});
+
+test("the owner deletes a team workspace once its name is typed, told what goes for everyone and what stays installed, and the window lands; a member is offered no Delete", async () => {
+  const owner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const group = leaveGroup(owner.page) ?? assert.fail("no leave");
+  act(() => button(group, "Delete").click());
+  const named = [...dialog().querySelectorAll(".confirm-consequences li")].map(
+    (li) => li.textContent,
+  );
+  await confirm("Delete workspace");
+  const deletes = () => sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_DELETE);
+  const unsentBeforeTyped = deletes().length;
+  typeGate(ACME.name);
+  await confirm("Delete workspace");
+
+  assert.deepEqual(named, [
+    "Its tasks, agents and their transcripts, automations, memory, and invitations are deleted for everyone.",
+    "Agents still working in it stop.",
+    "The GitHub App, the Slack bot, and the Sentry integration stay installed on GitHub, Slack, and Sentry. Remove them there if you no longer need them.",
+  ]);
+  assert.equal(unsentBeforeTyped, 0);
+  assert.deepEqual(
+    deletes().map((request) => request.payload),
+    [{ workspaceId: ACME.id }],
+  );
+  assert.equal(owner.pressed.left, 1);
+
+  const member = await mount(ACME);
+  assert.deepEqual(buttons(leaveGroup(member.page) ?? assert.fail("no leave"), "Delete"), []);
 });
 
 test("the account's first workspace reads like any other: its members with Invite, and Connect for its GitHub", async () => {

@@ -1,5 +1,5 @@
 /**
- * workspaces-procedures.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a slug or a photo, or handed over, and its members read, removed, given a role, or left.
+ * workspaces-procedures.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a slug or a photo, handed over, or deleted, and its members read, removed, given a role, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -21,6 +21,13 @@
  * removed, or one who leaves, lets go of every task of the workspace assigned
  * to them, in the plugin's own delete (the `task_assignee_leaves_with_member`
  * trigger).
+ * `POST /api/workspaces/delete` lets the owner alone delete a workspace,
+ * though never the account's own first workspace, which goes only with the
+ * account. Every agent of the workspace not archived, any member's, is
+ * stopped first, as a task's archive stops its agents, and the delete is
+ * refused as not ready, stopping no one, where one cannot be stopped yet;
+ * the plugin then deletes the workspace and every row of it, and its hooks
+ * stamp the agents' conversations deleted (`workspace-deletion.ts`).
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug; an account's first
  * workspace is refused, since it is named by its owner's account name.
@@ -34,9 +41,10 @@
  * answering the workspace with its photo's new version or none. The photo's
  * bytes are served apart (`workspaces-app.ts`).
  *
- * Removing, changing a role, handing over, leaving, renaming, and setting
- * the photo are Better Auth's own `removeMember`, `updateMemberRole`,
- * `leaveOrganization`, and `updateOrganization`
+ * Removing, changing a role, handing over, leaving, deleting, renaming,
+ * and setting the photo are Better Auth's own `removeMember`,
+ * `updateMemberRole`, `leaveOrganization`, `deleteOrganization`, and
+ * `updateOrganization`
  * (https://www.better-auth.com/docs/plugins/organization#remove-member),
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; the list, a
@@ -51,6 +59,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import { type Agent, listWorkspaceAgents } from "@repo/database/models/agent-store";
 import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { setWorkspaceSlug } from "@repo/database/models/workspace-slug-store";
 import {
@@ -59,6 +68,7 @@ import {
   listWorkspaces,
   workspaceOf,
 } from "@repo/database/models/workspace-store";
+import { storeWriter } from "@repo/database/models/writer";
 import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_ROLE,
@@ -68,6 +78,8 @@ import {
   workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
+import { everyStoppedForGood, everyStopsForGood } from "../agents/coder-host/stop.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   recordServerEvent,
   SERVER_EVENT,
@@ -84,8 +96,15 @@ import {
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
+import type { WorkspaceDeleteCall } from "./deletion-hooks.js";
 import { answeredWorkspace, managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
 import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.js";
+
+/** How many of a workspace's agents a delete reads at once, page by page, before it stops any. */
+const DELETE_AGENTS_PAGE = 100;
+
+/** Whoever a delete's Stops are written as: the workspace's agents, as a task's archive stops its own. */
+const STOPPER = storeWriter({ tools: CODER_TOOL_SET });
 
 /** The roles a workspace is handed to: an admin, or an owner a handover cut short already made one. */
 const HEIR_ROLES: ReadonlySet<WorkspaceRole> = new Set([
@@ -113,6 +132,8 @@ export interface WorkspacesProcedureSeams {
   workspaces: WorkspaceSeams;
   /** The plugin's member writes, made under the session `resolveSessionUserId` read. */
   members: MemberSeams;
+  /** The plugin's delete of a workspace, made under the same session, its hooks run on the asking fiber's services. */
+  deleteWorkspace: WorkspaceDeleteCall;
 }
 
 /**
@@ -163,6 +184,24 @@ const ownedWorkspace = Effect.fn("web/ownedWorkspace")(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return workspace;
+});
+
+/** Every agent of the workspace not archived, any member's, read a page at a time. */
+const workspaceAgentsToStop = Effect.fn("web/workspaceAgentsToStop")(function* (
+  userId: string,
+  workspaceId: string,
+) {
+  const agents: Agent[] = [];
+  for (;;) {
+    const page = yield* hostedStoreOrUnavailable(
+      listWorkspaceAgents(userId, workspaceId, {
+        offset: agents.length,
+        limit: DELETE_AGENTS_PAGE,
+      }),
+    );
+    agents.push(...page);
+    if (page.length < DELETE_AGENTS_PAGE) return agents;
+  }
 });
 
 /** The members of a workspace as they stand after a write. */
@@ -291,6 +330,26 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       );
       yield* memberChanged(userId, workspaceId, SERVER_WORKSPACE_MEMBER_ACTION.LEAVE);
       return { workspaceId };
+    }),
+    /**
+     * Note that every agent is read before any is stopped, so a delete
+     * refused as not ready cancels no one's work, and that the workspace's
+     * kind is our rule rather than the plugin's, because an account's
+     * deletion deletes its own first workspace through the same plugin call.
+     */
+    delete: session.delete.effect(function* ({ context, input }) {
+      const { userId, sessionHeaders: headers } = context;
+      const { workspaceId } = input;
+      const workspace = yield* ownedWorkspace(userId, workspaceId);
+      if (workspace.personal === true) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      const agents = yield* workspaceAgentsToStop(userId, workspace.id);
+      if (!(yield* everyStopsForGood(agents))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      }
+      yield* everyStoppedForGood(STOPPER, userId, agents);
+      yield* pluginCallOrRefused(seams.deleteWorkspace({ headers, organizationId: workspace.id }));
+      yield* memberChanged(userId, workspace.id, SERVER_WORKSPACE_MEMBER_ACTION.DELETE);
+      return { workspaceId: workspace.id };
     }),
     /**
      * Note that the plugin is handed the name alone, because a slug it was

@@ -345,6 +345,21 @@ const FOOT_QUESTION = "flex min-w-0 flex-1 items-center gap-dialog-action-gap";
 const FOOT_WORDS = "flex min-w-0 flex-1 flex-col";
 
 /**
+ * What an act takes with it and what it leaves, one line each, held under a
+ * confirm's body: a leave's, or a delete's. Its words are the caller's, which
+ * a screen recording masks as it masks whatever a card holds under its body.
+ */
+export function ConfirmConsequences({ lines }: { lines: readonly string[] }): React.JSX.Element {
+  return (
+    <ul className="confirm-consequences m-0 pl-ui-16 text-body text-muted-foreground [&>li+li]:mt-ui-4">
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * A question asked inside a dialog about something the dialog holds (a key
  * it shows, a sign-in it keeps), drawn at that dialog's foot in place of its
  * answers rather than as a second card over it: the question's title and

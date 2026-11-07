@@ -157,6 +157,7 @@ import { slackNotificationsWritten } from "./account-preferences-follow.js";
 import {
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
+  WORKSPACE_AGENT_NOT_READY_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
   WORKSPACE_SLUG_REFUSAL,
 } from "./acts.js";
@@ -397,6 +398,7 @@ const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as c
 const WORKSPACE_REFUSAL: Partial<Record<WorkspaceCallFailure, string>> = {
   [WORKSPACE_CALL_FAILURE.NOT_PERMITTED]: WORKSPACE_NOT_PERMITTED_REFUSAL,
   [WORKSPACE_CALL_FAILURE.ALREADY_INVITED]: ALREADY_INVITED_REFUSAL,
+  [WORKSPACE_CALL_FAILURE.AGENT_NOT_READY]: WORKSPACE_AGENT_NOT_READY_REFUSAL,
   [WORKSPACE_CALL_FAILURE.SLUG_MALFORMED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.MALFORMED],
   [WORKSPACE_CALL_FAILURE.SLUG_RESERVED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.RESERVED],
   [WORKSPACE_CALL_FAILURE.SLUG_TAKEN]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN],
@@ -545,6 +547,7 @@ export type TasksClient = Pick<
     | "changeRole"
     | "transfer"
     | "leave"
+    | "delete"
     | "invite"
     | "cancelInvitation"
   >;
@@ -2938,6 +2941,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (readerId !== undefined) {
           yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
         }
+      }),
+    // Note that a delete closes the open task where it is that workspace's,
+    // as a leave does, because the task is deleted with it; a refused delete
+    // closes nothing. The workspace and its tasks leave the view over the
+    // follow, as every other member's window hears it.
+    WORKSPACE_DELETE: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const openTaskId = view.activeTaskId;
+        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
+        const closeOpenTask = serial(
+          Effect.sync(() => {
+            if (view.activeTaskId === openTaskId) closeActive();
+          }),
+        );
+        const remove = Effect.tap(client.workspaces.delete(workspaceId), (answer) =>
+          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
+        );
+        const deleted = yield* workspaceCall(remove);
+        if (!deleted.ok) return yield* workspaceRefused(deleted.failure);
       }),
     // An invitation made or canceled moves no workspace or task, so nothing
     // else is read with it; the invitations' read carries it, an invitation

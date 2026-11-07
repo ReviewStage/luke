@@ -3,6 +3,7 @@ import {
   BUTTON_VARIANT,
   Button,
   CONFIRM_LOSS,
+  ConfirmConsequences,
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
@@ -62,12 +63,15 @@ function Asking({
   question,
   gate,
   answer = () => ACCEPTED,
+  children,
 }: {
   label: string;
   question: DialogQuestion;
   /** The subject's name the act waits on, for the gravest acts. */
   gate?: string;
   answer?: () => ActionResult;
+  /** What the card holds under its body. */
+  children?: React.ReactNode;
 }): React.JSX.Element {
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: true },
@@ -79,7 +83,9 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={confirm.ask}>
         {label}
       </Button>
-      <ConfirmDialog open confirm={confirm} question={question} gate={gate} />
+      <ConfirmDialog open confirm={confirm} question={question} gate={gate}>
+        {children}
+      </ConfirmDialog>
     </>
   );
 }
@@ -259,6 +265,24 @@ function ConfirmDialogs(): React.JSX.Element {
             loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
+        <Asking
+          label="Delete workspace…"
+          gate="Acme"
+          question={{
+            title: "Delete Acme?",
+            body: "Deletes it and everything in it for every member. This can't be undone.",
+            verb: "Delete workspace",
+            running: "Deleting",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
+          }}
+        >
+          <ConfirmConsequences
+            lines={[
+              "Its tasks, agents and their transcripts, automations, memory, and invitations are deleted for everyone.",
+              "The GitHub App, the Slack bot, and the Sentry integration stay installed on GitHub, Slack, and Sentry.",
+            ]}
+          />
+        </Asking>
         <KeyInADialog />
       </Inline>
     </CatalogSection>

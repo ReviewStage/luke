@@ -47,6 +47,10 @@ const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
   `GitHub is the only way you sign in to this ${PRODUCT_NAME} account, so it cannot be disconnected.` as const;
 
+/** What a workspace's delete is refused with while one of its agents is still starting a turn, which has no turn to stop yet. */
+export const WORKSPACE_AGENT_NOT_READY_REFUSAL =
+  "An agent in this workspace is still starting its turn. Try again in a moment." as const;
+
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =
   "That address is already in this workspace or invited." as const;

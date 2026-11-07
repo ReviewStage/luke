@@ -15,11 +15,13 @@ import {
   type WorkspaceSeams,
 } from "@repo/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { account, invitation, member, organization, user } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
+import { conversations } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { joinWorkspace } from "@repo/database/testing";
+import { joinWorkspace, openTaskAgent } from "@repo/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@repo/features";
 import {
   AUTOMATION_ACTION,
@@ -203,6 +205,7 @@ const githubRows = Database.use((db) =>
 interface SessionSeams {
   readonly members: MemberSeams;
   readonly resolveSessionUserId: WorkspacesProcedureSeams["resolveSessionUserId"];
+  readonly deleteWorkspace: WorkspacesProcedureSeams["deleteWorkspace"];
 }
 
 /** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
@@ -217,6 +220,7 @@ const NO_SESSION: SessionSeams = {
     updateOrganization: () => Effect.die("no member write without a session"),
   },
   resolveSessionUserId: () => Effect.succeed(Option.none()),
+  deleteWorkspace: () => Effect.die("no workspace delete without a session"),
 };
 
 /** An OAuth bearer stands for the account it names. */
@@ -240,6 +244,7 @@ const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
   HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
   HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
+  HOSTED_SERVICE_PATH.WORKSPACES_DELETE,
   HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET,
 ]);
 
@@ -276,6 +281,7 @@ const answered = <A>(
           resolveSessionUserId: session.resolveSessionUserId,
           workspaces: seams,
           members: session.members,
+          deleteWorkspace: session.deleteWorkspace,
         }),
       });
       // SAFETY: the procedures yield the database, the clock, GitHub and the analytics alone, which is all a test provides of the web runtime's services.
@@ -1038,6 +1044,10 @@ const removing = (plugin: WorkspacePlugin, userId: string, workspaceId: string, 
 const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, { workspaceId });
 
+/** The account deleting the workspace, under its session. */
+const deleting = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_DELETE, { workspaceId });
+
 /** The account renaming the workspace, under its session. */
 const renaming = (plugin: WorkspacePlugin, userId: string, workspaceId: string, name: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_RENAME, { workspaceId, name });
@@ -1513,6 +1523,78 @@ it.effect("an owner cannot leave, and a member leaves", () =>
 );
 
 it.effect(
+  "only its owner deletes a workspace, and never an account's first: an admin, a member, and an account outside it are refused, and it stands",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const linus = yield* openGithubAccount("Linus Torvalds");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        const personal = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+
+        assert.deepEqual(yield* deleting(plugin, grace, acme), notPermitted);
+        assert.deepEqual(yield* deleting(plugin, alan, acme), notPermitted);
+        assert.deepEqual(
+          yield* deleting(plugin, linus, acme),
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* deleting(plugin, ada, personal), notPermitted);
+        assert.equal((yield* membersOf(acme)).length, 3);
+        assert.equal((yield* membersOf(personal)).length, 1);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the owner's delete takes the workspace and its rows, and stamps its agents' conversations deleted, any member's",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
+        const agentId = yield* openTaskAgent(grace, acme, null);
+        const [agent] = yield* Database.use((db) =>
+          db
+            .select({ conversationId: agentTable.conversationId })
+            .from(agentTable)
+            .where(eq(agentTable.id, agentId)),
+        );
+        const conversationId = (agent ?? assert.fail("no agent")).conversationId;
+
+        const deleted = yield* deleting(plugin, ada, acme);
+
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { workspaceId: acme } });
+        assert.deepEqual(
+          yield* Database.use((db) =>
+            db.select().from(organization).where(eq(organization.id, acme)),
+          ),
+          [],
+        );
+        assert.deepEqual(yield* membersOf(acme), []);
+        const [stamped] = yield* Database.use((db) =>
+          db
+            .select({ deletedAt: conversations.deletedAt })
+            .from(conversations)
+            .where(eq(conversations.id, conversationId)),
+        );
+        assert.ok(stamped?.deletedAt != null);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
   "each change to a workspace's members is counted under the member who made it, in the workspace, and a refused one is not",
   () =>
     Effect.gen(function* () {
@@ -1550,6 +1632,7 @@ it.effect(
         const refused = yield* removing(plugin, alan, acme, ada);
         yield* transferring(plugin, ada, acme, alan);
         yield* leaving(plugin, ada, acme);
+        yield* deleting(plugin, alan, acme);
 
         assert.equal(refused.status, HOSTED_HTTP_STATUS.FORBIDDEN);
         assert.deepEqual(countedIn(ada), [
@@ -1560,7 +1643,9 @@ it.effect(
           { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.TRANSFER },
           { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.LEAVE },
         ]);
-        assert.deepEqual(countedIn(alan), []);
+        assert.deepEqual(countedIn(alan), [
+          { workspaceId: acme, action: SERVER_WORKSPACE_MEMBER_ACTION.DELETE },
+        ]);
       }).pipe(Effect.provide(plugin.database));
     }),
 );

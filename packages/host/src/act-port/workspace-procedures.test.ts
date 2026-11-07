@@ -124,6 +124,10 @@ const REFUSAL_ROWS: { readonly [Name in keyof typeof WORKSPACE_ACTS]: RefusalRow
     refusal: "Could not leave that workspace on this system.",
     payload: WORKSPACE,
   },
+  WORKSPACE_DELETE: {
+    refusal: "Could not delete that workspace on this system.",
+    payload: WORKSPACE,
+  },
   WORKSPACE_TOKEN_REPOSITORY_SET: {
     refusal: "Could not change that workspace's repositories on this system.",
     payload: { ...WORKSPACE, repository: "acme/relay", added: true },
