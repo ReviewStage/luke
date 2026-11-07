@@ -157,6 +157,7 @@
     "./feedback": "./src/feedback/index.js",
     "./contract": "./src/contract/index.js",
     "./contract/browser-client": "./src/contract/browser-client.js",
+    "./hosted-call": "./src/hosted-call.js",
     "./hosted-link": "./src/hosted-link.js",
     "./hosted-routes": "./src/hosted-routes.js",
     "./keyed-write": "./src/keyed-write.js",
