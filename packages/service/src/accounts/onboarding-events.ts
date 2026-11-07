@@ -26,6 +26,10 @@
  *   are read from every task the account started each time, not added up
  *   here, so a report lost to an outage is made whole by the next. An
  *   account with no task keeps Resend's fallbacks, 0, 0, and -1.
+ * - An account deleted (`account-deletion.ts`) has its contact deleted
+ *   (https://resend.com/docs/api-reference/contacts/delete-contact), so
+ *   Resend keeps no address of an account the service no longer has, and the
+ *   automation has no one left to write to.
  *
  * The deployment sends these where it sends the welcome email: under its
  * Resend key (`RESEND_API_KEY`) and only where it names the welcome's sender
@@ -93,6 +97,8 @@ interface OnboardingEventsValues {
   readonly inviteAccepted: (email: string) => Effect.Effect<void>;
   /** Sets the contact's task properties to what the account's tasks now say; never fails. */
   readonly taskActivity: (email: string, activity: TaskActivity) => Effect.Effect<void>;
+  /** Deletes the contact of an account that was deleted; never fails. */
+  readonly forget: (email: string) => Effect.Effect<void>;
 }
 
 /** The deployment's reporter to Resend's onboarding. Read optionally, so a runtime without one reports nothing. */
@@ -124,6 +130,11 @@ const findActivity = SqlSchema.findOneOption({
     ),
 });
 
+/** The contact's own address at Resend, which names a contact by its email. */
+function contactPath(email: string): string {
+  return `${RESEND.CONTACTS_PATH}/${encodeURIComponent(email)}`;
+}
+
 /** A variable as the deployment holds it, trimmed, and nothing where it is unset or blank. */
 function presentText(value: Option.Option<string>): string | undefined {
   const trimmed = Option.getOrUndefined(value)?.trim();
@@ -153,6 +164,7 @@ export const onboardingEventsFromEnvironment: Layer.Layer<
         signedUp: () => Effect.void,
         inviteAccepted: () => Effect.void,
         taskActivity: () => Effect.void,
+        forget: () => Effect.void,
       };
     }
     const client = yield* HttpClient.HttpClient;
@@ -162,9 +174,13 @@ export const onboardingEventsFromEnvironment: Layer.Layer<
       requestTimeoutMs: RESEND.REQUEST_TIMEOUT_MS,
     });
     // One call, whose refusal is logged by what was asked and its status alone, because the body carries the address.
-    const send = (asked: string, method: HttpMethod, path: string, body: object) =>
+    const send = (asked: string, method: HttpMethod, path: string, body?: object) =>
       Effect.gen(function* () {
-        const answer = yield* call.send({ method, path, body: JSON.stringify(body) });
+        const answer = yield* call.send({
+          method,
+          path,
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
         if (callAnswered(answer) && answer.response.ok) return;
         yield* Effect.logWarning(
           callAnswered(answer)
@@ -184,18 +200,14 @@ export const onboardingEventsFromEnvironment: Layer.Layer<
         ),
       inviteAccepted: (email: string) => sendEvent(ONBOARDING_EVENT.INVITE_ACCEPTED, email, {}),
       taskActivity: (email: string, activity: TaskActivity) =>
-        send(
-          "task activity",
-          HTTP_METHOD.PATCH,
-          `${RESEND.CONTACTS_PATH}/${encodeURIComponent(email)}`,
-          {
-            properties: {
-              [ONBOARDING_PROPERTY.HAS_TASK]: 1,
-              [ONBOARDING_PROPERTY.TASK_DAYS]: activity.days,
-              [ONBOARDING_PROPERTY.LAST_TASK_DAY]: activity.lastDay,
-            },
+        send("task activity", HTTP_METHOD.PATCH, contactPath(email), {
+          properties: {
+            [ONBOARDING_PROPERTY.HAS_TASK]: 1,
+            [ONBOARDING_PROPERTY.TASK_DAYS]: activity.days,
+            [ONBOARDING_PROPERTY.LAST_TASK_DAY]: activity.lastDay,
           },
-        ),
+        }),
+      forget: (email: string) => send("contact delete", HTTP_METHOD.DELETE, contactPath(email)),
     };
   }),
 );
@@ -249,5 +261,17 @@ export function taskActivityReported(userId: string): Effect.Effect<void, never,
       if (activity === undefined || activity.lastDay === null) return;
       yield* events.taskActivity(person.email, { days: activity.days, lastDay: activity.lastDay });
     }),
+  );
+}
+
+/**
+ * Deletes the onboarding contact of an account already deleted, by the
+ * address read before it went; nothing for a runtime without a reporter.
+ * Note that it runs at once rather than after the answer, because the
+ * deletion's request is still open and nothing after it names the address.
+ */
+export function onboardingForgotten(email: string): Effect.Effect<void> {
+  return Effect.flatMap(Effect.serviceOption(OnboardingEvents), (events) =>
+    Option.isNone(events) ? Effect.void : events.value.forget(email),
   );
 }
