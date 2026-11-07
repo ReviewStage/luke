@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   AGENT_BOUNDS,
   AGENT_STATUS,
@@ -34,7 +33,7 @@ import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { GLYPH } from "@repo/ui/icons";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { type ReportedFailure, UNREPORTED, type Unreported } from "@repo/ui/reported-failure";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type ReactNode,
@@ -590,14 +589,14 @@ export function AgentComposer({
   const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { descriptionEditor } = useSideBundles();
-  const bundle = useAtomValue(descriptionEditor);
+  const bundle = useQuery(descriptionEditor);
   // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
-  const retryBundle = useAtomRefresh(descriptionEditor);
-  const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
+  const retryBundle = () => void bundle.refetch();
+  const module = bundle.data;
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
   const statuses = useIntegrationStatuses();
-  const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
+  const unloaded = bundle.isError ? EDITOR_LOAD_FAILED : undefined;
   const sendNote = noteWhileOffline(composer.note, connected);
   const words =
     composer.closed ??

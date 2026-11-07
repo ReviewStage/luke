@@ -1,11 +1,11 @@
-import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomMount } from "@effect/atom-react";
 import {
   TERMINAL_STATE,
   type TerminalAction,
   type TerminalState,
 } from "@repo/features/terminal-model";
-import { Duration, Effect, Option } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
+import { Duration, Effect } from "effect";
 import {
   useCallback,
   useEffect,
@@ -69,9 +69,9 @@ export function useTerminalView(
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
   const { terminal } = useSideBundles();
-  const loaded = useAtomValue(terminal);
-  const retryBundle = useAtomRefresh(terminal);
-  const module = Option.getOrUndefined(AsyncResult.value(loaded));
+  const loaded = useQuery(terminal);
+  const retryBundle = () => void loaded.refetch();
+  const module = loaded.data;
   const state = useSyncExternalStore(
     session?.subscribe ?? HEARS_NOTHING,
     () => session?.state ?? NO_TERMINAL,
@@ -105,7 +105,7 @@ export function useTerminalView(
 
   return {
     state,
-    failed: AsyncResult.isFailure(loaded),
+    failed: loaded.isError,
     retryBundle,
     find,
     screen: setElement,
