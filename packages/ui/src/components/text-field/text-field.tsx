@@ -81,6 +81,14 @@ export const TEXT_FIELD_GROUND = {
 
 export type TextFieldGround = (typeof TEXT_FIELD_GROUND)[keyof typeof TEXT_FIELD_GROUND];
 
+/** The room a field leaves at its end: none, or a compact press drawn inside its edge, as a secret's Show is. */
+export const TEXT_FIELD_END = {
+  NONE: "none",
+  PRESS: "press",
+} as const;
+
+export type TextFieldEnd = (typeof TEXT_FIELD_END)[keyof typeof TEXT_FIELD_END];
+
 /** The face a field's words are set in: the body's, or a fixed width for code, a cron or a path. */
 export const TEXT_FIELD_FONT = {
   BODY: "body",
@@ -160,6 +168,12 @@ const TEXT_FIELD_GROUND_CLASS = {
   [TEXT_FIELD_GROUND.INPUT]: undefined,
   [TEXT_FIELD_GROUND.CARD]: "bg-surface focus:bg-surface",
 } as const satisfies Record<TextFieldGround, string | undefined>;
+
+/** Each end's inset: the control's own, or room for a compact press and its inset either side. */
+const TEXT_FIELD_END_CLASS = {
+  [TEXT_FIELD_END.NONE]: undefined,
+  [TEXT_FIELD_END.PRESS]: "pe-9",
+} as const satisfies Record<TextFieldEnd, string | undefined>;
 
 /**
  * A time is typed or stepped with the arrows, the engine's own clock hidden.
@@ -306,6 +320,7 @@ export function TextField({
   onPasted,
   size = TEXT_FIELD_SIZE.CONTROL,
   ground = TEXT_FIELD_GROUND.INPUT,
+  end = TEXT_FIELD_END.NONE,
   ref,
   ...props
 }: TextEntryProps &
@@ -326,6 +341,8 @@ export function TextField({
     size?: TextFieldSize | undefined;
     /** The ground its well is filled with; the input's where none is named. */
     ground?: TextFieldGround | undefined;
+    /** The room it leaves at its end for a press drawn inside it; none where none is named. */
+    end?: TextFieldEnd | undefined;
     ref?: Ref<HTMLInputElement> | undefined;
   }): React.JSX.Element {
   return (
@@ -334,6 +351,7 @@ export function TextField({
       className={cn(
         TEXT_FIELD_SIZE_CLASS[size],
         TEXT_FIELD_GROUND_CLASS[ground],
+        TEXT_FIELD_END_CLASS[end],
         TEXT_FIELD_FONT_CLASS[props.font ?? TEXT_FIELD_FONT.BODY],
         props.type === TEXT_FIELD_TYPE.TIME && TIME_FIELD,
       )}
