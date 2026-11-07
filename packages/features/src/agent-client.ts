@@ -18,6 +18,7 @@ import {
   AGENT_CALL_FAILURE,
   AGENT_CHOOSE_RENAMES,
   AGENT_DELETE_RENAMES,
+  AGENT_INBOX_WRITE_RENAMES,
   AGENT_RENAMES,
   AGENT_START_RENAMES,
   type AgentAgentAnswer,
@@ -122,6 +123,7 @@ import {
   askLive,
   HOSTED_DEADLINE,
   type HostedClient,
+  type HostedDeadline,
   type HostedFailure,
   HostedUnanswered,
   hostedClient,
@@ -230,29 +232,6 @@ type NamedRefusals = Readonly<Partial<Record<HostedApiError, AgentCallFailure>>>
 const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
-
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, an agent on its starter's own GitHub token the caller did not start, and a device away, refused as a Start on it is. */
-const MESSAGE_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
-  [HOSTED_API_ERROR.AGENT_NOT_READY]: AGENT_CALL_FAILURE.AGENT_NOT_READY,
-  [HOSTED_API_ERROR.AGENT_RETIRED]: AGENT_CALL_FAILURE.AGENT_RETIRED,
-  [HOSTED_API_ERROR.DEVICE_REMOVED]: AGENT_CALL_FAILURE.DEVICE_REMOVED,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
-  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
-  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
-  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
-  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
-  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
-  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
-} satisfies NamedRefusals;
-
-/** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
-const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
@@ -392,6 +371,15 @@ function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Respons
     ...(errorName === undefined ? undefined : { errorName }),
   });
   return { ...UNANSWERED, cause: hostedFailureFacts(unanswered) };
+}
+
+/** How a member's write on the inbox taken once under its idempotency key is asked: under `deadline` and the key given where one is, a key already written under read as no answer (`AGENT_INBOX_WRITE_RENAMES`). */
+function inboxWrite(deadline: HostedDeadline, key: string | undefined) {
+  return {
+    as: AGENT_INBOX_WRITE_RENAMES,
+    deadline,
+    ...(key === undefined ? undefined : { idempotencyKey: key }),
+  };
 }
 
 /** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
@@ -805,9 +793,9 @@ export class HostedAgentClient {
     };
     const asked =
       callId === undefined
-        ? askHosted(this.#hosted.messages.agent, { id: agentId, ...query })
-        : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, ...query });
-    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
+        ? hostedCall(this.#hosted.messages.agent, { id: agentId, ...query })
+        : hostedCall(this.#hosted.messages.agentWorker, { id: agentId, call: callId, ...query });
+    return Effect.map(asked, readNow);
   }
 
   /**
@@ -824,7 +812,7 @@ export class HostedAgentClient {
     cut = false,
   ): Effect.Effect<AgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
-      hostedAnswer(this.#newest(agentId, callId, undefined, cut), ROW_REFUSALS),
+      this.#newest(agentId, callId, undefined, cut),
       // Note that a read naming no `before` is answered the newest page, which an older page alone is not.
       (answer) => ("failure" in answer || "status" in answer ? answer : UNANSWERED),
     );
@@ -843,7 +831,7 @@ export class HostedAgentClient {
     cut = false,
   ): Effect.Effect<AgentOlderAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
-      hostedAnswer(this.#newest(agentId, callId, before, cut), ROW_REFUSALS),
+      this.#newest(agentId, callId, before, cut),
       (answer): AgentOlderAnswer | Failed =>
         "failure" in answer
           ? answer
@@ -861,8 +849,8 @@ export class HostedAgentClient {
       ...(cut ? { parts: TRANSCRIPT_PARTS_QUERY.CUT } : undefined),
     };
     return callId === undefined
-      ? askHosted(this.#hosted.messages.agentNewest, { id: agentId, ...page })
-      : askHosted(this.#hosted.messages.agentWorkerNewest, { id: agentId, call: callId, ...page });
+      ? hostedCall(this.#hosted.messages.agentNewest, { id: agentId, ...page })
+      : hostedCall(this.#hosted.messages.agentWorkerNewest, { id: agentId, call: callId, ...page });
   }
 
   /**
@@ -878,11 +866,9 @@ export class HostedAgentClient {
     callId?: string,
   ): Effect.Effect<AgentPartView, never, HttpClient.HttpClient> {
     const part = { id: agentId, message: messageId, index: String(index) };
-    const asked =
-      callId === undefined
-        ? askHosted(this.#hosted.messages.agentPart, part)
-        : askHosted(this.#hosted.messages.agentWorkerPart, { ...part, call: callId });
-    return hostedAnswer(asked, ROW_REFUSALS);
+    return callId === undefined
+      ? hostedCall(this.#hosted.messages.agentPart, part)
+      : hostedCall(this.#hosted.messages.agentWorkerPart, { ...part, call: callId });
   }
 
   /**
@@ -933,13 +919,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentMessageAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(agentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.messages.send,
-        { params: { id: agentId }, body: admitted },
-        HOSTED_DEADLINE.STEER,
-      ),
-      MESSAGE_REFUSALS,
+    return hostedCall(
+      this.#hosted.messages.send,
+      { params: { id: agentId }, body: admitted },
+      { deadline: HOSTED_DEADLINE.STEER },
     );
   }
 
@@ -950,13 +933,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentQueueAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(agentQueueChangeSchema)(change));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.messages.queue,
-        { params: { id: agentId }, body: admitted },
-        HOSTED_DEADLINE.STEER,
-      ),
-      MESSAGE_REFUSALS,
+    return hostedCall(
+      this.#hosted.messages.queue,
+      { params: { id: agentId }, body: admitted },
+      { deadline: HOSTED_DEADLINE.STEER },
     );
   }
 
@@ -1481,14 +1461,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxAcknowledgeRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.inbox.answer,
-        { params: { id: itemId }, body },
-        HOSTED_DEADLINE.STEER,
-        key,
-      ),
-      INBOX_ANSWER_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.answer,
+      { params: { id: itemId }, body },
+      inboxWrite(HOSTED_DEADLINE.STEER, key),
     );
   }
 
@@ -1506,14 +1482,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxCloseRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.inbox.close,
-        { params: { id: itemId }, body },
-        HOSTED_DEADLINE.STEER,
-        key,
-      ),
-      INBOX_ANSWER_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.close,
+      { params: { id: itemId }, body },
+      inboxWrite(HOSTED_DEADLINE.STEER, key),
     );
   }
 
@@ -1529,13 +1501,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxMessagedView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxMessageRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.inbox.message,
-        { params: { id: itemId }, body },
-        HOSTED_DEADLINE.STEER,
-      ),
-      INBOX_ANSWER_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.message,
+      { params: { id: itemId }, body },
+      { deadline: HOSTED_DEADLINE.STEER },
     );
   }
 
@@ -1550,17 +1519,14 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxMessagedView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxStartRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.start, body, HOSTED_DEADLINE.STEER),
-      INBOX_ANSWER_REFUSALS,
-    );
+    return hostedCall(this.#hosted.inbox.start, body, { deadline: HOSTED_DEADLINE.STEER });
   }
 
   /** Where one item stands, its agent, task, and workspace, as a link naming it by its id alone is opened; not found where the item is not one the account may read. */
   inboxItemHome(
     itemId: string,
   ): Effect.Effect<AgentInboxItemHomeView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.inbox.home, { id: itemId }), ROW_REFUSALS);
+    return hostedCall(this.#hosted.inbox.home, { id: itemId });
   }
 
   /**
@@ -1574,9 +1540,10 @@ export class HostedAgentClient {
     itemId: string,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.markItemRead, { id: itemId }, HOSTED_DEADLINE.USUAL, key),
-      ROW_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.markItemRead,
+      { id: itemId },
+      inboxWrite(HOSTED_DEADLINE.USUAL, key),
     );
   }
 
@@ -1585,9 +1552,10 @@ export class HostedAgentClient {
     itemId: string,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }, HOSTED_DEADLINE.USUAL, key),
-      ROW_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.markItemUnread,
+      { id: itemId },
+      inboxWrite(HOSTED_DEADLINE.USUAL, key),
     );
   }
 
@@ -1597,14 +1565,10 @@ export class HostedAgentClient {
     until: number | null,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.inbox.remindItem,
-        { params: { id: itemId }, body: { until } },
-        HOSTED_DEADLINE.USUAL,
-        key,
-      ),
-      ROW_REFUSALS,
+    return hostedCall(
+      this.#hosted.inbox.remindItem,
+      { params: { id: itemId }, body: { until } },
+      inboxWrite(HOSTED_DEADLINE.USUAL, key),
     );
   }
 
@@ -1621,9 +1585,6 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxReadAllView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxReadAllRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.inbox.markAllRead, body, HOSTED_DEADLINE.USUAL, key),
-      {},
-    );
+    return hostedCall(this.#hosted.inbox.markAllRead, body, inboxWrite(HOSTED_DEADLINE.USUAL, key));
   }
 }
