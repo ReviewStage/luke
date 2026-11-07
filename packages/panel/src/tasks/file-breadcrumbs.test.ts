@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { FolderListing } from "../file-tree/contract.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileViewBar } from "./file-view.js";
@@ -36,8 +35,7 @@ function barOver(path = PATH) {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(FileViewBar, {
           history: { canGoBack: false, canGoForward: false, onStep: () => undefined },
           lead: createElement(FileBreadcrumbs, {

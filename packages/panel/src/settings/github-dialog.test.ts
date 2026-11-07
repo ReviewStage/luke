@@ -12,7 +12,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -20,7 +19,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, holdGitHubToken } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
@@ -126,8 +125,7 @@ async function mountAndOpen(open = true): Promise<void> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.push(link) },
@@ -369,12 +367,10 @@ test("the row draws no other account's token when Profile is drawn for another a
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (id: string) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(AccountSection, {
             account: {
               status: ACCOUNT_STATUS.SIGNED_IN,

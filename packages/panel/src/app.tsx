@@ -19,7 +19,6 @@ import {
   EXPERIMENT,
   type Experiment,
   type HostCapability,
-  NO_EXPERIMENTS,
 } from "@repo/settings";
 import {
   agentKeyLink,
@@ -110,7 +109,6 @@ import {
   selectAdminAccessPending,
   selectAppSettingsView,
   selectExperiment,
-  selectExperimentChoices,
   selectInbox,
   selectRun,
   selectSessionReplay,
@@ -124,7 +122,8 @@ import { useVersionHistoryRoute } from "./version-history-route.js";
 import { ViewingAs } from "./viewing-as.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
-import { useBoardRoute, usePersonRoute } from "./workspace-routes.js";
+import { useExperimentsIn } from "./workspace-experiments.js";
+import { useBoardRoute, usePersonRoute, useUnknownWorkspaceRoute } from "./workspace-routes.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -444,6 +443,10 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
   });
+  const unknownWorkspaceView = useUnknownWorkspaceRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const inboxView = useInboxRoute({
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
@@ -473,6 +476,7 @@ function AppWindow(): React.JSX.Element {
     automationsView,
     versionHistoryView,
     inboxView,
+    unknownWorkspaceView,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -506,8 +510,7 @@ function AppWindow(): React.JSX.Element {
   });
   settingsRoute.current = settingsPlace;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const experiments =
-    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
+  const experiments = useExperimentsIn(settingsPlace.workspaceId);
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -572,10 +575,13 @@ function AppWindow(): React.JSX.Element {
       // Admin is the router's place, which its link opens as a navigation from wherever the window stands.
       guardLeave(() => adminView.onOpen(adminViewOfLink(place)))();
     } else {
-      // Note that the Inbox and an agent's page are left by the door the link opens, as it stands what the link names, rather than up front,
-      // because an agent's link reads where its agent stands first, and a leave before that read lands would write a step of the place under it.
+      // Note that the Inbox, an agent's page, and a workspace not there are left by the door the link opens, as it stands what the link names,
+      // rather than up front, because an agent's link reads where its agent stands first, and a leave before that read lands would write a
+      // step of the place under it.
       const leftByDoor =
-        routedHere?.place === ROUTED_PLACE.INBOX || routedHere?.place === ROUTED_PLACE.AGENT;
+        routedHere?.place === ROUTED_PLACE.INBOX ||
+        routedHere?.place === ROUTED_PLACE.AGENT ||
+        routedHere?.place === ROUTED_PLACE.UNKNOWN_WORKSPACE;
       guardLeave(() => {
         if (!leftByDoor) changeTab(PANEL_TAB.TASKS);
         tasks.onOpenLink(link);

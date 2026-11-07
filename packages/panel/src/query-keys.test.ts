@@ -4,14 +4,13 @@ import assert from "node:assert/strict";
 import { TASK_TREE_ENTRY } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { useQuery } from "@tanstack/react-query";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { forgetAccountReads } from "./query-keys.js";
 import { taskTreeQueryOptions } from "./tasks/repository-reads.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
-import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * query-keys.test.ts -- a read taken as the account signed in but keyed by
@@ -51,7 +50,7 @@ test("a task's tree one account read is not drawn to the next account once the w
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Tree))));
+  act(() => root.render(withQueryClient(createElement(Tree))));
   await vi.waitFor(() => assert.equal(container.textContent, "one.ts"));
 
   reader = "two.ts";

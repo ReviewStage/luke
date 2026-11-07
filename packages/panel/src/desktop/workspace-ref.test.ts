@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import { LIVE_READ } from "@repo/features/live-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
 
 /**
@@ -49,7 +48,7 @@ function draw(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 

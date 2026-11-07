@@ -283,7 +283,7 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
   );
 
   it.effect(
-    "stamps deleted the workers a dropped turn delegated, and keeps those delegated before it",
+    "deletes the workers a dropped turn delegated, and keeps those delegated before it",
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation;
@@ -302,16 +302,18 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
             return id;
           });
         const kept = yield* worker(1_500);
-        const dropped = yield* worker(2_500);
+        yield* worker(2_500);
 
         yield* rewindConversation(target, secondLine);
         const rows = yield* db
-          .select({ id: conversations.id, deletedAt: conversations.deletedAt })
+          .select({ id: conversations.id })
           .from(conversations)
           .where(eq(conversations.parentConversationId, target.conversationId));
-        const deleted = new Map(rows.map((row) => [row.id, row.deletedAt !== null]));
 
-        assert.deepEqual([deleted.get(kept), deleted.get(dropped)], [false, true]);
+        assert.deepEqual(
+          rows.map((row) => row.id),
+          [kept],
+        );
       }),
   );
 

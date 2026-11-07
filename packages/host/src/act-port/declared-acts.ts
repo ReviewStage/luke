@@ -1,7 +1,14 @@
 import { createORPCErrorConstructorMap } from "@orpc/contract";
 import type { ContractedRouter } from "@orpc/server";
 import { Cause, Effect, Schema as EffectSchema, Option } from "effect";
-import { ACT_ERROR, type ActInput, type ActOutput, type AnyHostAct } from "../contract/index.js";
+import {
+  ACT_ERROR,
+  type ActInput,
+  type ActOutput,
+  type AnyHostAct,
+  type AnyLiveFollow,
+  isLiveFollow,
+} from "../contract/index.js";
 import { type ActHandler, ActRefused, type HostActTable } from "../host-acts.js";
 import { type ActPortContext, actPort } from "./base.js";
 
@@ -19,15 +26,17 @@ import { type ActPortContext, actPort } from "./base.js";
  * A defect is reported where it stands, as the Gateway reported one.
  */
 
-/** The procedures of the acts `Names` names that are relayed, as the port's router types them; an act written by hand has none here. */
+/** The procedures of the acts `Names` names that are relayed, as the port's router types them; an act written by hand, or a live follow (`live-follows.ts`), has none here. */
 type DeclaredProcedures<
-  Acts extends Readonly<Record<string, AnyHostAct>>,
+  Acts extends Readonly<Record<string, AnyHostAct | AnyLiveFollow>>,
   Names extends keyof Acts,
 > = ContractedRouter<
   {
-    readonly [Name in Names as Acts[Name]["byHand"] extends true
-      ? never
-      : Acts[Name]["kind"]]: Acts[Name]["procedure"];
+    readonly [Name in Names as Acts[Name] extends AnyHostAct
+      ? Acts[Name]["byHand"] extends true
+        ? never
+        : Acts[Name]["kind"]
+      : never]: Acts[Name]["procedure"];
   },
   ActPortContext
 >;
@@ -78,17 +87,17 @@ export function declaredAnswer<Act extends AnyHostAct>(
 /**
  * The act port's procedure for each act `handlers` answers, keyed by the
  * act's kind, but an act written by hand, whose own procedure calls its
- * handler. The host hands every act's handler (`HostActTable`), so its
+ * handler, and a live follow, whose are built by `liveFollowProcedures`. The host hands every act's handler (`HostActTable`), so its
  * router answers every declared kind; a test may hand only the ones it calls.
  */
 export function declaredActProcedures<
-  const Acts extends Readonly<Record<string, AnyHostAct>>,
+  const Acts extends Readonly<Record<string, AnyHostAct | AnyLiveFollow>>,
   const Handlers extends Partial<HostActTable<Acts>>,
 >(acts: Acts, handlers: Handlers): DeclaredProcedures<Acts, keyof Handlers & keyof Acts> {
   const procedures: Record<string, unknown> = {};
   for (const [name, handler] of Object.entries(handlers)) {
     const act = acts[name];
-    if (act === undefined || handler === undefined || act.byHand) continue;
+    if (act === undefined || handler === undefined || isLiveFollow(act) || act.byHand) continue;
     // SAFETY: a declared act's kind keys its own procedure in the contract `actPort` implements.
     const builder = actPort[
       act.kind as keyof typeof actPort

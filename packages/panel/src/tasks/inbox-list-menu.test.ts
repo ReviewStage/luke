@@ -9,13 +9,12 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { KEPT } from "../act.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
 import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
@@ -131,7 +130,7 @@ function mount(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Inbox))));
+  act(() => root.render(withQueryClient(createElement(Inbox))));
   return { opened, marked };
 }
 

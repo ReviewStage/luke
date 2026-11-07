@@ -11,14 +11,13 @@ import {
 import { DESCRIPTION_COMMENT_CALL_FAILURE } from "@repo/features/tasks-view";
 import { TASKS_ACT_KIND } from "@repo/host/contract";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { DRAFT_PLACE, useDraft } from "../composer-drafts.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { useDescriptionComments } from "./use-description-comments.js";
 
 /**
@@ -59,7 +58,7 @@ test("a reply whose mentioned agent could not take the thread posts, and its thr
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() => root.render(withQueryClient(createElement(Probe))));
 
   let posted = false;
   await act(async () => {
@@ -102,7 +101,7 @@ test("an edit the service refused keeps its words as the comment's draft, which 
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() => root.render(withQueryClient(createElement(Probe))));
 
   let landed = true;
   await act(async () => {

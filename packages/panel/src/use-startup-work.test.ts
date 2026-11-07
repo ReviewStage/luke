@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import type { AppStateSnapshot } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -12,7 +11,7 @@ import { installAppPlatform } from "./app-platform.js";
 import { SideBundlesContext } from "./bundle-loader.js";
 import { markdownHtmlParserQuery } from "./markdown-html-parser.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 import { standInBundles } from "./testing/side-bundles.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 
@@ -84,8 +83,7 @@ function draw(first: AppStateSnapshot): (next: AppStateSnapshot) => void {
     },
   });
   const render = (state: AppStateSnapshot): ReactElement =>
-    onRegistry(
-      AtomRegistry.make(),
+    withQueryClient(
       createElement(
         SideBundlesContext.Provider,
         { value: bundles },

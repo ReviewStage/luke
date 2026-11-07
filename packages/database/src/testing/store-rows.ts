@@ -39,7 +39,6 @@ export interface ConversationRow {
   readonly parentConversationId?: string | null;
   readonly runtimeSessionId?: string | null;
   readonly createdAt?: Date;
-  readonly deletedAt?: Date | null;
   readonly nextMessageSeq?: number;
   readonly label?: string | null;
   readonly title?: string | null;
@@ -59,7 +58,6 @@ export function insertConversation(run: HostedStoreTestRun, row: ConversationRow
           parentConversationId: row.parentConversationId ?? null,
           runtimeSessionId: row.runtimeSessionId ?? null,
           createdAt: row.createdAt ?? new Date(),
-          deletedAt: row.deletedAt ?? null,
           nextMessageSeq: row.nextMessageSeq ?? 1,
           label: row.label ?? null,
           title: row.title ?? null,
@@ -69,24 +67,6 @@ export function insertConversation(run: HostedStoreTestRun, row: ConversationRow
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
-}
-
-export function setConversationDeletedAt(
-  run: HostedStoreTestRun,
-  conversationId: string,
-  deletedAt: Date | null,
-): Promise<void> {
-  return run(
-    Effect.asVoid(
-      Database.use((db) =>
-        db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
-      ),
-    ),
-  );
-}
-
-export function readConversationById(run: HostedStoreTestRun, id: string) {
-  return run(Database.use((db) => db.select().from(conversations).where(eq(conversations.id, id))));
 }
 
 export interface MessageRow {
@@ -142,18 +122,6 @@ export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise
         .returning({ id: messages.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
-  );
-}
-
-export function readMessagesByConversation(run: HostedStoreTestRun, conversationId: string) {
-  return run(
-    Database.use((db) =>
-      db
-        .select()
-        .from(messages)
-        .where(eq(messages.conversationId, conversationId))
-        .orderBy(messages.seq),
-    ),
   );
 }
 
@@ -219,18 +187,6 @@ const TurnRowSchema = Schema.Struct({
 });
 export type TurnRow = Schema.Schema.Type<typeof TurnRowSchema>;
 const decodeTurnRow = Schema.decodeUnknownSync(TurnRowSchema);
-
-export function readTurnsByConversation(
-  run: HostedStoreTestRun,
-  conversationId: string,
-): Promise<readonly TurnRow[]> {
-  return run(
-    Effect.map(
-      Database.use((db) => db.select().from(turns).where(eq(turns.conversationId, conversationId))),
-      (rows) => rows.map((row) => decodeTurnRow(row)),
-    ),
-  );
-}
 
 export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnRow | undefined> {
   return run(

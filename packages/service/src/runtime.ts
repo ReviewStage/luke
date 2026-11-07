@@ -86,8 +86,8 @@ const slackBot = slackBotFromEnvironment.pipe(
  * `SettledTurnListener` is here because the store writer tells it of every
  * coding agent turn it settles, on whichever function the settle ran: it
  * counts the turn, hands the agent's final message to the agent that
- * started it, and sends an automation run's result on Slack
- * (`agents/coder-host/settled-turns.ts`).
+ * started it, sends an automation run's result on Slack, and hands on the
+ * agent's queue (`agents/coder-host/settled-turns.ts`).
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog

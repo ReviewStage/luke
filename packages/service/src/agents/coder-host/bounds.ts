@@ -265,8 +265,7 @@ export const CODER = {
    * a second or two, and the runner ends an interrupt its CLI never answers
    * within `RUNNER_CONTROL.ANSWER_MS`, so one still running past this has a
    * runner that will not end it: ask, wait briefly, then force, rather than
-   * leaving it running for the sweep's five minutes
-   * (`TURN_ABANDON.CANCEL_AFTER_MS`).
+   * leaving it running until its lease runs out.
    */
   STOP_CONFIRM: Duration.seconds(10),
   /**

@@ -6,7 +6,6 @@ import { TASK_CREATE_RELATION_KIND } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -18,7 +17,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -104,11 +103,9 @@ async function mount(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = () =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(NewTaskComposer, {
           newTask: {
             ...control.newTask,

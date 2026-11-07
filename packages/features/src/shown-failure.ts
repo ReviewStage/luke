@@ -198,6 +198,7 @@ export const FAILURE_SURFACE = {
   WINDOW_ZOOM: "window.zoom",
   WORKSPACES_READ: "workspaces.read",
   WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_EXPERIMENT: "workspace.experiment",
   WORKSPACE_ENVIRONMENT_READ: "workspace_environment.read",
   WORKSPACE_GITHUB: "workspace.github",
   WORKSPACE_GITHUB_DISCONNECT: "workspace_github.disconnect",

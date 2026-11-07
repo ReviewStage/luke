@@ -34,13 +34,17 @@ const MIGRATION = "20261105235359_inbox_item_read_remind_expand";
  */
 const DESCRIPTION_RENAME = "20261106055235_description_rename";
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after but the description's rename. */
+/** The agent's `seen_at` column, which a later migration added, taken on the same terms, since the agent's model names it. */
+const AGENT_SEEN_AT = "20261107014920_agent_seen_at";
+
+/** A migrations folder holding every migration named before `MIGRATION`'s, and none after but the description's rename and the agent's seen-at. */
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
   const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-remind-expand-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0 || name === DESCRIPTION_RENAME,
+    (name) =>
+      name.localeCompare(MIGRATION) < 0 || name === DESCRIPTION_RENAME || name === AGENT_SEEN_AT,
   );
   for (const name of names) {
     yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));

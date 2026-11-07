@@ -7,14 +7,13 @@ import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -80,8 +79,7 @@ function drawn(text: string, opened: ReadLink[]): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => opened.push(link) },

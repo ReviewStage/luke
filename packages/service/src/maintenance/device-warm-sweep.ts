@@ -9,8 +9,8 @@
  * cap (`@repo/agent-runner`'s `RUNNER_WARM.IDLE_CAP_MS`), where a message its
  * host writes in that instant is lost. This sweep retires it first: it reads
  * every account's local agents whose newest launch is still open, on a device
- * that beat within its lease (a lapsed one's launches are the lease sweep's,
- * `device-lease-sweep.ts`), and whose run ended longer ago than the larger of
+ * that beat within its lease (a lapsed one's launches are settled at its
+ * agent's next touch, `../agents/coder-host/lapsed-runner.ts`), and whose run ended longer ago than the larger of
  * the device's window and a short grace, which leaves the IDLE's own retire
  * to go first; or past the grace alone where the device last beat that it
  * waits to switch release (`HOST_UPDATE.WAITING`), so a host waiting to

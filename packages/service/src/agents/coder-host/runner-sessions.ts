@@ -107,6 +107,7 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
   type RunnerEnd,
+  type RunnerTrace,
 } from "@repo/agent-runner/protocol";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
@@ -123,6 +124,7 @@ import {
   readAgentRouting,
   readAgentSeenAt,
   readNativeRunStanding,
+  recordAgentNativeSession,
   recordAgentRunnerToken,
 } from "@repo/database/models/agent-store";
 import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
@@ -143,7 +145,7 @@ import {
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { openWorkspaceEnvironment } from "@repo/database/models/workspace-environment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
-import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
+import { AGENT_MACHINE, type AgentMachineKind, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { causeKind, failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
@@ -170,6 +172,8 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
+import { logStoreFailure } from "../../http/store-failure.js";
+import { agentSpanAttributes, sentryRunnerTrace } from "../../observability/sentry.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -208,12 +212,16 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
+import { experimentsOnIn } from "../workspace-experiment-on.js";
 import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
 import { type AgentImage, AgentImageMissing } from "./agent-image.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentFirewallSources, CheckoutRefused, type CheckoutServices } from "./checkout.js";
+import { contextWindowOf } from "./context.js";
 import { nativeSkillFiles } from "./native-skills.js";
+import { restartReplayOf } from "./replay.js";
+import { fileBlocksBytes, REPLAY_FIT } from "./replay-summary.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
@@ -371,6 +379,16 @@ interface RunnerMessage {
   readonly files: readonly SandboxFile[];
   readonly turn: SessionTurn;
   readonly timeZone: string | undefined;
+}
+
+/** The bytes a line carries beside a replay ahead of it: the turn's words, the developer's, and each picture or document counted as a file (`fileBlocksBytes`). */
+function besideBytes(turnText: string | undefined, content: readonly ContentBlock[]): number {
+  const words = [
+    turnText ?? "",
+    ...content.flatMap((block) => (block.type === "text" ? [block.text] : [])),
+  ];
+  const files = content.filter((block) => block.type !== "text").length;
+  return new TextEncoder().encode(words.join("\n\n")).byteLength + fileBlocksBytes(files);
 }
 
 /** The message line as the runner takes it, the turn's own words ahead of the developer's, and what to keep once the runner took it. */
@@ -849,6 +867,16 @@ export const runnerSessions = <
       fork = false,
     ) =>
       Effect.gen(function* () {
+        // The launch's trace, read here on its span, for a runner in the cloud's sandbox to trace
+        // its startup in; a device's runner is handed none and sends Sentry nothing.
+        const traced =
+          place.running.machine === AGENT_MACHINE.VERCEL
+            ? yield* Effect.sync(sentryRunnerTrace)
+            : undefined;
+        const trace: RunnerTrace | undefined =
+          traced === undefined
+            ? undefined
+            : { ...traced, ...(path === undefined ? undefined : { path }) };
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const delivered = machine.deliverCredentials(agent, [
           ...(credential.credentials ?? []),
@@ -902,6 +930,7 @@ export const runnerSessions = <
                       : undefined),
                     ...(fork ? { fork } : undefined),
                     ...(warm ? { warm } : undefined),
+                    ...(trace === undefined ? undefined : { trace }),
                   },
                   rewind,
                 };
@@ -1009,7 +1038,13 @@ export const runnerSessions = <
       }).pipe(
         Effect.withSpan(LAUNCH_SPAN, {
           attributes: {
-            harness: harness.runtime,
+            ...agentSpanAttributes({
+              agentId: agent.id,
+              userId: agent.userId,
+              workspaceId: agent.organizationId,
+              repository: agent.repository,
+              harness: harness.runtime,
+            }),
             machine: place.running.machine,
             ...(path === undefined ? undefined : { path }),
           },
@@ -1045,13 +1080,20 @@ export const runnerSessions = <
      * The message line with the turn's own words ahead of the developer's
      * (`turn-message.ts`), composed on what the harness's session has handed
      * (`native_handed`): nothing yet for a fresh session, whose history
-     * holds none of it, and what the row keeps otherwise.
+     * holds none of it, and what the row keeps otherwise. A fresh session
+     * keeps the workspace's experiments it opens on beside what it was
+     * handed, and a resumed one the ones it opened on, or, for one opened
+     * before they were kept, the ones standing. A session opened afresh on
+     * the agent's own conversation (`replayed`) is handed its steps so far
+     * ahead of the turn's words, in the one block they ride in
+     * (`restartReplayOf`).
      */
     const openedLine = (
       agent: Agent,
       sessionId: string,
       sent: RunnerMessage,
       fresh: boolean,
+      replayed = false,
     ): Effect.Effect<OpenedLine, never, DatabaseServices> =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -1064,12 +1106,72 @@ export const runnerSessions = <
         };
         const now = yield* Clock.currentTimeMillis;
         const turn = { kind: sent.turn, turnId: undefined };
-        const opened = yield* coderTurnMessage(admitted, agent, turn, handed, now);
+        const [opened, experiments] = yield* Effect.all(
+          [
+            coderTurnMessage(admitted, agent, turn, handed, now),
+            experimentsOnIn(agent.organizationId),
+          ],
+          { concurrency: "unbounded" },
+        );
         const { content } = sent.line;
+        // Note that the replay is fitted beside what else the line carries, so the whole line fits the window.
+        const replay = replayed
+          ? yield* restartReplay(agent, besideBytes(opened.text, content))
+          : undefined;
+        const words = [replay, opened.text].filter((part) => part !== undefined);
         const ahead: readonly ContentBlock[] =
-          opened.text === undefined ? [] : [{ type: "text", text: opened.text }];
-        const taken = recordNativeTurnHanded(target, opened.handed);
+          words.length === 0 ? [] : [{ type: "text", text: words.join("\n\n") }];
+        const taken = recordNativeTurnHanded(target, {
+          ...opened.handed,
+          experiments: fresh ? experiments : (handed.experiments ?? experiments),
+        });
         return { line: { ...sent.line, content: [...ahead, ...content] }, taken };
+      });
+
+    /**
+     * The agent's own steps so far, as a session opened afresh on its
+     * conversation is handed them (`restartReplayOf`), fitted to its model's
+     * window less the instructions told where none was measured and the
+     * bytes the rest of its line comes to; nothing where its rows cannot be
+     * read, logged, so the session still opens on the turn's words.
+     */
+    const restartReplay = (agent: Agent, beside: number) =>
+      restartReplayOf(agent, {
+        windowTokens: contextWindowOf([], agent.model, agent.contextWindow ?? CONTEXT_WINDOW.LONG),
+        instructionsTokens: REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS,
+        besideBytes: beside,
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.orElseSucceed(() => undefined),
+      );
+
+    /**
+     * Whether the message must open the harness's session afresh, its
+     * conversation replayed into it: the workspace's experiments its session
+     * opened on (`native_handed`) are no longer the ones standing, since a
+     * resumed Claude Code or Codex session keeps the instructions it opened
+     * with until it compacts. Never while a turn runs, which goes on with what
+     * it has, the change caught by the next message after it; and never for a
+     * session opened before its experiments were kept. Note that the experiments
+     * are kept only once a runner took the line that opened the fresh session
+     * (`openedLine`'s `taken`), so a restart whose launch failed stays pending,
+     * its harness's session already let go, and the next message opens it
+     * afresh with its replay again rather than with the turn's words alone.
+     */
+    const experimentsChanged = (agent: Agent, turnRunning: boolean) =>
+      Effect.gen(function* () {
+        if (turnRunning) return false;
+        const opened = (yield* readNativeTurnHanded({
+          userId,
+          conversationId: agent.conversationId,
+        })).experiments;
+        if (opened === undefined) return false;
+        const standing = yield* experimentsOnIn(agent.organizationId);
+        return (
+          opened.descriptionsOn !== standing.descriptionsOn ||
+          opened.pilotOn !== standing.pilotOn ||
+          opened.memoryOn !== standing.memoryOn
+        );
       });
 
     /** The files a message names written into the running place, before its line names them. */
@@ -1226,6 +1328,7 @@ export const runnerSessions = <
       sent: RunnerMessage | undefined,
       path: LaunchPath,
       created = false,
+      queuedFirst?: OpenedLine,
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
@@ -1260,6 +1363,7 @@ export const runnerSessions = <
               )
             : Effect.void,
           path,
+          queuedFirst,
         );
       });
 
@@ -1320,6 +1424,15 @@ export const runnerSessions = <
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
+        // A session opened on experiments since changed is opened afresh, on the same place, its
+        // conversation replayed into it: its harness's session is let go before anything is
+        // handed, so every launch past here, the one a hand-on runs past the answer among them,
+        // resumes none, and the first line, its replay ahead of it, is composed once.
+        const restart = yield* experimentsChanged(agent, turnRunning);
+        if (restart) yield* recordAgentNativeSession(userId, agent.id, null);
+        const restartLine = restart
+          ? yield* openedLine(agent, sessionId, sent, true, true)
+          : undefined;
         const handedAt = yield* Clock.currentTimeMillis;
         const handed = (path: HandoffPath) =>
           Effect.andThen(
@@ -1352,6 +1465,7 @@ export const runnerSessions = <
           // or not the sweep or the IDLE's retire ran, since a Mac drops a line once its runner
           // has gone, so a line written to a runner on its way down is lost.
           if (
+            restart ||
             (yield* pastWarmWindow(found.value.machine, agent.id, turn, handedAt)) ||
             (yield* stopWritten(machine, running)) ||
             (yield* staleWarm(agent, layout, running.mark, turnRunning))
@@ -1365,6 +1479,8 @@ export const runnerSessions = <
               layout,
               sent,
               LAUNCH_PATH.RELAUNCHED,
+              false,
+              restartLine,
             );
             yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
             return accepted;
@@ -1458,7 +1574,7 @@ export const runnerSessions = <
           const fresh = Option.isNone(
             Option.flatMapNullishOr(routing, (read) => read.nativeSession),
           );
-          const opened = yield* openedLine(agent, sessionId, sent, fresh);
+          const opened = restartLine ?? (yield* openedLine(agent, sessionId, sent, fresh));
           yield* queued(agent, ANY_LAUNCH, [opened.line]);
           yield* opened.taken;
           yield* handedOnAfter(sessionId, agent, sent.line.uuid, handed);
@@ -1479,6 +1595,7 @@ export const runnerSessions = <
             sent,
             resumedPath(place.created, wasUp),
             place.created,
+            restartLine,
           );
           return place;
         }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
@@ -1498,7 +1615,7 @@ export const runnerSessions = <
             layout,
             sent,
             yield* harness.launch(agent, layout),
-            undefined,
+            restartLine,
             undefined,
             LAUNCH_PATH.FRESH,
           );
@@ -1569,7 +1686,7 @@ export const runnerSessions = <
      * started, runs on. The ended runner's bearer is let go and the place's
      * record cleared, as `haltHolding` leaves them, so nothing it posts on its
      * way down is taken and the next message relaunches; its sandbox stops
-     * at the sweep (`native-sandbox-sweep.ts`), since a killed runner posts
+     * at its timeout, since a killed runner posts
      * no END. A turn ended meanwhile, as a runner that heard the Stop ends
      * it within seconds, is left as it ended.
      */
@@ -2040,7 +2157,7 @@ export const runnerSessions = <
       // conversation's turn under way, to the command of the launch running it, and naming that
       // launch, so a Stop delayed past its turn never interrupts the next launch's. A Stop taken
       // is forced past the answer (`forcedStop`), its wait run there rather than holding the
-      // request; a caller with no after-response door leaves an unconfirmed Stop to the sweep.
+      // request; a caller with no after-response door leaves an unconfirmed Stop to the turn's lease.
       cancel: (sessionId, turnId) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);

@@ -77,6 +77,9 @@ function scriptedSandbox(state: SandboxState) {
         const running = state === SANDBOX_STATE.RUNNING;
         return { running, ports: running ? PORTS : [] };
       }),
+    share: () => Effect.die("the tab shares nothing"),
+    unshare: () => Effect.die("the tab shares nothing"),
+    shared: () => Effect.die("the tab shares nothing"),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
         asked.push({ what: "start", sessionId });

@@ -18,7 +18,9 @@
  *
  * The ports a server listens on are read the same way, from the kernel's
  * socket tables in the running session (`listening-ports.ts`), and never
- * from a sandbox that is not running.
+ * from a sandbox that is not running. One of them may be shared by a public
+ * link (`port-share.ts`), only from a running sandbox; closing the share
+ * closes its route whatever the sandbox stands.
  *
  * The GitHub credential the firewall carries for the agent is set here in
  * the shape its own session and a copy of its work set it
@@ -56,6 +58,7 @@ import {
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
 import { listeningPortsOf, readSocketTables } from "./listening-ports.js";
+import { sharedPortOf, sharePort, unsharePort } from "./port-share.js";
 import {
   holdsTerminal,
   killTerminal,
@@ -112,6 +115,17 @@ export interface AgentSandboxService {
   readonly listeningPorts: (
     sessionId: string,
   ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
+  /** The port shared by a public link from the agent's running sandbox, answering the link; none where it is not running, which a share never changes. */
+  readonly share: (
+    sessionId: string,
+    port: number,
+  ) => Effect.Effect<string | undefined, SandboxUnavailable>;
+  /** The agent's shared port's link closed; a sandbox never opened has none. */
+  readonly unshare: (sessionId: string) => Effect.Effect<void, SandboxUnavailable>;
+  /** The port the agent's running sandbox shares now and its link; none while it is not running. */
+  readonly shared: (
+    sessionId: string,
+  ) => Effect.Effect<{ readonly port: number; readonly url: string } | null, SandboxUnavailable>;
   /** A new shell in the agent's running sandbox, under the id given, named where the developer named it. */
   readonly start: (
     sessionId: string,
@@ -218,6 +232,23 @@ function agentSandboxOver(
         // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
         if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
         return { running: true, ports };
+      }),
+    share: (sessionId, port) =>
+      Effect.gen(function* () {
+        const { sandbox, running } = yield* standing(sessionId);
+        if (sandbox === undefined || running === undefined) return undefined;
+        return yield* sharePort(api, sandbox, running, port);
+      }),
+    unshare: (sessionId) =>
+      Effect.gen(function* () {
+        const { sandbox, running } = yield* standing(sessionId);
+        if (sandbox !== undefined) yield* unsharePort(api, sandbox, running);
+      }),
+    shared: (sessionId) =>
+      Effect.gen(function* () {
+        const { sandbox, running } = yield* standing(sessionId);
+        if (sandbox === undefined || running === undefined) return null;
+        return yield* sharedPortOf(api, sandbox, running);
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>

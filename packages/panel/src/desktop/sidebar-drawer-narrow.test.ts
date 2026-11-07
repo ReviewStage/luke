@@ -3,14 +3,13 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -77,12 +76,7 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
     taskSections: { sections: [], entries: [], agentEntries: [] },
   });
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopSidebar, { ...sidebarProps(tasks), room }),
-      ),
-    ),
+    root.render(withQueryClient(createElement(DesktopSidebar, { ...sidebarProps(tasks), room }))),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();

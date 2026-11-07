@@ -361,6 +361,25 @@ const SequenceSchema = Schema.Number.check(
 );
 
 /**
+ * What a launch in the cloud's sandbox is handed to trace its startup in the
+ * launch's own Sentry trace (`trace.ts`): the service's DSN, environment and
+ * release, the launch span's `sentry-trace` and `baggage`, and the launch's
+ * path as `LAUNCH_PATH` spells it. A host's launch is handed none, and its
+ * runner sends Sentry nothing. A DSN is the project's public address for
+ * sending to it, no secret. The path is read as any word, so a path the
+ * service names later never fails an older runner's config.
+ */
+const RunnerTraceSchema = Schema.Struct({
+  dsn: Schema.String,
+  environment: Schema.String,
+  release: Schema.optionalKey(Schema.String),
+  sentryTrace: Schema.String,
+  baggage: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+});
+export type RunnerTrace = typeof RunnerTraceSchema.Type;
+
+/**
  * The first stdin line of a Claude Code launch: everything one launch of the CLI is started with.
  * `executable` is the `claude` binary the image carries, because the bundled
  * SDK cannot find its own platform package. `firstSequence` is where this
@@ -406,6 +425,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   installedSkills: Schema.optionalKey(Schema.String),
   /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
+  /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
+  trace: Schema.optionalKey(RunnerTraceSchema),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -465,6 +486,8 @@ export const CodexConfigSchema = Schema.Struct({
   installedSkills: Schema.optionalKey(Schema.String),
   /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
+  /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
+  trace: Schema.optionalKey(RunnerTraceSchema),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 

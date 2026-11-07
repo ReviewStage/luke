@@ -20,12 +20,11 @@ import "./desktop/admin-route.lazy.js";
 import "./desktop/settings-route.lazy.js";
 import "./desktop/person-route.lazy.js";
 import { runAppCommand } from "./app-commands.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry, readAppState } from "./testing/copy-feedback.js";
+import { readAppState, withQueryClient } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
 /**
@@ -62,8 +61,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  // The window's one registry holds the document it read, so the next test's window reads its own.
-  rendererRegistry.reset();
 });
 
 /** Main's document for a fixture run on `profile`: signed out, nothing read, no access. */
@@ -104,8 +101,8 @@ async function settle(): Promise<void> {
 }
 
 /**
- * Draws the window as its root does on a fixture run on `profile`: on the
- * window's one registry, once main's document is read
+ * Draws the window as its root does on a fixture run on `profile`: once
+ * main's document is read
  * (`window-root.tsx`) and the synthetic tasks have landed (`App`).
  */
 function drawWindow(profile: string): Effect.Effect<void> {
@@ -115,7 +112,7 @@ function drawWindow(profile: string): Effect.Effect<void> {
     yield* Effect.promise(readAppState);
     yield* Effect.promise(loadTasksFixture);
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
+    act(() => root?.render(withQueryClient(windowRouter().drawn())));
     yield* Effect.promise(settle);
   });
 }

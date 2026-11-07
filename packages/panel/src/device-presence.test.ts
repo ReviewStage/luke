@@ -2,14 +2,13 @@
 
 import assert from "node:assert/strict";
 import { DEVICE_STANDING } from "@repo/features/agent-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { presenceStanding, useDevicePresence } from "./device-presence.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { handBeats } from "./testing/app-state.js";
-import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "./testing/copy-feedback.js";
 
 /**
  * device-presence.test.ts -- the shared presence judges each device by how long ago its beat was on this machine's clock, and says it cannot check, not offline, where its read failed.
@@ -25,12 +24,10 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
@@ -43,16 +40,14 @@ function Standings({ ids }: { ids: readonly string[] }): React.JSX.Element {
   return createElement("p", null, ids.map((id) => presenceStanding(book, id) ?? "none").join(","));
 }
 
-/** Draws the devices `ids` name under one registry and lets the read land. */
+/** Draws the devices `ids` name and lets the read land. */
 async function draw(ids: readonly string[]): Promise<HTMLElement> {
   await writeHandedAppState();
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(Standings, { ids }))));
+  act(() => root.render(withQueryClient(createElement(Standings, { ids }))));
   // Note that the read lands once it reaches the beats' query, until when every device reads checking.
   await vi.waitFor(() =>
     assert.equal(container.textContent?.includes(DEVICE_STANDING.CHECKING), false),

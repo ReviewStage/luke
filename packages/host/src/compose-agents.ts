@@ -30,30 +30,18 @@ import {
   agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
   agentMarkReadParamsSchema,
-  agentPageParamsSchema,
   agentPinParamsSchema,
   agentPullRequestParamsSchema,
   agentRenameParamsSchema,
   agentStartParamsSchema,
   agentTranscriptKeySchema,
-  type ChatGptDevicePollAnswerView,
-  type GitHubTokenAnswerView,
   INBOX_SCOPE_KIND,
-  memoriesFollowParamsSchema,
-  type ProviderKeysAnswerView,
   pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
-import {
-  AGENT_ARCHIVER,
-  type AgentSummary,
-  CONTEXT_WINDOW,
-  MAC_PRESENCE,
-} from "@repo/features/agent-wire";
-import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@repo/features/failure-facts";
+import { AGENT_ARCHIVER, type AgentSummary, CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
-import { HOSTS_READ } from "@repo/features/host-live";
-import type { DevicePresenceAnswer } from "@repo/features/host-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -64,12 +52,9 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
-import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
-import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -91,7 +76,6 @@ import {
   type WriteDeclaration,
 } from "@repo/sync";
 import {
-  Clock,
   Deferred,
   Duration,
   Effect,
@@ -99,12 +83,20 @@ import {
   FiberMap,
   Option,
   RcMap,
-  Schedule,
   Schema,
   type Scope,
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import {
+  type AccountGateDependencies,
+  type Asked,
+  askedOf,
+  closedBy,
+  type GateClosed,
+  gateClosed,
+  gateOf,
+} from "./account-gate.js";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
 import {
@@ -115,20 +107,10 @@ import {
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
-  type AppAgentOrigins,
-  type AppChapters,
-  type AppDevicePresence,
-  type AppDevicePresences,
-  type AppGitHubToken,
-  type AppGitHubTokens,
   type AppHolderInboxes,
   type AppHostRead,
-  type AppHosts,
   type AppInboxItems,
-  type AppMemories,
   type AppModels,
-  type AppProviderKeyList,
-  type AppProviderKeys,
   type AppTranscript,
   type AppTranscripts,
   type AppWorkspaceTools,
@@ -138,19 +120,19 @@ import {
   UNREAD,
 } from "./app-state.js";
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
-import type { AccountComposer } from "./compose-account.js";
+import type { AccountAsksAgentAct } from "./compose-account-asks.js";
 import type { Composer } from "./composer.js";
-import type {
-  ACCOUNT_ASK_ACTS,
-  AGENT_ACTS,
-  AGENT_INBOX_ACTS,
-  CHAPTERS_ACTS,
+import {
+  type AGENT_ACTS,
+  AGENT_FOLLOWS,
+  type AGENT_INBOX_ACTS,
+  type CHAPTERS_ACTS,
+  CHAPTERS_FOLLOWS,
 } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
-import type { HostActTable } from "./host-acts.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
-import { heldHosts, hostRemove } from "./hosts-follow.js";
 import {
   type AccountWideReads,
   accountWideReads,
@@ -176,7 +158,6 @@ import {
   type HeldSlice,
   heldSlice,
 } from "./live-collection.js";
-import { heldMemories, memoryForget } from "./memory-follow.js";
 import { heldAgentOrigins } from "./origin-follow.js";
 import {
   type PullRequestListing,
@@ -184,7 +165,6 @@ import {
   pullRequestParts,
 } from "./pull-request-parts.js";
 import { untaken } from "./queued-writes.js";
-import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
   InboxScopeKey,
@@ -219,17 +199,13 @@ const AGENT_QUEUED_WRITE = {
 } as const;
 
 /**
- * compose-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
+ * compose-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, the task's inbox, one item of it answered, and what waits across the account. The account's own asks are `compose-account-asks.ts`'s.
  *
  * Nothing is held here but the transcripts' subscriptions, the held
  * inboxes' (`scope-inbox-follow.ts`), told as `HOLDER_INBOXES_CHANGED`
  * events to the app state every window draws, and the reads the host
- * fetches for the windows that hold them (`held-fetch.ts`): when the
- * account's devices last beat, asked every `MAC_PRESENCE.POLL_MS` while
- * held, and an agent's own tools, each told the same way; and each
- * workspace's memories Settings › Memory holds, followed live into the
- * sync engine's pool (`memory-follow.ts`) and told as `MEMORIES_CHANGED`,
- * a forget drawn gone over them the moment it is asked. The window holds the agents it draws and the cursor it reads
+ * fetches for the windows that hold them (`held-fetch.ts`): the models,
+ * and an agent's own tools, each told the same way. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. An agent's or a worker's transcript is held
@@ -250,8 +226,7 @@ const AGENT_QUEUED_WRITE = {
  * memory for the account (`kept-content.ts`), never in app state, so one
  * shown again asks the service nothing. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
- * unanswered. A provider key passes through on its way to the service and
- * is held nowhere here; no answer carries one back.
+ * unanswered (`account-gate.ts`).
  */
 
 /** The service's side of the agents, as this concern asks it. */
@@ -262,11 +237,6 @@ export type AgentClient = Pick<
   | "writeDefault"
   | "writeChaptersProvider"
   | "liveRead"
-  | "devicePresence"
-  | "removeHost"
-  | "readHostPairing"
-  | "approveHostPairing"
-  | "denyHostPairing"
   | "list"
   | "listWorkspace"
   | "start"
@@ -299,18 +269,6 @@ export type AgentClient = Pick<
   | "githubImage"
   | "pullRequestAction"
   | "pullRequestViewed"
-  | "readProviderKeys"
-  | "saveProviderKey"
-  | "removeProviderKey"
-  | "setProviderKeyForAgents"
-  | "startChatGptDeviceLogin"
-  | "pollChatGptDeviceLogin"
-  | "cancelChatGptDeviceLogin"
-  | "readGitHubToken"
-  | "saveGitHubToken"
-  | "removeGitHubToken"
-  | "forgetMemory"
-  | "transcribeDictation"
   | "answerInbox"
   | "closeInbox"
   | "messageInbox"
@@ -328,9 +286,8 @@ export type AgentClient = Pick<
   | "agentPicture"
 >;
 
-export interface AgentsDependencies {
-  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
-  account: Pick<AccountComposer, "capabilitiesActive">;
+export interface AgentsDependencies extends AccountGateDependencies {
+  kernel: Pick<HostKernel, "emit" | "now"> & AccountGateDependencies["kernel"];
   client: AgentClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
@@ -356,19 +313,20 @@ export interface AgentsDependencies {
   pool: EntityPool;
   /** The agent as the task list shows it now, which a rename or a pin waiting for the service answers its caller with; none where the list shows no such agent. */
   agentListed?: (agentId: string) => AgentSummary | undefined;
-  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them, answering once each has landed (`TasksComposer.repositoriesMoved`); none asks nothing. */
-  repositoriesMoved?: Effect.Effect<void>;
 }
 
-/** The acts this composer answers: the account's own asks, the Inbox's, every agent act but This Mac's, which its own concern answers, and a pull request's chapters generated. */
-type AgentsActs = HostActTable<typeof ACCOUNT_ASK_ACTS> &
-  HostActTable<typeof AGENT_INBOX_ACTS> &
-  HostActTable<Omit<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET">> &
-  HostActTable<typeof CHAPTERS_ACTS>;
+/** The acts this composer answers: the Inbox's, every agent act but This Mac's and the hosts', which their own concerns answer, and a pull request's chapters generated; and the live follows of an agent's origin and a pull request's chapters. */
+type AgentsActs = HostActTable<typeof AGENT_INBOX_ACTS> &
+  HostActTable<Omit<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET" | AccountAsksAgentAct>> &
+  HostActTable<Omit<typeof AGENT_FOLLOWS, "HOSTS_FOLLOW">> &
+  HostActTable<typeof CHAPTERS_ACTS> &
+  HostActTable<typeof CHAPTERS_FOLLOWS>;
 
 export interface AgentsComposer extends Composer {
-  /** The account's own asks, the Inbox's acts, the agents' acts, and a pull request's chapters generated, answered directly as the panel's port asks them. */
+  /** The Inbox's acts, the agents' acts, and a pull request's chapters generated, answered directly as the panel's port asks them. */
   readonly acts: AgentsActs;
+  /** The models asked again where a window holds them, as the account's keys moving asks (`compose-account-asks.ts`). */
+  readonly modelsMoved: Effect.Effect<void>;
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
@@ -384,26 +342,6 @@ export interface AgentsComposer extends Composer {
    * so none goes under whoever signs in next.
    */
   readonly letGoHeldCloses: Effect.Effect<void>;
-}
-
-/** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
-interface GateClosed {
-  readonly failure: typeof AGENT_CALL_FAILURE.UNANSWERED;
-  readonly cause: FailureFacts;
-}
-
-/** Why the service may not be asked now: a run that sends nothing, or no account behind the gate; none where it may. */
-function closedBy({ kernel, account }: AgentsDependencies): string | undefined {
-  if (!kernel.runMode.sendsNetwork) return GATE_CLOSED_BY.NO_NETWORK;
-  return account.capabilitiesActive() ? undefined : GATE_CLOSED_BY.NO_ACCOUNT;
-}
-
-/** The answer of a call the gate kept from the service, saying why, so it is never reported as a service that did not answer. */
-function gateClosed(by: string): GateClosed {
-  return {
-    failure: AGENT_CALL_FAILURE.UNANSWERED,
-    cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
-  };
 }
 
 /**
@@ -453,28 +391,6 @@ function isKeptImage(src: string): boolean {
   const image = githubImageOf(src);
   if (image?.source === GITHUB_IMAGE_SOURCE.ASSET) return true;
   return image?.source === GITHUB_IMAGE_SOURCE.FILE && isCommitSha(image.ref);
-}
-
-/** Whether a device-code login's poll ends its wait: settled one way or another, or unanswered, which the window offers to start over from. */
-function deviceSettled(answer: ChatGptDevicePollAnswerView): boolean {
-  return "failure" in answer || answer.outcome !== CHATGPT_DEVICE_LOGIN.PENDING;
-}
-
-/** Whether the service may be asked now: a run that sends, behind an open account gate. */
-function gateOf(dependencies: AgentsDependencies): () => boolean {
-  return () => closedBy(dependencies) === undefined;
-}
-
-/** The service asked behind the gate, over the host's own HTTP client. */
-function askedOf(dependencies: AgentsDependencies, http: HttpClient.HttpClient) {
-  return <Answer>(
-    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | GateClosed> => {
-    const by = closedBy(dependencies);
-    return by === undefined
-      ? Effect.provideService(call, HttpClient.HttpClient, http)
-      : Effect.succeed(gateClosed(by));
-  };
 }
 
 export function composeAgents(
@@ -564,8 +480,7 @@ export function composeAgents(
         ),
       accountId: dependencies.accountId,
       gate,
-      tell: (held: AppChapters) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, CHAPTERS_FOLLOWS.CHAPTERS_FOLLOW),
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
@@ -574,8 +489,7 @@ export function composeAgents(
         ),
       accountId: dependencies.accountId,
       gate,
-      tell: (held: AppAgentOrigins) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.AGENT_ORIGINS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, AGENT_FOLLOWS.AGENTS_ORIGIN_FOLLOW),
     });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
@@ -603,35 +517,7 @@ export function composeAgents(
     // Note that the row is held for the session rather than by a window, so the read stands until the session's reads close.
     const holdPreferences = (userId: string) =>
       Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
-    const memories = yield* heldMemories({
-      seal: (workspaceId, userId, poll, after) =>
-        asked(
-          client.liveRead(
-            WORKSPACE_MEMORIES_READ,
-            { userId, workspaceId },
-            poll ? { after } : undefined,
-          ),
-        ),
-      accountId: dependencies.accountId,
-      gate,
-      pool: dependencies.pool,
-      tell: (held: AppMemories) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.MEMORIES_CHANGED, carried(held)),
-    });
-    const hosts = yield* heldHosts({
-      seal: (userId, poll, after) =>
-        asked(client.liveRead(HOSTS_READ, { userId }, poll ? { after } : undefined)),
-      accountId: dependencies.accountId,
-      gate,
-      pool: dependencies.pool,
-      tell: (held: AppHosts) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.HOSTS_CHANGED, carried(held)),
-    });
-    const hostsHold = yield* accountHeld(hosts, dependencies.accountId);
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
-    const chapterHolds = yield* FiberMap.make<ChaptersKey>();
-    const memoryHolds = yield* FiberMap.make<string>();
-    const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
     const parts = yield* pullRequestParts({
@@ -656,10 +542,7 @@ export function composeAgents(
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
-      { chapters, holds: chapterHolds },
-      { memories, holds: memoryHolds },
-      { origins, holds: originHolds },
-      { hosts, hold: hostsHold },
+      { chapters, origins },
       fetched,
       parts,
     );
@@ -699,36 +582,16 @@ interface SessionReads {
   readonly holdPreferences: (userId: string) => Effect.Effect<void>;
 }
 
-/** The held lifetime over every agent's pull request's chapters the windows hold, and the windows' holds, one fiber per pull request held. */
-interface ChapterFollows {
+/** The live follows' reads the windows hold (`contract/live-follow.ts`), each held through its stream's scope. */
+interface LiveFollows {
+  /** Every agent's pull request's chapters, by the agent and the number. */
   readonly chapters: HeldSlice<ChaptersKey>;
-  readonly holds: FiberMap.FiberMap<ChaptersKey>;
-}
-
-/** The held lifetime over every workspace's memories the windows hold, and the windows' holds, one fiber per workspace held. */
-interface MemoryFollows {
-  readonly memories: HeldSlice<string>;
-  readonly holds: FiberMap.FiberMap<string>;
-}
-
-/** The held lifetime over every agent's origin the windows hold, and the windows' holds, one fiber per agent held. */
-interface OriginFollows {
+  /** Every agent's origin, by the agent. */
   readonly origins: HeldSlice<string>;
-  readonly holds: FiberMap.FiberMap<string>;
-}
-
-/** The account's hosts the windows hold, and the windows' one hold on them under the account signed in. */
-interface HostsFollows {
-  readonly hosts: HeldSlice<string>;
-  readonly hold: AccountHeld;
 }
 
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
 interface FetchedReads {
-  /** When the account's own devices last beat, by the account. */
-  readonly presence: HeldFetch<string, AppDevicePresence>;
-  /** The windows' hold on the beats, under the account signed in. */
-  readonly presenceHold: AccountHeld;
   /** Our own tools each agent is offered, by the agent. */
   readonly tools: HeldFetch<string, WorkspaceToolsAnswer>;
   /** The windows' hold on each agent's tools, one fiber standing until let go. */
@@ -737,70 +600,20 @@ interface FetchedReads {
   readonly models: HeldFetch<string, ModelsAnswer>;
   /** The windows' hold on the models, under the account signed in. */
   readonly modelsHold: AccountHeld;
-  /** The account's own provider keys, by the account. */
-  readonly keys: HeldFetch<string, AppProviderKeyList>;
-  /** The windows' hold on the keys, under the account signed in. */
-  readonly keysHold: AccountHeld;
-  /** The account's own GitHub token, by the account. */
-  readonly token: HeldFetch<string, AppGitHubToken>;
-  /** The windows' hold on the token, under the account signed in. */
-  readonly tokenHold: AccountHeld;
-}
-
-/** The keys and plans an answer of the service's says the account holds, without what it says of the one write. */
-function keyListOf(answer: ProviderKeysAnswer): AppProviderKeyList {
-  return answer.subscriptions === undefined
-    ? { keys: answer.keys }
-    : { keys: answer.keys, subscriptions: answer.subscriptions };
-}
-
-/** The beats as the service answered them, each aged at `askedAt`, the host's instant as the answer landed. */
-function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePresence {
-  return {
-    beats: answer.devices.map(({ deviceId, ageMs }) => ({ deviceId, beatAt: askedAt - ageMs })),
-    askedAt,
-  };
 }
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats, the models, the keys, and the GitHub token are asked for
- * the account signed in now alone, since the service answers that
- * account's; that the models are asked again as the keys move, since a key,
- * a plan, or a plan's default moves which models no credential pays for;
- * and that
- * an ask of the beats which fails, its deadline of
- * `MAC_PRESENCE.READ_TIMEOUT_MS` among the ways, after one answered keeps the beats it
- * answered, marked stale, under the new instant, so a window says it cannot
- * check rather than that a device left.
+ * that the models are asked for the account signed in now alone, since the
+ * service answers that account's.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
-  asked: ReturnType<typeof askedOf>,
+  asked: Asked,
 ): Effect.Effect<FetchedReads, never, Scope.Scope> {
   return Effect.gen(function* () {
     const { client, kernel, focus, accountId } = dependencies;
     const gate = gateOf(dependencies);
-    const presence = yield* heldFetch<typeof LIVE_READ.DEVICE_PRESENCE, string>({
-      empty: NO_KEYS_HELD,
-      path: (userId) => [userId],
-      gate,
-      focus,
-      every: Duration.millis(MAC_PRESENCE.POLL_MS),
-      fetch: (userId, held) =>
-        Effect.gen(function* () {
-          if (userId !== accountId()) return Option.none();
-          // Note that a read past its deadline fails like any other, so a window says it cannot check rather than letting every device age away while it hangs.
-          const answer = yield* asked(client.devicePresence());
-          const askedAt = yield* Clock.currentTimeMillis;
-          if (!("failure" in answer)) return Option.some(presenceOf(answer, askedAt));
-          return held === undefined
-            ? Option.none()
-            : Option.some({ beats: held.beats, askedAt, stale: true as const });
-        }),
-      tell: (held: AppDevicePresences) =>
-        kernel.emit(GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED, carried(held)),
-    });
     const tools = yield* heldFetch<typeof LIVE_READ.WORKSPACE_TOOLS, string>({
       empty: NO_KEYS_HELD,
       path: (agentId) => [agentId],
@@ -826,49 +639,11 @@ function fetchedReads(
           : Effect.succeed(Option.none()),
       tell: (held: AppModels) => kernel.emit(GATEWAY_EVENT.MODELS_CHANGED, carried(held)),
     });
-    const keys = yield* heldFetch<typeof LIVE_READ.PROVIDER_KEYS, string>({
-      empty: NO_KEYS_HELD,
-      path: (userId) => [userId],
-      gate,
-      focus,
-      fetch: (userId, held) =>
-        userId === accountId()
-          ? Effect.flatMap(asked(client.readProviderKeys()), (answer) => {
-              if ("failure" in answer) return Effect.succeed(Option.none());
-              const list = keyListOf(answer);
-              // Note that the first answer asks nothing of the models, which are asked as a window holds them.
-              const moved = held !== undefined && JSON.stringify(held) !== JSON.stringify(list);
-              return Effect.as(moved ? models.wake(() => true) : Effect.void, Option.some(list));
-            })
-          : Effect.succeed(Option.none()),
-      tell: (held: AppProviderKeys) =>
-        kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
-    });
-    const token = yield* heldFetch<typeof LIVE_READ.GITHUB_TOKEN, string>({
-      empty: NO_KEYS_HELD,
-      path: (userId) => [userId],
-      gate,
-      focus,
-      fetch: (userId) =>
-        userId === accountId()
-          ? Effect.map(asked(client.readGitHubToken()), (answer) =>
-              "failure" in answer ? Option.none() : Option.some({ token: answer.token }),
-            )
-          : Effect.succeed(Option.none()),
-      tell: (held: AppGitHubTokens) =>
-        kernel.emit(GATEWAY_EVENT.GITHUB_TOKEN_CHANGED, carried(held)),
-    });
     return {
-      presence,
-      presenceHold: yield* accountHeld(presence, accountId),
       tools,
       toolsHolds: yield* FiberMap.make<string>(),
       models,
       modelsHold: yield* accountHeld(models, accountId),
-      keys,
-      keysHold: yield* accountHeld(keys, accountId),
-      token,
-      tokenHold: yield* accountHeld(token, accountId),
     };
   });
 }
@@ -883,26 +658,9 @@ function composed(
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches and its preferences among them. */
   { reads: sessionReads, followItems, preferences, holdPreferences }: SessionReads,
-  /** The pull requests' chapters the windows hold. */
-  { chapters, holds: chapterHolds }: ChapterFollows,
-  /** The workspaces' memories Settings › Memory holds. */
-  { memories, holds: memoryHolds }: MemoryFollows,
-  /** The agents' origins the windows hold. */
-  { origins, holds: originHolds }: OriginFollows,
-  /** The account's hosts Settings › Hosts holds. */
-  { hosts, hold: hostsHold }: HostsFollows,
-  {
-    presence,
-    presenceHold,
-    tools,
-    toolsHolds,
-    models,
-    modelsHold,
-    keys,
-    keysHold,
-    token,
-    tokenHold,
-  }: FetchedReads,
+  /** The pull requests' chapters and the agents' origins the windows hold. */
+  { chapters, origins }: LiveFollows,
+  { tools, toolsHolds, models, modelsHold }: FetchedReads,
   /** The parts of the pull requests the windows' Pull request tabs hold. */
   parts: PullRequestParts,
 ): AgentsComposer {
@@ -1387,76 +1145,8 @@ function composed(
       };
     });
 
-  /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
-  const keysWritten = (answer: ProviderKeysAnswerView) => Effect.as(keysAnswered(answer), answer);
-  /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them, and the models asked again, whose marks they move. */
-  const keysAnswered = (answer: ProviderKeysAnswerView) =>
-    Effect.suspend(() => {
-      const userId = dependencies.accountId();
-      return userId === undefined || !("keys" in answer)
-        ? Effect.void
-        : Effect.andThen(
-            keys.answered(userId, keyListOf(answer)),
-            models.wake(() => true),
-          );
-    });
-
-  /** A device-code login's wait or cancel answered whole to the window that asked; once it connected, the keys it carries laid as a write's are. */
-  const deviceAnswered = (answer: ChatGptDevicePollAnswerView) =>
-    Effect.as(
-      "keys" in answer && answer.keys !== undefined ? keysAnswered(answer.keys) : Effect.void,
-      answer,
-    );
-
-  /**
-   * A token's write answered whole to the window that asked; where the
-   * service took it, the repositories every list holds asked again, since
-   * what the token reaches moved, and then its answer laid on the held token
-   * for the account signed in. Note that the lists land before the token,
-   * because a surface the token draws, setup's Add repository, would
-   * otherwise offer the list read before it, with none of its repositories;
-   * the write's press stays busy meanwhile.
-   */
-  const tokenWritten = (answer: GitHubTokenAnswerView) =>
-    Effect.as(
-      Effect.suspend(() => {
-        if ("failure" in answer) return Effect.void;
-        const userId = dependencies.accountId();
-        return Effect.andThen(
-          dependencies.repositoriesMoved ?? Effect.void,
-          userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
-        );
-      }),
-      answer,
-    );
-
-  /** The account's own asks (`ACCOUNT_ASK_ACTS`), the Inbox's acts, the agents' (`AGENT_ACTS`), and a pull request's chapters generated (`CHAPTERS_ACTS`), answered as the panel's port asks them. */
+  /** The Inbox's acts, the agents' (`AGENT_ACTS`), and a pull request's chapters generated (`CHAPTERS_ACTS`), answered as the panel's port asks them. */
   const acts: AgentsActs = {
-    PROVIDER_KEYS_SAVE: (save) => Effect.flatMap(asked(client.saveProviderKey(save)), keysWritten),
-    PROVIDER_KEYS_REMOVE: (removal) =>
-      Effect.flatMap(asked(client.removeProviderKey(removal)), keysWritten),
-    PROVIDER_KEYS_FOR_AGENTS: (change) =>
-      Effect.flatMap(asked(client.setProviderKeyForAgents(change)), keysWritten),
-    CHATGPT_DEVICE_START: () => asked(client.startChatGptDeviceLogin()),
-    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
-    CHATGPT_DEVICE_WAIT: ({ loginId, intervalSeconds }) => {
-      const interval = Duration.seconds(intervalSeconds);
-      const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
-      return Effect.andThen(
-        Effect.sleep(interval),
-        Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
-      ).pipe(Effect.flatMap(deviceAnswered));
-    },
-    CHATGPT_DEVICE_CANCEL: (login) =>
-      Effect.flatMap(asked(client.cancelChatGptDeviceLogin(login)), deviceAnswered),
-    GITHUB_TOKEN_SAVE: (save) => Effect.flatMap(asked(client.saveGitHubToken(save)), tokenWritten),
-    GITHUB_TOKEN_REMOVE: () => Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
-    MEMORIES_FORGET: declaredWrite(
-      dependencies.pool,
-      memoryForget((forget) => asked(client.forgetMemory(forget))),
-    ),
-    // Note that the clip passes through once and is noted nowhere, because its words are the developer's voice.
-    DICTATION_TRANSCRIBE: (clip) => asked(client.transcribeDictation(clip)),
     CHAPTERS_GENERATE: ({ agentId, number }) => asked(client.generateChapters(agentId, number)),
     AGENTS_DEFAULT_WRITE: declaredWrite(
       dependencies.pool,
@@ -1469,15 +1159,6 @@ function composed(
         dependencies.accountId,
       ),
     ),
-    // A removal is drawn gone over the held hosts the moment it is asked.
-    HOSTS_REMOVE: declaredWrite(
-      dependencies.pool,
-      hostRemove((id) => asked(client.removeHost(id))),
-      { read: ({ id }) => Effect.succeed(id) },
-    ),
-    HOSTS_PAIRING_READ: ({ code }) => asked(client.readHostPairing(code)),
-    HOSTS_PAIRING_APPROVE: ({ code }) => asked(client.approveHostPairing(code)),
-    HOSTS_PAIRING_DENY: ({ code }) => asked(client.denyHostPairing(code)),
     AGENTS_LIST: ({ taskId, includeArchived }) => asked(client.list(taskId, includeArchived)),
     AGENTS_WORKSPACE_LIST: (listed) => asked(client.listWorkspace(listed)),
     AGENTS_START: (start) =>
@@ -1584,6 +1265,16 @@ function composed(
         client.agentPicture(agentId, pictureId, callId),
         (picture) => ("base64" in picture ? picture : undefined),
       ),
+    // An agent's origin is held for a window while its page shows it.
+    AGENTS_ORIGIN_FOLLOW: {
+      hold: ({ agentId }) => origins.hold(agentId),
+      retry: ({ agentId }) => origins.retry(agentId),
+    },
+    // A pull request's chapters are held for a window while its Pull request tab reads them.
+    CHAPTERS_FOLLOW: {
+      hold: ({ agentId, number }) => chapters.hold(new ChaptersKey({ agentId, number })),
+      retry: ({ agentId, number }) => chapters.retry(new ChaptersKey({ agentId, number })),
+    },
   };
 
   const methods: HostMethodTable = {
@@ -1594,75 +1285,6 @@ function composed(
       Effect.suspend(() => {
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : models.retry(userId), {});
-      }),
-    // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in, and told only on the app state (`HOSTS_CHANGED`); a removal is drawn gone over them the moment it is asked.
-    [GATEWAY_METHOD.HOSTS_FOLLOW]: () => Effect.as(hostsHold.follow, {}),
-    [GATEWAY_METHOD.HOSTS_UNFOLLOW]: () => Effect.as(hostsHold.unfollow, {}),
-    [GATEWAY_METHOD.HOSTS_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : hosts.retry(userId), {});
-      }),
-    // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
-    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
-    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () => Effect.as(presenceHold.unfollow, {}),
-    // Note that the beats are asked again only where a window holds them, as a window coming forward asks them.
-    [GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH]: () =>
-      Effect.gen(function* () {
-        yield* presence.wake(() => true);
-        return {};
-      }),
-    // The keys are held for the windows while any draws them, under the account signed in, and told only on the app state (`PROVIDER_KEYS_CHANGED`); each write's own answer is laid there too.
-    [GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW]: () => Effect.as(keysHold.follow, {}),
-    [GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW]: () => Effect.as(keysHold.unfollow, {}),
-    [GATEWAY_METHOD.PROVIDER_KEYS_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
-      }),
-    // A workspace's memories are held for the windows while Settings › Memory shows them, and told only on the app state (`MEMORIES_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.MEMORIES_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "following memories names a workspace",
-        );
-        yield* FiberMap.run(
-          memoryHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(memories.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.MEMORIES_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "letting memories go names a workspace",
-        );
-        yield* FiberMap.remove(memoryHolds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.MEMORIES_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "reading memories again names a workspace",
-        );
-        yield* memories.retry(workspaceId);
-        return {};
-      }),
-    // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
-    [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
-    [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
-    [GATEWAY_METHOD.GITHUB_TOKEN_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : token.retry(userId), {});
       }),
     // A transcript is held for a window while its tab shows it, and told only on the app state (`TRANSCRIPTS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
@@ -1686,42 +1308,6 @@ function composed(
       Effect.gen(function* () {
         const { key } = yield* agentTranscriptOf(params);
         yield* transcriptSlice.retry(key);
-        return {};
-      }),
-    // An agent's origin is held for a window while its page shows it, and told only on the app state (`AGENT_ORIGINS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "following the run that started an agent names one agent",
-        );
-        yield* FiberMap.run(
-          originHolds,
-          agentId,
-          Effect.scoped(Effect.andThen(origins.hold(agentId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "letting the run that started an agent go names one agent",
-        );
-        yield* FiberMap.remove(originHolds, agentId);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_ORIGIN_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "reading the run that started an agent again names one agent",
-        );
-        yield* origins.retry(agentId);
         return {};
       }),
     // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -1761,48 +1347,6 @@ function composed(
         ),
         {},
       ),
-    // A pull request's chapters are held for a window while its Pull request tab reads them, and told only on the app state (`CHAPTERS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "following a pull request's chapters names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.run(
-          chapterHolds,
-          key,
-          Effect.scoped(Effect.andThen(chapters.hold(key), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "letting a pull request's chapters go names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.remove(chapterHolds, key);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "reading a pull request's chapters again names one agent and its pull request's number",
-          ),
-        );
-        yield* chapters.retry(key);
-        return {};
-      }),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1906,9 +1450,7 @@ function composed(
     yield* transcriptSlice.end;
     yield* holders.end;
     yield* chapters.end;
-    yield* memories.end;
     yield* origins.end;
-    yield* hosts.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* kept.clear;
@@ -1916,28 +1458,20 @@ function composed(
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
     yield* sessionReads.end;
     yield* preferences.end;
-    yield* presence.end;
     yield* tools.end;
     yield* models.end;
-    yield* keys.end;
-    yield* token.end;
     yield* parts.end;
   });
 
-  // Note that the beats, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
+  // Note that the models are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* sessionReads.open(LIVE_READ.ACCOUNT_PREFERENCES, holdPreferences);
     yield* transcriptSlice.open;
     yield* holders.open;
     yield* chapters.open;
-    yield* memories.open;
     yield* origins.open;
-    yield* presenceHold.open;
-    yield* hostsHold.open;
     yield* modelsHold.open;
-    yield* keysHold.open;
-    yield* tokenHold.open;
     yield* tools.open;
     yield* parts.open;
   });
@@ -1945,6 +1479,7 @@ function composed(
   return {
     methods,
     acts,
+    modelsMoved: models.wake(() => true),
     lifetime: Effect.void,
     open,
     reset,

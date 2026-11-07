@@ -1,6 +1,7 @@
 import { type CallCredential, lateCredential } from "@repo/features";
 import {
   PRODUCT_EVENT,
+  PRODUCT_EXPERIMENT_SCOPE,
   PRODUCT_SETTING_VALUE,
   type ProductEventPropertiesFor,
   productEventFromWire,
@@ -547,6 +548,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
                 recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
                   experiment: EXPERIMENT_COUNTED_AS[experiment],
                   setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+                  experiment_scope: PRODUCT_EXPERIMENT_SCOPE.ACCOUNT,
                 });
               }),
             EXPERIMENT_UNANSWERED,

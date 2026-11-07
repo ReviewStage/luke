@@ -23,7 +23,6 @@ import {
 } from "@repo/ui/description-comments";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
@@ -37,11 +36,11 @@ import {
   type PlacedWords,
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { registryWith, stateWith } from "../testing/app-state.js";
+import { stateWith, writeExperiments } from "../testing/app-state.js";
 import {
-  onRegistry,
   settledWrites,
   settleQueries,
+  withQueryClient,
   writeAppState,
 } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
@@ -142,7 +141,6 @@ beforeAll(async () => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -162,9 +160,8 @@ afterEach(async () => {
   caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before the test's client is cleared.
   await settledWrites();
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   mounted.length = 0;
 });
@@ -178,8 +175,8 @@ async function settle(): Promise<void> {
 
 /**
  * The document with an edit door that records each edit and answers from the
- * script, and the names it renamed to, beside the window's toasts and over
- * atoms of its own, as the window holds them; `render` draws another description,
+ * script, and the names it renamed to, beside the window's toasts; `render`
+ * draws another description,
  * through its own door where given.
  */
 /** A description comment thread on the description's first words, open or not. */
@@ -278,8 +275,7 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  registries.push(registry);
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: DescriptionEditRequest) => {
     sent.push(request);
@@ -297,8 +293,7 @@ function mount(
   const draw = (page: ReactElement) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           onSideBundles(
             bundles,
             createElement(

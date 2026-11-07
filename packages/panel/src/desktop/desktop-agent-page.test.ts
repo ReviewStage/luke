@@ -55,7 +55,6 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { Clock, Context, Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createContext, createElement, Fragment, type ReactElement, useContext } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -95,7 +94,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -452,7 +451,7 @@ function onAgentRoute(page: ReactElement): ReactElement {
 /**
  * The page of the agent, standing in the task's place, as the window's
  * tasks control holds it, the task list carrying `listed` as `listStatus`
- * says and the host holding its origin, its atoms held by `registry`.
+ * says and the host holding its origin.
  * Answers the page's container, and `relist`, which draws it again as the
  * list now stands.
  */
@@ -460,7 +459,6 @@ function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
   away?: { label: string; onPress: () => void },
-  registry = AtomRegistry.make(),
 ): HTMLElement & { relist: () => void } {
   handOrigin();
   const container = document.createElement("div");
@@ -477,8 +475,7 @@ function mount(
       }),
     );
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           Fragment,
           null,
@@ -715,7 +712,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
+  act(() => root?.render(withQueryClient(onAgentRoute(createElement(PanelPage)))));
   await settle();
 
   const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
@@ -790,7 +787,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PagesPage)))));
+  act(() => root?.render(withQueryClient(onAgentRoute(createElement(PagesPage)))));
   await settle();
   act(() => drawnPanel?.onToggle());
   await settle();
@@ -908,7 +905,7 @@ async function mountPanelPage(): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
+  act(() => root?.render(withQueryClient(onAgentRoute(createElement(PanelPage)))));
   await settle();
   return container;
 }
@@ -1204,7 +1201,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   const page = document.createElement("div");
   document.body.append(page);
   root = createRoot(page);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), onAgentRoute(createElement(PanelPage)))));
+  act(() => root?.render(withQueryClient(onAgentRoute(createElement(PanelPage)))));
   await settle();
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
@@ -1835,12 +1832,6 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   );
 });
 
-/** A registry for a window whose waits run on this clock, as the window's run on its own. */
-function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  serveEffectsOn(Context.make(Clock.Clock, clock));
-  return AtomRegistry.make();
-}
-
 /** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
 const pastSearchPause = Effect.gen(function* () {
   yield* TestClock.adjust("300 millis");
@@ -1875,12 +1866,8 @@ it.effect(
           archivedAt: 3,
         },
       ];
-      const page = mount(
-        tasksControl({ tasks: [billing] }),
-        undefined,
-        undefined,
-        registryOn(yield* Clock.Clock),
-      );
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+      const page = mount(tasksControl({ tasks: [billing] }));
       yield* Effect.promise(settle);
 
       typeInComposer(page, "Ask @billing");
@@ -1918,12 +1905,8 @@ it.effect(
           turnId: null,
         },
       ];
-      const page = mount(
-        tasksControl({ workspace: ACME, workspaces: [ACME] }),
-        undefined,
-        undefined,
-        registryOn(yield* Clock.Clock),
-      );
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+      const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
       yield* Effect.promise(settle);
 
       typeInComposer(page, "Ask @bill");

@@ -114,8 +114,9 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import { TASK_RENAME_SHAPE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { appStateQuery, selectAccount, selectExperiment } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -724,9 +725,8 @@ function TaskMenuFooter({
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
-  // Note that the open task's last editor is its description's, so while Descriptions is off it is said only by when the task last changed, as another task is.
-  const descriptions =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  // Note that the open task's last editor is its description's, so while its workspace has Descriptions off it is said only by when the task last changed, as another task is.
+  const descriptions = useWorkspaceExperiment(task.workspaceId, EXPERIMENT.DESCRIPTIONS);
   const edit = opened === undefined || !descriptions ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
@@ -864,8 +864,7 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const descriptions =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  const descriptions = useWorkspaceExperiment(task?.workspaceId, EXPERIMENT.DESCRIPTIONS);
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -971,7 +970,7 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   useAppCommand(
     APP_COMMAND.VERSION_HISTORY,
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
+    useWorkspaceExperiment(task.workspaceId, EXPERIMENT.DESCRIPTIONS)
       ? () => tasks.history.onOpen(task.id)
       : undefined,
   );

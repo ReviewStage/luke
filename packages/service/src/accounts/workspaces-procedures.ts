@@ -33,6 +33,10 @@
  * a `data:` URL of a photo's type within its bound, or remove it with null,
  * answering the workspace with its photo's new version or none. The photo's
  * bytes are served apart (`workspaces-app.ts`).
+ * `POST /api/workspaces/experiment/set` lets an owner or admin turn a
+ * workspace experiment on or off for everyone in the workspace, refusing a
+ * key that names none, and answers the workspace with who changed each of
+ * its experiments last (`workspace-experiment-store.ts`).
  *
  * Removing, changing a role, handing over, leaving, renaming, and setting
  * the photo are Better Auth's own `removeMember`, `updateMemberRole`,
@@ -51,6 +55,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { setWorkspaceSlug } from "@repo/database/models/workspace-slug-store";
 import {
@@ -67,6 +72,7 @@ import {
   type WorkspaceSlugProblem,
   workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
+import { isExperiment, isWorkspaceExperiment } from "@repo/settings";
 import { type Cause, Effect, Option } from "effect";
 import {
   recordServerEvent,
@@ -343,6 +349,24 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
           organizationId: workspace.id,
           data: { logo: photo },
         }),
+      );
+      return { workspace: yield* answeredWorkspace(userId, workspace.id) };
+    }),
+    /**
+     * Note that the choice is written by the store rather than the plugin,
+     * because an experiment is the app's state and not the plugin's, and an
+     * owner or admin may make it, which `managedWorkspace` holds. A key this
+     * build does not list as a workspace's experiment is refused.
+     */
+    setExperiment: account.setExperiment.effect(function* ({ context, input }) {
+      const { userId } = context;
+      const { workspaceId, experiment, on } = input;
+      if (!isExperiment(experiment) || !isWorkspaceExperiment(experiment)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const workspace = yield* managedWorkspace(userId, workspaceId);
+      yield* hostedStoreOrUnavailable(
+        setWorkspaceExperiment({ organizationId: workspace.id, experiment, on, by: userId }),
       );
       return { workspace: yield* answeredWorkspace(userId, workspace.id) };
     }),

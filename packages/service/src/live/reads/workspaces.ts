@@ -1,5 +1,5 @@
 /**
- * workspaces.ts -- the account's workspaces' live read bound: its two statements, the tables they read, and the topics that wake it.
+ * workspaces.ts -- the account's workspaces' live read bound: its three statements, the tables they read, and the topics that wake it.
  *
  * The same rows, joins, and rule of who may read them as `listWorkspaces`
  * (`WORKSPACES_READ`). What the held read works out from a row is worked
@@ -12,8 +12,8 @@
  *
  * It is woken on the account's topic and on each of its workspaces'. A
  * workspace's name and photo, the slugs it stood under before, its members,
- * its installations, and the name of the account it was made for name the
- * workspace; the account's memberships, its first workspace, and its own
+ * its installations, the experiments chosen for it and who chose each, and
+ * the name of the account it was made for name the workspace; the account's memberships, its first workspace, and its own
  * picture name the account.
  */
 
@@ -27,12 +27,14 @@ import {
 import { member, organization, user } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
+import { workspaceExperiment } from "@repo/database/schemas/workspace-experiment";
 import {
   githubInstallationSync,
   memberSync,
   organizationSync,
   personalWorkspaceSync,
   userSync,
+  workspaceExperimentSync,
   workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { WORKSPACES_READ } from "@repo/features/workspace-live";
@@ -48,6 +50,7 @@ export const workspacesRead = bindLiveRead(WORKSPACES_READ, {
     userSync,
     githubInstallationSync,
     workspaceFormerSlugSync,
+    workspaceExperimentSync,
   ],
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => ({
@@ -102,6 +105,28 @@ export const workspacesRead = bindLiveRead(WORKSPACES_READ, {
           .select(selection)
           .from(githubInstallation)
           .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+          .where(eq(member.userId, userId)),
+    ),
+    experiments: liveRowsStatement(
+      WORKSPACES_READ.parts.experiments,
+      {
+        ordered: false,
+        columns: {
+          workspaceId: workspaceExperiment.organizationId,
+          experiment: workspaceExperiment.experiment,
+          on: workspaceExperiment.on,
+          changedById: workspaceExperiment.changedBy,
+          // Note that who changed it is left-joined, so their name is null once their account is gone.
+          changedByName: sql<string | null>`${user.name}`,
+        },
+        instants: { changedAt: workspaceExperiment.changedAt },
+      },
+      (selection) =>
+        queryBuilder
+          .select(selection)
+          .from(workspaceExperiment)
+          .innerJoin(member, eq(member.organizationId, workspaceExperiment.organizationId))
+          .leftJoin(user, eq(user.id, workspaceExperiment.changedBy))
           .where(eq(member.userId, userId)),
     ),
   }),

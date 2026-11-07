@@ -58,8 +58,6 @@ import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +76,6 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import {
@@ -96,7 +93,7 @@ import {
   type PullRequestPartAnswers,
 } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
@@ -600,31 +597,21 @@ const NO_GITHUB: GitHubConnectControl = {
   disconnect: () => Promise.resolve(false),
 };
 
-/** A registry whose atoms count on this clock, as the window's count on its own. */
-function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  serveEffectsOn(Context.make(Clock.Clock, clock));
-  return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
-}
-
 /** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
-  registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
   openPlace?: (link: ReadLink) => void,
 ) {
   drawnParts = partsOf.get(control) ?? drawnParts;
   drawnChanges = changesOf.get(control) ?? drawnChanges;
-  return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
+  return drawn(createElement(Switching, { control, first }), github, openPlace);
 }
 
 /** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function drawn(
   tab: React.ReactElement,
-  registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
   openPlace?: (link: ReadLink) => void,
 ) {
@@ -633,8 +620,7 @@ async function drawn(
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         onSideBundles(
           bundles,
           createElement(GitHubConnectProvider, {
@@ -897,7 +883,7 @@ it.effect(
   "a check wears its App's avatar, a status's picture off GitHub's avatar host read through the service; a running one counts each second from when it started, a finished one says how long it ran",
   () =>
     Effect.gen(function* () {
-      const registry = registryOn(yield* Clock.Clock);
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
       yield* TestClock.setTime(66_000);
       const checks: AgentOverviewChecks = {
         checks: [
@@ -913,7 +899,6 @@ it.effect(
         draw(
           controlAnswering({ checks: () => Promise.resolve({ pullRequest: checks }) }),
           PULL_REQUEST_VIEW.CONVERSATION,
-          registry,
         ),
       );
       yield* Effect.promise(() => choose(tab, "Checks"));
@@ -962,7 +947,6 @@ it.effect(
       );
       act(() => root?.unmount());
       root = undefined;
-      registry.dispose();
     }),
 );
 
@@ -2508,7 +2492,7 @@ function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
 }
 
 test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads and the checks once shown", async () => {
-  const failure = { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const failure = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
   const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
   const tab = await draw(
     controlAnswering({
@@ -2639,7 +2623,7 @@ test("the pill wears what was published of the checks only for the pull request 
   const control = {
     ...controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, number: 43 } }),
-      checks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
+      checks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     }),
   };
   const tab = await draw(control);
@@ -2714,7 +2698,7 @@ test("a draft's pill offers Ready for review, and Close pull request in red, whi
 test("a member GitHub would not take as signed in is offered to sign in with GitHub again, and a merged pull request's pill offers nothing", async () => {
   let connects = 0;
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
-  const tab = await draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, AtomRegistry.make(), {
+  const tab = await draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, {
     ...NO_GITHUB,
     connect: () => {
       connects += 1;
@@ -3449,11 +3433,11 @@ it.effect(
   "each branch is a chip that copies its name: a button the keyboard reaches, named for what it copies, its glyph turning to the check and saying Copied once the clipboard took it",
   () =>
     Effect.gen(function* () {
-      const registry = registryOn(yield* Clock.Clock);
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
       const copied: string[] = [];
       fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
       const tab = yield* Effect.promise(() =>
-        draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, registry),
+        draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION),
       );
       const branches =
         tab.querySelector<HTMLElement>(".pull-request-header .pull-request-branches") ??
@@ -3492,7 +3476,6 @@ it.effect(
       assert.deepEqual(copied, ["luke/expiry-job", "main"]);
       act(() => root?.unmount());
       root = undefined;
-      registry.dispose();
     }),
 );
 
@@ -3645,7 +3628,6 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
         }),
     }),
     PULL_REQUEST_VIEW.CONVERSATION,
-    undefined,
     undefined,
     (link) => links.push(link),
   );
@@ -4079,7 +4061,7 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
         reads += 1;
         return Promise.resolve(
           reads === 1
-            ? { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
+            ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
             : { labels: [], users: [{ login: "priyan", bot: false }], teams: [] },
         );
       },

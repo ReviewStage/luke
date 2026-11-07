@@ -146,6 +146,7 @@ export const SANDBOX_CALL = {
   NETWORK_POLICY: "network-policy",
   INTERACTIVE: "interactive",
   SNAPSHOT: "snapshot",
+  PORTS: "ports",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -169,6 +170,7 @@ const SANDBOX_CALL_SPAN = {
   [SANDBOX_CALL.NETWORK_POLICY]: "web/sandboxNetworkPolicy",
   [SANDBOX_CALL.INTERACTIVE]: "web/sandboxInteractive",
   [SANDBOX_CALL.SNAPSHOT]: "web/sandboxSnapshot",
+  [SANDBOX_CALL.PORTS]: "web/sandboxUpdatePorts",
 } as const satisfies Record<SandboxCall, string>;
 
 /**
@@ -229,6 +231,14 @@ export interface ListedSandbox {
   readonly expiresAt?: number | undefined;
   /** How many of its snapshots Vercel keeps and for how long; none where none was set, which keeps every one. */
   readonly keepLastSnapshots?: SnapshotRetention | undefined;
+  /** The public routes its session serves; a list names none, only a lookup by name. */
+  readonly routes?: readonly SandboxRoute[] | undefined;
+}
+
+/** A port of the sandbox served at a public address, which anyone holding it may open. */
+export interface SandboxRoute {
+  readonly port: number;
+  readonly url: string;
 }
 
 /** A sandbox a create or a resume answered: Vercel opens it ready, so it always names the session it runs. */
@@ -450,6 +460,11 @@ export interface VercelSandboxApi {
   readonly listTagged: (
     sessionId: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /** One page of the sandboxes carrying the tag with the value given, every state among them. */
+  readonly listCarrying: (
+    tag: string,
+    value: string,
+  ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
   /**
    * One page of the project's running sandboxes, every kind, by when they
    * were created in the order given, from the cursor a page before answered;
@@ -511,6 +526,17 @@ export interface VercelSandboxApi {
     name: string,
     tags: Readonly<Record<string, string>>,
   ) => Effect.Effect<void, SandboxUnavailable>;
+  /**
+   * Serves exactly the ports given on public routes, closing every other,
+   * and replaces the named sandbox's tags whole, without resuming it;
+   * answers the routes it serves after
+   * (https://vercel.com/docs/rest-api/sandboxes/update-a-sandbox).
+   */
+  readonly updatePorts: (
+    name: string,
+    ports: readonly number[],
+    tags: Readonly<Record<string, string>>,
+  ) => Effect.Effect<readonly SandboxRoute[], SandboxUnavailable>;
 }
 
 /**
@@ -783,6 +809,11 @@ function listedOf(listed: ListedMetadata): ListedSandbox {
   };
 }
 
+/** The public routes the sandbox's session serves, each at the address the SDK names for its port. */
+function routesOf(sandbox: Sandbox): readonly SandboxRoute[] {
+  return sandbox.routes.map(({ port }) => ({ port, url: sandbox.domain(port) }));
+}
+
 /** A sandbox the SDK answered whole, as we read it: the session it holds is the one running now, whatever the sandbox's own record lags. */
 function openedOf(sandbox: Sandbox): OpenedSandbox {
   const session = sandbox.currentSession();
@@ -797,6 +828,7 @@ function openedOf(sandbox: Sandbox): OpenedSandbox {
     vcpus: sandbox.vcpus,
     expiresAt: sandbox.expiresAt?.getTime(),
     keepLastSnapshots: sandbox.keepLastSnapshots,
+    routes: routesOf(sandbox),
   };
 }
 
@@ -1054,22 +1086,26 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
         openedOf,
       ).pipe(Effect.withSpan("web/sandboxResume"));
 
+    const listCarrying = (tag: string, value: string) =>
+      Effect.map(
+        asked(SANDBOX_CALL.LIST, (signal, under) =>
+          Sandbox.list({
+            ...under,
+            limit: SANDBOX_API.PAGE,
+            // SAFETY: one tag, as the SDK's filter takes it, which its type holds only for a literal name.
+            tags: { [tag]: value } as Record<"tag", string>,
+            signal,
+          }),
+        ),
+        (page) => page.sandboxes.map(listedOf),
+      );
+
     return {
       listTagged: (sessionId) =>
-        Effect.map(
-          asked(SANDBOX_CALL.LIST, (signal, under) =>
-            Sandbox.list({
-              ...under,
-              limit: SANDBOX_API.PAGE,
-              tags: { [SESSION_TAG]: sessionId },
-              signal,
-            }),
-          ),
-          (page) =>
-            page.sandboxes
-              .map(listedOf)
-              .toSorted((first, second) => (second.createdAt ?? 0) - (first.createdAt ?? 0)),
+        Effect.map(listCarrying(SESSION_TAG, sessionId), (listed) =>
+          listed.toSorted((first, second) => (second.createdAt ?? 0) - (first.createdAt ?? 0)),
         ),
+      listCarrying,
       listRunning: (cursor, order) =>
         Effect.map(
           asked(SANDBOX_CALL.LIST, (signal, under) =>
@@ -1162,6 +1198,12 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           Effect.catchIf(isGone, () => Effect.succeed(undefined)),
         ),
       updateTags: (name, tags) => updated(SANDBOX_CALL.TAGS, name, { tags: { ...tags } }),
+      updatePorts: (name, ports, tags) =>
+        asked(SANDBOX_CALL.PORTS, async (signal, under) => {
+          const sandbox = await Sandbox.get({ ...under, name, resume: false, signal });
+          await sandbox.update({ ports: [...ports], tags: { ...tags } }, { signal });
+          return routesOf(sandbox);
+        }),
     };
   });
 }

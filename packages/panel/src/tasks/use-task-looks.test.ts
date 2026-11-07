@@ -9,12 +9,11 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { NO_LOOKS, useAgentLook, useTaskLooks, useUnreadTasks } from "./use-task-looks.js";
 
@@ -55,7 +54,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
 });
 
-/** A window drawing `open`, or no plan, for `readerId`, from the row the list carries: a render each call, on one registry. */
+/** A window drawing `open`, or no plan, for `readerId`, from the row the list carries: a render each call. */
 function windowOn(): {
   readonly draw: (
     open: Task | undefined,
@@ -79,10 +78,9 @@ function windowOn(): {
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
-  const registry = AtomRegistry.make();
   return {
     draw: (open, readerId, row) =>
-      act(() => root.render(onRegistry(registry, createElement(Reader, { open, readerId, row })))),
+      act(() => root.render(withQueryClient(createElement(Reader, { open, readerId, row })))),
     looks: () => looks,
   };
 }
@@ -194,9 +192,8 @@ test("an agent with no task is looked at as its page opens, again as its row's t
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (open: typeof agent | undefined) =>
-    act(() => root.render(onRegistry(registry, createElement(Page, { open }))));
+    act(() => root.render(withQueryClient(createElement(Page, { open }))));
 
   draw(agent);
   draw({ ...agent, activityAt: LOOKED_AT + 5 });
@@ -224,9 +221,8 @@ test("a task reads unread while it changed after the reader's mark or stands mar
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (open: Task | undefined) =>
-    act(() => root.render(onRegistry(registry, createElement(Sidebar, { open }))));
+    act(() => root.render(withQueryClient(createElement(Sidebar, { open }))));
 
   draw(undefined);
   assert.deepEqual([read, finished, marked].map(drawn.unread), [false, true, true]);

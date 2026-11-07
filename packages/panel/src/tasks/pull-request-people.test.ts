@@ -14,7 +14,6 @@ import {
 } from "@repo/features/agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { Tooltip } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -23,7 +22,7 @@ import { TAB_KIND } from "../tasks/tab-look.js";
 import { answeringChanges, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -112,10 +111,7 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        withPeopleRead({ workspace: WORKSPACE, readerId: "user-dana" }, element),
-      ),
+      withQueryClient(withPeopleRead({ workspace: WORKSPACE, readerId: "user-dana" }, element)),
     ),
   );
   await act(async () => {

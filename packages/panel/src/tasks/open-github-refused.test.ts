@@ -2,15 +2,13 @@
 
 import assert from "node:assert/strict";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { appPlatform } from "../app-platform.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 
@@ -50,11 +48,8 @@ async function mountChip(): Promise<HTMLAnchorElement> {
       createElement(
         Fragment,
         null,
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(BranchChip, { published: BRANCH_ONLY, doors }),
-        ),
-        onRegistry(rendererRegistry, createElement(ToastHost)),
+        withQueryClient(createElement(BranchChip, { published: BRANCH_ONLY, doors })),
+        withQueryClient(createElement(ToastHost)),
       ),
     ),
   );
@@ -86,7 +81,7 @@ test("an Open on GitHub the host takes raises no toast", async () => {
     },
   });
   const chip = await mountChip();
-  // The window's toast registry outlives a test, so a toast a test before left standing is not this press's.
+  // The window's toasts outlive a test, so a toast a test before left standing is not this press's.
   const before = toasts();
 
   await act(async () => chip.click());

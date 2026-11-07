@@ -11,15 +11,13 @@ import {
 import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
 import { Duration, Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { installShownFailureReporter } from "./failure-report.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
-import { onRegistry, readAppState, testQueryClientNow } from "./testing/copy-feedback.js";
+import { readAppState, testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
   ToastHost,
@@ -52,7 +50,6 @@ const WINDOW = {
 } as const;
 
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 let show: ((notice: ToastNotice) => void) | undefined;
 let work: ((words: string) => (notice: ToastNotice) => void) | undefined;
 
@@ -60,9 +57,6 @@ afterEach(() => {
   vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
-  registry?.dispose();
-  // The window's one registry holds ⌘Z's lists, so the next test's window starts with none.
-  rendererRegistry.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
@@ -123,13 +117,10 @@ function mount(height: number, account?: string): (next: string) => void {
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  const held = registry;
   const render = (signedIn: string | undefined) =>
     act(() =>
       root?.render(
-        onRegistry(
-          held,
+        withQueryClient(
           createElement(
             Fragment,
             null,

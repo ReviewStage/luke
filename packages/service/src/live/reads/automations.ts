@@ -121,6 +121,7 @@ function runAgentColumns(userId: string, latest: ReturnType<typeof latestTurnOf>
       agentCreatedAt: outerJoined(agentTable.createdAt),
       turnQueuedAt: outerJoined(latest.queuedAt),
       turnSettledAt: latest.settledAt,
+      turnLeaseUntil: latest.leaseUntil,
       awaitingLineAt: awaitingLineAtIn(agentTable.conversationId),
     },
   };

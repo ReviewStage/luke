@@ -13,7 +13,6 @@ import {
 import { MESSAGE_ROLE } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -25,7 +24,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { menuItem } from "../testing/desktop-inbox.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -152,13 +151,11 @@ async function drawnTab(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   let drawn = agent;
   const draw = (open: boolean) =>
     act(async () =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             "div",
             null,
@@ -195,12 +192,12 @@ async function drawnTab(
       release();
       await settle();
     },
-    /** Closes the tab, the window's registry standing, as another tab or task opening does. */
+    /** Closes the tab, the window standing, as another tab or task opening does. */
     close: async () => {
       await draw(false);
       await settle();
     },
-    /** Opens the tab again on the same registry. */
+    /** Opens the tab again in the same window. */
     open: async () => {
       await draw(true);
       await settle();

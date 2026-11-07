@@ -155,6 +155,7 @@ import {
   RUNNER_WARM,
   type RunnerEnd,
 } from "./protocol.js";
+import { RUNNER_SPAN } from "./trace.js";
 import { transcriptStore } from "./transcripts.js";
 
 /**
@@ -783,7 +784,9 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       inRunnerGroup: runsOnHost(env),
     },
     listenerFor(seen, tokens),
-  ).pipe(Scope.provide(serverScope));
+  ).pipe(Scope.provide(serverScope), (spawned) =>
+    launch.context.trace.step(RUNNER_SPAN.CLI, spawned),
+  );
   const opened = Effect.gen(function* () {
     // Note that the sign-in on host-supplied tokens is experimental, which app-server serves only to a client that opted in.
     yield* server.request(METHOD.INITIALIZE, {
@@ -837,6 +840,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
     return opened.value.thread;
   });
   const openedThread = yield* opened.pipe(
+    (handshake) => launch.context.trace.step(RUNNER_SPAN.HANDSHAKE, handshake),
     Effect.tapError(() => Scope.close(serverScope, Exit.void)),
   );
   return { server, serverScope, threadId: openedThread.id, path: openedThread.path ?? undefined };
@@ -951,6 +955,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       launch.warm = false;
+      yield* launch.context.trace.taken;
       // Note that our id for the line is the id Codex echoes, so a turn that takes it names it.
       const uuid = value.uuid ?? randomUUID();
       const outgoing: Outgoing = { clientId: uuid, input: userInput(value.content), lines: [uuid] };
@@ -1188,7 +1193,10 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   const store =
     config.transcriptsUrl === undefined || codexHome === undefined
       ? undefined
-      : { store: transcriptStore(config.transcriptsUrl, context.bearer), codexHome };
+      : {
+          store: transcriptStore(config.transcriptsUrl, context.bearer, context.trace.headers),
+          codexHome,
+        };
   if (store !== undefined && config.threadId !== undefined) {
     const restored = yield* restoreRollouts(store.store, store.codexHome, config.threadId).pipe(
       Effect.result,

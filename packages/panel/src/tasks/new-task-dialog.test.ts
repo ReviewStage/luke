@@ -29,7 +29,6 @@ import {
 } from "@repo/settings/settings-views";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -58,7 +57,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -70,8 +69,7 @@ import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.
  * New task as the developer meets it: a card over the window whose head row
  * holds the repository chip, over the composer, whose words start a coding agent. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
- * does, so closing is read as the card leaving the window, on a registry
- * of its own, as one launch of the window holds.
+ * does, so closing is read as the card leaving the window.
  */
 
 const roots: Root[] = [];
@@ -168,7 +166,6 @@ async function mount(
     ...chose,
   };
   const links: SettingsLink[] = [];
-  let registry = AtomRegistry.make();
   let listed = control.newTask.workspaceId;
   let openAgain = (): void => undefined;
   function Owner() {
@@ -226,7 +223,7 @@ async function mount(
   document.body.append(container);
   let root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(Owner))));
+  act(() => root.render(withQueryClient(createElement(Owner))));
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
   const field = (): HTMLElement => composerEditor(document);
@@ -266,13 +263,13 @@ async function mount(
     /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
-      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      act(() => root.render(withQueryClient(createElement(Owner))));
       await settle();
     },
     /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
     list: async (workspaceId: string | undefined) => {
       listed = workspaceId;
-      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      act(() => root.render(withQueryClient(createElement(Owner))));
       await settle();
     },
     /** Opens New task again, as another press of it does. */
@@ -283,10 +280,9 @@ async function mount(
     /** Stands the window again from what it stored, as a relaunch does, the card open. */
     relaunch: async () => {
       act(() => root.unmount());
-      registry = AtomRegistry.make();
       root = createRoot(container);
       roots.push(root);
-      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      act(() => root.render(withQueryClient(createElement(Owner))));
       await settle();
     },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
@@ -603,8 +599,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   const control = tasksControl();
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(NewTaskDialog, {
           newTask: {
             ...control.newTask,

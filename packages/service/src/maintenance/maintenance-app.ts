@@ -1,13 +1,8 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
-import { hostedStore } from "@repo/database/models/hosted-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
-import { storeWriter } from "@repo/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -15,12 +10,11 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
-import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
+import { sweepPortShares } from "./port-share-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
 const SWEEP_MONITOR: CronMonitor = {
@@ -33,8 +27,8 @@ const SWEEP_MONITOR: CronMonitor = {
 };
 
 /**
- * The scheduled sweep handed the deployment's real seams. A wakeup or a
- * queued message reaches its agent's session through `routedSessions` acting
+ * The scheduled sweep handed the deployment's real seams. A wakeup
+ * reaches its agent's session through `routedSessions` acting
  * for the agent's owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
@@ -52,25 +46,14 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     request,
     cronSecret: environment.cronSecret,
     monitor: sentryCronCheckIns(SWEEP_MONITOR),
-    purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
-    sweepAbandonedTurns: (now) =>
-      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
-        sweepAbandonedTurns({ writer }, { now }),
-      ),
-    sweepDeviceLeases: (now) =>
-      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
-        sweepDeviceLeases(writer, { now }),
-      ),
     sweepDeviceWarmRunners: (now) =>
       sweepDeviceWarmRunners(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
-    sweepNativeSandboxes: (now) =>
-      sweepNativeSandboxes(new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
+    sweepPortShares: (now) => sweepPortShares(new Date(now)),
   });
 });
 

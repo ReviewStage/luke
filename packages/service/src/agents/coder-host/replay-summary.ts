@@ -196,6 +196,11 @@ export function measuredBoundBytes(
   return measured.compacted || rawBytes > bound * RAW_PAST_MEASURED ? bound : undefined;
 }
 
+/** The bytes a first message's picture or document blocks take beside its words, each counted at `REPLAY_FIT.FILE_TOKENS`, since a block's bytes tell nothing of its tokens. */
+export function fileBlocksBytes(count: number): number {
+  return count * REPLAY_FIT.FILE_TOKENS * BYTES_PER_TOKEN;
+}
+
 /**
  * The bytes the first message's files take beside its words: a text file's
  * own, since the harness is handed it inlined, and an image's or a PDF's counted at
@@ -205,9 +210,7 @@ export function filesBytes(files: readonly AgentAttachment[]): number {
   return files.reduce(
     (sum, file) =>
       sum +
-      (file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT
-        ? base64Bytes(file.data)
-        : REPLAY_FIT.FILE_TOKENS * BYTES_PER_TOKEN),
+      (file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT ? base64Bytes(file.data) : fileBlocksBytes(1)),
     0,
   );
 }

@@ -115,10 +115,35 @@ export interface BaseSnapshotOf {
 /** Where a base stands for a launch: ready to create from, being filled, or wanted, with the sandbox in a fill's way. */
 export const BASE_STATE = { READY: "ready", FILLING: "filling", WANTED: "wanted" } as const;
 
+/**
+ * Why a base is wanted, as its spans name it: none stands, the one standing
+ * was keyed for another image or branch, a fill left it unfinished past its
+ * grace, or a launch found its snapshot lapsed or moved a lockfile past it.
+ */
+export const BASE_WANTED = {
+  MISSING: "missing",
+  STALE_KEY: "stale_key",
+  UNFINISHED: "unfinished",
+  LAPSED: "lapsed",
+  LOCKFILE_MOVED: "lockfile_moved",
+} as const;
+
+type BaseWanted = (typeof BASE_WANTED)[keyof typeof BASE_WANTED];
+
 export type BaseSnapshotRead =
   | { readonly state: typeof BASE_STATE.READY; readonly snapshotId: string }
   | { readonly state: typeof BASE_STATE.FILLING }
-  | { readonly state: typeof BASE_STATE.WANTED; readonly stale?: ListedSandbox };
+  | {
+      readonly state: typeof BASE_STATE.WANTED;
+      readonly reason: BaseWanted;
+      readonly stale?: ListedSandbox;
+    };
+
+/** A ready base a launch found unusable, to fill again in its place, and why. */
+export interface BaseReplacing {
+  readonly snapshotId: string;
+  readonly reason: typeof BASE_WANTED.LAPSED | typeof BASE_WANTED.LOCKFILE_MOVED;
+}
 
 /** A digest of the fields given, each ended by a NUL so none runs into the next. */
 function digestOf(fields: readonly string[]): string {
@@ -153,20 +178,31 @@ function stillFilling(found: ListedSandbox, now: number): boolean {
 
 /** The sandbox found under the base's name as a launch reads it, against the key it should carry. */
 function readOf(found: ListedSandbox | undefined, key: string, now: number): BaseSnapshotRead {
-  if (found === undefined) return { state: BASE_STATE.WANTED };
+  if (found === undefined) return { state: BASE_STATE.WANTED, reason: BASE_WANTED.MISSING };
   const keyed = found.tags?.[BASE_TAG.KEY] === key;
   if (keyed && found.status === SANDBOX_STATUS.STOPPED && found.currentSnapshotId !== undefined) {
     return { state: BASE_STATE.READY, snapshotId: found.currentSnapshotId };
   }
   if (stillFilling(found, now)) return { state: BASE_STATE.FILLING };
-  return { state: BASE_STATE.WANTED, stale: found };
+  const reason = keyed ? BASE_WANTED.UNFINISHED : BASE_WANTED.STALE_KEY;
+  return { state: BASE_STATE.WANTED, reason, stale: found };
 }
 
-/** The base snapshot as it stands for a launch on the image given. */
+/** What a base's span says of it: where it stands, and why it is wanted where it is. */
+function baseSpanAttributes(state: BaseSnapshotRead["state"], reason: BaseWanted | undefined) {
+  return { "base.state": state, ...(reason === undefined ? undefined : { "base.reason": reason }) };
+}
+
+/** The base snapshot as it stands for a launch on the image given, which its span records. */
 export const readBaseSnapshot = (api: VercelSandboxApi, of: BaseSnapshotOf, image: string) =>
-  Effect.map(
-    Effect.all([api.getNamed(baseSnapshotName(of)), Clock.currentTimeMillis]),
-    ([found, now]) => readOf(found, baseKey(of, image), now),
+  Effect.all([api.getNamed(baseSnapshotName(of)), Clock.currentTimeMillis]).pipe(
+    Effect.map(([found, now]) => readOf(found, baseKey(of, image), now)),
+    Effect.tap((read) =>
+      Effect.annotateCurrentSpan(
+        baseSpanAttributes(read.state, read.state === BASE_STATE.WANTED ? read.reason : undefined),
+      ),
+    ),
+    Effect.withSpan("web/readBaseSnapshot"),
   );
 
 /** Whether two reads of a name are of one sandbox: the same creation and the same session. */
@@ -247,7 +283,8 @@ export const lockfileMoved = (sandbox: RepositorySandbox, since: string) =>
  * at the firewall for the clone alone, its dependencies installed, the key
  * tagged, and the snapshot taken, which stops it. A base that reads ready is
  * filled again only where its snapshot is the one `replacing` names: gone
- * under a launch, or with a lockfile its agent's fast-forward moved. A name
+ * under a launch, or with a lockfile its agent's fast-forward moved. Its
+ * span records where the base stood and why it was filled. A name
  * another launch took first is that launch's fill, and this one does
  * nothing. A fill that failed or outlasted `FILL_TIMEOUT` deletes its
  * sandbox. `open` is the sandbox as the clone reaches it, over the caller's
@@ -259,18 +296,20 @@ export const fillBaseSnapshot = Effect.fn("web/fillBaseSnapshot")(function* (
   image: string,
   credential: BaseSnapshotCredential,
   open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
-  replacing?: string,
+  replacing?: BaseReplacing,
 ) {
   const name = baseSnapshotName(of);
   const key = baseKey(of, image);
   const found = yield* api.getNamed(name);
   const read = readOf(found, key, yield* Clock.currentTimeMillis);
-  const stale =
-    read.state === BASE_STATE.READY && read.snapshotId === replacing
-      ? found
-      : read.state === BASE_STATE.WANTED
-        ? read.stale
-        : undefined;
+  const replaced = read.state === BASE_STATE.READY && read.snapshotId === replacing?.snapshotId;
+  yield* Effect.annotateCurrentSpan(
+    baseSpanAttributes(
+      read.state,
+      replaced ? replacing?.reason : read.state === BASE_STATE.WANTED ? read.reason : undefined,
+    ),
+  );
+  const stale = replaced ? found : read.state === BASE_STATE.WANTED ? read.stale : undefined;
   if (read.state !== BASE_STATE.WANTED && stale === undefined) return;
   if (stale !== undefined && !(yield* deleteIfStill(api, stale))) return;
   const created = yield* api

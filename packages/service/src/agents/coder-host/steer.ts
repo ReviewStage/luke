@@ -32,6 +32,7 @@ import { AGENT_MACHINE, AGENT_STATUS, type AgentAttachment } from "@repo/feature
 import { MENTION_KIND, withoutMemberLinks } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import { causeKind } from "@repo/runtime/effect";
+import { EXPERIMENT } from "@repo/settings";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -50,9 +51,9 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { agentSpansAnnotated } from "../../observability/sentry.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { keptHandedImages, senderLabel, turnContent } from "../attached-files.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -63,8 +64,10 @@ import {
   type SessionUnreachable,
   type TypedTurn,
 } from "../sessions/agent-sessions.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
+import { settleLapsedRunner } from "./lapsed-runner.js";
 import { harnessOf } from "./native-runtime.js";
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
@@ -119,7 +122,7 @@ import { agentStatusOf } from "./status.js";
  * will end the turn it was running, so that turn, as read before the harness was
  * asked, is settled failed for its session's end
  * (`@repo/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
- * rather than running until the sweep's day-long bound. The words are then
+ * rather than running until its lease runs out. The words are then
  * no refusal: they open a fresh session over the same conversation, and so
  * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
@@ -262,8 +265,8 @@ const runningTurnOf = (agent: Agent) =>
 /**
  * The turn read before the send settled failed for its session's end, now
  * that the harness said it runs the session no more; a write that fails is logged
- * and the refusal stands all the same, since the sweep's bound still ends
- * the turn in time.
+ * and the refusal stands all the same, since the turn's lease still ends it
+ * in time.
  */
 const settledEnded = (writer: Effect.Effect<StoreWriter>, agent: Agent, turn: AgentLatestTurn) =>
   Effect.gen(function* () {
@@ -331,6 +334,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
+  // A turn whose runner stopped posting is settled lost first, so the words open a turn of their own
+  // rather than steering one nothing runs (`lapsed-runner.ts`).
+  yield* settleLapsedRunner(agent);
   // Note that the reads a refusal is decided by are made at once beside each other, since none waits on
   // another, and then judged one by one in the order below, so a send refused for two reasons is
   // refused for the same one it always was; a repeat reads them all for nothing, which is rare.
@@ -361,6 +367,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   const routing = yield* Effect.fromResult(read.routing);
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
+  yield* agentSpansAnnotated({
+    agentId: agent.id,
+    userId,
+    workspaceId: agent.organizationId,
+    repository: agent.repository,
+    harness: runtime,
+  });
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
   // keeps none for its model now is refused by name and never moved to another payer; one on no
@@ -437,7 +450,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
         task,
         reads,
         agent.id,
-        yield* descriptionsOnFor(agent.userId, agent.kind),
+        yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS),
       );
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);

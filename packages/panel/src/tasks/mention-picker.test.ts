@@ -22,8 +22,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../description-editor/contract.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handHostReads, handState, holdAutomations, registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import {
+  handHostReads,
+  handState,
+  holdAutomations,
+  withExperiments,
+} from "../testing/app-state.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 
@@ -63,9 +67,7 @@ function mounted() {
   document.body.append(page);
   root = createRoot(page);
   act(() =>
-    root?.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Picker)),
-    ),
+    root?.render(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), createElement(Picker))),
   );
   return {
     picker: (): MentionPicker => {
@@ -153,9 +155,7 @@ async function mountedOnDescription(chosen: MentionNode[]) {
   document.body.append(page);
   root = createRoot(page);
   act(() =>
-    root?.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Picker)),
-    ),
+    root?.render(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), createElement(Picker))),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -314,8 +314,8 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
   const boxRoot = createRoot(box);
   act(() =>
     boxRoot.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(MentionNodeChip, {
           mention: picked,
           doors: {

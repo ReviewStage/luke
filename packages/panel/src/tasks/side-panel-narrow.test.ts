@@ -8,14 +8,13 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl } from "../testing/tasks-control.js";
 
 /**
@@ -59,7 +58,7 @@ async function mounted(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

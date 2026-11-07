@@ -20,13 +20,12 @@ import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-g
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -158,8 +157,7 @@ async function drawn(
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(OpenLinkProvider, {
           value: (link: ReadLink) => places.push(link.place),
           children: createElement(AgentTab, {

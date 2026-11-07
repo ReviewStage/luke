@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import type { MessageListRead } from "@repo/database/models/message-reads";
 import { listRecentMessages, type StoredMessageRecord } from "@repo/database/models/message-reads";
-import { CLEARED_CONVERSATION_RETENTION_MS } from "@repo/database/models/soft-delete";
-import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import {
   type ConversationRow,
   insertConversation as insertConversationRow,
@@ -10,10 +8,6 @@ import {
   insertTurn as insertTurnRow,
   type MessageRow as MessageInsertRow,
   openHostedStoreTestDatabase,
-  readConversationById,
-  readMessagesByConversation,
-  readTurnsByConversation,
-  setConversationDeletedAt,
   type TurnInsertRow,
 } from "@repo/database/testing";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
@@ -23,9 +17,7 @@ import { z } from "zod";
 
 /**
  * The conversation reads the brain and the voice make, against the real
- * migrations: each answers the rows it names typed by role and skips a
- * conversation stamped `deleted_at` from the very next call, the purge takes
- * the stamped rows once the window has passed and nothing sooner, a row
+ * migrations: each answers the rows it names typed by role, a row
  * naming a tool the catalog has retired reads back without that part, and a
  * row this build cannot read back — parts that are not a message's —
  * refuses the page rather than riding out in it.
@@ -35,7 +27,6 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = new Date("2026-09-10T12:00:00.000Z");
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const TOOLS: ToolSet = {
   read_transcript: tool({
@@ -98,10 +89,6 @@ async function insertMessage(
   });
 }
 
-async function countConversations(id: string): Promise<number> {
-  return (await readConversationById(database.run, id)).length;
-}
-
 function readRecords(read: MessageListRead): readonly StoredMessageRecord[] {
   assert.equal(read.ok, true);
   return read.ok ? read.value : [];
@@ -144,45 +131,4 @@ test("one account's rows are never read under another's id", async () => {
     recent: [],
     turns: [],
   });
-});
-
-test("the purge takes a stamped conversation and everything under it once the window has passed, and nothing sooner", async () => {
-  // The purge runs across every account, so this test's stamps stand in a year of their own, clear of the other tests' stamps.
-  const base = new Date("2020-01-01T00:00:00.000Z");
-  const userId = await database.createUser();
-  const other = await database.createUser();
-  const { main } = await populateMain(userId);
-  const child = await insertConversation(userId, {
-    kind: CONVERSATION_KIND.CHILD,
-    parentConversationId: main,
-  });
-  await setConversationDeletedAt(database.run, main, base);
-  await setConversationDeletedAt(database.run, child, base);
-  const kept = await insertConversation(userId, { kind: CONVERSATION_KIND.OBSERVED });
-  const { main: recent } = await populateMain(other);
-  await setConversationDeletedAt(database.run, recent, new Date(base.getTime() + DAY_MS));
-  const standing = await insertConversation(other, { kind: CONVERSATION_KIND.OBSERVED });
-
-  const beforeWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1);
-  assert.equal(await database.run(database.store.retention.purgeCleared(beforeWindow)), 0);
-  assert.equal(await countConversations(main), 1);
-
-  const atWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS);
-  assert.equal(await database.run(database.store.retention.purgeCleared(atWindow)), 2);
-  assert.equal(await countConversations(main), 0);
-  assert.equal(await countConversations(child), 0);
-  assert.equal((await readMessagesByConversation(database.run, main)).length, 0);
-  assert.equal((await readTurnsByConversation(database.run, main)).length, 0);
-  assert.equal(await countConversations(kept), 1);
-  assert.equal(await countConversations(recent), 1);
-  assert.equal(await countConversations(standing), 1);
-
-  assert.equal(
-    await database.run(
-      database.store.retention.purgeCleared(new Date(atWindow.getTime() + DAY_MS)),
-    ),
-    1,
-  );
-  assert.equal(await countConversations(recent), 0);
-  assert.equal(await countConversations(standing), 1);
 });

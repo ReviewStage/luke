@@ -8,14 +8,13 @@ import { type TaskSummary, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -153,11 +152,10 @@ async function drawn(text: string): Promise<{ container: HTMLElement }> {
       value: PAGE,
       children: createElement(TranscriptWords, { text: said }),
     });
-  const registry = AtomRegistry.make();
-  act(() => root?.render(onRegistry(registry, words(text))));
+  act(() => root?.render(withQueryClient(words(text))));
   await settle();
   // Drawn again, as a transcript is drawn as its turn streams.
-  act(() => root?.render(onRegistry(registry, words(`${text} `))));
+  act(() => root?.render(withQueryClient(words(`${text} `))));
   await settle();
   return { container };
 }

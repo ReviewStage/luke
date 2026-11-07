@@ -9,7 +9,6 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { changesTab } from "@repo/ui/tab-strip-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
@@ -21,7 +20,7 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import {
@@ -195,8 +194,7 @@ test("a pull request's card names the coding agent whose it is on a row by its t
   const published = pullRequest(42, "Expire invitations");
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(PullRequestCard, {
           pullRequest: published,
           place: { taskId: null },
@@ -253,8 +251,7 @@ test("the phone's Activity list hangs each tab's card on its row, as the tab han
   ];
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(ActivityList, { strip, offers: [], onListed: () => undefined }),
       ),
     ),

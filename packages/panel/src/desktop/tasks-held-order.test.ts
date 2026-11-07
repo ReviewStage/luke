@@ -18,7 +18,6 @@ import {
   type TasksDisplay,
   type TasksFilter,
 } from "@repo/ui/tasks-page-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { Activity, act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
@@ -28,7 +27,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
@@ -127,7 +126,6 @@ async function mountView(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const sent: [string, unknown][] = [];
   const named: (string | undefined)[] = [];
   const draw = (listed: readonly TaskSummary[], drawing: Drawing = {}) => {
@@ -154,8 +152,7 @@ async function mountView(
     };
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             Fragment,
             null,

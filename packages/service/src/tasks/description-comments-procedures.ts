@@ -24,9 +24,11 @@ import {
 } from "@repo/features/description-comment-wire";
 import { askedInWords } from "@repo/features/mention-link";
 import { PAGE_SHOWER } from "@repo/features/page-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { COMMENT_LINE_BOUNDS } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
+import { experimentOnIn } from "../agents/workspace-experiment-on.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
@@ -377,7 +379,11 @@ function mentionKey(clientKey: string, to: DescriptionCommentAsked): string {
 /**
  * An ask written in the thread handed to the one asked, in the words of the
  * thread as it now stands, its line taken back where the hand-over fails, so
- * the thread never says someone was asked who was not.
+ * the thread never says someone was asked who was not. A thread on the
+ * description is handed over only while the task's workspace has Task
+ * descriptions on, read again here because the hand-over runs past the
+ * member's request (`afterResponse`), where the switch may have flipped
+ * since `askableAgent` read it; one held back has its line taken back too.
  */
 const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
   readonly userId: string;
@@ -394,6 +400,12 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
   );
   const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (
+    thread.page === undefined &&
+    !(yield* experimentOnIn(task.value.workspaceId, EXPERIMENT.DESCRIPTIONS))
+  ) {
+    return yield* withdrawnAsk(taskId, clientKey);
+  }
   const page =
     thread.page === undefined
       ? undefined
@@ -427,15 +439,16 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
     threadId,
     words,
     line,
-  }).pipe(
-    Effect.onError(() =>
-      withdrawDescriptionCommentAsk(taskId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
-  );
+  }).pipe(Effect.onError(() => withdrawnAsk(taskId, clientKey)));
 });
+
+/** The ask's line taken back from its thread; one that could not be is logged and left. */
+function withdrawnAsk(taskId: string, clientKey: string) {
+  return withdrawDescriptionCommentAsk(taskId, clientKey).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.ignore,
+  );
+}
 
 /** Where a page's start, or a reply, stands in a review: held in one, sending one with the threads it names along, or in none. */
 function reviewOf(comment: {

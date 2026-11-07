@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import type { Client } from "@modelcontextprotocol/client";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { createAgent, readAgent } from "@repo/database/models/agent-store";
 import {
   createAutomation,
@@ -23,6 +22,7 @@ import { listMemories, rememberMemory } from "@repo/database/models/memory-store
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -52,13 +52,14 @@ import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { EXPERIMENT } from "@repo/settings";
+import { EXPERIMENT, WORKSPACE_EXPERIMENT_LIST } from "@repo/settings";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
 import { eq, sql } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { readWorkspaceMemories, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
 import { recordMemberDescriptionNotes } from "../agents/coder-host/description-edit.js";
+import { EXPERIMENT_OFF_REFUSAL } from "../agents/workspace-experiment-on.js";
 import { DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
@@ -77,6 +78,7 @@ import {
   RELAY_FULL_NAME,
   startedAgent,
 } from "../testing/agents-app-support.js";
+import { experimentWordsIn } from "../testing/experiment-words.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -98,7 +100,12 @@ import {
 import { harnessFor } from "../testing/native-harness-fake.js";
 import { MEMBER_MCP_METADATA_ROUTE, memberMcpIssuer } from "./app.js";
 import { MEMBER_MCP_PATH, MEMBER_MCP_SCOPE } from "./resource.js";
-import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools.js";
+import {
+  LIST_WORKSPACES_TOOL,
+  MEMBER_MCP_TOOL,
+  MEMBER_MCP_TOOLS,
+  type MemberMcpTool,
+} from "./tools.js";
 
 /**
  * The member MCP server, answered by its group the way a function answers
@@ -210,13 +217,13 @@ const decodeFound = Schema.decodeUnknownSync(
 /** The description a stranger's task and a member's both hold, and the words a thread stands on in it. */
 const DESCRIPTION_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
 
-/** Descriptions turned on or off for the account, as Settings › Experimental turns it. */
-const descriptionsFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+/** Task descriptions turned on or off for everyone in the workspace by the admin named, as Settings › Experimental turns it. */
+const descriptionsIn = (organizationId: string, by: string, on: boolean) =>
+  setWorkspaceExperiment({ organizationId, experiment: EXPERIMENT.DESCRIPTIONS, on, by });
 
-/** Memory turned on for the account, as Settings › Experimental turns it on. */
-const memoryOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
+/** Memory turned on for everyone in the workspace by the admin named, as Settings › Experimental turns it on. */
+const memoryIn = (organizationId: string, by: string) =>
+  setWorkspaceExperiment({ organizationId, experiment: EXPERIMENT.MEMORY, on: true, by });
 
 /** An agent on the task, on Claude Code, its session standing, so a comment handed to it is taken by the recording harness. */
 const standingAgent = (userId: string, taskId: string) =>
@@ -252,6 +259,14 @@ const GOLDEN_ROOT = path.join(
 /** The golden a tool's input is recorded under: its name, hyphenated, as the package's goldens are named. */
 function goldenOf(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}-input`;
+}
+
+/** The golden a tool's input is recorded under where no workspace of the member's has Task descriptions on: its off twin's, where its input there differs, its own otherwise. */
+function offGoldenOf(tool: MemberMcpTool): string {
+  const off = tool.descriptionsOff;
+  return off === undefined || off.input === tool.input
+    ? goldenOf(tool.name)
+    : `${goldenOf(tool.name)}-off`;
 }
 
 /** The head commit a changes read answers its pull request at. */
@@ -323,7 +338,7 @@ it.effect(
 );
 
 it.effect.each(Object.values(REVISION))(
-  "an SDK client at %s lists every tool as its golden shows it, with its annotations, and runs list_workspaces as the member",
+  "an SDK client at %s lists every tool as its golden shows it, with its annotations, a workspace experiment's only once one of the member's workspaces has it on, and runs list_workspaces as the member",
   (revision) =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -338,6 +353,10 @@ it.effect.each(Object.values(REVISION))(
       );
       const { client, transport } = yield* connected(fetch, token, revision);
 
+      const unlisted = yield* Effect.promise(() => client.listTools());
+      yield* Effect.forEach(WORKSPACE_EXPERIMENT_LIST, (experiment) =>
+        setWorkspaceExperiment({ organizationId: workspaceId, experiment, on: true, by: userId }),
+      ).pipe(Effect.provide(services));
       const listed = yield* Effect.promise(() => client.listTools());
       const called = yield* Effect.promise(() =>
         client.callTool({ name: LIST_WORKSPACES_TOOL.name, arguments: {} }),
@@ -345,12 +364,28 @@ it.effect.each(Object.values(REVISION))(
       yield* Effect.promise(() => client.close());
 
       assert.equal(transport.protocolVersion, revision);
+      const goldenInput = (golden: string) =>
+        Effect.promise(async () =>
+          JSON.parse(await fs.readFile(path.join(GOLDEN_ROOT, `${golden}.json`), "utf8")),
+        );
+      // With no experiment on, a tool is listed in the words that name none, its input its off twin's golden where it has one.
+      const offGoldens = yield* Effect.forEach(
+        MEMBER_MCP_TOOLS.filter(({ experiment }) => experiment === undefined),
+        (tool) =>
+          Effect.map(goldenInput(offGoldenOf(tool)), (inputSchema) => ({
+            name: tool.name,
+            inputSchema,
+          })),
+      );
+      assert.deepEqual(
+        unlisted.tools.map(({ name, inputSchema }) => ({ name, inputSchema })),
+        offGoldens,
+      );
+      assert.deepEqual(experimentWordsIn(unlisted.tools), []);
       const goldens = yield* Effect.forEach(MEMBER_MCP_TOOLS, ({ name, annotations }) =>
-        Effect.promise(async () => ({
+        Effect.map(goldenInput(goldenOf(name)), (inputSchema) => ({
           name,
-          inputSchema: JSON.parse(
-            await fs.readFile(path.join(GOLDEN_ROOT, `${goldenOf(name)}.json`), "utf8"),
-          ),
+          inputSchema,
           annotations,
         })),
       );
@@ -525,7 +560,9 @@ it.effect(
       const stranger = yield* Effect.promise(() => signUp(auth));
       const rows = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
-        yield* memoryOn(member.userId);
+        // The member's own workspace has its experiments on, so their tools are listed to be refused elsewhere.
+        yield* memoryIn(own, member.userId);
+        yield* descriptionsIn(own, member.userId, true);
         const elsewhere = yield* openWorkspace(stranger.userId);
         const task = yield* createTask(stranger.userId, {
           organizationId: elsewhere,
@@ -709,7 +746,7 @@ it.effect(
       const member = yield* Effect.promise(() => signUp(auth));
       const agentId = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
-        yield* descriptionsFor(member.userId, true);
+        yield* descriptionsIn(own, member.userId, true);
         return yield* openTaskAgent(member.userId, own, null);
       }).pipe(Effect.provide(services));
       const token = yield* Effect.promise(() =>
@@ -994,21 +1031,24 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
 });
 
 it.effect(
-  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it; with Descriptions off no thread is started on the description",
+  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it; in a workspace with Task descriptions off no thread is started on the description, while another of theirs has it on",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services, heard } = yield* standing;
       const member = yield* Effect.promise(() => signUp(auth));
-      const { taskId, agentId } = yield* Effect.gen(function* () {
+      const { own, taskId, agentId } = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
-        yield* descriptionsFor(member.userId, true);
+        // A second workspace keeps Task descriptions on, so the tool stays listed once the first turns it off.
+        for (const workspace of [own, yield* openWorkspace(member.userId)]) {
+          yield* descriptionsIn(workspace, member.userId, true);
+        }
         yield* connectAgentApiKeys(member.userId);
         const task = yield* createTask(member.userId, { organizationId: own, name: "Seats" });
         yield* recordMemberDescriptionNotes(
           { userId: member.userId, taskId: task.id },
           { notes: [DESCRIPTION_NOTE] },
         );
-        return { taskId: task.id, agentId: yield* standingAgent(member.userId, task.id) };
+        return { own, taskId: task.id, agentId: yield* standingAgent(member.userId, task.id) };
       }).pipe(Effect.provide(services));
       const token = yield* Effect.promise(() =>
         mintedToken(auth, member.cookie, {
@@ -1038,7 +1078,7 @@ it.effect(
       const resolved = decodeThread(
         yield* call(MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread, resolved: true }),
       );
-      yield* descriptionsFor(member.userId, false).pipe(Effect.provide(services));
+      yield* descriptionsIn(own, member.userId, false).pipe(Effect.provide(services));
       const planless = decodeAnswer(
         yield* Effect.promise(() =>
           client.callTool({
@@ -1075,7 +1115,10 @@ it.effect(
       );
       assert.equal(resolved.state, DESCRIPTION_COMMENT_STATUS.RESOLVED);
       assert.equal(planless.isError, true);
-      assert.match(planless.content[0].text, /has Task descriptions off/u);
+      assert.ok(
+        planless.content[0].text.includes(EXPERIMENT_OFF_REFUSAL),
+        planless.content[0].text,
+      );
       // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
       assert.deepEqual(
         lines.map(({ words }) => words),
@@ -1099,12 +1142,17 @@ it.effect(
 );
 
 it.effect(
-  "a member with Memory on keeps a memory Settings › Memory lists as theirs, finds it, corrects it, and forgets it; with Memory off nothing runs",
+  "a member keeps a memory in a workspace with Memory on that Settings › Memory lists as theirs, finds it, corrects it, and forgets it; in one with Memory off nothing runs, while another of theirs has it on",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
       const member = yield* Effect.promise(() => signUp(auth));
-      const workspaceId = yield* openWorkspace(member.userId).pipe(Effect.provide(services));
+      const workspaceId = yield* Effect.gen(function* () {
+        const own = yield* openWorkspace(member.userId);
+        yield* memoryIn(yield* openWorkspace(member.userId), member.userId);
+        return own;
+      }).pipe(Effect.provide(services));
+      const workspace = `workspace-${workspaceId}`;
       const token = yield* Effect.promise(() =>
         mintedToken(auth, member.cookie, {
           clientId: MCP_CLIENT.id,
@@ -1122,21 +1170,29 @@ it.effect(
         Effect.provide(services),
       );
 
-      const off = yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, { text: "Tests run on PGlite." });
-      yield* memoryOn(member.userId).pipe(Effect.provide(services));
+      const off = yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, {
+        workspace,
+        text: "Tests run on PGlite.",
+      });
+      yield* memoryIn(workspaceId, member.userId).pipe(Effect.provide(services));
       const kept = decodeKept(
-        (yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, { text: "Tests run on PGlite." })).read,
+        (yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, { workspace, text: "Tests run on PGlite." }))
+          .read,
       );
       const listed = yield* settings;
       const found = decodeFound(
-        (yield* call(MEMBER_MCP_TOOL.SEARCH_MEMORY, { query: "pglite" })).read,
+        (yield* call(MEMBER_MCP_TOOL.SEARCH_MEMORY, { workspace, query: "pglite" })).read,
       );
       yield* call(MEMBER_MCP_TOOL.SAVE_MEMORY, {
+        workspace,
         text: "Tests run on PGlite through test:store.",
         replaces: kept.memory.id,
       });
       const corrected = yield* settings;
-      const forgot = yield* call(MEMBER_MCP_TOOL.FORGET_MEMORY, { memoryId: kept.memory.id });
+      const forgot = yield* call(MEMBER_MCP_TOOL.FORGET_MEMORY, {
+        workspace,
+        memoryId: kept.memory.id,
+      });
       const forgotten = yield* settings;
       yield* Effect.promise(() => client.close());
 
@@ -1178,5 +1234,18 @@ it.each(MEMBER_MCP_TOOLS.map((tool) => [tool.name, tool] as const))(
   "%s shows the model the recorded input",
   async (name, tool) => {
     await settleJsonSchemaGolden(GOLDEN_ROOT, goldenOf(name), tool.input);
+  },
+);
+
+it.each(
+  MEMBER_MCP_TOOLS.flatMap((tool) =>
+    tool.descriptionsOff === undefined || tool.descriptionsOff.input === tool.input
+      ? []
+      : [[tool.name, tool, tool.descriptionsOff.input] as const],
+  ),
+)(
+  "%s shows the model the recorded input that names no description where no workspace of the member's has Task descriptions on",
+  async (_name, tool, input) => {
+    await settleJsonSchemaGolden(GOLDEN_ROOT, offGoldenOf(tool), input);
   },
 );

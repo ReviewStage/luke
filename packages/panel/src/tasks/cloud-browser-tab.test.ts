@@ -24,7 +24,6 @@ import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { WireBoundaryInput } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,8 +32,13 @@ import { browserTabsQuery } from "../live-reads.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdBrowserTabs, registryWith, signedInAs } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import {
+  handHostReads,
+  holdBrowserTabs,
+  signedInAs,
+  writeExperiments,
+} from "../testing/app-state.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { appStateQuery, selectAccount } from "../use-app-state.js";
@@ -101,15 +105,15 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Draws an element under a fresh atom registry, as the window's root does. */
+/** Draws an element on the test's Query client, as the window's root does. */
 function draw(element: React.ReactElement): { rerender: (next: React.ReactElement) => void } {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  act(() => root.render(onRegistry(registry, element)));
-  return { rerender: (next) => act(() => root.render(onRegistry(registry, next))) };
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  act(() => root.render(withQueryClient(element)));
+  return { rerender: (next) => act(() => root.render(withQueryClient(next))) };
 }
 
 /** A task that has used every fixed tab. */
@@ -282,11 +286,9 @@ it.effect(
       const root = createRoot(container);
       roots.push(root);
       serveEffectsOn(Context.make(Clock.Clock, clock));
-      const registry = AtomRegistry.make();
       act(() =>
         root.render(
-          onRegistry(
-            registry,
+          withQueryClient(
             createElement(CloudBrowserPane, {
               tab: LISTED,
               owner: APP_OWNER,
@@ -912,11 +914,9 @@ it.effect(
       const root = createRoot(container);
       roots.push(root);
       serveEffectsOn(Context.make(Clock.Clock, clock));
-      const registry = AtomRegistry.make();
       act(() =>
         root.render(
-          onRegistry(
-            registry,
+          withQueryClient(
             createElement(CloudBrowserPane, {
               tab: { ...LISTED, lastActedAt: 0 },
               owner: { name: "Ada", icon: createElement("span") },

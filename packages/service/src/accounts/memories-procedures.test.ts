@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
@@ -80,9 +80,12 @@ const openTeam = Effect.gen(function* () {
   }
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
-  yield* openWorkspace(outsider);
-  for (const id of [owner, teammate, outsider]) {
-    yield* writeAccountPreferences(id, { experiments: { [EXPERIMENT.MEMORY]: true } });
+  const elsewhere = yield* openWorkspace(outsider);
+  for (const [organizationId, by] of [
+    [workspaceId, owner],
+    [elsewhere, outsider],
+  ] as const) {
+    yield* setWorkspaceExperiment({ organizationId, experiment: EXPERIMENT.MEMORY, on: true, by });
   }
   const bearers = new Map([owner, teammate, outsider].map((id) => [`Bearer ${id}`, id]));
   const procedures = memoriesProcedures({
@@ -371,7 +374,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
   );
 
   it.effect(
-    "words that look like a credential are never kept, a correction of a memory gone keeps nothing, and a member with Memory off neither keeps nor searches",
+    "words that look like a credential are never kept, a correction of a memory gone keeps nothing, and a member of a workspace with Memory off neither keeps nor searches",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId, ask } = yield* openTeam;
@@ -385,7 +388,12 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const gone = yield* ask(
           save(owner, { workspaceId, text: DEPLOYS, replaces: randomUUID() }),
         );
-        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.MEMORY]: false } });
+        yield* setWorkspaceExperiment({
+          organizationId: workspaceId,
+          experiment: EXPERIMENT.MEMORY,
+          on: false,
+          by: owner,
+        });
         const off = refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.MEMORY_OFF);
 
         assert.deepEqual(

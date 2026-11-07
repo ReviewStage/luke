@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import { AGENT_CALL_FAILURE, PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
@@ -44,7 +43,6 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppChapters } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -53,12 +51,11 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -518,8 +515,7 @@ async function draw(
   const tab = createElement(Switching, { control, first });
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         onSideBundles(
           bundles,
           createElement(GitHubConnectProvider, {
@@ -531,16 +527,7 @@ async function draw(
             children: createElement(MemberDirectory, {
               workspace: { id: "workspace-acme", memberCount: 1 },
               readerId: "user-dana",
-              children: createElement(
-                Fragment,
-                null,
-                tab,
-                createElement(
-                  RegistryContext.Provider,
-                  { value: rendererRegistry },
-                  createElement(ToastHost),
-                ),
-              ),
+              children: createElement(Fragment, null, tab, createElement(ToastHost)),
             }),
           }),
         ),

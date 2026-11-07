@@ -6,6 +6,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import type { GatewayHost, NodeRegistry } from "@repo/gateway";
 import type { AppSettings } from "@repo/settings/wire";
 import { Effect, Option, type Scope } from "effect";
+import { HOST_ACTS, isLiveFollow } from "../contract/index.js";
 import type { HostActTable } from "../host-acts.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
@@ -35,6 +36,11 @@ export interface OperatorClient {
   /** Gives back what `start` began: every subscription this client holds. */
   stop: () => Effect.Effect<void>;
 }
+
+/** Every slice a live follow is told on (`contract/live-follow.ts`), which the host writes into the document whatever read it is. */
+const FOLLOWED_SLICES: ReadonlySet<string> = new Set(
+  Object.values(HOST_ACTS).flatMap((act) => (isLiveFollow(act) ? [act.slice] : [])),
+);
 
 export interface OperatorClientDependencies {
   report: (message: string) => void;
@@ -92,11 +98,14 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onOfflineRefusedChanged((offlineRefused) => {
         state.update({ network: { ...state.snapshot().network, offlineRefused } });
       }),
+      // Note that a live follow's slice is written whole as it is told, as each read's own was, and only a slice a follow declares.
+      gateway.host.onLiveReadChanged(({ read, held }) => {
+        // SAFETY: a followed slice is told whole as the host holds it (`liveTold`), so `held` is that slice's own.
+        if (FOLLOWED_SLICES.has(read))
+          state.update({ [read]: held } as Parameters<AppStateStore["update"]>[0]);
+      }),
       gateway.host.onAccountPreferencesChanged((held) => {
         state.update({ [LIVE_READ.ACCOUNT_PREFERENCES]: held });
-      }),
-      gateway.host.onAgentOriginsChanged((held) => {
-        state.update({ [LIVE_READ.AGENT_ORIGINS]: held });
       }),
       gateway.host.onInboxItemsChanged((read) => {
         state.update({ [LIVE_READ.INBOX_ITEMS]: read });
@@ -116,9 +125,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onLinkStandingsChanged((held) => {
         state.update({ [LIVE_READ.LINK_STANDINGS]: held });
       }),
-      gateway.host.onMemoriesChanged((held) => {
-        state.update({ [LIVE_READ.MEMORIES]: held });
-      }),
       gateway.host.onModelsChanged((held) => {
         state.update({ [LIVE_READ.MODELS]: held });
       }),
@@ -134,9 +140,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onGitHubTokenChanged((held) => {
         state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
       }),
-      gateway.host.onChaptersChanged((held) => {
-        state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });
-      }),
       gateway.host.onBrowserTabsChanged((held) => {
         state.update({ [LIVE_READ.BROWSER_TABS]: held });
       }),
@@ -145,9 +148,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
-      }),
-      gateway.host.onHostsChanged((held) => {
-        state.update({ [LIVE_READ.HOSTS]: held });
       }),
       gateway.host.onWorkspaceInvitationsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_INVITATIONS]: held });

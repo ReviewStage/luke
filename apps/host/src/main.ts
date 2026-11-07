@@ -16,8 +16,9 @@
  * (`apps/desktop/src/main/native/this-mac-host.ts`).
  *
  * `run` is the command the service runs. A box that never connected says
- * so and reads its record again every `UNENROLLED_REST`, rather than
- * exiting for its service to start it over; one that did runs the daemon
+ * so and watches its state folder until a connect writes its record
+ * (`hostDeviceWhen`), rather than exiting for its service to start it
+ * over; one that did runs the daemon
  * (`@repo/host/daemon`) until the service is stopped, which stops every
  * runner it started with it. Once the service settles the box's secret as
  * refused, the host removed in Settings › Hosts, it stops them and marks its
@@ -76,6 +77,7 @@ import {
   type HostService,
   hostArch,
   hostDaemon,
+  hostDeviceWhen,
   hostPlatform,
   hostRefusedRest,
   hostRuntime,
@@ -101,9 +103,6 @@ const DEFAULT_SERVICE_ORIGIN = LINK_ORIGIN;
 const DEFAULT_INSTALL_COMMAND = hostInstallCommand(
   new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, DEFAULT_SERVICE_ORIGIN).href,
 );
-
-/** How long a box that never connected rests before it reads its record again. */
-const UNENROLLED_REST = Duration.minutes(1);
 
 /** Where the account install keeps its releases, under the home it is installed in, each in a folder of its own under `versions/` (`vespin-host.sh`'s `ACCOUNT_RELEASES`). */
 const ACCOUNT_RELEASES = { FOLDER: ".local/share/vespin-host", VERSIONS: "versions" } as const;
@@ -204,7 +203,7 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, a rest until there is one, or a rest while the service refuses it; it ends once the daemon switched to a newer release. */
+/** The daemon on the box's record, a wait until a connect writes one, or a rest while the service refuses it; it ends once the daemon switched to a newer release. */
 const follow = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
@@ -213,7 +212,7 @@ const follow = (runtime: HostRuntime) =>
       reportToStderr(
         `${PRODUCT_NAME} host: this box is not connected. Run ${HOST_COMMAND} connect, or the install command from Settings › Hosts › Add hosts (${DEFAULT_INSTALL_COMMAND}), and approve the code it shows in ${PRODUCT_NAME}.`,
       );
-      yield* Effect.sleep(UNENROLLED_REST);
+      yield* hostDeviceWhen(stateRoot, Option.isSome);
       return undefined;
     }
     // Note that a box the service refused rests until it is connected again.

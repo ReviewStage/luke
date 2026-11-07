@@ -11,11 +11,10 @@ import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   ListedPullRequests,
@@ -171,8 +170,7 @@ test("a link naming a listed task by its number is asked of the place it is pres
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () =>
     root?.render(
-      onRegistry(
-        rendererRegistry,
+      withQueryClient(
         createElement(
           OpenAddressesHere,
           {

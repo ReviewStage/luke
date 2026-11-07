@@ -10,13 +10,12 @@ import {
 } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { PICTURE_STATE } from "@repo/ui/picture-read";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { pictureNow } from "../picture-query.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { useAgentPictureDoor } from "./agent-pictures.js";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
 import {
@@ -124,7 +123,7 @@ beforeEach(async () => {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Tab))));
+  await act(async () => root.render(withQueryClient(createElement(Tab))));
 });
 
 afterEach(() => {

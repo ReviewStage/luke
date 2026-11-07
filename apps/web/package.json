@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@better-auth/oauth-provider": "1.7.7",
-    "@effect/atom-react": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/geist": "5.3.0",

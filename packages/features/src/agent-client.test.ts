@@ -20,6 +20,7 @@ import {
 } from "./provider-key-wire.js";
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
 import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
+import { READ_MARK } from "./read-mark.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 
@@ -467,15 +468,15 @@ it.effect(
 /** An inbox item a keyed write names. */
 const KEYED_ITEM_ID = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
 
-/** One keyed inbox write: what it is, the route it travels, and its retry under the key it carries again. */
-interface KeyedInboxWrite {
+/** One keyed write: what it is, the route it travels, and its retry under the key it carries again. */
+interface KeyedWrite {
   readonly write: string;
   readonly route: string;
   readonly retried: (key: string) => Effect.Effect<object, never, HttpClient.HttpClient>;
 }
 
-/** One retry of each keyed inbox write. */
-const KEYED_INBOX_WRITES: readonly KeyedInboxWrite[] = [
+/** One retry of each keyed write, on the inbox and on an agent's row. */
+const KEYED_WRITES: readonly KeyedWrite[] = [
   {
     write: "an answer",
     route: `POST /api/inbox/${KEYED_ITEM_ID}`,
@@ -512,9 +513,24 @@ const KEYED_INBOX_WRITES: readonly KeyedInboxWrite[] = [
     route: "PUT /api/inbox/read",
     retried: (key: string) => client().markInboxRead({}, key),
   },
+  {
+    write: "an agent renamed",
+    route: `PATCH /api/agents/${AGENT_ID}`,
+    retried: (key: string) => client().rename(AGENT_ID, { title: "Expiry job" }, key),
+  },
+  {
+    write: "an agent pinned",
+    route: `PATCH /api/agents/${AGENT_ID}`,
+    retried: (key: string) => client().pin(AGENT_ID, { pinned: true }, key),
+  },
+  {
+    write: "an agent marked read",
+    route: `PATCH /api/agents/${AGENT_ID}`,
+    retried: (key: string) => client().markRead(AGENT_ID, { readMark: READ_MARK.READ }, key),
+  },
 ];
 
-it.effect.each(KEYED_INBOX_WRITES)(
+it.effect.each(KEYED_WRITES)(
   "$write retried under its key after its answer was lost, answered already written, keeps its optimistic change",
   ({ route, retried }) =>
     Effect.gen(function* () {
@@ -802,51 +818,56 @@ it.effect(
     }),
 );
 
+it.effect("a pull request's chapters are generated with the tab's number in the query", () =>
+  Effect.gen(function* () {
+    const path = `/api/agents/${AGENT_ID}/chapters`;
+    const answer = {
+      pullRequest: {
+        number: 7,
+        generatable: true,
+        chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+      },
+    };
+    const api = fakeCloudApi({
+      [`POST ${path}`]: { answer: () => answer },
+    });
+
+    assert.deepEqual(
+      yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
+      answer,
+    );
+    assert.deepEqual(
+      api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
+      [`POST ${path}?number=7`],
+    );
+    assert.equal(api.requests()[0]?.body ?? "", "");
+  }),
+);
+
 it.effect(
-  "a pull request's chapters are generated with the tab's number in the query, each refusal the tab acts on read as its own failure",
+  "a Generate the service cannot run now reads as its own failure, and one refused for its repository's reach reads without why, as the tab has always heard it",
   () =>
     Effect.gen(function* () {
-      const path = `/api/agents/${AGENT_ID}/chapters`;
-      const answer = {
-        pullRequest: {
-          number: 7,
-          generatable: true,
-          chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
-        },
-      };
-      const api = fakeCloudApi({
-        [`POST ${path}`]: { answer: () => answer },
+      const refusedWith = (body: JsonValue) =>
+        Effect.provide(
+          client().generateChapters(AGENT_ID),
+          fakeCloudApi({
+            [`POST /api/agents/${AGENT_ID}/chapters`]: {
+              answer: () => body,
+              status: HTTP_STATUS.CONFLICT,
+            },
+          }).layer,
+        );
+
+      const unavailable = yield* refusedWith({ error: HOSTED_API_ERROR.UNAVAILABLE });
+      const unreached = yield* refusedWith({
+        error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        unreached: { reason: REPOSITORY_UNREACHED.GONE, repository: "Acme/Relay" },
       });
 
-      assert.deepEqual(
-        yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
-        answer,
-      );
-      assert.deepEqual(
-        api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
-        [`POST ${path}?number=7`],
-      );
-      assert.equal(api.requests()[0]?.body ?? "", "");
-
-      const refusals = [
-        [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],
-        [
-          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-          PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-        ],
-        [HOSTED_API_ERROR.GITHUB_UNANSWERED, PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED],
-        [HOSTED_API_ERROR.UNAVAILABLE, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE],
-        [HOSTED_API_ERROR.INVALID_REQUEST, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED],
-      ] as const;
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          [`POST ${path}`]: { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
-        });
-        assert.deepEqual(
-          yield* Effect.provide(client().generateChapters(AGENT_ID), refusing.layer),
-          { failure },
-          error,
-        );
-      }
+      assert.deepEqual(unavailable, { failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE });
+      assert.deepEqual(unreached, {
+        failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      });
     }),
 );

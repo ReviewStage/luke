@@ -33,6 +33,7 @@
  * nothing.
  */
 
+import type { RunnerTrace } from "@repo/agent-runner/protocol";
 import {
   scrubbedAttributes,
   scrubbedQueryParams,
@@ -45,7 +46,17 @@ import {
   type EventHint,
   SentryEffectExternalSpanLayer,
 } from "@sentry/effect/server";
-import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
+import {
+  Effect,
+  ErrorReporter,
+  Exit,
+  Layer,
+  Logger,
+  Option,
+  Predicate,
+  References,
+  Tracer,
+} from "effect";
 
 export const SENTRY_ENVIRONMENT = {
   /** The `vespin-web` project's DSN; absent means nothing is sent. */
@@ -98,6 +109,51 @@ const SEND_ROOT_SPAN = {
 } as const;
 
 const SEND_ROOT_SPAN_NAMES: ReadonlySet<string> = new Set(Object.values(SEND_ROOT_SPAN));
+
+/** What an agent's start, send, or launch is found by in Sentry: ids, and its repository's and harness's names. */
+export interface AgentTraceIds {
+  readonly agentId: string;
+  readonly userId: string;
+  readonly workspaceId: string;
+  readonly repository: string | null;
+  readonly harness: string | undefined;
+}
+
+/**
+ * The span attributes a search finds an agent's trace by. Note that nothing
+ * of a person is among them but the account's id: no name, email, prompt,
+ * or credential.
+ */
+export function agentSpanAttributes(ids: AgentTraceIds): Record<string, string> {
+  return {
+    "agent.id": ids.agentId,
+    "user.id": ids.userId,
+    "workspace.id": ids.workspaceId,
+    ...(ids.repository === null ? undefined : { repository: ids.repository }),
+    ...(ids.harness === undefined ? undefined : { harness: ids.harness }),
+  };
+}
+
+/**
+ * The current span and every span above it in this process annotated with
+ * the agent's ids, so the procedure span a start or a send runs under
+ * (`orpc/base.ts`) is found by them as well as the step's own; a caller's
+ * span from another process is passed over.
+ */
+export const agentSpansAnnotated = (ids: AgentTraceIds): Effect.Effect<void> =>
+  Effect.currentSpan.pipe(
+    Effect.flatMap((current) =>
+      Effect.sync(() => {
+        const attributes = Object.entries(agentSpanAttributes(ids));
+        let span: Tracer.AnySpan | undefined = current;
+        while (span?._tag === "Span") {
+          for (const [key, value] of attributes) span.attribute(key, value);
+          span = Option.getOrUndefined(span.parent);
+        }
+      }),
+    ),
+    Effect.ignore,
+  );
 
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
@@ -296,16 +352,13 @@ export function sentryOptions(): SentryOptions {
     // Note that one in ten requests is traced, because each request carries
     // several Effect spans and every request came to about 140,000 spans an
     // hour in production, which a plan's span quota does not hold. A call
-    // with a parent follows the parent's decision, so a send the client
-    // sampled is traced through here. A start or send with no parent (an
-    // automation, a Slack start, a comment's ask, an agent's `start_agent`,
-    // a request naming no trace) is always traced, because it is rare and
-    // the trace is what it is for. Errors, logs, and check-ins are not
-    // sampled by this.
-    tracesSampler: ({ name, parentSampled, inheritOrSampleWith }) =>
-      parentSampled === undefined && SEND_ROOT_SPAN_NAMES.has(name)
-        ? 1
-        : inheritOrSampleWith(TRACES_SAMPLE_RATE),
+    // with a parent follows the parent's decision. A start or send is always
+    // traced, whatever its caller decided, because it is rare, the trace is
+    // what it is for, and a desktop that samples one in ten would otherwise
+    // drop nine of its starts. Errors, logs, and check-ins are not sampled by
+    // this.
+    tracesSampler: ({ name, inheritOrSampleWith }) =>
+      SEND_ROOT_SPAN_NAMES.has(name) ? 1 : inheritOrSampleWith(TRACES_SAMPLE_RATE),
     // Note that this outranks a model call's own telemetry asking to record,
     // and is read by every AI integration Sentry ships (the AI SDK's, MCP's, OpenAI's, Anthropic's).
     // Note that no request body is kept either, because what is posted to an agent is a
@@ -531,6 +584,27 @@ export function sentryQueueSent(): Promise<boolean> {
  */
 export function sentryStep<A>(name: string, step: () => Promise<A>): Promise<A> {
   return Sentry.startSpan({ name }, step);
+}
+
+/**
+ * What a runner in the cloud's sandbox is handed to trace its startup in the
+ * launch's own trace (`@repo/agent-runner`'s `trace.ts`): this deployment's
+ * project, environment and release, and the active span's `sentry-trace`
+ * and `baggage`, so it is read on the fiber of the span the runner is to
+ * continue. None where this process sends Sentry nothing.
+ */
+export function sentryRunnerTrace(): Omit<RunnerTrace, "path"> | undefined {
+  const options = Sentry.getClient()?.getOptions();
+  if (options?.dsn === undefined || options.dsn === "") return undefined;
+  const { "sentry-trace": sentryTrace, baggage } = Sentry.getTraceData();
+  if (sentryTrace === undefined) return undefined;
+  return {
+    dsn: options.dsn,
+    environment: options.environment ?? UNNAMED_DEPLOYMENT,
+    ...(options.release === undefined ? undefined : { release: options.release }),
+    sentryTrace,
+    ...(baggage === undefined ? undefined : { baggage }),
+  };
 }
 
 /** A web function's handler, as the platform calls it. */

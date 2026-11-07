@@ -14,7 +14,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Option, Schema } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -24,7 +23,7 @@ import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import {
   ADMIN_AWAY,
@@ -33,6 +32,7 @@ import {
   BOARD_AWAY,
   INBOX_AWAY,
   PERSON_AWAY,
+  UNKNOWN_WORKSPACE_AWAY,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -230,6 +230,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       automationsView: AUTOMATIONS_AWAY,
       versionHistoryView: VERSION_HISTORY_AWAY,
       inboxView: INBOX_AWAY,
+      unknownWorkspaceView: UNKNOWN_WORKSPACE_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }
@@ -239,10 +240,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(Fragment, null, createElement(Page), createElement(ToastHost)),
-      ),
+      withQueryClient(createElement(Fragment, null, createElement(Page), createElement(ToastHost))),
     ),
   );
   await settle();

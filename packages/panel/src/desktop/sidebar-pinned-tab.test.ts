@@ -12,7 +12,6 @@ import type { TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire"
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { AGENT_ACT_KIND } from "@repo/host/contract";
 import { agentTab, changesTab } from "@repo/ui/tab-strip-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
@@ -27,7 +26,7 @@ import {
   quietHold,
 } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, listedAgent, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -96,8 +95,7 @@ function drawPin(
   root = createRoot(list);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(SidebarPinnedTab, {
           tasks: control,
           pin,

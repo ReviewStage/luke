@@ -147,6 +147,14 @@ Service does not send Sentry what was sent to or returned by a model, though an
 error's own words can quote what an agent was working on. The Mac app also sends
 Sentry diagnostic data about its resource use, such as processor usage.
 
+An agent running in Vespin's cloud also sends Sentry, from its sandbox, the
+timings of its own start: performance traces of its startup steps, in the same
+trace as the Service's, and the time from its taking your message to the first
+word of the model's answer. These carry only ids, the kind of agent, how
+it was started, and durations, never your messages, the agent's work, or its
+environment; it sends no error reports. An agent running on your own machine
+sends Sentry nothing.
+
 ### Feedback
 
 If you send feedback, we receive your words, any screenshots you attach, and,
@@ -250,8 +258,8 @@ affected users and relevant authorities as required by applicable law.
 
 We retain your data for as long as your account is active and as needed to
 provide the Service. Deleting a task deletes it at once with its history,
-pages, inbox items, and pictures; its agents' transcripts are removed seven
-days later, and their sandboxes and those sandboxes' snapshots expire and are
+pages, inbox items, and pictures, and its agents' transcripts. Deleting an
+agent deletes its transcript at once. Their sandboxes and those sandboxes' snapshots expire and are
 removed seven days after they were last used. When you delete your account:
 
 - **Account data** (profile, sessions, OAuth tokens, saved credentials,

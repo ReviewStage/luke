@@ -12,12 +12,11 @@ import {
 } from "@repo/features/inbox-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { type InboxReadMarks, type MarkSaying, useInboxReadMarks } from "./use-inbox-read-marks.js";
 
@@ -107,8 +106,7 @@ function marks() {
     return createElement(Fragment, null, createElement(ToastHost));
   }
   root = createRoot(document.createElement("div"));
-  const registry = AtomRegistry.make();
-  act(() => root?.render(onRegistry(registry, createElement(Harness))));
+  act(() => root?.render(withQueryClient(createElement(Harness))));
   const held = () => control ?? assert.fail("the hook stands");
   return {
     sent,

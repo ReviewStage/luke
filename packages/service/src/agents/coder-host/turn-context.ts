@@ -43,13 +43,24 @@ export const TurnHandedSchema = Schema.Struct({
   task: Schema.optionalKey(Schema.String),
   /** Whether the session's last turn was spoken, on a call of a build that still took calls, which a compaction leaves standing, so the next turn says the call's words no longer hold. */
   spoken: Schema.optionalKey(Schema.Boolean),
+  /** The workspace's experiments the session's instructions and tools were composed on as it opened, which a message arriving after they changed opens a fresh session for (`runner-sessions.ts`); none for a session opened before they were kept, which takes up the ones standing. */
+  experiments: Schema.optionalKey(
+    Schema.Struct({
+      descriptionsOn: Schema.Boolean,
+      pilotOn: Schema.Boolean,
+      memoryOn: Schema.Boolean,
+    }),
+  ),
 });
 
 export type TurnHanded = typeof TurnHandedSchema.Type;
 
-/** What a session has handed once its history was compacted: only the last turn's kind, since a summary may have dropped the rest. */
+/** What a session has handed once its history was compacted: only the last turn's kind, since a summary may have dropped the rest, and the experiments it opened on, which a compaction leaves its instructions on. */
 export function handedAfterCompaction(handed: TurnHanded): TurnHanded {
-  return handed.spoken === true ? { spoken: true } : {};
+  return {
+    ...(handed.spoken === true ? { spoken: true } : undefined),
+    ...(handed.experiments === undefined ? undefined : { experiments: handed.experiments }),
+  };
 }
 
 /** A content address: the same text always answers the same key. */

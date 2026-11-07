@@ -15,7 +15,6 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -38,7 +37,7 @@ import {
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handHostReads, handInboxItems, handState } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
@@ -91,7 +90,7 @@ async function mount(surface: React.ReactElement): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   unmounts.push(() => root.unmount());
-  act(() => root.render(onRegistry(AtomRegistry.make(), surface)));
+  act(() => root.render(withQueryClient(surface)));
   await settle();
   return container;
 }

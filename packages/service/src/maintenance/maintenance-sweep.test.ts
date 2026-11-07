@@ -9,12 +9,8 @@ import {
   type MaintenanceSweepOptions,
   SWEEP_FAILED,
 } from "./maintenance-sweep.js";
-import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-/** What the sweep over the running native sandboxes answers. */
-const NATIVE: NativeSandboxSweepOutcome = { lost: 1 };
-
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
   authorization: string | null = `Bearer ${Redacted.value(CRON_SECRET)}`,
@@ -28,22 +24,14 @@ function sweepRequest(
 
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
-  purged: number[];
-  abandoned: number[];
-  deviceLeases: number[];
   deviceWarmRunners: number[];
-  native: number[];
   wakeups: number[];
   syncLog: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
-    purged: [],
-    abandoned: [],
-    deviceLeases: [],
     deviceWarmRunners: [],
-    native: [],
     wakeups: [],
     syncLog: [],
   };
@@ -51,42 +39,22 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
     monitor: { run: (sweep) => sweep },
-    purgeCleared: (now) =>
-      Effect.sync(() => {
-        recorded.purged.push(now);
-        return 2;
-      }),
-    sweepAbandonedTurns: (now) =>
-      Effect.sync(() => {
-        recorded.abandoned.push(now);
-        return 1;
-      }),
-    sweepDeviceLeases: (now) =>
-      Effect.sync(() => {
-        recorded.deviceLeases.push(now);
-        return { lapsed: 1, busy: 0, failed: 0 };
-      }),
     sweepDeviceWarmRunners: (now) =>
       Effect.sync(() => {
         recorded.deviceWarmRunners.push(now);
         return { retired: 1, left: 0, busy: 0, failed: 0 };
-      }),
-    sweepNativeSandboxes: (now) =>
-      Effect.sync(() => {
-        recorded.native.push(now);
-        return NATIVE;
       }),
     sweepNativeWakeups: (now) =>
       Effect.sync(() => {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
       }),
-    sweepAgentQueues: () => Effect.succeed(0),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
         recorded.syncLog.push(now);
         return 5;
       }),
+    sweepPortShares: () => Effect.succeed(0),
     ...overrides,
   };
   return { options, recorded };
@@ -107,11 +75,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
-      purged: [],
-      abandoned: [],
-      deviceLeases: [],
       deviceWarmRunners: [],
-      native: [],
       wakeups: [],
       syncLog: [],
     });
@@ -129,20 +93,12 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
-      purged: [],
-      abandoned: [],
-      deviceLeases: [],
       deviceWarmRunners: [],
-      native: [],
       wakeups: [],
       syncLog: [],
     });
     assert.deepEqual(missing.recorded, {
-      purged: [],
-      abandoned: [],
-      deviceLeases: [],
       deviceWarmRunners: [],
-      native: [],
       wakeups: [],
       syncLog: [],
     });
@@ -157,17 +113,12 @@ it.effect(
       const answer = yield* sweep(options);
 
       assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.equal(answer.body.syncLog, 5);
-      const [instant] = recorded.purged;
+      const [instant] = recorded.deviceWarmRunners;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
-        purged: [instant],
-        abandoned: [instant],
-        deviceLeases: [instant],
         deviceWarmRunners: [instant],
-        native: [instant],
         wakeups: [instant],
         syncLog: [instant],
       });
@@ -180,7 +131,7 @@ it.effect(
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
+        sweepDeviceWarmRunners: () => Effect.fail(new Error("a runner's row could not be read")),
         sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
@@ -196,7 +147,7 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
+      assert.deepEqual(answer.body.deviceWarmRunners, SWEEP_FAILED);
       assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
       assert.equal(recorded.syncLog.length, 1);
     }),

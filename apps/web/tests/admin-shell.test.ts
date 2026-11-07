@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import "@repo/panel/testing/match-media";
 import "@repo/panel/testing/resize-observer";
-import { onRegistry } from "@repo/panel/testing/copy-feedback";
+import { withQueryClient } from "@repo/panel/testing/copy-feedback";
 import type { WireValue } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -75,13 +74,7 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   const { AdminDashboard } = await import("../src/AdminDashboard");
   root = createRoot(container);
   await act(async () => {
-    root?.render(
-      createElement(
-        StrictMode,
-        null,
-        onRegistry(AtomRegistry.make(), createElement(AdminDashboard)),
-      ),
-    );
+    root?.render(createElement(StrictMode, null, withQueryClient(createElement(AdminDashboard))));
   });
   return container;
 }

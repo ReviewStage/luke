@@ -1,46 +1,26 @@
 /**
- * The renderer's Effect edge: the browser runtime the atoms' own work runs on,
- * and the registry that holds them.
+ * renderer-runtime.ts -- the renderer's Effect edge: the services the panel's
+ * own fibers run on.
  *
- * There is one of each per window: every window is its own document loading
- * the one renderer bundle, so each instantiates this module once, provides
- * its own registry from the root, and holds the one browser `ManagedRuntime`
- * the factory builds inside it. No two windows share one. Nothing here
+ * There is one set per window: every window is its own document loading
+ * the one renderer bundle, so each instantiates this module once and builds
+ * its services here, once. No two windows share them. Nothing here
  * may reach a layer that reaches `node:` — the renderer is a sandboxed browser
  * context, and a runtime is exactly the place a Node-reaching service would
  * arrive unnoticed.
  */
 
-import { scheduleTask } from "@effect/atom-react/RegistryContext";
-import { Cause, type Context, Duration, Effect, Exit, Layer } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { Cause, Context, Duration, Effect, Exit } from "effect";
 
 /**
- * No service stands yet: what the runtime is for is holding the fibers the
- * atoms fork, and a layer arrives here when a surface needs one. It is kept
- * alive because it is the bundle's one edge: a runtime the registry disposed
- * between two readings would be a second runtime to whatever it handed out.
+ * No service stands yet: what the services are for is holding the fibers the
+ * panel forks, and a service arrives here when a surface needs one. They are
+ * made once, so every fiber stands on the one set of services this bundle has.
  */
-export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
+const RENDERER_SERVICES: Context.Context<never> = Context.empty();
 
-/**
- * The registry the root provides, so a hook reading an atom and a callback
- * reading the same atom outside React read the one value rather than two.
- * Its `scheduleTask` is the React binding's own, which is what batches a
- * delivery's redraws into one.
- */
-export const rendererRegistry = AtomRegistry.make({ scheduleTask });
-
-/**
- * The services that runtime was built over, for work that is a fiber of its
- * own rather than an atom's, so a fiber outside the atoms still stands on the
- * one set of services this bundle has. The layer is built
- * synchronously, so there is nothing to wait for.
- */
-export const rendererServicesNow = (): Context.Context<never> =>
-  AsyncResult.getOrThrow(rendererRegistry.get(rendererRuntime));
+/** The services the renderer's fibers run on, for a reading outside a fiber, such as the clock's time. */
+export const rendererServicesNow = (): Context.Context<never> => RENDERER_SERVICES;
 
 /**
  * A pause of the milliseconds handed, as a fiber of its own on the

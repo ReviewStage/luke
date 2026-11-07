@@ -10,13 +10,14 @@ import {
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { EXPERIMENT } from "@repo/settings";
 import { MESSAGE_CHANNEL } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
+import { experimentOnIn } from "../agents/workspace-experiment-on.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
@@ -165,9 +166,10 @@ export function reviewAskMessage(ask: ReviewAsk): string {
 
 /**
  * The agent an ask names, where it is the plan's own and stands, and, for a
- * thread on the description rather than a page, where its starter has Descriptions on
- * (`descriptions-on.ts`), since an agent with Descriptions off is told nothing of the
- * description's comments; nothing otherwise, which no ask is written for.
+ * thread on the description rather than a page, where its workspace has Task
+ * descriptions on (`workspace-experiment-on.ts`), since an agent with it off
+ * is told nothing of the description's comments; nothing otherwise, which no
+ * ask is written for.
  */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -182,7 +184,7 @@ export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   if (
     thread.page === undefined &&
-    !(yield* descriptionsOnFor(agent.value.userId, agent.value.kind))
+    !(yield* experimentOnIn(agent.value.organizationId, EXPERIMENT.DESCRIPTIONS))
   ) {
     return undefined;
   }

@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_PICK_ACT, PAGE_PICK_TYPE } from "@repo/features/page-pick";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ReplyDoorProvider } from "./reply-to-selection.js";
 import { ShownPage } from "./shown-page.js";
 
@@ -43,11 +42,7 @@ function drawPage(door: ((reply: string) => void) | undefined): Window {
     version: 1,
     title: "Invite funnel",
   });
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(ReplyDoorProvider, { value: door }, page)),
-    ),
-  );
+  act(() => root.render(withQueryClient(createElement(ReplyDoorProvider, { value: door }, page))));
   const framed = container.querySelector("iframe")?.contentWindow;
   assert.ok(framed);
   return framed;

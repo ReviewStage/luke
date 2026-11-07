@@ -2,13 +2,12 @@
 
 import assert from "node:assert/strict";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -43,9 +42,7 @@ async function drawn(text: string): Promise<HTMLElement> {
   fakeActPort({});
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() =>
-    root?.render(onRegistry(AtomRegistry.make(), createElement(TranscriptWords, { text }))),
-  );
+  act(() => root?.render(withQueryClient(createElement(TranscriptWords, { text }))));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

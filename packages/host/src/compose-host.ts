@@ -30,6 +30,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAccountAsks } from "./compose-account-asks.js";
 import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
@@ -41,6 +42,7 @@ import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
 import { composeThisMacHost } from "./compose-this-mac-host.js";
+import { composeWorkspaces } from "./compose-workspaces.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
@@ -83,7 +85,9 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.TASKS,
+  HOST_CONCERN.WORKSPACES,
   HOST_CONCERN.AGENTS,
+  HOST_CONCERN.ACCOUNT_ASKS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
@@ -250,25 +254,37 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         pool,
         entities: () => entities?.store,
         offlineRefused,
+        client: new HostedTaskClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
+      }),
+    );
+    const workspaces = yield* served(
+      composeWorkspaces({
+        kernel,
+        account,
+        accountId,
+        member,
+        kept,
+        focus,
+        pool,
+        entities: () => entities?.store,
         githubMoved: integrations.githubMoved,
-        client: Object.assign(
-          new HostedTaskClient({
+        recordProductEvent: settings.recordProductEvent,
+        tasks: tasks.workspaces,
+        client: {
+          workspaces: workspaceClient,
+          github: new HostedGitHubConnectionClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
+            sessionCredential: account.sessionCredential,
           }),
-          {
-            workspaces: workspaceClient,
-            github: new HostedGitHubConnectionClient({
-              serviceBaseUrl: kernel.hostedServiceBaseUrl,
-              credential: account.credential,
-              sessionCredential: account.sessionCredential,
-            }),
-            admin: new HostedAdminClient({
-              serviceBaseUrl: kernel.hostedServiceBaseUrl,
-              sessionCredential: account.sessionCredential,
-            }),
-          },
-        ),
+          admin: new HostedAdminClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            sessionCredential: account.sessionCredential,
+          }),
+        },
       }),
     );
     /** An agent as the task list holds it now, on a plan or with none; none where it lists no such agent. */
@@ -312,6 +328,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         pullRequestListings: tasks.pullRequestListings,
         pool,
         agentListed,
+      }),
+    );
+    const accountAsks = yield* served(
+      composeAccountAsks({
+        kernel,
+        account,
+        accountId,
+        focus,
+        client: agentClient,
+        pool,
+        modelsMoved: agents.modelsMoved,
         repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
@@ -499,7 +526,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* account.refreshAccess;
         yield* openEntities;
         yield* tasks.open;
+        yield* workspaces.open;
         yield* agents.open;
+        yield* accountAsks.open;
         yield* automations.open;
         yield* integrations.open;
         yield* installedSkills.open;
@@ -511,8 +540,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const closeCapabilities = Effect.gen(function* () {
       yield* account.forgetAccess;
       yield* forgetEntities;
+      // Note that the workspaces are let go before the tasks, so no follow of theirs draws on the view the tasks' reset leaves idle.
+      yield* workspaces.reset;
       yield* tasks.reset;
       yield* agents.reset;
+      yield* accountAsks.reset;
       yield* integrations.reset;
       yield* automations.reset;
       yield* installedSkills.reset;
@@ -530,6 +562,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
+    yield* tasks.link({ workspacesRefreshed: workspaces.refreshed });
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
@@ -539,7 +572,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.TASKS]: tasks,
+      [HOST_CONCERN.WORKSPACES]: workspaces,
       [HOST_CONCERN.AGENTS]: agents,
+      [HOST_CONCERN.ACCOUNT_ASKS]: accountAsks,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
@@ -610,6 +645,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       acts: {
         ...account.acts,
         ...agents.acts,
+        ...accountAsks.acts,
         ...settings.acts,
         ...thisMacHost.acts,
         ...automations.acts,
@@ -618,6 +654,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ...macCommands.acts,
         ...portForwards.acts,
         ...tasks.acts,
+        ...workspaces.acts,
       },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),

@@ -11,7 +11,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { type AppHostRead, type AppProviderKeyList, UNREAD } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -21,7 +20,7 @@ import { DictateButton } from "./tasks/dictation-strip.js";
 import { useDictation } from "./tasks/use-dictation.js";
 import { fakeActPort, quietHold } from "./testing/app-bridge.js";
 import { handState } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * Dictation runs on the account's own OpenAI API key, so an account known to
@@ -84,8 +83,7 @@ async function mount(held: AppHostRead<AppProviderKeyList>, signedIn = true) {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.push(link) },

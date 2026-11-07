@@ -18,7 +18,7 @@
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
  * window as Settings does. Settings, Admin, a workspace's Board, a
- * person's page, an agent's own page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
+ * person's page, an agent's own page, the Automations pages, a task's version history, the Inbox, and a workspace's address naming none of the reader's, not found, are routed places: the router alone says the window stands
  * on them, their routes draw them, as lazy routes but for an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`), but for an agent's page, which stands at any address
@@ -36,6 +36,7 @@ import {
   createRoute,
   createRouter,
   type ErrorComponentProps,
+  notFound,
   type RouterHistory,
   RouterProvider,
   redirect,
@@ -55,6 +56,7 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
 import {
@@ -158,16 +160,28 @@ const connectRoute = createRoute({
 
 const workspaceRoute = createRoute({ getParentRoute: () => placesRoute, path: "/$workspace" });
 
+/**
+ * A workspace's Home, the place the window's state says, of one of the
+ * reader's workspaces (`workspaceRouteStands`): an address naming none of
+ * theirs is not found, its page saying the workspace is not there for them
+ * and drawing nothing of it, at its own address
+ * (`ROUTED_PLACE.UNKNOWN_WORKSPACE`).
+ */
 const homeRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "/",
+  beforeLoad: ({ context, params }) => {
+    if (workspaceRouteStands(params.workspace, context.access)) return;
+    throw notFound();
+  },
   component: StatePlace,
+  notFoundComponent: UnknownWorkspacePlace,
 });
 
 /**
  * A workspace's Board, the Tasks page, of one of the reader's workspaces
  * (`workspaceRouteStands`): an address naming none of theirs gives way to
- * that address's Home, which says the workspace is not there for them. Its
+ * that address's Home, which is not found. Its
  * page is a chunk of its own, read ahead as the pointer comes to its row,
  * and once the signed-in window is idle; what stands while it loads is the
  * page's own frame.
@@ -414,8 +428,8 @@ const adminDayRoute = createRoute({ getParentRoute: () => adminRoute, path: "day
  * Settings, over the whole window rather than beside the sidebar, under the
  * workspace whose Workspace page it shows, or under `/app` while the window
  * lists none. Its list is the index, which a narrow room stands alone, and
- * each page a `$page`. A page an experiment holds stands only while the
- * account has it on (`settingsPageRouteStands`), and gives way to Profile
+ * each page a `$page`. A page an experiment holds stands only while it is
+ * on, the account's own or the workspace's (`settingsPageRouteStands`), and gives way to Profile
  * otherwise. Its pages are a chunk of their own, opened seldom, whose frame
  * stands while it loads.
  */
@@ -434,7 +448,7 @@ const settingsPageRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "$page",
   beforeLoad: ({ context, params }) => {
-    if (settingsPageRouteStands(params.page, context.access)) return;
+    if (settingsPageRouteStands(params.page, context.access, params.workspace)) return;
     throw redirect({
       to: "/$workspace/settings/$page",
       params: { workspace: params.workspace, page: SETTINGS_VIEW.ACCOUNT },
@@ -450,7 +464,7 @@ const settingsPageRoute = createRoute({
  * alone, a version chosen at `/version/<revision>`, its sections listed at
  * `/version/<revision>/sections`, and one of them at
  * `/version/<revision>/section/<heading>`. It is the description's, so it
- * stands only while the account has Descriptions on
+ * stands only while the workspace it names has Descriptions on
  * (`versionHistoryRouteStands`), and gives way to the task otherwise. One
  * layout draws every page of it, so moving between them draws no new
  * history; its chunk is its own, opened seldom, whose frame stands while it
@@ -470,9 +484,9 @@ const versionHistoryRoute = createRoute({
 const taskVersionsRoute = createRoute({
   getParentRoute: () => versionHistoryRoute,
   path: "/$workspace/task/$taskId/versions",
-  // A version history gives way to the task it is of while the account has Descriptions off.
+  // A version history gives way to the task it is of while its workspace has Descriptions off.
   beforeLoad: ({ context, params }) => {
-    if (versionHistoryRouteStands(context.access)) return;
+    if (versionHistoryRouteStands(context.access, params.workspace)) return;
     throw redirect({ to: "/$workspace/task/$taskId", params, replace: true });
   },
 });
@@ -481,7 +495,7 @@ const taskVersionRoute = createRoute({
   getParentRoute: () => versionHistoryRoute,
   path: "/$workspace/task/$taskId/version/$revision",
   beforeLoad: ({ context, params }) => {
-    if (versionHistoryRouteStands(context.access)) return;
+    if (versionHistoryRouteStands(context.access, params.workspace)) return;
     throw redirect({
       to: "/$workspace/task/$taskId",
       params: { workspace: params.workspace, taskId: params.taskId },

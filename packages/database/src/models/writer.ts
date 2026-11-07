@@ -74,7 +74,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turnlessUserLine, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
-import { TURN_ABANDON } from "./abandoned-turns.js";
+import { LOST_TURNS } from "./abandoned-turns.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -91,6 +91,7 @@ import {
   waitingOutDispatchClaim,
 } from "./dispatch-claim.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
+import { leaseFrom } from "./turn-lease.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -649,11 +650,7 @@ const lockConversation = SqlSchema.findOneOption({
         .select({ id: conversations.id, kind: conversations.kind })
         .from(conversations)
         .where(
-          and(
-            eq(conversations.id, target.conversationId),
-            eq(conversations.userId, target.userId),
-            isNull(conversations.deletedAt),
-          ),
+          and(eq(conversations.id, target.conversationId), eq(conversations.userId, target.userId)),
         )
         .for("update"),
     ),
@@ -886,6 +883,7 @@ const insertStartedTurn = SqlSchema.void({
         status: TURN_STATUS.RUNNING,
         queuedAt: row.startedAt,
         startedAt: row.startedAt,
+        leaseUntil: leaseFrom(row.startedAt),
       }),
     ),
 });
@@ -917,6 +915,7 @@ const insertQueuedTurn = SqlSchema.void({
         promptHash: row.promptHash,
         toolSetHash: row.toolSetHash,
         queuedAt: row.queuedAt,
+        leaseUntil: leaseFrom(row.queuedAt),
       }),
     ),
 });
@@ -927,7 +926,11 @@ const startTurn = SqlSchema.void({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ status: TURN_STATUS.RUNNING, startedAt: row.startedAt })
+        .set({
+          status: TURN_STATUS.RUNNING,
+          startedAt: row.startedAt,
+          leaseUntil: leaseFrom(row.startedAt),
+        })
         .where(eq(turns.id, row.turnId)),
     ),
 });
@@ -1912,7 +1915,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
   yield* deleteStaleWithdrawnLines({
     conversationId: context.target.conversationId,
-    before: new Date(context.now.getTime() - TURN_ABANDON.AGENT_AFTER_MS),
+    before: new Date(context.now.getTime() - LOST_TURNS.WITHDRAWN_LINE_KEEP_MS),
   });
   // A line already under the key is the send a lost answer was for: the runtime has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
@@ -1989,11 +1992,10 @@ const deleteWithdrawnLine = SqlSchema.void({
 
 /**
  * Deletes the conversation's withdrawn lines no turn took, withdrawn before
- * the instant given. Note that the bound is a coding agent's turn bound,
- * because the runtime hands a line it took to the turn under way or to one
- * it opens at once, and a turn running past that bound is settled, so a
- * line withdrawn longer ago is one no turn will ever take, which every read
- * already leaves out.
+ * the instant given (`LOST_TURNS.WITHDRAWN_LINE_KEEP_MS` ago). Note that the
+ * runtime hands a line it took to the turn under way or to one it opens at
+ * once, so a line withdrawn that long ago is one no turn will ever take,
+ * which every read already leaves out.
  */
 const deleteStaleWithdrawnLines = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, before: Schema.Date }),
