@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { agentBrowserTabAnswerSchema, browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
+import { browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
   AGENT_STATUS,
@@ -9,6 +9,8 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
+import { agentBrowserTabsContract } from "./contract/agent-browser-tabs.js";
+import { descriptionCommentsContract } from "./contract/description-comments.js";
 import { githubContract } from "./contract/github.js";
 import { repositoryPinsContract } from "./contract/repository-pins.js";
 import { taskFilesContract } from "./contract/task-files.js";
@@ -18,7 +20,6 @@ import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.j
 import {
   descriptionCommentActionRequestSchema,
   descriptionCommentStartRequestSchema,
-  descriptionCommentThreadAnswerSchema,
 } from "./description-comment-wire.js";
 import {
   DESCRIPTION_EDIT_REFUSAL,
@@ -401,14 +402,9 @@ export const TASK_BLOCK_RENAMES = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_API_ERROR.NOT_FOUND,
 } as const;
 
-/** The task procedures that declare their own refusals, read through `hostedCall`. */
+/** The task procedures, read through `hostedCall`. */
 const declaredTaskCalls = {
-  list: tasksContract.list,
-  create: tasksContract.create,
-  update: tasksContract.update,
-  block: tasksContract.block,
-  parent: tasksContract.parent,
-  relation: tasksContract.relation,
+  tasks: tasksContract,
   files: taskFilesContract,
   sections: taskSectionsContract,
   pins: repositoryPinsContract,
@@ -431,8 +427,8 @@ export const TASK_CALL_FAILURE = {
   NOT_FOUND: TASK_FAILURE.NOT_FOUND,
   /** The repository named is not one our GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: TASK_FAILURE.REPOSITORY_NOT_REACHABLE,
-  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. No task procedure answers it now, since a start answers its agent's refusal beside the task it made, but the window still reads it. */
-  LOCAL_AGENT_REFUSED: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. A start no longer answers it, since it answers its agent's refusal beside the task it made, but the window still reads it; a delete's Stop of an agent on a device away is the task procedure that declares it now. */
+  LOCAL_AGENT_REFUSED: TASK_FAILURE.LOCAL_AGENT_REFUSED,
 } as const;
 
 export type TaskCallFailure = (typeof TASK_CALL_FAILURE)[keyof typeof TASK_CALL_FAILURE];
@@ -681,6 +677,14 @@ export const tasksLinkStandingParamsSchema = EffectSchema.Struct({
 
 export type TasksLinkStandingParams = typeof tasksLinkStandingParamsSchema.Type;
 
+/** A Browser tab's open's failures that shipped spelled otherwise than their refusal's slug, each as the side panel says it. */
+export const BROWSER_TAB_RENAMES = {
+  [HOSTED_API_ERROR.INVALID_REQUEST]: "invalid-address",
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: "not-ready",
+  [HOSTED_API_ERROR.AGENT_RETIRED]: "retired",
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: "unreachable",
+} as const;
+
 /**
  * Why a Browser tab a member asked for did not open in a coding agent's
  * browser, as the side panel says it: the service did not answer, the task
@@ -688,15 +692,9 @@ export type TasksLinkStandingParams = typeof tasksLinkStandingParamsSchema.Type;
  * drive, the address is not one a Browser tab opens, the agent has run no
  * sandbox yet, it is archived, or its browser could not be reached.
  */
-export const BROWSER_TAB_OPEN_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-  NOT_PERMITTED: "not-permitted",
-  INVALID_ADDRESS: "invalid-address",
-  NOT_READY: "not-ready",
-  RETIRED: "retired",
-  UNREACHABLE: "unreachable",
-} as const;
+export const BROWSER_TAB_OPEN_FAILURE = failureSetOf(agentBrowserTabsContract.agentOpen, {
+  as: BROWSER_TAB_RENAMES,
+});
 
 export type BrowserTabOpenFailure =
   (typeof BROWSER_TAB_OPEN_FAILURE)[keyof typeof BROWSER_TAB_OPEN_FAILURE];
@@ -710,12 +708,9 @@ export const tasksBrowserTabOpenParamsSchema = EffectSchema.Struct({
 export type TasksBrowserTabOpenParams = typeof tasksBrowserTabOpenParamsSchema.Type;
 
 /** The tab opened, already taken over by the member, or why none opened. */
-export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
-  agentBrowserTabAnswerSchema,
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(BROWSER_TAB_OPEN_FAILURE)),
-  }),
-]);
+export const tasksBrowserTabOpenAnswerSchema = answerView(agentBrowserTabsContract.agentOpen, {
+  as: BROWSER_TAB_RENAMES,
+});
 
 export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
@@ -1073,14 +1068,7 @@ export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;
 
 /** Why a call about a description's comments answered nothing to draw: no answer, or the plan is not the account's to read or write. */
-export const DESCRIPTION_COMMENT_CALL_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-} as const;
-
-const descriptionCommentFailedSchema = EffectSchema.Struct({
-  failure: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_CALL_FAILURE)),
-});
+export const DESCRIPTION_COMMENT_CALL_FAILURE = failureSetOf(descriptionCommentsContract);
 
 /** What a task's comment threads stand on: its description, or one of its pages. */
 export const COMMENT_SUBJECT = {
@@ -1114,9 +1102,6 @@ export const tasksCommentActParamsSchema = EffectSchema.Struct({
 export type TasksCommentActParams = typeof tasksCommentActParamsSchema.Type;
 
 /** A write to a description's comments as the window hears it: the thread as it stands, its deletion, a refusal, or why there is no answer. */
-export const tasksCommentAnswerSchema = EffectSchema.Union([
-  descriptionCommentThreadAnswerSchema,
-  descriptionCommentFailedSchema,
-]);
+export const tasksCommentAnswerSchema = answerView(descriptionCommentsContract.act);
 
 export type TasksCommentAnswer = typeof tasksCommentAnswerSchema.Type;

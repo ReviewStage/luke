@@ -37,7 +37,6 @@ import type {
 } from "./github-repositories-wire.js";
 import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
-  askHosted,
   askLive,
   HOSTED_DEADLINE,
   type HostedClient,
@@ -100,8 +99,7 @@ import {
 } from "./task-wire.js";
 import {
   type BlockCallFailure,
-  BROWSER_TAB_OPEN_FAILURE,
-  type BrowserTabOpenFailure,
+  BROWSER_TAB_RENAMES,
   DESCRIPTION_COMMENT_CALL_FAILURE,
   type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
@@ -181,9 +179,6 @@ const KEEP_REFUSED = {
 /** A comment call that answered nothing to draw. */
 const COMMENT_UNANSWERED = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** A comment call refused because the plan is not the account's to read or write. */
-const COMMENT_NOT_FOUND = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
-
 /** What a task's mark names: pinned or not and where the pin stands, or the reader's read mark. */
 export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "readMark">;
 
@@ -218,9 +213,10 @@ function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): Ta
 }
 
 /**
- * A procedure's failure as a result: its refusal where it is one the caller
- * names, unanswered for everything else, with the failure beneath it, which
- * the window reports and never draws.
+ * A live read's failure as a result, until live reads move onto
+ * `hostedCall`: its refusal where it is one the caller names, unanswered
+ * for everything else, with the failure beneath it, which the window
+ * reports and never draws.
  */
 function hostedRefusal<Failure extends string>(
   failed: HostedFailure,
@@ -230,13 +226,10 @@ function hostedRefusal<Failure extends string>(
   if (failed._tag !== "HostedRefused" || failure === undefined) {
     return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
   }
-  const localAgentRefusal = failed.data?.localAgentRefusal;
-  return localAgentRefusal === undefined
-    ? ({ ok: false, failure } as const)
-    : ({ ok: false, failure, localAgentRefusal } as const);
+  return { ok: false, failure } as const;
 }
 
-/** A procedure's answer as a result, as `hostedRefusal` reads a failure. */
+/** A live read's answer as a result, as `hostedRefusal` reads a failure. */
 function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -290,20 +283,15 @@ function failedResult<Failure extends string>(failed: {
     : ({ ok: false, failure, cause } as const);
 }
 
+/** A `hostedCall` failure handed on bare, as the calls that never carried what failed beneath it, or a refusal's fields, always answered it. */
+function bareFailure<Failure extends string>(failed: { readonly failure: Failure }) {
+  return { failure: failed.failure } as const;
+}
+
 /** How a keyed write's `hostedCall` failure went untaken (`keyed-write.ts`). */
 function untakenAs(failed: HostedCallFailed) {
   return { ok: false, failure: writeUntakenOf(failedFacts(failed)) } as const;
 }
-
-/** The refusals a Browser tab's open can answer with, by the service's own word for each. */
-const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>([
-  [HOSTED_API_ERROR.NOT_FOUND, BROWSER_TAB_OPEN_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.NOT_PERMITTED, BROWSER_TAB_OPEN_FAILURE.NOT_PERMITTED],
-  [HOSTED_API_ERROR.INVALID_REQUEST, BROWSER_TAB_OPEN_FAILURE.INVALID_ADDRESS],
-  [HOSTED_API_ERROR.AGENT_NOT_READY, BROWSER_TAB_OPEN_FAILURE.NOT_READY],
-  [HOSTED_API_ERROR.AGENT_RETIRED, BROWSER_TAB_OPEN_FAILURE.RETIRED],
-  [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
-]);
 
 /** A File tab's window as its query carries it, or nothing where it is not one the wire admits. */
 function fileWindowQuery(window: TaskFileRequest):
@@ -335,13 +323,6 @@ function keyedReading(key: string | undefined) {
     deadline: HOSTED_DEADLINE.USUAL,
     ...(key === undefined ? undefined : { idempotencyKey: key }),
   };
-}
-
-/** A procedure's answer, or nothing where it reached none. */
-function orNothing<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient> {
-  return Effect.orElseSucceed(asked, () => undefined);
 }
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
@@ -388,14 +369,12 @@ export class HostedTaskClient {
       readEither(descriptionCommentStartRequestSchema)(request),
     );
     if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
-    return commentAnswer(
-      Effect.map(
-        askHosted(this.#hosted.descriptionComments.start, {
-          params: { id: planId },
-          body: admitted,
-        }),
-        (started) => started.body,
-      ),
+    return Effect.map(
+      hostedCall(this.#hosted.descriptionComments.start, {
+        params: { id: planId },
+        body: admitted,
+      }),
+      (started) => ("failure" in started ? bareFailure(started) : started.body),
     );
   }
 
@@ -409,11 +388,12 @@ export class HostedTaskClient {
       readEither(descriptionCommentActionRequestSchema)(request),
     );
     if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
-    return commentAnswer(
-      askHosted(this.#hosted.descriptionComments.act, {
+    return Effect.map(
+      hostedCall(this.#hosted.descriptionComments.act, {
         params: { id: planId, thread: threadId },
         body: admitted,
       }),
+      (acted) => ("failure" in acted ? bareFailure(acted) : acted),
     );
   }
 
@@ -463,11 +443,9 @@ export class HostedTaskClient {
     workspace: string,
     number: number,
   ): Effect.Effect<string | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.find, { workspace, number: String(number) }),
-        (found) => found.taskId,
-      ),
+    return Effect.map(
+      hostedCall(this.#hosted.plans.find, { workspace, number: String(number) }),
+      (found) => ("failure" in found ? undefined : found.taskId),
     );
   }
 
@@ -475,9 +453,10 @@ export class HostedTaskClient {
   open(
     taskId: string,
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
-    return hostedResult(
-      Effect.map(askHosted(this.#hosted.plans.open, { id: taskId }), (opened) => opened.plan),
-      NOT_FOUND_REFUSAL,
+    return Effect.map(hostedCall(this.#hosted.plans.open, { id: taskId }), (opened) =>
+      "failure" in opened
+        ? failedAs(opened, [TASK_CALL_FAILURE.NOT_FOUND])
+        : succeeded(opened.plan),
     );
   }
 
@@ -501,11 +480,10 @@ export class HostedTaskClient {
   > {
     const admitted = Result.getOrUndefined(readEither(descriptionEditRequestSchema)(edit));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.plans.editDescription, { params: { id: taskId }, body: admitted }),
-      {
-        [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-      },
+    return Effect.map(
+      hostedCall(this.#hosted.plans.editDescription, { params: { id: taskId }, body: admitted }),
+      (edited) =>
+        "failure" in edited ? failedAs(edited, [TASK_CALL_FAILURE.NOT_FOUND]) : succeeded(edited),
     );
   }
 
@@ -779,21 +757,13 @@ export class HostedTaskClient {
     params: TasksBrowserTabOpenParams,
   ): Effect.Effect<TasksBrowserTabOpenAnswer, never, HttpClient.HttpClient> {
     const { agentId, address } = params;
-    return Effect.match(
-      askHosted(
+    return Effect.map(
+      hostedCall(
         this.#hosted.agentBrowserTabs.agentOpen,
         { params: { id: agentId }, body: { address } },
-        HOSTED_DEADLINE.BROWSER_OPEN,
+        { as: BROWSER_TAB_RENAMES, deadline: HOSTED_DEADLINE.BROWSER_OPEN },
       ),
-      {
-        onSuccess: (answer): TasksBrowserTabOpenAnswer => answer,
-        onFailure: (failed): TasksBrowserTabOpenAnswer => ({
-          failure:
-            (failed._tag === "HostedRefused"
-              ? BROWSER_TAB_OPEN_REFUSALS.get(failed.refusal)
-              : undefined) ?? BROWSER_TAB_OPEN_FAILURE.UNANSWERED,
-        }),
-      },
+      (opened): TasksBrowserTabOpenAnswer => ("failure" in opened ? bareFailure(opened) : opened),
     );
   }
 
@@ -802,11 +772,12 @@ export class HostedTaskClient {
     taskId: string,
     before?: number,
   ): Effect.Effect<DescriptionRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.descriptionRevisions, {
+    return Effect.map(
+      hostedCall(this.#hosted.plans.descriptionRevisions, {
         id: taskId,
         ...(before === undefined ? undefined : { before: String(before) }),
       }),
+      (page) => ("failure" in page ? undefined : page),
     );
   }
 
@@ -819,11 +790,9 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.descriptionRevision, { id: taskId, seq: String(seq) }),
-        (answer) => answer.revision,
-      ),
+    return Effect.map(
+      hostedCall(this.#hosted.plans.descriptionRevision, { id: taskId, seq: String(seq) }),
+      (answer) => ("failure" in answer ? undefined : answer.revision),
     );
   }
 
@@ -869,8 +838,7 @@ export class HostedTaskClient {
     return Effect.map(
       hostedCall(this.#hosted.taskFiles.keepPicture, { params: { id: taskId }, body: { picture } }),
       (kept): TasksPictureKeepAnswer => {
-        // Note that a failure is handed on bare, as it always was, its cause left out.
-        if ("failure" in kept) return { failure: kept.failure };
+        if ("failure" in kept) return bareFailure(kept);
         return "id" in kept.body
           ? { id: kept.body.id }
           : { failure: KEEP_REFUSED[kept.body.refused] };
@@ -892,8 +860,8 @@ export class HostedTaskClient {
       );
     }
     return Effect.map(
-      orNothing(askHosted(this.#hosted.agentPages.version, { id: place.agentId, ...named })),
-      (answer) => answer?.page,
+      hostedCall(this.#hosted.agentPages.version, { id: place.agentId, ...named }),
+      (read) => ("failure" in read ? undefined : read.page),
     );
   }
 
@@ -906,11 +874,9 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    return orNothing(
-      Effect.map(
-        askHosted(this.#hosted.plans.restoreDescription, { id: taskId, seq: String(seq) }),
-        (answer) => ({ task: answer.plan, txid: answer.txid }),
-      ),
+    return Effect.map(
+      hostedCall(this.#hosted.plans.restoreDescription, { id: taskId, seq: String(seq) }),
+      (answer) => ("failure" in answer ? undefined : { task: answer.plan, txid: answer.txid }),
     );
   }
 
@@ -918,9 +884,9 @@ export class HostedTaskClient {
   delete(
     taskId: string,
   ): Effect.Effect<{ readonly txid?: string } | undefined, never, HttpClient.HttpClient> {
-    return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
-      onFailure: () => undefined,
-      onSuccess: (answer) => (answer.txid === undefined ? {} : { txid: answer.txid }),
+    return Effect.map(hostedCall(this.#hosted.plans.delete, { id: taskId }), (answer) => {
+      if ("failure" in answer) return undefined;
+      return answer.txid === undefined ? {} : { txid: answer.txid };
     });
   }
 
@@ -1086,21 +1052,4 @@ function taskStartedOf(started: TaskStartAnswer): TaskStarted {
     return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };
   }
   return { task: started.plan, ...written };
-}
-
-/** A comment call's answer, or why there was none: not found where the service said so, unanswered for anything else. */
-function commentAnswer<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<
-  Answer | typeof COMMENT_NOT_FOUND | typeof COMMENT_UNANSWERED,
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.catch(asked, (failed) =>
-    Effect.succeed(
-      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.NOT_FOUND
-        ? COMMENT_NOT_FOUND
-        : COMMENT_UNANSWERED,
-    ),
-  );
 }
