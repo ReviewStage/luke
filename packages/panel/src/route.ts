@@ -52,9 +52,10 @@ import {
  *   rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
- *   any other of their repository by its number in their first agent's; and
- *   a page of any other task or agent on no task, read on its own place,
- *   their own pages being the window's to open as the panel's.
+ *   any other of their repository no listed agent opened by its number in
+ *   their first agent's; and a page of any other task or agent on no task,
+ *   read on its own place, their own pages being the window's to open as the
+ *   panel's.
  * - The window goes to every place in the app, and to the Pull request tab of a
  *   pull request a listed task's or a listed agent on no task's agent opened;
  *   anything else leaves for the browser, as everything does outside the
@@ -91,6 +92,8 @@ export type Address =
       readonly href: string;
       readonly repository: string;
       readonly number: number;
+      /** The agent of a task or the agent on no task the window lists that opened it (`withListedAgent`); none where the window lists none, or is not asked. */
+      readonly listed: ListedAgent | undefined;
     }
   | {
       readonly kind: typeof ADDRESS.FILE;
@@ -136,6 +139,9 @@ export interface Listed {
   readonly agents: Parameters<typeof listedPullRequestOf>[2];
 }
 
+/** A listed agent that opened a pull request, and its task, none for an agent on none. */
+type ListedAgent = NonNullable<ReturnType<typeof listedPullRequestOf>>;
+
 /** The surface a press comes from, and what it holds. */
 export type Here =
   | ({
@@ -159,8 +165,6 @@ export type Here =
       readonly kind: typeof HERE.WINDOW;
       /** Whether the window opens a place at all; outside it, as in a test of one surface, an app link opens in the browser. */
       readonly opensPlaces: boolean;
-      /** What the window lists, whose pull requests open in their Pull request tabs; none inside a pull request's own tab, where a link to one leaves for GitHub. */
-      readonly listed: Listed | undefined;
     }
   | {
       readonly kind: typeof HERE.TASKS_TAB;
@@ -383,11 +387,13 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
 /**
  * A pull request pressed on a surface: one an agent it holds opened, however
  * its page is spelled, a page under it among them, opens in that agent's
- * Pull request tab, and any other of its repository, such as one an agent
- * opened before moving to another branch, in its first agent's by its
- * number; one of another repository is the window's. An Inbox item, a task's
- * page and an agent's answer it alike, an archived agent's pull request,
- * merged or not, opening its tab too.
+ * Pull request tab; one a listed agent elsewhere opened, a related task's
+ * row's chip among them, is the window's, which opens it in that agent's;
+ * and any other of its repository, such as one an agent opened before
+ * moving to another branch, in its first agent's by its number; one of
+ * another repository is the window's. An Inbox item, a task's page and an
+ * agent's answer it alike, an archived agent's pull request, merged or not,
+ * opening its tab too.
  */
 function pullRequestBeside(
   address: Extract<Address, { readonly kind: typeof ADDRESS.PULL_REQUEST }>,
@@ -402,6 +408,7 @@ function pullRequestBeside(
     (each) => repositoryPullRequestOf(each.url, here.repository) === address.number,
   );
   if (owner !== undefined) return preview({ kind: THING.PULL_REQUEST, agentId: owner.agentId });
+  if (address.listed !== undefined) return NOTHING;
   const first = here.agentIds?.[0];
   return first === undefined
     ? NOTHING
@@ -465,16 +472,12 @@ function external(address: Address): Route {
 function throughWindow(address: Address, here: WindowHere): Route {
   if (!here.opensPlaces) return external(address);
   if (address.kind === ADDRESS.PLACE) return go(address.link);
-  const listed =
-    address.kind === ADDRESS.PULL_REQUEST && here.listed !== undefined
-      ? listedPullRequestOf(address.href, here.listed.tasks, here.listed.agents)
-      : undefined;
-  if (listed === undefined) return external(address);
-  const task = listed.taskId === undefined ? undefined : { planId: listed.taskId };
-  return go({
-    workspace: "",
-    place: { kind: LINK_PLACE.CHANGES, ...task, agentId: listed.agentId },
-  });
+  if (address.kind !== ADDRESS.PULL_REQUEST || address.listed === undefined) {
+    return external(address);
+  }
+  const { taskId, agentId } = address.listed;
+  const task = taskId === undefined ? undefined : { planId: taskId };
+  return go({ workspace: "", place: { kind: LINK_PLACE.CHANGES, ...task, agentId } });
 }
 
 /** The thing of a task a place names that the task's panel draws as a tab of its own: a page, an agent's Changes or one of its review threads, or a worker; nothing for any other place. */
@@ -528,7 +531,9 @@ export function addressOf(href: string): Address {
   const link = readLink(href);
   if (link !== undefined) return { kind: ADDRESS.PLACE, link, href };
   const pullRequest = pullRequestAddressOf(href);
-  if (pullRequest !== undefined) return { kind: ADDRESS.PULL_REQUEST, href, ...pullRequest };
+  if (pullRequest !== undefined) {
+    return { kind: ADDRESS.PULL_REQUEST, href, ...pullRequest, listed: undefined };
+  }
   const repository = pageRepositoryOf(href);
   const mention = decodeMention(href, repository ?? null);
   switch (mention?.kind) {
@@ -552,6 +557,18 @@ export function addressOf(href: string): Address {
     default:
       return { kind: ADDRESS.WEB, href };
   }
+}
+
+/**
+ * The address with the listed agent that opened the pull request it names,
+ * however its page is spelled, among the tasks and the agents on no task the
+ * window lists, so a surface asked of it first leaves it to the window; any
+ * other address, or none listed, as it is. Note that it is read as the link
+ * is pressed, the list being new on every patch to any listed task.
+ */
+export function withListedAgent(address: Address, listed: Listed | undefined): Address {
+  if (address.kind !== ADDRESS.PULL_REQUEST || listed === undefined) return address;
+  return { ...address, listed: listedPullRequestOf(address.href, listed.tasks, listed.agents) };
 }
 
 /** What a press on an address does, from the surface given. */

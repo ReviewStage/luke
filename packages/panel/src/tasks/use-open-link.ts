@@ -29,6 +29,7 @@ import {
   ROUTE,
   route,
   THING,
+  withListedAgent,
 } from "../route.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { numberedTaskIdNow } from "./use-link-standing.js";
@@ -61,8 +62,9 @@ import { numberedTaskIdNow } from "./use-link-standing.js";
  * jumps to, is asked of it the same way (`useOpenPlace`,
  * `OpenAddressesHere`); a task, or an agent with no task, opens a pull
  * request one of its agents opened in that agent's Pull request tab, and any
- * other pull request of its repository in a Pull request tab by its number,
- * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
+ * other pull request of its repository no listed task's agent opened in a
+ * Pull request tab by its number, rather than on GitHub
+ * (`openPullRequestsHere`). Past the place, the window opens
  * a pull request any listed task's agent opened in that agent's Pull request
  * tab, on its task (`ListedPullRequests`), wherever it is pressed:
  * a thread, a version, a task's card, or another task. Inside a pull
@@ -251,12 +253,10 @@ function openAddress(
   },
 ): void {
   const { openPlace, openHere, listed } = doors;
-  if (openHere?.(address) === true) return;
-  const routed = route(address, {
-    kind: HERE.WINDOW,
-    opensPlaces: openPlace !== undefined,
-    listed: listed?.(),
-  });
+  // A pull request a listed agent opened is named so first, so the place leaves another task's to the window.
+  const named = withListedAgent(address, listed?.());
+  if (openHere?.(named) === true) return;
+  const routed = route(named, { kind: HERE.WINDOW, opensPlaces: openPlace !== undefined });
   if (routed.kind === ROUTE.GO) {
     openPlace?.(routed.link);
   } else if (routed.kind !== ROUTE.EXTERNAL) {
