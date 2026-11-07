@@ -110,7 +110,8 @@ export const taskBlockSync = defineSyncTable(taskBlock, {
  * A coding agent, on its own topic, its task's, and its workspace's. Note
  * that its last step is ignored, because every model step rewrites it, and
  * so is when its pull request was last read, because every read of the pull
- * request rewrites that; no view reads either live.
+ * request rewrites that, and when it was last on screen, because a client
+ * showing it rewrites that every minute; no view reads any of them live.
  */
 export const agentSync = defineSyncTable(agentTable, {
   topics: [
@@ -118,7 +119,7 @@ export const agentSync = defineSyncTable(agentTable, {
     { kind: TOPIC.TASK, column: agentTable.taskId },
     { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
   ],
-  ignore: [agentTable.lastStep, agentTable.publishedRead],
+  ignore: [agentTable.lastStep, agentTable.publishedRead, agentTable.seenAt],
   log: LOG.EVERY,
 });
 

@@ -546,6 +546,19 @@ it.effect("a warm launch nobody retires ends as idled at its cap", () =>
   }),
 );
 
+it.effect("a warm launch handed no message yet ends as idled when Vespin retires it", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    const { cli, write, run } = yield* launch(SHORT_TURN, service);
+    yield* write(WARM_CONFIG);
+    yield* write({ type: INPUT_LINE.RETIRE });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+    assert.equal(idles(service), 0);
+    assert.deepEqual(cli.prompts, []);
+  }),
+);
+
 it.effect(
   "a launch the config does not ask to stay warm ends at its turn's end and skips a retire",
   () =>

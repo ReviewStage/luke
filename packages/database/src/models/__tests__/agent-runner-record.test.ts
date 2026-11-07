@@ -1,18 +1,24 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
+import { eq } from "drizzle-orm";
+import { Clock, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
+import { turns } from "../../schemas/storage.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
   type AgentRunnerRecord,
   forgetAgentRunnerRecord,
   readAgentRunnerRecord,
+  warmCloudAgentLaunches,
   writeAgentRunnerRecord,
 } from "../agent-runner-record.js";
-import { createAgent } from "../agent-store.js";
+import { createAgent, recordAgentSeen } from "../agent-store.js";
 
 /**
  * Where a cloud agent's runner stands in its session's sandbox, over a real
@@ -53,7 +59,71 @@ const runningIn = (agentId: string, sandboxName: string): AgentRunnerRecord => (
   commandId: "cmd_1",
 });
 
+/** An agent of its own whose runner record says it runs, in a session of its own, after one turn of the status and settle time given. */
+const runningAfter = (
+  status: TurnStatus,
+  settledAt: Date | null,
+  commandId: string | null = "cmd_1",
+) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const opened = yield* openAgent;
+    const [agent] = yield* db
+      .select({ conversationId: agentTable.conversationId })
+      .from(agentTable)
+      .where(eq(agentTable.id, opened.agentId));
+    assert.ok(agent !== undefined);
+    yield* db.insert(turns).values({
+      userId: opened.userId,
+      conversationId: agent.conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status,
+      queuedAt: new Date(0),
+      settledAt,
+    });
+    const sessionId = `claude-code-${randomUUID()}`;
+    yield* writeAgentRunnerRecord(opened.userId, sessionId, {
+      ...runningIn(opened.agentId, `agent-sandbox-${randomUUID()}`),
+      commandId,
+    });
+    return { ...opened, sessionId };
+  });
+
 it.layer(getTestDB())("a cloud agent's runner record", (it) => {
+  it.effect(
+    "the warm cloud launches are the running runners whose turn ended and whose agent was last on screen before the bound and since the horizon, oldest use first, never one under way, seen since, cleared, or past the horizon",
+    () =>
+      Effect.gen(function* () {
+        // Note that the clock is moved off the epoch first, which the read takes as never.
+        yield* TestClock.adjust("1 day");
+        const startedAt = yield* Clock.currentTimeMillis;
+        const at = (minutes: number) => new Date(startedAt + minutes * 60_000);
+        const SETTLED = TURN_STATUS.SETTLED;
+        const ended = yield* runningAfter(SETTLED, at(0));
+        const earlier = yield* runningAfter(SETTLED, at(-10));
+        const seen = yield* runningAfter(SETTLED, at(-10));
+        const underWay = yield* runningAfter(TURN_STATUS.RUNNING, null);
+        const cleared = yield* runningAfter(SETTLED, at(0), null);
+        const capped = yield* runningAfter(SETTLED, at(-100));
+        yield* TestClock.adjust("8 minutes");
+        assert.equal(yield* recordAgentSeen(seen.userId, seen.agentId), true);
+        const ours = new Set(
+          [ended, earlier, seen, underWay, cleared, capped].map((each) => each.agentId),
+        );
+
+        const read = (limit: number) =>
+          warmCloudAgentLaunches({ since: at(-60), before: at(5), limit });
+        const warm = (yield* read(10_000)).filter((each) => ours.has(each.agentId));
+        const bounded = yield* read(1);
+
+        assert.deepEqual(warm, [
+          { userId: earlier.userId, agentId: earlier.agentId, sessionId: earlier.sessionId },
+          { userId: ended.userId, agentId: ended.agentId, sessionId: ended.sessionId },
+        ]);
+        assert.equal(bounded.length, 1);
+      }),
+  );
+
   it.effect("an account reads its own session's record, and never another account's", () =>
     Effect.gen(function* () {
       const owner = yield* openAgent;

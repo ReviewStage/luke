@@ -653,7 +653,7 @@ interface CodexLaunch {
   /** The service tier the next turn names (`turnTierOf`); null for the standard one. */
   tier: ServiceTier | null;
   stopping: boolean;
-  /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
+  /** Whether the launch is warm: started warm, or its turn completed with nothing left and an IDLE posted, and no message taken since. */
   warm: boolean;
   /** The thread's rollout as the store mirrors it, where the config names the store. */
   readonly mirror: RolloutMirror | undefined;
@@ -1233,7 +1233,8 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     effort: config.effort,
     tier: serviceTierOf(config.fast, config.ultrafast),
     stopping: false,
-    warm: false,
+    // Note that a warm launch is warm from its start, so one launched with no message waits for its first as one past an IDLE does.
+    warm: config.warm === true,
     mirror,
   };
 

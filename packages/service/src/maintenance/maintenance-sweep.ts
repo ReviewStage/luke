@@ -29,7 +29,7 @@ interface MaintenanceSweeps {
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Takes every open launch of the devices that have not beaten within their lease from them, a sweep's worth, its turn ended naming the device. */
   sweepDeviceLeases: (now: number) => SweepRead<DeviceLeaseSweepOutcome>;
-  /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, a sweep's worth. */
+  /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, and the cloud agents' past their sandbox's, a sweep's worth. */
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Settles as failed the turns of the running native agents whose runner died mid-turn, a sweep's worth. */
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;

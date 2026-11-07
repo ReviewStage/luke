@@ -41,6 +41,7 @@ import {
   agentRewindRequestSchema,
   agentServersRequestSchema,
   agentStartRequestSchema,
+  agentWarmAnswerSchema,
   agentWorkspaceListAnswerSchema,
   MAXIMUM_START_BODY_BYTES,
 } from "../agent-wire.js";
@@ -274,6 +275,11 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))
     .input(idParams)
     .output(EffectSchema.flip(agentAnswerSchema)),
+  /** One agent on screen, kept warm for the next message while it stays there (`agentWarmAnswerSchema`). */
+  warm: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/warm` }))
+    .input(idParams)
+    .output(EffectSchema.flip(agentWarmAnswerSchema)),
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works. */
   rewind: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))

@@ -30,7 +30,11 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readAgentHeaderOfConversation, readAgentRouting } from "@repo/database/models/agent-store";
+import {
+  readAgentHeaderOfConversation,
+  readAgentRouting,
+  recordAgentSeen,
+} from "@repo/database/models/agent-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
@@ -94,6 +98,8 @@ export interface NativeSessions<Turn extends SessionTurn = SessionTurn>
   readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
   /** The message lines an ended launch never took handed to a runner launched for them, where none runs (`runner-sessions.ts`'s `LINES_WAITING`); whether one was launched. */
   readonly deliverWaiting: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
+  /** The session's runner launched with no message past the answer, where none runs, for an agent on screen (`runner-sessions.ts`'s `warm`); it answers at once and fails nothing. */
+  readonly warm: (sessionId: string, conversationId: string) => Effect.Effect<void>;
 }
 
 export interface NativeAgentSessionsService {
@@ -350,6 +356,41 @@ export const runnerCheckedOut = (agent: {
         ),
         RUNNER_CHECKOUT.FAILED,
       ),
+    ),
+    Effect.annotateLogs(agentLogIds(agent)),
+  );
+
+/**
+ * A cloud agent a client has on screen kept warm, acting for the agent's
+ * starter as every native call does: when it was seen recorded, and, past
+ * the answer, its runner launched with no message where none runs, so the
+ * next message goes into its running session (`runner-sessions.ts`'s
+ * `warm`). A Mac's agent, an archived one, one on no harness, one whose
+ * session never claimed its record, and a function that cannot reach the
+ * harness launch nothing. Nothing here fails its caller.
+ */
+export const runnerWarmed = (agent: {
+  readonly id: string;
+  readonly userId: string;
+  readonly conversationId: string;
+}): Effect.Effect<void, never, DatabaseServices> =>
+  Effect.gen(function* () {
+    if (!(yield* recordAgentSeen(agent.userId, agent.id))) return;
+    const routing = yield* readAgentRouting(agent.userId, agent.id);
+    const runtime = harnessOf(Option.getOrUndefined(routing)?.runtime);
+    if (runtime === undefined) return;
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    const reached = Option.flatMap(native, (service) => service.sessions(runtime, agent.userId));
+    if (Option.isNone(reached)) return;
+    const sessionId = yield* recordedRuntimeSession({
+      userId: agent.userId,
+      conversationId: agent.conversationId,
+    });
+    if (sessionId === undefined || nativeRuntimeOfSession(sessionId) === undefined) return;
+    yield* (yield* reached.value).warm(sessionId, agent.conversationId);
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(`a native agent was not kept warm: ${failureKind(failure)}`),
     ),
     Effect.annotateLogs(agentLogIds(agent)),
   );

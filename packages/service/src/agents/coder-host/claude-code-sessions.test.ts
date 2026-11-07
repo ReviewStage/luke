@@ -28,6 +28,7 @@ import {
   latestTurnsOfReached,
   readAgentRouting,
   recordAgentNativeSession,
+  recordAgentSeen,
   updateAgentChoice,
 } from "@repo/database/models/agent-store";
 import { appendSessionEntries } from "@repo/database/models/claude-session-entries";
@@ -47,7 +48,7 @@ import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { messages } from "@repo/database/schemas/storage";
+import { messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
@@ -648,6 +649,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: [LINEAR_SERVER],
           allowedDomains: [],
           installedSkills: "/opt/agent/installed-skills",
+          warm: true,
         });
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
@@ -1548,6 +1550,72 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
         assert.deepEqual(
           read.map((line) => developerContent(JSON.parse(line.text) as InputLine)),
+          [[{ type: "text", text: "Now the emails." }]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a warm call on an agent whose sandbox stopped resumes it and launches its runner warm with no message, and a message past its turn's window while it is on screen reaches that runner as a line",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        yield* runnerTook(agent.id);
+        const ended = yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 8,
+          reason: RUNNER_END.IDLED,
+        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
+        assert.equal(ended, RUNNER_ENDED.STOPPED);
+        const record = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
+        assert.equal(record.commandId, null, "its END took the runner off its record");
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        sequence.next = 9;
+
+        yield* sessions.warm(opened.sessionId, agent.conversationId);
+
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.equal(api.commands.length, 2);
+        const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.warm, true);
+        // The agent's turn ended past the window, but a client had it on screen since.
+        yield* (yield* Database).insert(turns).values({
+          userId,
+          conversationId: agent.conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.SETTLED,
+          queuedAt: new Date(0),
+          settledAt: new Date(0),
+        });
+        yield* TestClock.adjust(
+          Duration.sum(CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL], Duration.minutes(1)),
+        );
+        assert.equal(yield* recordAgentSeen(userId, agent.id), true);
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 2, "the message relaunched nothing");
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: config.firstSequence,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(
+          read.flatMap((line) => {
+            const parsed = JSON.parse(line.text) as InputLine;
+            return parsed.type === INPUT_LINE.MESSAGE ? [developerContent(parsed)] : [];
+          }),
           [[{ type: "text", text: "Now the emails." }]],
         );
       }),

@@ -325,6 +325,11 @@ export const agentTable = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection.
      */
     runnerTokenHash: text("runner_token_hash"),
+    /**
+     * When a client last said a cloud agent was on screen, which keeps its runner warm for
+     * `CODER.RUNNER_WARM` past it (`coder-host/runner-sessions.ts`'s `warm`); null where none has.
+     */
+    seenAt: timestamptz("seen_at"),
     /** What the agent is (`AGENT_KIND`): a coder, or a task's pilot; a coder for every row from before the column. */
     kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
     /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */

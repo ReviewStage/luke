@@ -405,7 +405,7 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
   installedSkills: Schema.optionalKey(
     Schema.String,
-  ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
+  ) /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */,
   warm: Schema.optionalKey(Schema.Boolean),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
@@ -464,7 +464,7 @@ export const CodexConfigSchema = Schema.Struct({
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
   installedSkills: Schema.optionalKey(Schema.String),
-  /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
+  /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
@@ -588,7 +588,7 @@ export const RUNNER_END = {
    * come due. The turn is over, as a `turn_ended` one is.
    */
   RELEASED: "released",
-  /** A warm launch ended with no turn under way: retired by the service past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE. */
+  /** A warm launch ended with no turn under way: retired by the service past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE, or it never took a message. */
   IDLED: "idled",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
