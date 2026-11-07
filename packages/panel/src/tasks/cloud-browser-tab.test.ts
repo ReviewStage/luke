@@ -549,7 +549,7 @@ function signedInHere(element: React.ReactElement): React.ReactElement {
   return createElement(SignedInHere, null, element);
 }
 
-test("a draft's open that answers once another account signed in chooses nothing on its panel", async () => {
+test("a draft's open that answers once another account signed in chooses nothing on its panel, the tab and the draft's end the first account's", async () => {
   let answer: (tab: AgentBrowserTab) => void = () => undefined;
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: () =>
@@ -558,18 +558,40 @@ test("a draft's open that answers once another account signed in chooses nothing
         answer = (tab) => resolve({ tab } as never);
       }),
   });
+  holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => []);
+  const read = new Map<string, readonly string[] | undefined>();
+  const drafts = new Map<string, readonly CloudBrowserDraft[]>();
+  function Probe({ account }: { account: string }) {
+    read.set(
+      account,
+      useCloudBrowserTabs({ taskId: TASK }, true)?.map((tab) => tab.id),
+    );
+    drafts.set(account, useCloudBrowserDrafts({ taskId: TASK }, true));
+    return null;
+  }
+  const draft = startCloudDraft("account-ada", { taskId: TASK }, AGENT_ID);
   const handed: AgentBrowserTab[] = [];
   draw(
     createElement(
-      WindowAccountContext.Provider,
-      { value: "account-ada" },
-      createElement(CloudBrowserDraftPane, {
-        place: { taskId: TASK },
-        draft: { id: "draft-late", agentId: AGENT_ID },
-        owner: { name: "Invite expiry", icon: createElement("span") },
-        onOpened: (tab) => handed.push(tab),
-        onDiscard: () => undefined,
-      }),
+      "div",
+      null,
+      createElement(
+        WindowAccountContext.Provider,
+        { value: "account-ada", key: "account-ada" },
+        createElement(CloudBrowserDraftPane, {
+          place: { taskId: TASK },
+          draft,
+          owner: { name: "Invite expiry", icon: createElement("span") },
+          onOpened: (tab) => handed.push(tab),
+          onDiscard: () => undefined,
+        }),
+        createElement(Probe, { account: "account-ada" }),
+      ),
+      createElement(
+        WindowAccountContext.Provider,
+        { value: "account-grace", key: "account-grace" },
+        createElement(Probe, { account: "account-grace" }),
+      ),
     ),
   );
   writeAppState(signedInAs({ id: "account-ada", email: "ada@example.com", name: "Ada" }));
@@ -582,6 +604,9 @@ test("a draft's open that answers once another account signed in chooses nothing
   await settle();
 
   assert.deepEqual(handed, []);
+  assert.deepEqual(read.get("account-ada"), [OTHER_TAB], "the tab is the first account's");
+  assert.deepEqual(drafts.get("account-ada"), [], "its draft let go for the tab");
+  assert.notDeepEqual(read.get("account-grace"), [OTHER_TAB], "and no other account's");
 });
 
 test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays as a failure note over the kept address", async () => {
