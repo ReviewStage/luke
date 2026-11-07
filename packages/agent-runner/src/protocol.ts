@@ -5,7 +5,7 @@
  * service that launches the runner (P08) and the route that takes its events
  * (P09) import it without the SDK behind it. Every line on stdin is one JSON
  * object: the first is the config, each later one a message, a stop, a model
- * change, or a retire. A config that names `linesUrl` has the runner read
+ * change, a retire, or a warm. A config that names `linesUrl` has the runner read
  * the later lines from the service instead (`RUNNER_LINES`).
  *
  * The config says which harness the launch runs: Claude Code (P05), or Codex
@@ -209,6 +209,7 @@ export const INPUT_LINE = {
   STOP: "stop",
   MODEL: "model",
   RETIRE: "retire",
+  WARM: "warm",
 } as const;
 
 /**
@@ -422,9 +423,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
    */
   allowedDomains: Schema.optionalKey(Schema.Array(Schema.String)),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
-  installedSkills: Schema.optionalKey(
-    Schema.String,
-  ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
+  installedSkills: Schema.optionalKey(Schema.String),
+  /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
   /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
   trace: Schema.optionalKey(RunnerTraceSchema),
@@ -487,7 +487,7 @@ export const CodexConfigSchema = Schema.Struct({
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
   installedSkills: Schema.optionalKey(Schema.String),
-  /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
+  /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
   /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
   trace: Schema.optionalKey(RunnerTraceSchema),
@@ -568,11 +568,22 @@ const RetireLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.RETIRE),
 });
 
+/**
+ * Keep the launch warm: a warm launch's window (`RUNNER_WARM`) runs again from
+ * now. The service writes it while a client has the agent on screen
+ * (`coder-host/runner-sessions.ts`'s `warm`), and a launch at work skips it,
+ * since its next IDLE arms a window of its own.
+ */
+const WarmLineSchema = Schema.Struct({
+  type: Schema.Literal(INPUT_LINE.WARM),
+});
+
 export const InputLineSchema = Schema.Union([
   MessageLineSchema,
   StopLineSchema,
   ModelLineSchema,
   RetireLineSchema,
+  WarmLineSchema,
 ]);
 export type InputLine = typeof InputLineSchema.Type;
 
@@ -616,7 +627,7 @@ export const RUNNER_END = {
    * come due. The turn is over, as a `turn_ended` one is.
    */
   RELEASED: "released",
-  /** A warm launch ended with no turn under way: retired by the service or its host, or past its warm window on its own (`RUNNER_WARM`). Its turn was already over at its IDLE. */
+  /** A warm launch ended with no turn under way: retired by the service or its host, or past its warm window on its own (`RUNNER_WARM`). Its turn was already over at its IDLE, or it never took a message. */
   IDLED: "idled",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];

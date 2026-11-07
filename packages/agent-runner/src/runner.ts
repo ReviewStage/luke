@@ -23,8 +23,10 @@
  * CLI has said nothing for `RUNNER_UNANSWERED`. A turn that
  * is over ends the launch, or, where the config asks it to stay `warm`,
  * posts IDLE and keeps the CLI up (`RUNNER_WARM`) for the service's next message,
- * until the service or its host retires it or its warm window ends it. A
- * `result` after a stop
+ * until the service or its host retires it or its warm window ends it; a
+ * `warm` line re-arms that window, and such a launch is warm from its start
+ * too, so one the service launched with no message waits for its first as
+ * one past an IDLE does. A `result` after a stop
  * ends the launch whatever is pending, and so does one no Stop hook came
  * before, such as an error's. A stop interrupts whichever turn is running, a
  * wakeup's included, and ends a launch with none at once.
@@ -270,7 +272,7 @@ interface Launch {
   readonly warmable: boolean;
   /** How long the launch stays warm before it ends itself (`RUNNER_WARM`). */
   readonly warmFor: Duration.Duration;
-  /** Whether the launch is warm: its turn over at an IDLE, and nothing taken or begun since. */
+  /** Whether the launch is warm: started warm, or its turn over at an IDLE, and nothing taken or begun since. */
   readonly warm: Ref.Ref<boolean>;
   /** The wakeups a released wait left for the service to deliver; none until it is released. */
   readonly released: Ref.Ref<readonly RunnerWakeup[] | undefined>;
@@ -362,6 +364,8 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
         }),
       );
     }
+    case INPUT_LINE.WARM:
+      return yield* rearmed(launch);
     case INPUT_LINE.MODEL: {
       const { model, effort, fast } = value;
       if (model !== undefined) yield* control("setModel", () => launch.session.setModel(model));
@@ -494,6 +498,36 @@ const warmed = Effect.fn("agent-runner/warmed")(function* (launch: Launch) {
       yield* Ref.set(launch.warm, true);
       yield* launch.sink.emit({ type: RUNNER_EVENT.IDLE });
       // Counted as a wait, so a release a wait before armed is dropped.
+      return yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
+    }),
+  );
+  if (wait === undefined) return;
+  yield* Effect.forkScoped(watchWarm(launch, wait));
+});
+
+/**
+ * A warm launch idle from its start: warm before it takes a line, as one
+ * the service launched with no message waits for its first, so a retire
+ * ends it and its window bounds it, as an IDLE's watch does. Its first
+ * message takes it out of warm as any message does. It posts no IDLE,
+ * since no turn of it ended.
+ */
+const warmAtStart = Effect.fn("agent-runner/warmAtStart")(function* (launch: Launch) {
+  if (!launch.warmable) return;
+  const wait = yield* launch.admission.withPermit(
+    Effect.andThen(
+      Ref.set(launch.warm, true),
+      Ref.updateAndGet(launch.waits, (count) => count + 1),
+    ),
+  );
+  yield* Effect.forkScoped(watchWarm(launch, wait));
+});
+
+/** A warm launch's window armed again from now, on the service's `warm` line, where it is still warm; one at work skips it, since its next IDLE arms a window of its own. */
+const rearmed = Effect.fn("agent-runner/rearmed")(function* (launch: Launch) {
+  const wait = yield* launch.admission.withPermit(
+    Effect.gen(function* () {
+      if (!(yield* stillWarm(launch))) return undefined;
       return yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
     }),
   );
@@ -671,6 +705,8 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     firstSequence: config.firstSequence,
   };
 
+  // Warm before the first line is taken, so a message ahead of a retire takes it out of warm.
+  yield* warmAtStart(launch);
   // The service closing stdin ends the prompt stream, and the CLI ends once it has
   // answered what it was given.
   const inputLoop = Effect.gen(function* () {

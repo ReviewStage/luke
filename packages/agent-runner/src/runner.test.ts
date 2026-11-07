@@ -546,6 +546,42 @@ it.effect("a warm launch nobody retires ends as idled once the window it was han
   }),
 );
 
+it.effect("a warm line runs a warm launch's window again from now", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    const { write, run } = yield* launch(SHORT_TURN, service);
+    yield* write({ ...WARM_CONFIG, warmForMs: 60_000 });
+    yield* write(FIRST_MESSAGE);
+    yield* untilIdles(service, 1);
+    yield* TestClock.adjust(Duration.seconds(50));
+    yield* write({ type: INPUT_LINE.WARM });
+    // The input loop's fiber takes the line, which leaves nothing to wait on but its turn to run.
+    for (let step = 0; step < 50; step += 1) yield* Effect.yieldNow;
+    yield* TestClock.adjust(Duration.seconds(50));
+    const ended = () =>
+      service.applied.some(({ message }) => "type" in message && message.type === RUNNER_EVENT.END);
+    for (let step = 0; step < 500 && !ended(); step += 1) yield* Effect.yieldNow;
+    assert.equal(ended(), false, "the warm line kept it past its first window");
+
+    yield* TestClock.adjust(Duration.seconds(10));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+  }),
+);
+
+it.effect("a warm launch handed no message yet ends as idled when Vespin retires it", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    const { cli, write, run } = yield* launch(SHORT_TURN, service);
+    yield* write(WARM_CONFIG);
+    yield* write({ type: INPUT_LINE.RETIRE });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+    assert.equal(idles(service), 0);
+    assert.deepEqual(cli.prompts, []);
+  }),
+);
+
 it.effect(
   "a launch the config does not ask to stay warm ends at its turn's end and skips a retire",
   () =>

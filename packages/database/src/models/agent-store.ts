@@ -1509,6 +1509,38 @@ const updateAgentRunnerToken = SqlSchema.findAll({
     ),
 });
 
+const updateAgentSeen = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, seenAt: Schema.Date }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, seenAt }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ seenAt })
+        .where(
+          and(
+            reachableAgent(userId, agentId),
+            eq(agentTable.machine, AGENT_MACHINE.VERCEL),
+            isNull(agentTable.archivedAt),
+          ),
+        )
+        .returning({ id: agentTable.id }),
+    ),
+});
+
+const findAgentSeenAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ seenAt: Schema.NullOr(InstantColumnSchema) }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ seenAt: agentTable.seenAt })
+        .from(agentTable)
+        .where(eq(agentTable.id, agentId))
+        .limit(1),
+    ),
+});
+
 /** The `last_step` column as the coder host writes it (`StoredAgentStep`). */
 const AgentStepColumnSchema = Schema.Struct({
   inputTokens: Schema.Number,
@@ -3675,6 +3707,24 @@ export function recordAgentRunnerToken(
   return Effect.map(
     updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
     (rows) => rows.length > 0,
+  );
+}
+
+/**
+ * Now recorded as when a client last had the agent on screen, for an agent
+ * in a sandbox the account reaches and has not archived; answers whether it
+ * was, so a Mac's agent and an archived one record nothing.
+ */
+export function recordAgentSeen(userId: string, agentId: string): AgentStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (seenAt) =>
+    Effect.map(updateAgentSeen({ userId, agentId, seenAt }), (rows) => rows.length > 0),
+  );
+}
+
+/** When a client last had the agent under this id on screen; null where none has, or no agent has the id. Read with no account in hand, for an id its runner's place names. */
+export function readAgentSeenAt(agentId: string): AgentStoreEffect<Date | null> {
+  return Effect.map(findAgentSeenAt({ agentId }), (row) =>
+    Option.match(row, { onNone: () => null, onSome: ({ seenAt }) => seenAt }),
   );
 }
 

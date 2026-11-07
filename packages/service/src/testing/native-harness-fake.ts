@@ -48,6 +48,7 @@ export function scriptedHarness(
           checkOut: () => Effect.succeed(checkout),
           halt: () => Effect.succeed(true),
           deliverWaiting: () => Effect.succeed(false),
+          warm: () => Effect.void,
         }),
       ),
   };

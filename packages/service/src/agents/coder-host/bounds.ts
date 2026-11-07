@@ -21,8 +21,9 @@ export const CODER = {
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
    * end (`sandbox-keep-alive.ts`). A native runner keeps its sandbox alive by
-   * its heartbeat for as long as it runs, and its end at the agent's turn's
-   * end stops it, or two minutes into a wait on wakeups alone
+   * its heartbeat for as long as it runs, warm included, and its end, once
+   * its warm window passes (`RUNNER_WARM`), stops it, or two minutes into a
+   * wait on wakeups alone
    * (`@repo/agent-runner`'s `RUNNER_RELEASE`, whose process table tells the
    * harness's own processes from the agent's). What its end leaves up, as a
    * developer's Terminal holds it, is stopped by this timeout once nothing
@@ -202,12 +203,17 @@ export const CODER = {
    * and is handed its window, past which it ends itself (`warmForMs`,
    * `@repo/agent-runner`'s `RUNNER_WARM`), `RUNNER_WARM_SLACK` later.
    *
-   * The sandbox's is zero, so its runner is launched to end at its turn's
-   * end, and its END stops the sandbox, as Vercel advises: an idle sandbox
-   * bills its memory. Ten warm minutes kept a 4 vCPU, 8 GB sandbox up for up
-   * to 62 sandbox-hours a day over Oct 23–24, about $5–10 a day, for the 636
-   * of 1,536 finished turns a follow-up reached within three minutes. Those
-   * resume from the stop's snapshot. A message sent while the runner ends is
+   * The sandbox's is five minutes from the later of its turn's end and the
+   * last time a client had the agent on screen (`runner-sessions.ts`'s
+   * `warm`, which runs a warm runner's window again from now with a `warm`
+   * line, or launches one with no message where none is up), so an agent the
+   * developer is looking at takes a message straight into its running
+   * session, and one they left ends its runner five minutes on, its END
+   * stopping the sandbox, as Vercel advises: an idle sandbox bills its
+   * memory. Ten warm minutes after every turn, on screen or not, kept a
+   * 4 vCPU, 8 GB sandbox up for up to 62 sandbox-hours a day over Oct 23–24,
+   * about $5–10 a day, for the 636 of 1,536 finished turns a follow-up
+   * reached within three minutes. A message sent while the runner ends is
    * queued for it to read, and a runner that ends without reading it leaves
    * it waiting, which its END hands on (`runner-sessions.ts`'s
    * `LINES_WAITING`).
@@ -222,7 +228,7 @@ export const CODER = {
    * (`@repo/host`'s `compose-local-agents.ts`).
    */
   RUNNER_WARM: {
-    [AGENT_MACHINE.VERCEL]: Duration.zero,
+    [AGENT_MACHINE.VERCEL]: Duration.minutes(5),
     [AGENT_MACHINE.DEVICE]: Duration.minutes(30),
   } satisfies Record<AgentMachineKind, Duration.Duration>,
   /**

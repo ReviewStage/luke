@@ -29,7 +29,8 @@
  * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
  * IDLE and keeps the launch up (`RUNNER_WARM`) for the service's next message,
  * until the service or its host retires it or its warm window ends it as
- * `idled`. One interrupted
+ * `idled`; a `warm` line runs that window again from now, and such a launch is
+ * warm from its start too. One interrupted
  * after the service's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
@@ -655,7 +656,7 @@ interface CodexLaunch {
   /** The service tier the next turn names (`turnTierOf`); null for the standard one. */
   tier: ServiceTier | null;
   stopping: boolean;
-  /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
+  /** Whether the launch is warm: started warm, or its turn completed with nothing left and an IDLE posted, and no message taken since. */
   warm: boolean;
   /** The thread's rollout as the store mirrors it, where the config names the store. */
   readonly mirror: RolloutMirror | undefined;
@@ -1011,6 +1012,9 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
       yield* Effect.logWarning("agent-runner: skipped a retire for a launch at work");
       return undefined;
     }
+    // Note that a warm launch's window is its wait for the next signal, which this one already ran again from now.
+    case INPUT_LINE.WARM:
+      return undefined;
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
       // Note that a line naming either speed key says both, the one it leaves out being off.
@@ -1242,7 +1246,8 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     effort: config.effort,
     tier: serviceTierOf(config.fast, config.ultrafast),
     stopping: false,
-    warm: false,
+    // Note that a warm launch is warm from its start, so one launched with no message waits for its first as one past an IDLE does.
+    warm: config.warm === true,
     mirror,
   };
 

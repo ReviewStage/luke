@@ -146,6 +146,7 @@ function recording(sessionPrefix: string) {
         return answers.halts;
       }),
     deliverWaiting: () => Effect.succeed(false),
+    warm: () => Effect.void,
     checkOut: () => Effect.succeed(RUNNER_CHECKOUT.NOT_LIVE),
     open: (message) =>
       Effect.sync(() => {
