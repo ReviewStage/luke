@@ -30,7 +30,6 @@ import {
   agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
   agentMarkReadParamsSchema,
-  agentPageParamsSchema,
   agentPinParamsSchema,
   agentPullRequestParamsSchema,
   agentRenameParamsSchema,
@@ -39,7 +38,6 @@ import {
   type ChatGptDevicePollAnswerView,
   type GitHubTokenAnswerView,
   INBOX_SCOPE_KIND,
-  memoriesFollowParamsSchema,
   type ProviderKeysAnswerView,
   pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
@@ -69,7 +67,6 @@ import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
-import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -115,17 +112,13 @@ import {
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
-  type AppAgentOrigins,
-  type AppChapters,
   type AppDevicePresence,
   type AppDevicePresences,
   type AppGitHubToken,
   type AppGitHubTokens,
   type AppHolderInboxes,
   type AppHostRead,
-  type AppHosts,
   type AppInboxItems,
-  type AppMemories,
   type AppModels,
   type AppProviderKeyList,
   type AppProviderKeys,
@@ -140,15 +133,18 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type {
-  ACCOUNT_ASK_ACTS,
-  AGENT_ACTS,
-  AGENT_INBOX_ACTS,
-  CHAPTERS_ACTS,
+import {
+  type ACCOUNT_ASK_ACTS,
+  ACCOUNT_ASK_FOLLOWS,
+  type AGENT_ACTS,
+  AGENT_FOLLOWS,
+  type AGENT_INBOX_ACTS,
+  type CHAPTERS_ACTS,
+  CHAPTERS_FOLLOWS,
 } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
-import type { HostActTable } from "./host-acts.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import { heldHosts, hostRemove } from "./hosts-follow.js";
 import {
@@ -228,7 +224,7 @@ const AGENT_QUEUED_WRITE = {
  * account's devices last beat, asked every `MAC_PRESENCE.POLL_MS` while
  * held, and an agent's own tools, each told the same way; and each
  * workspace's memories Settings › Memory holds, followed live into the
- * sync engine's pool (`memory-follow.ts`) and told as `MEMORIES_CHANGED`,
+ * sync engine's pool (`memory-follow.ts`) and told on its live follow's slice (`liveTold`),
  * a forget drawn gone over them the moment it is asked. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
@@ -360,11 +356,14 @@ export interface AgentsDependencies {
   repositoriesMoved?: Effect.Effect<void>;
 }
 
-/** The acts this composer answers: the account's own asks, the Inbox's, every agent act but This Mac's, which its own concern answers, and a pull request's chapters generated. */
+/** The acts this composer answers: the account's own asks, the Inbox's, every agent act but This Mac's, which its own concern answers, and a pull request's chapters generated; and the live follows of a workspace's memories, the account's hosts, an agent's origin, and a pull request's chapters. */
 type AgentsActs = HostActTable<typeof ACCOUNT_ASK_ACTS> &
+  HostActTable<typeof ACCOUNT_ASK_FOLLOWS> &
   HostActTable<typeof AGENT_INBOX_ACTS> &
   HostActTable<Omit<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET">> &
-  HostActTable<typeof CHAPTERS_ACTS>;
+  HostActTable<typeof AGENT_FOLLOWS> &
+  HostActTable<typeof CHAPTERS_ACTS> &
+  HostActTable<typeof CHAPTERS_FOLLOWS>;
 
 export interface AgentsComposer extends Composer {
   /** The account's own asks, the Inbox's acts, the agents' acts, and a pull request's chapters generated, answered directly as the panel's port asks them. */
@@ -564,8 +563,7 @@ export function composeAgents(
         ),
       accountId: dependencies.accountId,
       gate,
-      tell: (held: AppChapters) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, CHAPTERS_FOLLOWS.CHAPTERS_FOLLOW),
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
@@ -574,8 +572,7 @@ export function composeAgents(
         ),
       accountId: dependencies.accountId,
       gate,
-      tell: (held: AppAgentOrigins) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.AGENT_ORIGINS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, AGENT_FOLLOWS.AGENTS_ORIGIN_FOLLOW),
     });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
@@ -615,8 +612,7 @@ export function composeAgents(
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
-      tell: (held: AppMemories) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.MEMORIES_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, ACCOUNT_ASK_FOLLOWS.MEMORIES_FOLLOW),
     });
     const hosts = yield* heldHosts({
       seal: (userId, poll, after) =>
@@ -624,14 +620,10 @@ export function composeAgents(
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
-      tell: (held: AppHosts) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.HOSTS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, AGENT_FOLLOWS.HOSTS_FOLLOW),
     });
     const hostsHold = yield* accountHeld(hosts, dependencies.accountId);
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
-    const chapterHolds = yield* FiberMap.make<ChaptersKey>();
-    const memoryHolds = yield* FiberMap.make<string>();
-    const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
     const parts = yield* pullRequestParts({
@@ -656,10 +648,7 @@ export function composeAgents(
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
-      { chapters, holds: chapterHolds },
-      { memories, holds: memoryHolds },
-      { origins, holds: originHolds },
-      { hosts, hold: hostsHold },
+      { chapters, memories, origins, hosts, hostsHold },
       fetched,
       parts,
     );
@@ -699,28 +688,18 @@ interface SessionReads {
   readonly holdPreferences: (userId: string) => Effect.Effect<void>;
 }
 
-/** The held lifetime over every agent's pull request's chapters the windows hold, and the windows' holds, one fiber per pull request held. */
-interface ChapterFollows {
+/** The live follows' reads the windows hold (`contract/live-follow.ts`), each held through its stream's scope. */
+interface LiveFollows {
+  /** Every agent's pull request's chapters, by the agent and the number. */
   readonly chapters: HeldSlice<ChaptersKey>;
-  readonly holds: FiberMap.FiberMap<ChaptersKey>;
-}
-
-/** The held lifetime over every workspace's memories the windows hold, and the windows' holds, one fiber per workspace held. */
-interface MemoryFollows {
+  /** Every workspace's memories Settings › Memory holds, by the workspace. */
   readonly memories: HeldSlice<string>;
-  readonly holds: FiberMap.FiberMap<string>;
-}
-
-/** The held lifetime over every agent's origin the windows hold, and the windows' holds, one fiber per agent held. */
-interface OriginFollows {
+  /** Every agent's origin, by the agent. */
   readonly origins: HeldSlice<string>;
-  readonly holds: FiberMap.FiberMap<string>;
-}
-
-/** The account's hosts the windows hold, and the windows' one hold on them under the account signed in. */
-interface HostsFollows {
+  /** The account's hosts Settings › Hosts holds, by the account. */
   readonly hosts: HeldSlice<string>;
-  readonly hold: AccountHeld;
+  /** The windows' one hold on the hosts, under the account signed in. */
+  readonly hostsHold: AccountHeld;
 }
 
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
@@ -883,14 +862,8 @@ function composed(
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches and its preferences among them. */
   { reads: sessionReads, followItems, preferences, holdPreferences }: SessionReads,
-  /** The pull requests' chapters the windows hold. */
-  { chapters, holds: chapterHolds }: ChapterFollows,
-  /** The workspaces' memories Settings › Memory holds. */
-  { memories, holds: memoryHolds }: MemoryFollows,
-  /** The agents' origins the windows hold. */
-  { origins, holds: originHolds }: OriginFollows,
-  /** The account's hosts Settings › Hosts holds. */
-  { hosts, hold: hostsHold }: HostsFollows,
+  /** The pull requests' chapters, the workspaces' memories, the agents' origins, and the account's hosts the windows hold. */
+  { chapters, memories, origins, hosts, hostsHold }: LiveFollows,
   {
     presence,
     presenceHold,
@@ -1584,6 +1557,30 @@ function composed(
         client.agentPicture(agentId, pictureId, callId),
         (picture) => ("base64" in picture ? picture : undefined),
       ),
+    // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in; a removal is drawn gone over them the moment it is asked.
+    HOSTS_FOLLOW: {
+      hold: () => hostsHold.hold,
+      retry: () =>
+        Effect.suspend(() => {
+          const userId = dependencies.accountId();
+          return userId === undefined ? Effect.void : hosts.retry(userId);
+        }),
+    },
+    // A workspace's memories are held for the windows while Settings › Memory shows them; a forget is drawn gone over them the moment it is asked.
+    MEMORIES_FOLLOW: {
+      hold: ({ workspaceId }) => memories.hold(workspaceId),
+      retry: ({ workspaceId }) => memories.retry(workspaceId),
+    },
+    // An agent's origin is held for a window while its page shows it.
+    AGENTS_ORIGIN_FOLLOW: {
+      hold: ({ agentId }) => origins.hold(agentId),
+      retry: ({ agentId }) => origins.retry(agentId),
+    },
+    // A pull request's chapters are held for a window while its Pull request tab reads them.
+    CHAPTERS_FOLLOW: {
+      hold: ({ agentId, number }) => chapters.hold(new ChaptersKey({ agentId, number })),
+      retry: ({ agentId, number }) => chapters.retry(new ChaptersKey({ agentId, number })),
+    },
   };
 
   const methods: HostMethodTable = {
@@ -1594,14 +1591,6 @@ function composed(
       Effect.suspend(() => {
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : models.retry(userId), {});
-      }),
-    // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in, and told only on the app state (`HOSTS_CHANGED`); a removal is drawn gone over them the moment it is asked.
-    [GATEWAY_METHOD.HOSTS_FOLLOW]: () => Effect.as(hostsHold.follow, {}),
-    [GATEWAY_METHOD.HOSTS_UNFOLLOW]: () => Effect.as(hostsHold.unfollow, {}),
-    [GATEWAY_METHOD.HOSTS_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : hosts.retry(userId), {});
       }),
     // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
     [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
@@ -1619,42 +1608,6 @@ function composed(
       Effect.suspend(() => {
         const userId = dependencies.accountId();
         return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
-      }),
-    // A workspace's memories are held for the windows while Settings › Memory shows them, and told only on the app state (`MEMORIES_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.MEMORIES_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "following memories names a workspace",
-        );
-        yield* FiberMap.run(
-          memoryHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(memories.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.MEMORIES_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "letting memories go names a workspace",
-        );
-        yield* FiberMap.remove(memoryHolds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.MEMORIES_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          memoriesFollowParamsSchema,
-          params,
-          "reading memories again names a workspace",
-        );
-        yield* memories.retry(workspaceId);
-        return {};
       }),
     // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
     [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
@@ -1686,42 +1639,6 @@ function composed(
       Effect.gen(function* () {
         const { key } = yield* agentTranscriptOf(params);
         yield* transcriptSlice.retry(key);
-        return {};
-      }),
-    // An agent's origin is held for a window while its page shows it, and told only on the app state (`AGENT_ORIGINS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "following the run that started an agent names one agent",
-        );
-        yield* FiberMap.run(
-          originHolds,
-          agentId,
-          Effect.scoped(Effect.andThen(origins.hold(agentId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "letting the run that started an agent go names one agent",
-        );
-        yield* FiberMap.remove(originHolds, agentId);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_ORIGIN_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPageParamsSchema,
-          params,
-          "reading the run that started an agent again names one agent",
-        );
-        yield* origins.retry(agentId);
         return {};
       }),
     // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -1761,48 +1678,6 @@ function composed(
         ),
         {},
       ),
-    // A pull request's chapters are held for a window while its Pull request tab reads them, and told only on the app state (`CHAPTERS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "following a pull request's chapters names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.run(
-          chapterHolds,
-          key,
-          Effect.scoped(Effect.andThen(chapters.hold(key), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "letting a pull request's chapters go names one agent and its pull request's number",
-          ),
-        );
-        yield* FiberMap.remove(chapterHolds, key);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const key = new ChaptersKey(
-          yield* readParams(
-            pullRequestChaptersReadParamsSchema,
-            params,
-            "reading a pull request's chapters again names one agent and its pull request's number",
-          ),
-        );
-        yield* chapters.retry(key);
-        return {};
-      }),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {

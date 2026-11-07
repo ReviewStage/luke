@@ -180,18 +180,6 @@ export const GATEWAY_METHOD = {
   /** The held models asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
   /**
-   * The account's hosts, held for a window from now until it is let go,
-   * followed on the service's live read into the sync engine's pool, and a
-   * while after among the reads let go lately. What it holds is heard as
-   * `HOSTS_CHANGED` events, on the app state every window draws, never
-   * answered.
-   */
-  HOSTS_FOLLOW: "hosts.follow",
-  /** The account's hosts let go by the window that held them. */
-  HOSTS_UNFOLLOW: "hosts.unfollow",
-  /** The account's held hosts read again at once, as Try again asks. */
-  HOSTS_RETRY: "hosts.retry",
-  /**
    * When the account's own devices last beat, held for a window from now
    * until it is let go, asked of the service at once and again every
    * `MAC_PRESENCE.POLL_MS` while held, and a while after among the reads let
@@ -215,18 +203,6 @@ export const GATEWAY_METHOD = {
   AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** One held transcript read again at once, as Try again asks; never answered. */
   AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
-  /**
-   * The run of an automation that started one agent, held followed for a
-   * window from now until it is let go, over the service's held poll, and a
-   * while after among those let go lately. What it holds is heard as
-   * `AGENT_ORIGINS_CHANGED` events, on the app state every window draws,
-   * never answered.
-   */
-  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
-  /** One agent's origin let go by the window that held it: it stays among those let go lately until later ones push it out. */
-  AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
-  /** One agent's held origin read again at once, as Try again asks; never answered. */
-  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /**
    * A workspace's automations, a workspace's runs, or an automation's runs
    * held followed for the windows from now until let go, and a while after
@@ -268,18 +244,6 @@ export const GATEWAY_METHOD = {
   /** One pull request's held part asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /**
-   * One agent's pull request's newest chapters, by the agent and the pull
-   * request's number, held followed for a window from now until it is let
-   * go, over the service's held poll, and a while after among those let go
-   * lately. What they hold is heard as `CHAPTERS_CHANGED` events, on the app
-   * state every window draws, never answered.
-   */
-  AGENTS_CHAPTERS_FOLLOW: "agents.chaptersFollow",
-  /** One agent's pull request's chapters let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  AGENTS_CHAPTERS_UNFOLLOW: "agents.chaptersUnfollow",
-  /** One agent's pull request's held chapters read again at once, as Try again asks; never answered. */
-  AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
-  /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
    * forward, and a while after among the reads let go lately. What it holds
@@ -317,18 +281,6 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
   /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
   GITHUB_TOKEN_RETRY: "githubToken.retry",
-  /**
-   * The memories our agents kept in one workspace, held for a window from
-   * now until it is let go, followed on the service's live read, and a while
-   * after among the reads let go lately. What it holds is heard as
-   * `MEMORIES_CHANGED` events, on the app state every window draws, never
-   * answered.
-   */
-  MEMORIES_FOLLOW: "memories.follow",
-  /** One workspace's memories let go by the window that held them. */
-  MEMORIES_UNFOLLOW: "memories.unfollow",
-  /** One workspace's held memories read again at once, as Try again asks; answered once the ask has landed. */
-  MEMORIES_RETRY: "memories.retry",
   /**
    * One plan's inbox, or one agent's, held followed for a window from now
    * until it is let go, over Neon Realtime, and a while after among the
@@ -546,16 +498,18 @@ export const GATEWAY_EVENT = {
   WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
   /** Every workspace's pending invitations the host holds for the windows, whole, as its reads of them stand, each time any of them moves or expires. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
-  /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
+  /**
+   * One live follow's slice (`@repo/host/contract`'s live follows), whole,
+   * named by its read (`LIVE_READ`), as the host's reads of it stand, each
+   * time any of them moves: `{ read, held }`.
+   */
+  LIVE_READ_CHANGED: "liveRead.changed",
   /** Every agent's or worker's transcript the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   TRANSCRIPTS_CHANGED: "transcripts.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   LINK_STANDINGS_CHANGED: "linkStandings.changed",
-  /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  CHAPTERS_CHANGED: "chapters.changed",
   /** One of the Pull request tabs' held parts, every agent's pull request's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   PULL_REQUEST_PARTS_CHANGED: "pullRequestParts.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
@@ -572,8 +526,6 @@ export const GATEWAY_EVENT = {
   INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
-  /** The account's hosts the host holds for the windows, whole, as its read of them stands, each time it moves. */
-  HOSTS_CHANGED: "hosts.changed",
   /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
   THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -586,8 +538,6 @@ export const GATEWAY_EVENT = {
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
-  /** Every workspace's memories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  MEMORIES_CHANGED: "memories.changed",
   /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The models the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
