@@ -38,6 +38,7 @@ import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js"
 import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
+import { hostPairing } from "../schemas/host-pairing.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
@@ -189,6 +190,31 @@ export const deviceSync = defineSyncTable(device, {
     device.lastSeenAt,
   ],
   log: LOG.EVERY,
+});
+
+/**
+ * A box's pairing, on the account that settled it, so a host its approve
+ * made leaves Settings › Hosts (`hostsRead`) when its box collects its
+ * secret, which deletes the pairing, rather than at the instant the read
+ * answered it lapses. A pending pairing names no account and notifies
+ * nothing. Note that every column but the host it names and when it lapses
+ * is ignored, because a box stamps its pairing on every poll and no view
+ * reads the rest.
+ */
+export const hostPairingSync = defineSyncTable(hostPairing, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: hostPairing.userId }],
+  ignore: [
+    hostPairing.pollSecretHash,
+    hostPairing.userCode,
+    hostPairing.name,
+    hostPairing.platform,
+    hostPairing.arch,
+    hostPairing.version,
+    hostPairing.ip,
+    hostPairing.status,
+    hostPairing.createdAt,
+    hostPairing.polledAt,
+  ],
 });
 
 /** An invitation to a workspace, pending or settled, on the workspace's topic. */
@@ -707,6 +733,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   memberSync,
   userSync,
   deviceSync,
+  hostPairingSync,
   invitationSync,
   organizationSync,
   personalWorkspaceSync,

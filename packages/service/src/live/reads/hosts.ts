@@ -19,18 +19,15 @@
  * removed, or moving through an update, or reporting another platform,
  * machine, or model. Note that a beat wakes nothing, since `deviceSync`
  * ignores when a device was last seen: a window judges a host by its own
- * presence read. Nor does a box collecting its secret, which writes only
- * columns Sync ignores and deletes its pairing, which Sync does not
- * capture: the hold's own look on the clock finds the lapse instant gone.
- * Note that a box which collects within one look of its lapse may leave the
- * page for that look and come back with the next answer, because a box polls
- * every few seconds from its start and an approve leaves it a minute at least.
+ * presence read. A box collecting its secret writes only columns Sync
+ * ignores, but deletes its pairing, which wakes it on the account that
+ * approved it (`hostPairingSync`), so the host's lapse instant goes with it.
  */
 
 import { queryBuilder } from "@repo/database/core/query";
 import { device, hostPairing } from "@repo/database/schemas";
 import { TOPIC } from "@repo/database/sync/notification";
-import { deviceSync } from "@repo/database/sync/tables";
+import { deviceSync, hostPairingSync } from "@repo/database/sync/tables";
 import { HOSTS_READ } from "@repo/features/host-live";
 import { and, eq, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -41,7 +38,7 @@ import { bindLiveRead, liveRowsStatement } from "../live-read-binding.js";
 const pairingLapsesAt: SQL<Date | null> = sql`(select ${hostPairing.expiresAt} from ${hostPairing} where ${eq(hostPairing.deviceId, device.id)} limit 1)`;
 
 export const hostsRead = bindLiveRead(HOSTS_READ, {
-  reads: [deviceSync],
+  reads: [deviceSync, hostPairingSync],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
   statements: ({ userId }) => ({
     hosts: liveRowsStatement(
