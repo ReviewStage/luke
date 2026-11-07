@@ -1479,9 +1479,16 @@ export function useTasksTab(input: {
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = input.agentView.agentId === undefined ? undefined : input.agentView;
-  // The agent whose page stands as the window was last drawn, which an answer landing late reads.
-  const agentNow = useRef(input.agentView.agentId);
-  agentNow.current = input.agentView.agentId;
+  // Whether a routed place stands as the window was last drawn, an agent's page among them, which an answer landing late reads.
+  const routedNow = useRef(false);
+  routedNow.current =
+    input.agentView.agentId !== undefined ||
+    input.inboxView.open ||
+    input.boardView.open ||
+    input.personView.userId !== undefined ||
+    input.automationsView.open ||
+    input.adminView.open ||
+    historyRoute.open;
   // A door into a place of the window's state leaves the Inbox or an agent's page standing in the task's place, as the router stands it when pressed.
   // Note that every routed place is left by the history's one leave (`onLeaveRouted`), which each route's `onClose` is.
   const overPlanNow = useRef({ over: false, leave: input.agentView.onClose });
@@ -3034,8 +3041,8 @@ export function useTasksTab(input: {
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
           setUnknownWorkspace((now) => now || unknownBefore);
-          // Note that the page comes back only where no agent's page stands now, as one opened since stays.
-          if (agentBefore !== undefined && agentNow.current === undefined) {
+          // Note that the page comes back only where no routed place stands now, as one opened since stays.
+          if (agentBefore !== undefined && !routedNow.current) {
             input.agentView.onOpen(agentBefore.agentId, agentBefore.workspace);
           }
           if (inboxBefore !== undefined) {

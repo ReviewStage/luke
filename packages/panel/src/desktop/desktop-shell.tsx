@@ -32,7 +32,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatch } from "@tanstack/react-router";
 import {
   Activity,
   createContext,
@@ -1156,9 +1156,16 @@ export function InboxPlace(): null {
   return null;
 }
 
-/** What an agent's own page's route draws in the places' content slot: the page of the agent its address names. */
+/**
+ * What an agent's addresses draw in the places' content slot: the page of
+ * the agent its address names, at the page's own address, and the place the
+ * window's state says under any address beneath it, a worker's, its
+ * Changes', or a message's, which a step on a task's tab is written at.
+ */
 export function AgentPlace(): React.JSX.Element {
   const { tasks, room, away } = useShellPlaces();
+  const ownPage = useMatch({ from: "/places/$workspace/agent/$agentId/", shouldThrow: false });
+  if (ownPage === undefined) return <StatePlace />;
   return <AgentRoutePage tasks={tasks} away={room === SHELL_ROOM.NARROW ? away : undefined} />;
 }
 

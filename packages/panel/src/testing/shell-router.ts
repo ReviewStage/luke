@@ -169,6 +169,7 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     path: "agent/$agentId",
     component: AgentPlace,
   });
+  const agentPage = createRoute({ getParentRoute: () => agent, path: "/" });
   const settings = createRoute({
     getParentRoute: () => root,
     path: SHELL_AT.SETTINGS,
@@ -207,7 +208,7 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
         workspace.addChildren([
           automationPages.addChildren([automations, automation]),
           inbox.addChildren([inboxItem]),
-          agent,
+          agent.addChildren([agentPage]),
         ]),
       ]),
       settings.addChildren([settingsPage]),

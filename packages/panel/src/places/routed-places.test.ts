@@ -59,7 +59,8 @@ test.each([
   ["/acme/automation/automation-1/runs", ROUTED_PLACE.AUTOMATIONS],
   ["/acme/task/7/version/3", ROUTED_PLACE.VERSION_HISTORY],
   ["/acme/inbox/item-1", ROUTED_PLACE.INBOX],
-  ["/acme/agent/agent-1/worker/call-1", ROUTED_PLACE.AGENT],
+  ["/acme/agent/agent-1", ROUTED_PLACE.AGENT],
+  ["/acme/agent/agent-1/changes", undefined],
   ["/acme/task/7", undefined],
   ["/app", undefined],
 ] as const)("%s stands on its routed place, where it is one", (address, place) => {

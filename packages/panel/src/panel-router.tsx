@@ -230,11 +230,11 @@ const taskAgentMessageRoute = createRoute({
 
 /**
  * An agent's own page, the page of an agent on no task or of an archived
- * one opened on its own, under the workspace its address names. Its route
- * draws the page of the agent its address names (`AgentPlace`); the places
- * under it, a worker, its Changes, a message, a page, or an Inbox item of
- * it, are what a link to them names, which open in the panel beside the
- * page.
+ * one opened on its own, under the workspace its address names, at its own
+ * address (`AgentPlace`). The places under it, a worker, its Changes, a
+ * message, a page, or an Inbox item of it, are what a link to them names,
+ * and what a step on a task's tab is written at, so they draw the place the
+ * window's state says, as every route not yet moved does.
  */
 const agentRoute = createRoute({
   getParentRoute: () => workspaceRoute,

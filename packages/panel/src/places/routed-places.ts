@@ -310,7 +310,8 @@ export const ROUTED_PLACE = {
         : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: historyTask }],
   },
   AGENT: {
-    routes: ["/places/$workspace/agent/$agentId"],
+    // Note that only the page's own address is its place: a worker's, its Changes', or a message's beneath it is a task's tab's, as the window's state says.
+    routes: ["/places/$workspace/agent/$agentId/"],
     // Note that its route draws the page under any address, as it always has, so this gate is Back and Forward's alone.
     gate: workspaceGate,
     stillThere: () => true,
