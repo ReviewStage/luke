@@ -21,11 +21,12 @@ import {
 import type { WireRecord, WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
-import { type Cause, Duration, Effect, Exit, Queue, Result, Stream } from "effect";
+import { type Cause, Deferred, Duration, Effect, Exit, Queue, Result, Stream } from "effect";
 import { Base64 } from "effect/encoding";
 import { TestClock } from "effect/testing";
 import {
   composeTerminals,
+  TERMINAL_OPENING_RETRY,
   TERMINAL_RECONNECT,
   type TerminalClient,
   type TerminalSocket,
@@ -42,7 +43,8 @@ import {
  * connection's events, and typing and resizes reach its socket; the relay's
  * close says how the connection ends, and a drop is opened again after a
  * wait that doubles and starts over once the shell attaches; an agent with
- * no sandbox yet is asked after every five seconds; output past the
+ * no sandbox yet is asked again as the task list says it opened, and after a
+ * wait that doubles where the list said so and it still starts; output past the
  * watermark pauses the socket until the tab acks; a refused bearer is
  * renewed once; a wake cuts a wait short; and a detach or a sign-out ends
  * the connection, as ten minutes unused does. Synthetic ids and bytes throughout.
@@ -128,6 +130,8 @@ function subject(
     const opened: { url: string; headers: Readonly<Record<string, string>> }[] = [];
     const events = options.events ?? [];
     const bearers = [...(options.bearers ?? ["bearer-1"])];
+    // The task list's word that the agent's sandbox opened, which a test gives.
+    const sandboxOpen = yield* Deferred.make<void>();
     const composer = yield* composeTerminals({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -150,6 +154,12 @@ function subject(
           Effect.sync(() => void opened.push({ url, headers })),
           Queue.take(openings),
         ),
+      sandboxOpened: () =>
+        Effect.gen(function* () {
+          if (yield* Deferred.isDone(sandboxOpen)) return false;
+          yield* Deferred.await(sandboxOpen);
+          return true;
+        }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -175,6 +185,7 @@ function subject(
       composer,
       asked: service.asked,
       hand: (opening: TerminalSocketOpening) => Queue.offer(openings, opening),
+      openSandbox: Deferred.succeed(sandboxOpen, undefined),
       opened,
       states,
       printed,
@@ -430,33 +441,48 @@ it.effect(
     }),
 );
 
-it.effect("an agent with no sandbox yet is asked after every five seconds", () =>
-  Effect.gen(function* () {
-    const { call, hand, opened, states } = yield* subject();
-    const starting = yield* scriptedSocket;
-    const ready = yield* scriptedSocket;
+it.effect(
+  "an agent with no sandbox yet is asked again as the list says it opened, then after a doubling wait while it still starts",
+  () =>
+    Effect.gen(function* () {
+      const { call, hand, openSandbox, opened, states } = yield* subject();
+      const starting = yield* scriptedSocket;
+      const stillStarting = yield* scriptedSocket;
+      const ready = yield* scriptedSocket;
 
-    yield* call(GATEWAY_METHOD.TERMINALS_CONNECT, connected());
-    yield* hand(starting.opening);
-    yield* starting.close(TERMINAL_RELAY_CLOSE.STARTING);
-    yield* settle;
-    yield* hand(ready.opening);
-    yield* TestClock.adjust(Duration.seconds(4));
-    yield* settle;
-    const beforeFive = opened.length;
-    yield* TestClock.adjust(TERMINAL_RECONNECT.STARTING_EVERY);
-    yield* settle;
-    yield* ready.attached;
-    yield* settle;
+      yield* call(GATEWAY_METHOD.TERMINALS_CONNECT, connected());
+      yield* hand(starting.opening);
+      yield* starting.close(TERMINAL_RELAY_CLOSE.STARTING);
+      yield* settle;
+      yield* hand(stillStarting.opening);
+      yield* hand(ready.opening);
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settle;
+      const beforeOpen = opened.length;
+      yield* openSandbox;
+      yield* settle;
+      const asOpen = opened.length;
+      yield* stillStarting.close(TERMINAL_RELAY_CLOSE.STARTING);
+      yield* settle;
+      yield* TestClock.adjust(Duration.millis(Duration.toMillis(TERMINAL_OPENING_RETRY.FIRST) - 1));
+      yield* settle;
+      const beforeFirstWait = opened.length;
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* settle;
+      yield* ready.attached;
+      yield* settle;
 
-    assert.equal(beforeFive, 1);
-    assert.equal(opened.length, 2);
-    assert.deepEqual(states(), [
-      state(TERMINAL_CONNECTION.CONNECTING),
-      state(TERMINAL_CONNECTION.STARTING),
-      state(TERMINAL_CONNECTION.ATTACHED),
-    ]);
-  }),
+      assert.equal(beforeOpen, 1, "nothing is asked while the list says the sandbox is not open");
+      assert.equal(asOpen, 2, "the list saying it opened asks at once");
+      assert.equal(beforeFirstWait, 2, "a sandbox open but still starting is asked after a wait");
+      assert.equal(opened.length, 3);
+      assert.deepEqual(states(), [
+        state(TERMINAL_CONNECTION.CONNECTING),
+        state(TERMINAL_CONNECTION.STARTING),
+        state(TERMINAL_CONNECTION.STARTING),
+        state(TERMINAL_CONNECTION.ATTACHED),
+      ]);
+    }),
 );
 
 it.effect("output past the watermark pauses the socket until the tab acks it down", () =>
