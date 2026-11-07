@@ -46,6 +46,11 @@ function holdsNone(place: RoutedPlace | undefined): boolean {
   return place?.binding === PLACE_BINDING.NONE;
 }
 
+/** Whether a place is the task bound's own, which the address the window's state draws, as a pairing's link, stands for too. */
+function holdsTask(place: RoutedPlace | undefined): boolean {
+  return place === undefined || place.binding === PLACE_BINDING.TASK;
+}
+
 /** The move from `before` to `now`, each side following the edge of the other's change. */
 function bindingMove(before: BindingReading, now: BindingReading): BindingMove {
   // The developer arriving on a place of no task asks for none, over whatever the host bound in the same breath.
@@ -54,8 +59,8 @@ function bindingMove(before: BindingReading, now: BindingReading): BindingMove {
   }
   if (now.bound === before.bound) return BINDING_MOVE.STAY;
   if (now.bound !== undefined && holdsNone(now.place)) return BINDING_MOVE.TO_BOUND;
-  // Note that only the task's own place, the one no routed place stands over, gives way to the place of no task.
-  if (now.bound === undefined && now.place === undefined) return BINDING_MOVE.TO_UNBOUND;
+  // Note that only the task's own place gives way to the place of no task, never a place standing over it.
+  if (now.bound === undefined && holdsTask(now.place)) return BINDING_MOVE.TO_UNBOUND;
   return BINDING_MOVE.STAY;
 }
 
@@ -63,7 +68,7 @@ function bindingMove(before: BindingReading, now: BindingReading): BindingMove {
 export interface PlaceBindingInput {
   /** Whether the window knows where it stands; nothing is followed before it does. */
   readonly known: boolean;
-  /** The routed place standing (`useWindowPlace`); none on the task's own place. */
+  /** The routed place standing (`useWindowPlace`); none on an address the window's state draws. */
   readonly place: RoutedPlace | undefined;
   /** The task the window is bound for (`TasksControl.boundFor`). */
   readonly bound: string | undefined;

@@ -81,7 +81,7 @@ import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
-import { DesktopHomePage, DesktopTasks, TaskOpening } from "./desktop-tasks.js";
+import { DesktopHomePage, DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -1197,12 +1197,6 @@ export function UnknownWorkspacePlace(): React.JSX.Element {
 export function StatePlace(): React.JSX.Element {
   const { tasks, room, looks, away } = useShellPlaces();
   return <DesktopTasks tasks={tasks} looks={looks} room={room} away={away} />;
-}
-
-/** A task's route's frame while it waits on the account's workspaces, a link's slug read against them (`panel-router.tsx`). */
-export function TaskRouteLoading(): React.JSX.Element {
-  const { tasks, room, away } = useShellPlaces();
-  return <TaskOpening tasks={tasks} room={room} away={away} />;
 }
 
 /**

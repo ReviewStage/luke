@@ -247,3 +247,27 @@ it.effect(
       assert.equal(document.querySelector(".desktop-settings"), null, "Settings waits on the ask");
     }),
 );
+
+it.effect(
+  "on the tasks profile, Home pressed in the sidebar leaves the task the fixture binds for good where it stands",
+  () =>
+    Effect.gen(function* () {
+      handFixtureRun(RUN_PROFILE.TASKS);
+      yield* Effect.promise(readAppState);
+      yield* Effect.promise(loadTasksFixture);
+      const router = windowRouter();
+      root = createRoot(document.body.appendChild(document.createElement("div")));
+      act(() => root?.render(withQueryClient(router.drawn())));
+      yield* Effect.promise(settle);
+      const standing = [router.history.location.pathname, router.addresses().length];
+      const home = [...document.querySelectorAll("aside.desktop-sidebar button")].find(
+        (button) => button.textContent?.startsWith("Home") === true,
+      );
+      assert.ok(home instanceof HTMLElement, "the sidebar's Home stands");
+
+      act(() => home.click());
+      yield* Effect.promise(settle);
+
+      assert.deepEqual([router.history.location.pathname, router.addresses().length], standing);
+    }),
+);

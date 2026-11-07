@@ -1065,26 +1065,6 @@ test("Back's list names a person's page by the name the workspace's members give
   assert.equal(window.history().steps.back[0]?.title?.label, "Lee Chen");
 });
 
-test("a tab chosen in the task's column by a press is a step of its own, which Back goes back to on that tab, while one chosen in the side panel's strip takes the standing step in place", () => {
-  const shown: string[] = [];
-  const notes = fileTab("docs/notes.md");
-  const beside = (column: typeof AGENT_A, side: SidePanelTab) => {
-    const tasks = onTabs({ column, side, shown });
-    return { ...tasks, sidePanel: { ...tasks.sidePanel, strip: [SIDE_PANEL_TAB.COMMENTS, notes] } };
-  };
-  const window = mount(beside(AGENT_A, SIDE_PANEL_TAB.COMMENTS));
-  press();
-  window.stand(beside(AGENT_B, SIDE_PANEL_TAB.COMMENTS));
-  press();
-  window.stand(beside(AGENT_B, notes));
-  assert.equal(window.addresses().length, 2, "the column's tab is a step, the panel's is not");
-
-  act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-a", "side:comments"]);
-  assert.equal(window.history().canGoBack, false);
-  assert.equal(window.history().canGoForward, true);
-});
-
 test("a page a link opens in the side panel is one step, which Back undoes, shutting the panel it opened, and Forward opens again", () => {
   const shown: string[] = [];
   const notes = fileTab("docs/notes.md");
@@ -1169,44 +1149,6 @@ test("Back to another task whose panel stood shut leaves the panel to shut as th
 
   act(() => window.history().onBack());
   assert.deepEqual(done, [`task:${OTHER_TASK}`]);
-});
-
-test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
-  const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.INBOX }));
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.INBOX }));
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS }));
-  assert.equal(
-    window.addresses().length,
-    1,
-    "an agent's tab shown as it starts, or a task's tabs arriving, adds nothing",
-  );
-  assert.equal(window.history().canGoBack, false);
-});
-
-test("a task's tabs arriving after it opens, and the side panel opening on its tab, fill in the task's step rather than adding one", () => {
-  const window = mount(listedTab());
-  press();
-  window.stand(listedTab({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }));
-  press();
-  window.stand(onTabs({ column: AGENT_A }));
-  press();
-  window.stand(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.COMMENTS }));
-  assert.equal(window.addresses().length, 2, "home, then the task on its tabs");
-});
-
-test("a step on a tab since closed is passed over by Back, which goes back to the tab before it", () => {
-  const shown: string[] = [];
-  const window = mount(onTabs({ column: AGENT_A, shown }));
-  press();
-  window.stand(onTabs({ column: AGENT_B, shown }));
-  press();
-  window.stand(onTabs({ column: AGENT_C, shown }));
-  // Agent B's tab closed from the strip, leaving the column on C.
-  window.stand(onTabs({ column: AGENT_C, agents: [AGENT_A, AGENT_C], shown }));
-
-  act(() => window.history().onBack());
-  assert.deepEqual(shown, ["column:agent-a", "side:shut"], "B's step is passed over");
-  assert.equal(window.history().canGoBack, false);
 });
 
 test("an Inbox item chosen by a press where the Inbox splits is a step of its own, which Back chooses again", () => {

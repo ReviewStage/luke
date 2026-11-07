@@ -327,8 +327,11 @@ function AppWindow(): React.JSX.Element {
     }
     route.open(link);
   }, []);
-  // Note that Home is the Tasks tab's own place, the one of no task bound, so it is no routed place the tab leaves.
-  const routedStanding = routedHere !== undefined && routedHere.place !== ROUTED_PLACE.HOME;
+  // Note that Home and the task's own place are the Tasks tab's own places, of no task bound and of the task bound, so neither is a routed place the tab leaves.
+  const routedStanding =
+    routedHere !== undefined &&
+    routedHere.place !== ROUTED_PLACE.HOME &&
+    routedHere.place !== ROUTED_PLACE.TASK;
   // Arriving at Settings is arriving at its page list and its first page, Profile; the Tasks tab is the place the window's
   // state says, which a routed place standing is left for. Note that `PanelTab` and the counted tab are the same union:
   // both are `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.

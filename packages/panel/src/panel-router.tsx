@@ -22,10 +22,10 @@
  * on them, their routes draw them, as lazy routes but for Home and an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`), but for an agent's page, which stands at any address
- * as it always has. A task's place
- * is still the window's state's, which its routes draw through one
- * component (`StatePlace`), so moving a place onto the router swaps its
- * route's component and deletes its place kind from `navigation-history.ts`.
+ * as it always has. A task's own place is declared beside them
+ * (`ROUTED_PLACE.TASK`), its step holding what its panes show in typed
+ * history state, though its routes still draw the window's state through
+ * one component (`StatePlace`), as a pairing's link does.
  */
 
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
@@ -57,7 +57,6 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
-  TaskRouteLoading,
   UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
@@ -70,7 +69,6 @@ import {
   useRouteAccess,
   versionHistoryRouteStands,
   workspaceRouteStands,
-  workspacesReadFor,
 } from "./route-gates.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
@@ -206,23 +204,17 @@ const boardRoute = createRoute({
 }).lazy(() => import("./desktop/board-route.lazy.js").then((loaded) => loaded.boardLazyRoute));
 
 /**
- * A task's place, which the window's state draws (`StatePlace`). A link to
- * it is read against the account's workspaces, so as the window loads at
- * it the route waits on their read, its own frame standing at once as a
- * lazy route's does, rather than the window resting anywhere else
- * meanwhile. Note that the frame is the task's loading page alone, never
- * the place itself, because a move onto the route shows it for the turn
- * the wait takes even once the workspaces are read, and the task's page
- * drawn there would be drawn twice.
+ * A task's own place (`ROUTED_PLACE.TASK`), which the window's state draws
+ * (`StatePlace`). A link to it is opened once the account's workspaces are
+ * read, its slug read against them (`app.tsx`), the task's loading frame
+ * standing at its address meanwhile as it does for any task on its way.
+ * Note that it waits on no `loader`, because a move from one task to another
+ * is a new match of the route, whose pending frame would stand in for the
+ * task's page and draw it anew on every move.
  */
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "task/$taskId",
-  loader: ({ context, abortController }) =>
-    workspacesReadFor(context.queryClient, abortController.signal),
-  pendingComponent: TaskRouteLoading,
-  pendingMs: 0,
-  pendingMinMs: 0,
   component: StatePlace,
 });
 

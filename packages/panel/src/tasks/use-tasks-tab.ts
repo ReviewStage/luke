@@ -1516,6 +1516,50 @@ export function useTasksTab(input: {
   const leaveOverPlan = useCallback(() => {
     if (overPlanNow.current.over) overPlanNow.current.leave();
   }, []);
+  // Every navigation a press asked for, counted, so an answer that lands
+  // after a newer one was asked for changes nothing the newer one decided.
+  const navigations = useRef(0);
+  // What stood where a door was pressed, a workspace not there, an agent's page, the Inbox, and, where `history` says, a
+  // version history, each by where its address stood, which a refusal of the move stands again where the developer went
+  // nowhere since; the place a refusal leaves standing otherwise is the binding's (`places/place-binding.ts`).
+  const pressedOverNow = useRef<(history: boolean) => () => void>(() => () => undefined);
+  pressedOverNow.current = (history) => {
+    const pressedAt = navigations.current;
+    const unknownBefore = input.unknownWorkspaceView.workspace;
+    const agentBefore =
+      agentView?.agentId === undefined || agentView.workspace === undefined
+        ? undefined
+        : { agentId: agentView.agentId, workspace: agentView.workspace };
+    const inboxBefore =
+      inboxView?.standingIn === undefined
+        ? undefined
+        : {
+            at: { workspace: inboxView.standingIn, narrowed: inboxView.narrowed },
+            chosen: inboxView.chosen,
+          };
+    const historyBefore =
+      !history || historyRoute.workspace === undefined || historyRoute.task === undefined
+        ? undefined
+        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
+    const { unknownWorkspaceView, agentView: agentRoute, inboxView: inboxRoute } = input;
+    return () => {
+      if (navigations.current !== pressedAt) return;
+      // Note that the page comes back only where no routed place stands now, as one opened since stays.
+      if (unknownBefore !== undefined && !routedNow.current) {
+        unknownWorkspaceView.onOpen(unknownBefore);
+      }
+      if (agentBefore !== undefined && !routedNow.current) {
+        agentRoute.onOpen(agentBefore.agentId, agentBefore.workspace);
+      }
+      if (inboxBefore !== undefined) {
+        if (inboxBefore.chosen === undefined) inboxRoute.onOpen(inboxBefore.at);
+        else inboxRoute.onChoose(inboxBefore.chosen, inboxBefore.at);
+      }
+      if (historyBefore !== undefined) {
+        historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
+      }
+    };
+  };
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
   const tasksFixture = loadedTasksFixture();
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
@@ -2070,21 +2114,19 @@ export function useTasksTab(input: {
   // Home is the listed workspace's too, at `/app` while none is listed, so another listed, or the first one read, stands its
   // Home in the step's place. Note that Home with a task still bound is left as it is, since the binding moves it next
   // (`places/place-binding.ts`).
-  const homeWorkspace =
-    input.homeView.standingIn === undefined
-      ? undefined
-      : workspaceOfSlug(viewed.workspaces, input.homeView.standingIn)?.id;
+  // Note that it is compared by the address step its link names, so a slug renamed, or a workspace addressed by its id, stands Home at the step Copy link names.
   const homeElsewhere =
     input.homeView.open &&
     boundFor === undefined &&
-    listedWorkspace !== undefined &&
-    homeWorkspace !== listedWorkspace.id;
+    listedStep !== undefined &&
+    input.homeView.standingIn !== listedStep;
   // Note that Home whose own workspace the reader is no longer in is found not there by its route without moving, and turns
   // the same way, while an address naming a workspace never the reader's, as a link's, stays not found.
   const homeWasIn = useRef<string | undefined>(undefined);
   const unknownIn = input.unknownWorkspaceView.workspace;
+  // Note that it is kept only while the page saying so stands at Home's own workspace, so a not-found page Home was left for keeps none.
   if (input.homeView.open) homeWasIn.current = input.homeView.standingIn;
-  else if (unknownIn === undefined) homeWasIn.current = undefined;
+  else if (unknownIn !== homeWasIn.current) homeWasIn.current = undefined;
   const homeLost = unknownIn !== undefined && unknownIn === homeWasIn.current;
   const turnHome = input.homeView.onTurn;
   useEffect(() => {
@@ -2224,7 +2266,10 @@ export function useTasksTab(input: {
   // would not open must not leave the sidebar on another workspace, this
   // launch or the next.
   const openTask = useCallback(
-    (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
+    (taskId: string, onOpened: () => void, onRefused?: () => void) => {
+      // Note that what stood over the task's place is read before it is left, so a refusal stands it again; a version
+      // history is left by the doors that open it, which a refusal never brings back, as its task is what opens.
+      const standBack = pressedOverNow.current(false);
       leaveOverPlan();
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
@@ -2234,7 +2279,10 @@ export function useTasksTab(input: {
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
         if (opening.current === timed) opening.current = undefined;
-        onRefused();
+        // A refusal with no way of its own stands again what stood where another task's open was pressed; the task already
+        // open, and a fixture run's, which binds nothing asked of it, stand as they are.
+        if (onRefused !== undefined) onRefused();
+        else if (fixture === undefined && taskId !== openTaskId) standBack();
       };
       if (fixture === undefined) setAsked(ask);
       sendSelect({ taskId }).then((opened) => {
@@ -2262,14 +2310,13 @@ export function useTasksTab(input: {
   const homeOpen = input.homeView.open;
   const homeNow = useRef({ home: input.homeView, boundFor });
   homeNow.current = { home: input.homeView, boundFor };
+  // Note that a fixture run binds its task for good, so leaving it only leaves what stands over it, as it always has.
   const leaveTask = useCallback(() => {
     const now = homeNow.current;
-    if (!now.home.open) now.home.onOpen();
+    if (fixture !== undefined && now.boundFor !== undefined) leaveOverPlan();
+    else if (!now.home.open) now.home.onOpen();
     else if (now.boundFor !== undefined) unbindTask();
-  }, [unbindTask]);
-  // Every navigation a press asked for, counted, so an answer that lands
-  // after a newer one was asked for changes nothing the newer one decided.
-  const navigations = useRef(0);
+  }, [fixture, unbindTask, leaveOverPlan]);
   // A workspace chosen on purpose, from the switcher, a workspace made, or
   // one left, is listed at once, and the task on screen follows: the task
   // last open there opens again, where it is still that workspace's, or
@@ -3048,26 +3095,8 @@ export function useTasksTab(input: {
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
-    // Note that a workspace not there standing at the press is where its address stood, which a refusal opens again.
-    const unknownBefore = input.unknownWorkspaceView.workspace;
-    // Note that an agent's page standing at the press is where its address stood, which a refusal opens again.
-    const agentBefore =
-      agentView?.agentId === undefined || agentView.workspace === undefined
-        ? undefined
-        : { agentId: agentView.agentId, workspace: agentView.workspace };
-    // Note that the Inbox standing at the press is where its address stood, which a refusal opens again.
-    const inboxBefore =
-      inboxView?.standingIn === undefined
-        ? undefined
-        : {
-            at: { workspace: inboxView.standingIn, narrowed: inboxView.narrowed },
-            chosen: inboxView.chosen,
-          };
-    // Note that a version history standing at the press is where its address stood, which a refusal opens again.
-    const historyBefore =
-      historyRoute.workspace === undefined || historyRoute.task === undefined
-        ? undefined
-        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
+    // Note that what stood at the press is where its address stood, which a refusal opens again.
+    const standBack = pressedOverNow.current(true);
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
     // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
@@ -3108,22 +3137,7 @@ export function useTasksTab(input: {
       if (handed !== undefined) {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.
-        if (navigations.current === pressedAt) {
-          // Note that the page comes back only where no routed place stands now, as one opened since stays.
-          if (unknownBefore !== undefined && !routedNow.current) {
-            input.unknownWorkspaceView.onOpen(unknownBefore);
-          }
-          if (agentBefore !== undefined && !routedNow.current) {
-            input.agentView.onOpen(agentBefore.agentId, agentBefore.workspace);
-          }
-          if (inboxBefore !== undefined) {
-            if (inboxBefore.chosen === undefined) input.inboxView.onOpen(inboxBefore.at);
-            else input.inboxView.onChoose(inboxBefore.chosen, inboxBefore.at);
-          }
-          if (historyBefore !== undefined) {
-            historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
-          }
-        }
+        standBack();
         setNewTaskAsk({
           preset:
             card === undefined
@@ -3735,7 +3749,11 @@ export function useTasksTab(input: {
     input.automationsView.onOpen(to, stepOf(shown));
   };
 
-  const goHome = leaveTask;
+  // Note that a fixture run's Home leaves a version history over its task too, as it always has.
+  const goHome = () => {
+    if (fixture !== undefined && boundFor !== undefined) closeHistory();
+    leaveTask();
+  };
 
   /**
    * An app link's place opened through the door each kind already has: the
