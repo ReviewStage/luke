@@ -498,6 +498,23 @@ test("the terminals a build before this one kept are the signed-in account's, an
   assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
+test("the terminals a build before this one kept wait, through a window signed out, for the account that signs in", async () => {
+  window.sessionStorage.setItem(
+    "vespin.terminals",
+    JSON.stringify({
+      cloud: { [AGENT.id]: [{ shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON }] },
+      local: {},
+    }),
+  );
+  const tab = await mount(true, true, undefined);
+
+  await tab.signIn("ada", true);
+
+  assert.deepEqual(tab.terminals.held.of("ada", TERMINAL_KIND.CLOUD, AGENT.id), [
+    { shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON },
+  ]);
+});
+
 test("while another account is signed in, nothing the first's shell says reaches the window, and nothing typed reaches that shell", async () => {
   keep([{ shell: TAB.shell, title: TAB.title }], "ada");
   const tab = await mount(true, true, "ada");

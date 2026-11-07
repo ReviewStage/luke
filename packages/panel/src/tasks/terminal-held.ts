@@ -175,9 +175,14 @@ export class TerminalsHeld {
     this.#write({ ...state, accounts: new Map(state.accounts).set(account, next) });
   }
 
-  /** Puts the account signed in on top in storage, the last one's moved under its own key, and gives it what a build before this one kept. */
+  /**
+   * Puts the account signed in on top in storage, the last one's moved under
+   * its own key, and gives it what a build before this one kept. Note that a
+   * window signed out claims none of that, so it waits, in storage too, for
+   * the account that signs in.
+   */
   own(account: string | undefined): void {
-    const state = claimed(this.all.state, account);
+    const state = account === undefined ? this.all.state : claimed(this.all.state, account);
     if (state === this.all.state && state.top === account) return;
     this.#write({ ...state, top: account });
   }
