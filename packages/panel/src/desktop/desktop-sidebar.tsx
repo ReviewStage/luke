@@ -1918,8 +1918,9 @@ function SidebarColumn({
   const listedPullRequests = useListedTaskPullRequests();
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
+  // Note that the task asked for is current while the host opens it, as the address the window stands at already names it.
   const current = (taskId: string) =>
-    onTasks && !standingIn && tasks.taskPlaceStands && taskId === tasks.activeTaskId;
+    onTasks && !standingIn && tasks.taskPlaceStands && taskId === tasks.boundFor;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
   const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>

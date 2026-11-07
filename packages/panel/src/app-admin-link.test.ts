@@ -554,3 +554,80 @@ test("a move from one open task to another keeps the task's page drawn, never it
   assert.equal(router.history.location.pathname, "/acme/task/77");
   assert.deepEqual(reading, [], "no loading frame drawn on the way");
 });
+
+/** The sidebar's row of the task named `name`, as it is pressed. */
+function taskRow(name: string): HTMLElement {
+  const found = [
+    ...document.querySelectorAll<HTMLElement>(
+      "aside.desktop-sidebar button, aside.desktop-sidebar a",
+    ),
+  ].find((row) => row.textContent?.includes(name) === true);
+  return found ?? assert.fail(`the row of ${name} stands`);
+}
+
+/** The words of every sidebar row standing current. */
+function currentRows(): string[] {
+  return [...document.querySelectorAll('aside.desktop-sidebar [aria-current="page"]')].map(
+    (row) => row.textContent ?? "",
+  );
+}
+
+test("a task pressed in the sidebar on Home is its row current while the host opens it, as the address already names it", async () => {
+  const { document: _document, ...listed } = { ...DOCUMENT_TASK, workspaceId: ACME.id };
+  first = stateWith(
+    {},
+    {
+      tasks: { ...IDLE_TASKS_VIEW, workspaces: [ACME], tasks: [listed] },
+      access: { admin: false, pending: true },
+    },
+  );
+  // The host takes its time opening the task, answering every other act with a refusal.
+  fakeActPortAnswering((request) =>
+    request.kind === ACT_KIND.TASKS_SELECT
+      ? new Promise(() => undefined)
+      : Promise.reject(refusedOnPort("Not here.")),
+  );
+  const router = await drawWindow("/acme");
+
+  act(() => taskRow(listed.name).click());
+  await settle();
+
+  assert.notEqual(router.history.location.pathname, "/acme");
+  assert.equal(currentRows().length, 1);
+  assert.match(currentRows()[0] ?? "", new RegExp(listed.name, "u"));
+});
+
+test.each([
+  ["Home", "/acme", undefined],
+  ["the Inbox", "/acme/inbox", undefined],
+  ["another open task", "/acme/task/77", "open"],
+] as const)(
+  "a task pressed in the sidebar on %s that the host refuses to open lands back where it was pressed",
+  async (_from, at, other) => {
+    const { document: _document, ...listed } = { ...DOCUMENT_TASK, workspaceId: ACME.id };
+    const open = {
+      ...listed,
+      id: "b2000002-0000-4000-8000-0000000000f9",
+      name: "Other",
+      number: 77,
+    };
+    first = stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          workspaces: [ACME],
+          tasks: [listed, open],
+          ...(other === undefined ? {} : { activeTaskId: open.id }),
+        },
+        access: { admin: false, pending: true },
+      },
+    );
+    const router = await drawWindow(at);
+
+    act(() => taskRow(listed.name).click());
+    await settle();
+
+    assert.equal(router.history.location.pathname, at);
+  },
+);

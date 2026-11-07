@@ -1515,6 +1515,50 @@ export function useTasksTab(input: {
   const leaveOverPlan = useCallback(() => {
     if (overPlanNow.current.over) overPlanNow.current.leave();
   }, []);
+  // Every navigation a press asked for, counted, so an answer that lands
+  // after a newer one was asked for changes nothing the newer one decided.
+  const navigations = useRef(0);
+  // What stood where a door was pressed, a workspace not there, an agent's page, the Inbox, and, where `history` says, a
+  // version history, each by where its address stood, which a refusal of the move stands again where the developer went
+  // nowhere since; the place a refusal leaves standing otherwise is the binding's (`places/place-binding.ts`).
+  const pressedOverNow = useRef<(history: boolean) => () => void>(() => () => undefined);
+  pressedOverNow.current = (history) => {
+    const pressedAt = navigations.current;
+    const unknownBefore = input.unknownWorkspaceView.workspace;
+    const agentBefore =
+      agentView?.agentId === undefined || agentView.workspace === undefined
+        ? undefined
+        : { agentId: agentView.agentId, workspace: agentView.workspace };
+    const inboxBefore =
+      inboxView?.standingIn === undefined
+        ? undefined
+        : {
+            at: { workspace: inboxView.standingIn, narrowed: inboxView.narrowed },
+            chosen: inboxView.chosen,
+          };
+    const historyBefore =
+      !history || historyRoute.workspace === undefined || historyRoute.task === undefined
+        ? undefined
+        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
+    const { unknownWorkspaceView, agentView: agentRoute, inboxView: inboxRoute } = input;
+    return () => {
+      if (navigations.current !== pressedAt) return;
+      // Note that the page comes back only where no routed place stands now, as one opened since stays.
+      if (unknownBefore !== undefined && !routedNow.current) {
+        unknownWorkspaceView.onOpen(unknownBefore);
+      }
+      if (agentBefore !== undefined && !routedNow.current) {
+        agentRoute.onOpen(agentBefore.agentId, agentBefore.workspace);
+      }
+      if (inboxBefore !== undefined) {
+        if (inboxBefore.chosen === undefined) inboxRoute.onOpen(inboxBefore.at);
+        else inboxRoute.onChoose(inboxBefore.chosen, inboxBefore.at);
+      }
+      if (historyBefore !== undefined) {
+        historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
+      }
+    };
+  };
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
   const tasksFixture = loadedTasksFixture();
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
@@ -2219,7 +2263,10 @@ export function useTasksTab(input: {
   // would not open must not leave the sidebar on another workspace, this
   // launch or the next.
   const openTask = useCallback(
-    (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
+    (taskId: string, onOpened: () => void, onRefused?: () => void) => {
+      // Note that what stood over the task's place is read before it is left, so a refusal stands it again; a version
+      // history is left by the doors that open it, which a refusal never brings back, as its task is what opens.
+      const standBack = pressedOverNow.current(false);
       leaveOverPlan();
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
@@ -2229,7 +2276,9 @@ export function useTasksTab(input: {
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
         if (opening.current === timed) opening.current = undefined;
-        onRefused();
+        // A refusal with no way of its own stands again what stood where the open was pressed.
+        if (onRefused === undefined) standBack();
+        else onRefused();
       };
       if (fixture === undefined) setAsked(ask);
       sendSelect({ taskId }).then((opened) => {
@@ -2264,9 +2313,6 @@ export function useTasksTab(input: {
     else if (!now.home.open) now.home.onOpen();
     else if (now.boundFor !== undefined) unbindTask();
   }, [fixture, unbindTask, leaveOverPlan]);
-  // Every navigation a press asked for, counted, so an answer that lands
-  // after a newer one was asked for changes nothing the newer one decided.
-  const navigations = useRef(0);
   // A workspace chosen on purpose, from the switcher, a workspace made, or
   // one left, is listed at once, and the task on screen follows: the task
   // last open there opens again, where it is still that workspace's, or
@@ -3045,26 +3091,8 @@ export function useTasksTab(input: {
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
-    // Note that a workspace not there standing at the press is where its address stood, which a refusal opens again.
-    const unknownBefore = input.unknownWorkspaceView.workspace;
-    // Note that an agent's page standing at the press is where its address stood, which a refusal opens again.
-    const agentBefore =
-      agentView?.agentId === undefined || agentView.workspace === undefined
-        ? undefined
-        : { agentId: agentView.agentId, workspace: agentView.workspace };
-    // Note that the Inbox standing at the press is where its address stood, which a refusal opens again.
-    const inboxBefore =
-      inboxView?.standingIn === undefined
-        ? undefined
-        : {
-            at: { workspace: inboxView.standingIn, narrowed: inboxView.narrowed },
-            chosen: inboxView.chosen,
-          };
-    // Note that a version history standing at the press is where its address stood, which a refusal opens again.
-    const historyBefore =
-      historyRoute.workspace === undefined || historyRoute.task === undefined
-        ? undefined
-        : { workspace: historyRoute.workspace, task: historyRoute.task, spot: historyRoute.spot };
+    // Note that what stood at the press is where its address stood, which a refusal opens again.
+    const standBack = pressedOverNow.current(true);
     const stays = !opensNewTask;
     const pressedAt = navigations.current;
     // Note that the agent's first line is stamped at the press, which its line after the answer keeps.
@@ -3105,22 +3133,7 @@ export function useTasksTab(input: {
       if (handed !== undefined) {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.
-        if (navigations.current === pressedAt) {
-          // Note that the page comes back only where no routed place stands now, as one opened since stays.
-          if (unknownBefore !== undefined && !routedNow.current) {
-            input.unknownWorkspaceView.onOpen(unknownBefore);
-          }
-          if (agentBefore !== undefined && !routedNow.current) {
-            input.agentView.onOpen(agentBefore.agentId, agentBefore.workspace);
-          }
-          if (inboxBefore !== undefined) {
-            if (inboxBefore.chosen === undefined) input.inboxView.onOpen(inboxBefore.at);
-            else input.inboxView.onChoose(inboxBefore.chosen, inboxBefore.at);
-          }
-          if (historyBefore !== undefined) {
-            historyRoute.onOpen(historyBefore.workspace, historyBefore.task, historyBefore.spot);
-          }
-        }
+        standBack();
         setNewTaskAsk({
           preset:
             card === undefined
