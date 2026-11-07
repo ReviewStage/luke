@@ -14,9 +14,10 @@
  * is held, so a runner that posted meanwhile keeps its turn, and only where
  * no other call holds the lease, since that call is at work on the agent and
  * a later touch settles what is still lost. The runner is let go first: its
- * bearer dropped, so nothing it posts after is taken; its credentials taken
- * off its place's firewall; a command still recorded as running ended; and
- * its record cleared, so the next message relaunches. For a Mac that
+ * bearer dropped, so nothing it posts after is taken; a command still
+ * recorded as running ended; and its record cleared, so the next message
+ * relaunches. Its place's firewall keeps its credentials until the place
+ * stops, as every place's does (`../sandbox-firewall.ts`). For a Mac that
  * stopped beating, its open launch is settled instead, which the Mac's own
  * beat reads as a run it holds no longer once it is back, and where its
  * runner never opened a turn, the turn its message waits on is queued first,
@@ -187,7 +188,6 @@ const letGo = (
             .runnerExit(runner.handle, CODER.RUNNER_EXIT_READ)
             .pipe(Effect.orElseSucceed(() => undefined));
     if (runner !== undefined && exit === null) yield* Effect.ignore(machine.kill(runner.handle));
-    if (found.running !== undefined) yield* Effect.ignore(machine.firewall.clear(found.running));
     const place = { ...found, userId: agent.userId, agentId: agent.id };
     yield* Effect.ignore(machine.recordRunner(place, { kind: RUNNER_RECORD.NONE }));
     return exit === undefined || exit === null || runner === undefined
