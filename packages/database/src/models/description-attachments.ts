@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
   isVideoPicture,
   PICTURE_MEDIA_TYPE,
   type Picture,
   pictureMediaTypeSchema,
 } from "@repo/features/picture-wire";
-import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
@@ -16,7 +16,7 @@ import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
- * description-attachments.ts -- a description's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
+ * description-attachments.ts -- a description's pictures: keep one, read one, and stamp the ones a save names.
  *
  * A picture, or a video an agent recorded, is kept under the plan row's own
  * lock, so the counts it is held to, every picture's and every video's,
@@ -24,8 +24,12 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * plan and gates on its membership of the plan's workspace, so a member
  * reads a picture a teammate pasted and a plan of a workspace the account is
  * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
- * pictures its text names (`saveDescriptionText`), and the sweep deletes a day-old
- * picture no save ever stamped, a sweep's worth at a time.
+ * pictures its text names (`saveDescriptionText`). A picture stays until its
+ * task is deleted, which cascades to it, whether or not a save named it.
+ * Note that the stamp is still written though nothing here reads it, because
+ * a rollback to a release that still runs the old unsaved-picture purge would
+ * otherwise delete every picture saved since; a later release stops writing it
+ * and drops the column once this one is the rollback floor.
  */
 
 /** What keeping a picture came to: kept under its new id, refused for the description's count of pictures or of videos, or no plan to keep it on. */
@@ -41,9 +45,6 @@ export type DescriptionAttachmentKeep =
   | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY }
   | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY_VIDEOS }
   | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.NO_TASK };
-
-/** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
-const PURGE_BATCH = 200;
 
 /** A description's pictures among every attachment: the ones its task owns alone. */
 const descriptionPicture = ownedByTaskAlone(attachment);
@@ -139,38 +140,6 @@ const stampSaved = SqlSchema.void({
 });
 
 /**
- * The oldest unsaved pictures uploaded before the cutoff, a sweep's worth,
- * their plans locked until the transaction ends. Note that a plan a save
- * holds locked is skipped, because the save may be stamping one of them
- * this moment; the next sweep reads it again.
- */
-const lockUnsaved = SqlSchema.findAll({
-  Request: Schema.Struct({ before: Schema.Date }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ before }) =>
-    Database.use((db) =>
-      db
-        .select({ id: attachment.id })
-        .from(attachment)
-        .innerJoin(task, eq(task.id, attachment.taskId))
-        .where(
-          and(descriptionPicture, isNull(attachment.savedAt), lt(attachment.createdAt, before)),
-        )
-        .orderBy(asc(attachment.createdAt))
-        .limit(PURGE_BATCH)
-        .for("update", { of: task, skipLocked: true }),
-    ),
-});
-
-const deletePictures = SqlSchema.void({
-  Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
-  execute: ({ ids }) =>
-    Database.use((db) =>
-      db.delete(attachment).where(and(inArray(attachment.id, [...ids]), descriptionPicture)),
-    ),
-});
-
-/**
  * Keeps one picture or video on the description, uploaded by the account, under a
  * new id; refused where the description already holds its bound of pictures, or a
  * video where it holds its bound of videos, and nothing where the account
@@ -232,21 +201,4 @@ export function stampSavedAttachments(
 ): TaskStoreEffect<void> {
   if (ids.length === 0) return Effect.void;
   return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ taskId, ids, now }));
-}
-
-/**
- * The scheduled sweep's delete of the pictures no save named, uploaded
- * before `before`, a sweep's worth, under their plans' locks, so a save
- * stamping one cannot cross it; how many went.
- */
-export function purgeUnsavedAttachments(before: Date): TaskStoreEffect<number> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const ids = (yield* lockUnsaved({ before })).map((row) => row.id);
-        if (ids.length > 0) yield* deletePictures({ ids });
-        return ids.length;
-      }),
-    ),
-  );
 }

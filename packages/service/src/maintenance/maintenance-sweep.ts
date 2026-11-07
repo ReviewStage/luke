@@ -41,8 +41,6 @@ interface MaintenanceSweeps {
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
-  /** Deletes the descriptions' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
-  purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
@@ -77,8 +75,6 @@ interface MaintenanceSweepAnswer {
   nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   automations: Swept<AutomationSweepOutcome>;
-  /** Pictures pasted into descriptions that no save named, deleted. */
-  purgedPictures: Swept<number>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
@@ -128,7 +124,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
-    purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
   };

@@ -1,6 +1,5 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
-import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
 import { hostedStore } from "@repo/database/models/hosted-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";
@@ -34,9 +33,6 @@ const SWEEP_MONITOR: CronMonitor = {
   checkInMarginMinutes: 1,
   failuresBeforeIssue: 3,
 };
-
-/** How long a picture pasted into a description waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
-const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * The scheduled sweep handed the deployment's real seams. An automation's run
@@ -83,8 +79,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     sweepAutomations: (now) =>
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
-    purgeUnsavedPictures: (now) =>
-      purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
   });
 });
