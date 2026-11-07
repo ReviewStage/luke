@@ -1157,7 +1157,12 @@ function composed(
   const heldCloses = new Map<string, HeldClose>();
   /** The held closes told to go and not yet answered, which an account's departure drops. */
   const sendingCloses = new Set<HeldClose>();
-  /** The account each held close was asked under, by its key, until it comes to be sent. */
+  /**
+   * The account each held close was asked under, by its key, until it comes
+   * to be sent. Note that an account's departure keeps it, because a close
+   * still waiting behind another write comes to be sent only after, and
+   * must not read as one laid back from disk under whoever is signed in then.
+   */
   const heldBy = new Map<string, string | undefined>();
   /** The account the close under `clientKey` was asked under, taken so it is read once; the account signed in now where this host did not see it asked, as one laid back from disk. */
   const takeHolder = (clientKey: string): string | undefined => {
@@ -1240,7 +1245,6 @@ function composed(
     const held = [...heldCloses.values(), ...sendingCloses];
     heldCloses.clear();
     sendingCloses.clear();
-    heldBy.clear();
     return Effect.forEach(
       held,
       ({ told, dropped }) =>
