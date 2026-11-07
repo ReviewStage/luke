@@ -23,9 +23,10 @@
  * trigger).
  * `POST /api/workspaces/delete` lets the owner alone delete a workspace,
  * though never the account's own first workspace, which goes only with the
- * account. Every agent of the workspace not archived, any member's, is
- * stopped first, as a task's archive stops its agents, and the delete is
- * refused as not ready, stopping no one, where one cannot be stopped yet;
+ * account. Every agent of the workspace not archived, any member's, one
+ * the owner cannot see among them, is stopped first under the account that
+ * started it, and the delete is refused as not ready, stopping no one,
+ * where one cannot be stopped yet;
  * the plugin then deletes the workspace and every row of it, and its hooks
  * stamp the agents' conversations deleted (`workspace-deletion.ts`).
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
@@ -59,7 +60,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { type Agent, listWorkspaceAgents } from "@repo/database/models/agent-store";
+import { type Agent, listAgentsOfDeletedWorkspace } from "@repo/database/models/agent-store";
 import type { MemberSeams, WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { setWorkspaceSlug } from "@repo/database/models/workspace-slug-store";
 import {
@@ -78,7 +79,7 @@ import {
   workspaceSlugProblemOf,
 } from "@repo/features/workspace-wire";
 import { type Cause, Effect, Option } from "effect";
-import { everyStoppedForGood, everyStopsForGood } from "../agents/coder-host/stop.js";
+import { everyStoppedByStarter, everyStopsForGood } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   recordServerEvent,
@@ -186,15 +187,14 @@ const ownedWorkspace = Effect.fn("web/ownedWorkspace")(function* (
   return workspace;
 });
 
-/** Every agent of the workspace not archived, any member's, read a page at a time. */
+/** Every agent of the workspace not archived, any member's, whether or not the owner sees it, read a page at a time. */
 const workspaceAgentsToStop = Effect.fn("web/workspaceAgentsToStop")(function* (
-  userId: string,
   workspaceId: string,
 ) {
   const agents: Agent[] = [];
   for (;;) {
     const page = yield* hostedStoreOrUnavailable(
-      listWorkspaceAgents(userId, workspaceId, {
+      listAgentsOfDeletedWorkspace(workspaceId, {
         offset: agents.length,
         limit: DELETE_AGENTS_PAGE,
       }),
@@ -342,11 +342,11 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       const { workspaceId } = input;
       const workspace = yield* ownedWorkspace(userId, workspaceId);
       if (workspace.personal === true) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const agents = yield* workspaceAgentsToStop(userId, workspace.id);
+      const agents = yield* workspaceAgentsToStop(workspace.id);
       if (!(yield* everyStopsForGood(agents))) {
         return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
       }
-      yield* everyStoppedForGood(STOPPER, userId, agents);
+      yield* everyStoppedByStarter(STOPPER, agents);
       yield* pluginCallOrRefused(seams.deleteWorkspace({ headers, organizationId: workspace.id }));
       yield* memberChanged(userId, workspace.id, SERVER_WORKSPACE_MEMBER_ACTION.DELETE);
       return { workspaceId: workspace.id };

@@ -1777,6 +1777,31 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     ),
 });
 
+/**
+ * One page of every agent of the workspace not archived, any member's,
+ * oldest started first, read by the workspace alone: no account's reach
+ * gates it, since what reads it has already held the caller to the
+ * workspace's owner.
+ */
+const findAgentsOfDeletedWorkspace = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    offset: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: AgentRowSchema,
+  execute: ({ organizationId, offset, limit }) =>
+    Database.use((db) =>
+      db
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .where(and(eq(agentTable.organizationId, organizationId), isNull(agentTable.archivedAt)))
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id))
+        .offset(offset)
+        .limit(limit),
+    ),
+});
+
 const findAgentLinesOfWorkspace = SqlSchema.findAll({
   Request: AgentsOfWorkspaceSchema,
   Result: AgentLineRowSchema,
@@ -2650,6 +2675,20 @@ export function listWorkspaceAgents(
   options: WorkspaceAgentsAsked,
 ): AgentStoreEffect<readonly Agent[]> {
   return findAgentsOfWorkspace(workspaceRequest(userId, organizationId, options));
+}
+
+/**
+ * Every agent of the workspace a delete stops, not archived, any member's,
+ * whether or not the owner deleting it sees it, oldest started first, the
+ * first `offset` passed over, and at most `limit`. Read by the workspace
+ * alone, as `workspaceConversationIds` reads it: the caller holds the
+ * account to the workspace's owner first, since everything in it goes.
+ */
+export function listAgentsOfDeletedWorkspace(
+  organizationId: string,
+  page: { readonly offset: number; readonly limit: number },
+): AgentStoreEffect<readonly Agent[]> {
+  return findAgentsOfDeletedWorkspace({ organizationId, ...page });
 }
 
 /** The workspace's agents as `listWorkspaceAgents` lists them, each as its line reads. */

@@ -30,6 +30,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationScope,
 } from "@repo/features/automation-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
 import {
   workspaceInvitationAnswerSchema,
@@ -1590,6 +1591,35 @@ it.effect(
             .where(eq(conversations.id, conversationId)),
         );
         assert.ok(stamped?.deletedAt != null);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the owner's delete reads every agent of the workspace, one on a member's own GitHub the owner cannot see among them, and refuses while that one is still starting",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "member" }]);
+        const agentId = yield* openTaskAgent(grace, acme, null);
+        // Grace's own token reaches its repository and Ada's reads none, so Ada cannot see it; started with a prompt and no turn yet, it is still starting.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN, prompt: "Fix the flaky test" })
+            .where(eq(agentTable.id, agentId)),
+        );
+
+        const refused = yield* deleting(plugin, ada, acme);
+
+        assert.deepEqual(
+          refused,
+          refusedAs(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.equal((yield* membersOf(acme)).length, 2);
       }).pipe(Effect.provide(plugin.database));
     }),
 );
