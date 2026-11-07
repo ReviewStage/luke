@@ -101,7 +101,7 @@ import { useTerminalsOwner } from "./tasks/use-terminal-session.js";
 import { WindowAccountContext, windowAccountOf } from "./tasks/window-account.js";
 import { ToastHost, useToastsOwner } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
-import { useUpdatedToast } from "./update-toast.js";
+import { useReadyToast, useUpdatedToast } from "./update-toast.js";
 import {
   appStateQuery,
   selectAccount,
@@ -208,6 +208,12 @@ function SettingsPalette({
  */
 function UpdatedToast(): null {
   useUpdatedToast(useShownUpdate());
+  return null;
+}
+
+/** The toast a release downloaded and waiting on its restart is said in, with Restart. */
+function ReadyToast(): null {
+  useReadyToast();
   return null;
 }
 
@@ -864,6 +870,7 @@ function AppWindow(): React.JSX.Element {
                             {/* The menu a right-click on any link in the window hangs. */}
                             <LinkMenu />
                             <UpdatedToast />
+                            <ReadyToast />
                             <OfflineRefusedToast />
                             <ExpiredServerToasts />
                             {/* The plans, the open plan's agents and files, every command the
