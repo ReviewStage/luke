@@ -11,14 +11,18 @@ import { organization as organizationTable, session, user } from "@repo/database
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { conversations } from "@repo/database/schemas/storage";
 import { openMigratedPglite, openTaskAgent, sqlClientOverPglite } from "@repo/database/testing";
+import { HTTP_METHOD } from "@repo/wire";
+import { jsonResponse, recordingHttpClient } from "@repo/wire/testing";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountDeletionSteps, workspaceDeletionSteps } from "../accounts/deletion-hooks.js";
+import { onboardingEventsFromEnvironment } from "../accounts/onboarding-events.js";
+import { WELCOME_MAIL_ENVIRONMENT } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { accountDeletionTestServices } from "../testing/account-deletion-services.js";
 import { authApp } from "./auth-app.js";
@@ -68,10 +72,26 @@ const openAuthRoute = (client: Awaited<ReturnType<typeof openMigratedPglite>>) =
         }),
       ],
     });
+    // Resend answers every onboarding call, and each is kept to read back.
+    const resend = recordingHttpClient(() => jsonResponse({ object: "contact" }));
+    const onboarding = onboardingEventsFromEnvironment.pipe(
+      Layer.provide(
+        Layer.merge(
+          resend.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              [WELCOME_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
+              [WELCOME_MAIL_ENVIRONMENT.FROM]: "Charles <charles@app.test>",
+            }),
+          ),
+        ),
+      ),
+    );
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       accountDeletionTestServices,
+      onboarding,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       authApp((request) => auth.handler(request), workspaceSeams(auth.api)).pipe(
@@ -110,7 +130,7 @@ const openAuthRoute = (client: Awaited<ReturnType<typeof openMigratedPglite>>) =
         const { id } = decodeSignedUp(yield* Effect.promise(() => answered.json())).user;
         return { id, cookie };
       });
-    return { auth, post, signUp };
+    return { auth, post, signUp, resend };
   });
 
 /** A workspace of Ada's alone, holding a GitHub connection and an agent a member who has since left ran, and one she shares with Grace. */
@@ -183,6 +203,10 @@ it.effect(
           .from(conversations)
           .where(eq(conversations.id, leftBehind));
         assert.ok(stamped?.deletedAt != null);
+        const contactDeletes = route.resend.requests
+          .filter((request) => request.method === HTTP_METHOD.DELETE)
+          .map((request) => decodeURIComponent(request.pathname));
+        assert.deepEqual(contactDeletes, ["/contacts/ada@example.com"]);
       }).pipe(Effect.provide(sqlClientOverPglite(client)), Effect.scoped);
     }),
 );
