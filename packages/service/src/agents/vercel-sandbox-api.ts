@@ -42,6 +42,7 @@ import {
 import { Context, Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
+import { sentryStep } from "../observability/sentry.js";
 
 /** The tag every session's sandbox carries, its value the session's id. */
 export const SESSION_TAG = "sessionId";
@@ -722,13 +723,27 @@ function sdkPolicyOf(policy: NetworkPolicy): SdkNetworkPolicy {
   };
 }
 
-/** The user made in the sandbox as the SDK makes one, its home's folders made and the home closed (`SandboxUser`). */
+/**
+ * The user made in the sandbox as the SDK makes one, its home's folders made
+ * and the home closed (`SandboxUser`), each call a span of its own under the
+ * create's (`sentryStep`), since they run inside the SDK's own `onCreate`.
+ */
 async function madeUser(sandbox: Sandbox, made: SandboxUser, signal: AbortSignal): Promise<void> {
-  const user = await sandbox.createUser(made.name, { signal });
-  const { group } = await sandbox.getDefaultUser({ signal });
-  await sandbox.addUserToGroup(made.name, group, { signal });
-  for (const folder of made.homeFolders) await user.mkDir(folder, { signal });
-  const closed = await user.runCommand("chmod", ["700", user.homeDir], { signal });
+  const user = await sentryStep("web/sandboxCreateUser", () =>
+    sandbox.createUser(made.name, { signal }),
+  );
+  const { group } = await sentryStep("web/sandboxDefaultUser", () =>
+    sandbox.getDefaultUser({ signal }),
+  );
+  await sentryStep("web/sandboxAddUserToGroup", () =>
+    sandbox.addUserToGroup(made.name, group, { signal }),
+  );
+  for (const folder of made.homeFolders) {
+    await sentryStep("web/sandboxMakeDirectory", () => user.mkDir(folder, { signal }));
+  }
+  const closed = await sentryStep("web/sandboxCloseHome", () =>
+    user.runCommand("chmod", ["700", user.homeDir], { signal }),
+  );
   if (closed.exitCode !== 0) throw new Error(`${user.homeDir} could not be closed`);
 }
 

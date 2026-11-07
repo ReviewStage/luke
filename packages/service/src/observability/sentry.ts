@@ -498,6 +498,16 @@ export function sentryQueueSent(): Promise<boolean> {
   return Sentry.flush(REQUEST_FLUSH_MS);
 }
 
+/**
+ * A step of a promise a library calls back into, where no Effect runs to
+ * span it, traced as Sentry's custom instrumentation traces one: a span
+ * under whichever is active, which is the Effect span whose fiber started
+ * the call, as Sentry's tracer makes it active while the fiber runs.
+ */
+export function sentryStep<A>(name: string, step: () => Promise<A>): Promise<A> {
+  return Sentry.startSpan({ name }, step);
+}
+
 /** A web function's handler, as the platform calls it. */
 type WebFetch = (request: Request) => Promise<Response>;
 
