@@ -2067,21 +2067,19 @@ export function useTasksTab(input: {
   // Home is the listed workspace's too, at `/app` while none is listed, so another listed, or the first one read, stands its
   // Home in the step's place. Note that Home with a task still bound is left as it is, since the binding moves it next
   // (`places/place-binding.ts`).
-  const homeWorkspace =
-    input.homeView.standingIn === undefined
-      ? undefined
-      : workspaceOfSlug(viewed.workspaces, input.homeView.standingIn)?.id;
+  // Note that it is compared by the address step its link names, so a slug renamed, or a workspace addressed by its id, stands Home at the step Copy link names.
   const homeElsewhere =
     input.homeView.open &&
     boundFor === undefined &&
-    listedWorkspace !== undefined &&
-    homeWorkspace !== listedWorkspace.id;
+    listedStep !== undefined &&
+    input.homeView.standingIn !== listedStep;
   // Note that Home whose own workspace the reader is no longer in is found not there by its route without moving, and turns
   // the same way, while an address naming a workspace never the reader's, as a link's, stays not found.
   const homeWasIn = useRef<string | undefined>(undefined);
   const unknownIn = input.unknownWorkspaceView.workspace;
+  // Note that it is kept only while the page saying so stands at Home's own workspace, so a not-found page Home was left for keeps none.
   if (input.homeView.open) homeWasIn.current = input.homeView.standingIn;
-  else if (unknownIn === undefined) homeWasIn.current = undefined;
+  else if (unknownIn !== homeWasIn.current) homeWasIn.current = undefined;
   const homeLost = unknownIn !== undefined && unknownIn === homeWasIn.current;
   const turnHome = input.homeView.onTurn;
   useEffect(() => {

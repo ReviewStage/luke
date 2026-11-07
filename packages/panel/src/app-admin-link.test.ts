@@ -462,3 +462,50 @@ test("a Home link to a workspace the reader is not in, pressed over an agent's p
 
   assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/ghost", true]);
 });
+
+test("Home standing in a workspace whose slug was renamed stands at the new slug, as Copy link names it", async () => {
+  const router = await drawWindow("/acme");
+
+  await deliver(
+    stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          workspaces: [{ ...ACME, slug: "acme-2", formerSlugs: ["acme"] }],
+        },
+        access: { admin: false, pending: true },
+      },
+    ),
+  );
+
+  assert.equal(router.history.location.pathname, "/acme-2");
+});
+
+test("a link to a workspace the reader has since left, opened after a not-found page Home was left for, stands not found", async () => {
+  const PLATFORM = { ...ACME, id: "workspace-platform", name: "Platform", slug: "platform" };
+  first = stateWith(
+    {},
+    {
+      tasks: { ...IDLE_TASKS_VIEW, workspaces: [ACME, PLATFORM] },
+      access: { admin: false, pending: true },
+    },
+  );
+  const router = await drawWindow("/acme");
+  act(() => showLink?.({ workspace: "ghost", place: { kind: LINK_PLACE.HOME } }));
+  await settle();
+  await deliver(
+    stateWith(
+      {},
+      {
+        tasks: { ...IDLE_TASKS_VIEW, workspaces: [PLATFORM] },
+        access: { admin: false, pending: true },
+      },
+    ),
+  );
+
+  act(() => showLink?.({ workspace: "acme", place: { kind: LINK_PLACE.HOME } }));
+  await settle();
+
+  assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/acme", true]);
+});
