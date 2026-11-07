@@ -8,14 +8,13 @@
  * (`packages/service/src/orpc/base.ts`); a JSON body is read strictly, its
  * params apart from it (`exactBodyInput`).
  *
- * The list, a start, a change, and the tree's writes (a block, a parent, a
- * relation moved) declare the refusals their handlers answer
+ * Each procedure declares the refusals its handler answers
  * (`packages/service/src/tasks/tasks-procedures.ts`) beyond those any
- * procedure may (`declaredProcedure`): a plan, a workspace, or a related
- * task out of reach as not found, a repository the workspace does not reach
- * as not reachable or GitHub unanswered, the tree's own rules by name, and a
- * write sent again under its key as already written. The rest declare every
- * refusal until their own leaf declares them.
+ * procedure may (`declaredProcedure`): a plan, a workspace, a related task,
+ * or a revision out of reach as not found, a repository the workspace does
+ * not reach as not reachable or GitHub unanswered, the tree's own rules by
+ * name, a write sent again under its key as already written, and a delete's
+ * Stop of the plan's agents as an agent's Stop refuses (`STOP_REFUSALS`).
  */
 
 import { openapi } from "@orpc/openapi";
@@ -44,14 +43,8 @@ import {
   taskStartAnswerSchema,
   taskUpdateRequestSchema,
 } from "../task-wire.js";
-import {
-  bodyCap,
-  declaredProcedure,
-  exactBodyInput,
-  exactInput,
-  hostedProcedure,
-  refuses,
-} from "./base.js";
+import { STOP_REFUSALS } from "./agents.js";
+import { bodyCap, declaredProcedure, exactBodyInput, exactInput, refuses } from "./base.js";
 
 /** A change is a name and a repository's name at most, so a body past this is none. */
 const NAME_BODY_BYTES = 8_192;
@@ -150,7 +143,8 @@ export const tasksContract = {
    * spells it by, and its number there (`/<slug>/task/<number>`), as its id;
    * one the caller does not reach answers as none.
    */
-  find: hostedProcedure
+  find: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(
       openapi({
         method: HTTP_METHOD.GET,
@@ -159,7 +153,8 @@ export const tasksContract = {
     )
     .input(EffectSchema.Struct({ workspace: EffectSchema.String, number: taskNumberText }))
     .output(EffectSchema.flip(taskFoundAnswerSchema)),
-  open: hostedProcedure
+  open: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskAnswerSchema)),
@@ -216,29 +211,34 @@ export const tasksContract = {
     )
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskRelationChangeRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
-  delete: hostedProcedure
+  delete: declaredProcedure
+    .errors(refuses(...STOP_REFUSALS))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskDeleteAnswerSchema)),
   /** The developer's edit of the description. */
-  editDescription: hostedProcedure
+  editDescription: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(EDIT_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: DESCRIPTION, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), descriptionEditRequestSchema))
     .output(EffectSchema.flip(descriptionEditAnswerSchema)),
   /** A page of the description's history, before the revision `before` names where it names one. */
-  descriptionRevisions: hostedProcedure
+  descriptionRevisions: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISIONS }))
     .input(
       EffectSchema.Struct({ ...taskParams, before: EffectSchema.optionalKey(revisionSeqText) }),
     )
     .output(EffectSchema.flip(descriptionRevisionsAnswerSchema)),
-  descriptionRevision: hostedProcedure
+  descriptionRevision: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: REVISION }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(descriptionRevisionAnswerSchema)),
   /** One revision put back as the description's content. */
-  restoreDescription: hostedProcedure
+  restoreDescription: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(taskRestoreAnswerSchema)),

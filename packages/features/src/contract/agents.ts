@@ -92,7 +92,7 @@ const shellProcedure = sandboxProcedure.errors(
  * `failedCallRefusal`), its session ended, its host removed or away, or its
  * harness not reached from here.
  */
-const STOP_REFUSALS = [
+export const STOP_REFUSALS = [
   HOSTED_API_ERROR.NOT_FOUND,
   HOSTED_API_ERROR.NOT_PERMITTED,
   HOSTED_API_ERROR.AGENT_NOT_READY,
