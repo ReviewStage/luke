@@ -410,12 +410,12 @@ export class TerminalSessions {
     if (found !== undefined) return found;
     const made = make();
     held.set(key, made);
-    // Each shell's port goes to the session that asked for it.
-    this.#stopHearing ??= onTerminalPort((ticket, port) =>
-      this.#every()
-        .find((each) => each.takes(ticket.agentId, ticket.terminalId))
-        ?.attached(port),
-    );
+    // Each shell's port goes to the session that asked for it; one none waits for is let go, which main hears as the detach.
+    this.#stopHearing ??= onTerminalPort((ticket, port) => {
+      const taker = this.#every().find((each) => each.takes(ticket.agentId, ticket.terminalId));
+      if (taker === undefined) port.close();
+      else taker.attached(port);
+    });
     return made;
   }
 

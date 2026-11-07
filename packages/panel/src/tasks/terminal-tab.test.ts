@@ -504,6 +504,10 @@ test("while another account is signed in, nothing the first's shell says reaches
 
   // Note that the tab stays drawn, as a strip that still held it would draw it.
   await tab.signIn("grace", true);
+  const ada = tab.terminals.sessions.session("ada", TERMINAL_KIND.CLOUD, AGENT.id, TAB.shell, () =>
+    assert.fail("the first account's session stands"),
+  );
+  const detached = ada.state;
   await tab.type("a", 65);
   port.say({ type: "state", state: "exited", code: 0 });
   await settle();
@@ -513,6 +517,17 @@ test("while another account is signed in, nothing the first's shell says reaches
     [],
   );
   assert.notEqual(tab.standing(), "· exited", "the first account's shell said nothing here");
+  assert.deepEqual(ada.state, detached, "nor to its own detached session");
+});
+
+test("a port that arrives after another account signed in is let go, so its shell is held by no connection", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  await tab.signIn("grace", false);
+
+  const port = main.post(MADE);
+
+  assert.equal(port.closed(), true);
 });
 
 test("the first account signing in again finds its terminal, which attaches to the same shell, starting none", async () => {
