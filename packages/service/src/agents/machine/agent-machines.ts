@@ -40,9 +40,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
       write: (place, userId, sources) => of(place.machine).firewall.write(place, userId, sources),
       keepLaunch: (place, userId, launch) =>
         of(place.machine).firewall.keepLaunch(place, userId, launch),
-      clear: (place) => of(place.machine).firewall.clear(place),
-      // Note that a firewall's owner is always a sandbox session's, since no other machine keeps a launch there.
-      renew: (owner, ask) => cloud.firewall.renew(owner, ask),
     },
     stop: (place) => of(place.machine).stop(place),
     discard: (found) => of(found.machine).discard(found),

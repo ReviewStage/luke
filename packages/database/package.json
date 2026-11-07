@@ -78,6 +78,7 @@
     "./models/workspace-seams": "./src/models/workspace-seams.js",
     "./models/workspace-experiment-store": "./src/models/workspace-experiment-store.js",
     "./models/workspace-slug-store": "./src/models/workspace-slug-store.js",
+    "./models/workspace-environment-store": "./src/models/workspace-environment-store.js",
     "./models/workspace-store": "./src/models/workspace-store.js",
     "./models/workspace-token-repository-store": "./src/models/workspace-token-repository-store.js",
     "./models/writer": "./src/models/writer.js",

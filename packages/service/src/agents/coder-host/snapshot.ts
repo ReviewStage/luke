@@ -201,9 +201,7 @@ const stopMissed = (why: string) =>
  * It lists the sandbox again rather than trusting a session it was handed,
  * so a wake interrupted before it answered is stopped too, and asks again
  * whether it must stay up once listed, so a terminal, a turn, or another
- * Start's copy that took it up since the first ask keeps it. Its kept
- * launch is deleted ahead of each stop, as ahead of every other stop, so no
- * renewal writes to it again.
+ * Start's copy that took it up since the first ask keeps it.
  */
 const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -214,7 +212,6 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
         continue;
       }
       const running = { name: sandbox.name, sessionId: sandbox.currentSessionId };
-      yield* sandboxFirewall(api).clear(running);
       yield* (yield* api.session(running)).stop();
     }
   }).pipe(

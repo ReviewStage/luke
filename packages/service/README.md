@@ -1421,10 +1421,13 @@ would. Each is opened from its sealed row under
 `PROVIDER_KEY_ENCRYPTION_KEYS`. In a sandbox it is set at the sandbox's
 firewall as a placeholder swap (`src/agents/sandbox-firewall.ts`), as the
 runner's bearer is, the runner's environment holding only the placeholder
-minted for the launch, and the sweep renews a ChatGPT plan's token there; on
-a host it is in the runner's environment, and a Codex agent on a ChatGPT plan
-asks the service for its token as it needs one
-(`src/agents/native-events/runner-token-app.ts`). Neither harness runs a
+minted for the launch; on a host it is in the runner's environment. A Codex
+agent on a ChatGPT plan asks the service for the plan's access token as it
+needs one (`src/agents/native-events/runner-token-app.ts`): on a host through
+its token command, and in a sandbox to sign Codex in on host-supplied ChatGPT
+tokens and to answer Codex's refresh after a 401, so in a sandbox app-server
+holds the access token, and the sign-in that renews it stays with the
+service. Neither harness runs a
 command sandbox of its own, in a sandbox or on a host, so in a sandbox the
 firewall is what keeps a credential from the agent's commands: they can read
 the placeholders, each good only through that sandbox's firewall, and never

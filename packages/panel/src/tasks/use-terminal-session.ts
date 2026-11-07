@@ -320,6 +320,8 @@ export function useTerminalTabSession(
         }),
       ),
     );
+    // Note that a tab hidden calls the ask off, so only a tab on screen asks again.
+    return retry.stop;
   }, [shown, view.state, session, retry]);
   return view;
 }

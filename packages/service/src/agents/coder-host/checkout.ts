@@ -4,7 +4,6 @@ import { readAgentRepositories } from "@repo/database/models/agent-repositories"
 import {
   type Agent,
   hasRepository,
-  readAgent,
   settleAgentAuthor,
   type WithRepository,
 } from "@repo/database/models/agent-store";
@@ -382,42 +381,6 @@ export const agentFirewallSources = /* @__PURE__ */ Effect.fn("web/agentFirewall
     return { github: { token, fullName, access } };
   },
 );
-
-/**
- * The same for the account's agent named, read afresh, for a firewall write
- * made apart from the agent's own calls, as a launch's end or a sweep makes
- * one; none where no agent is named or the account reaches it no longer.
- */
-export const firewallSourcesOfAgent = /* @__PURE__ */ Effect.fn("web/firewallSourcesOfAgent")(
-  function* (
-    userId: string,
-    agentId: string | undefined,
-  ): Effect.fn.Return<FirewallSources, CheckoutRefused | StoreFailure, CheckoutServices> {
-    if (agentId === undefined) return {};
-    const agent = yield* readAgent(userId, agentId);
-    if (Option.isNone(agent)) return {};
-    const target = { userId, conversationId: agent.value.conversationId };
-    return yield* agentFirewallSources(target, agent.value);
-  },
-);
-
-/**
- * The same for a write that takes an ended launch's swaps off a place a
- * Terminal keeps up: none where the credential could not be minted, said in
- * the log, because the ended runner's credentials must come off whether or
- * not the shell goes on reaching GitHub.
- */
-export const firewallSourcesAfterLaunch = (userId: string, agentId: string | undefined) =>
-  firewallSourcesOfAgent(userId, agentId).pipe(
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(
-          `a held sandbox's repository credential was not minted as its launch ended: ${failure._tag}`,
-        ),
-        {} satisfies FirewallSources,
-      ),
-    ),
-  );
 
 /** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several, answering the repository at the place given among them. */
 const agentRepositoriesToken = Effect.fnUntraced(function* (

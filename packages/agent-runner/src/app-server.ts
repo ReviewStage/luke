@@ -5,17 +5,32 @@
  * (Node's in production, a scripted one in the tests), so the door a test
  * stands at is the same one the sandbox's process crosses. Closing the scope
  * the process was spawned in ends it, its process group with it. A request
- * Codex makes of the client (an approval, never expected under
- * `approval_policy = "never"`) is refused at once, so a turn cannot hang on it.
+ * Codex makes of the client is answered by the listener where it serves it
+ * (a sandbox's refresh of the plan's token, `codex.ts`), in a fiber of its
+ * own so the reader goes on meanwhile, and refused at once otherwise (an
+ * approval, never expected under `approval_policy = "never"`), so a turn
+ * cannot hang on it.
  */
 
-import { Data, Deferred, Duration, Effect, Fiber, Option, Queue, Schema, Stream } from "effect";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Option,
+  Queue,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { ClientRequest } from "./codex-protocol/index.js";
 import type { CodexNotification } from "./protocol.js";
 
-/** JSON-RPC's code for a method the receiver does not serve. */
+/** JSON-RPC's codes for a method the receiver does not serve, and for one it serves but could not answer. */
 const METHOD_NOT_FOUND = -32601;
+const INTERNAL_ERROR = -32603;
 
 /** How app-server is ended when its scope closes: asked first, then killed after the grace. */
 const APP_SERVER_KILL = {
@@ -88,14 +103,23 @@ export interface AppServer {
   readonly notify: (method: string) => Effect.Effect<void>;
 }
 
-/** What the launch hears from app-server: each notification, as Codex wrote it, and its end. */
+/** Why the runner could not answer a request app-server made of it, in words with no secret in them. */
+export class AppServerRequestFailed extends Data.TaggedError("AppServerRequestFailed")<{
+  readonly detail: string;
+}> {}
+
+/** What the launch hears from app-server: each notification, as Codex wrote it, each request it made, and its end. */
 export interface AppServerListener {
   readonly onNotification: (notification: CodexNotification) => Effect.Effect<void>;
+  /** The answer to a request app-server made, where the launch serves its method; none where it does not. */
+  readonly onRequest?: (
+    method: string,
+  ) => Effect.Effect<Schema.Json, AppServerRequestFailed> | undefined;
   /** The process's stdout ended: it exited, with the tail of what it wrote to stderr. */
   readonly onExit: (stderrTail: string) => Effect.Effect<void>;
 }
 
-/** What the runner writes to app-server: a request, a notification, or a refusal of its request. */
+/** What the runner writes to app-server: a request, a notification, or an answer to its request or a refusal of it. */
 type Outgoing =
   | {
       readonly id: number;
@@ -103,6 +127,7 @@ type Outgoing =
       readonly params: RequestParams<RequestMethod>;
     }
   | { readonly method: string }
+  | { readonly id: number | string; readonly result: Schema.Json }
   | {
       readonly id: number | string;
       readonly error: { readonly code: number; readonly message: string };
@@ -135,6 +160,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
   listener: AppServerListener,
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const scope = yield* Scope.Scope;
   const stdin = yield* Queue.unbounded<Uint8Array>();
   const handle = yield* spawner
     .spawn(
@@ -175,11 +201,23 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
     }
     const { id, method, result, error } = incoming.value;
     if (method !== undefined && id !== undefined) {
-      return write({
-        id,
-        error: { code: METHOD_NOT_FOUND, message: "The runner serves no requests" },
-      }).pipe(
-        Effect.andThen(Effect.logWarning(`agent-runner: refused app-server's ${method} request`)),
+      const served = listener.onRequest?.(method);
+      if (served === undefined) {
+        return write({
+          id,
+          error: { code: METHOD_NOT_FOUND, message: "The runner serves no such request" },
+        }).pipe(
+          Effect.andThen(Effect.logWarning(`agent-runner: refused app-server's ${method} request`)),
+        );
+      }
+      return served.pipe(
+        Effect.matchEffect({
+          onSuccess: (result) => write({ id, result }),
+          onFailure: (failure) =>
+            write({ id, error: { code: INTERNAL_ERROR, message: failure.detail } }),
+        }),
+        Effect.forkIn(scope),
+        Effect.asVoid,
       );
     }
     if (method !== undefined) {

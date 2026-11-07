@@ -26,9 +26,8 @@ import { vercelSandboxApi } from "./vercel-sandbox-api.js";
  * A sandbox session's firewall as the service writes it, over Vercel's
  * network-policy write answering from a script and a database of the
  * test's own: each write carries what its writer names beside the swaps the
- * session's launch keeps, the kept launch holds no value in the clear, its
- * end and a clear take the swaps off, a renewal's token is what every later
- * write sends, and a placeholder swap matches its header at the placeholder.
+ * session's launch keeps, the kept launch holds no value in the clear, and a
+ * placeholder swap matches its header at the placeholder.
  * Synthetic accounts, sessions, agents, and tokens throughout.
  */
 
@@ -132,7 +131,7 @@ const firewallOver = (layer: Layer.Layer<never>) =>
 
 it.layer(getTestDB())("a sandbox session's firewall", (it) => {
   it.effect(
-    "each write carries what its writer names beside the launch's swaps, the kept launch holds no value in the clear, and a clear deletes it and sends nothing",
+    "each write carries what its writer names beside the launch's swaps, and the kept launch holds no value in the clear",
     () =>
       Effect.gen(function* () {
         const session = yield* ownSession;
@@ -143,9 +142,7 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
           yield* firewall.keepLaunch(session, bearerLaunch(session.agentId));
           yield* firewall.write(session, { github: write });
           yield* firewall.write(session, { github: write, clone: read });
-          const row = yield* readFirewallLaunch(session);
-          yield* firewall.clear({ name: session.name, sessionId: session.sandboxSessionId });
-          return row;
+          return yield* readFirewallLaunch(session);
         }).pipe(services);
 
         assert.deepEqual(api.landed, [
@@ -171,52 +168,6 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
         for (const value of [BEARER, "runner-placeholder-fixture"]) {
           assert.equal(kept.sealedEntries.includes(value), false);
         }
-        assert.equal(yield* readFirewallLaunch(session), undefined);
-      }),
-  );
-
-  it.effect(
-    "a renewal sets the plan's new token behind the launch's placeholder, which every write after sends",
-    () =>
-      Effect.gen(function* () {
-        const session = yield* ownSession;
-        const api = vercel(session);
-        const { firewall, services } = yield* firewallOver(api.layer);
-        const placeholder = "Bearer plan-placeholder-fixture";
-
-        yield* Effect.gen(function* () {
-          yield* firewall.keepLaunch(session, {
-            agentId: session.agentId,
-            swaps: new Map([
-              [LAUNCH_SWAP.OPENAI_PLAN, swapOf("api.openai.test", placeholder, "Bearer one")],
-            ]),
-          });
-          const launch = yield* firewall.launchOf(session);
-          assert.ok(launch !== undefined);
-          yield* firewall.renew(
-            session,
-            launch,
-            LAUNCH_SWAP.OPENAI_PLAN,
-            swapOf("api.openai.test", placeholder, "Bearer two"),
-            {},
-          );
-          yield* firewall.write(session, {});
-        }).pipe(services);
-
-        const renewed = {
-          allow: {
-            "*": [],
-            "api.openai.test": [
-              {
-                match: {
-                  headers: [{ key: { exact: "authorization" }, value: { exact: placeholder } }],
-                },
-                transform: [{ headers: { authorization: "Bearer two" } }],
-              },
-            ],
-          },
-        };
-        assert.deepEqual(api.landed, [renewed, renewed]);
       }),
   );
 });

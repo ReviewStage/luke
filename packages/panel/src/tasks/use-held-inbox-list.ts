@@ -23,8 +23,8 @@ import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
  * open thread's row; an item the scope leaves out that a link, or Back,
  * chooses gets a row the same way, so the reader always sees where they
  * are. Choosing another item lets it go, and so does another scope or
- * Addressed to, or the list being hidden, so an item settled while it was
- * hidden is gone once the list is shown again. While the pointer is over
+ * Addressed to; hiding the list does not, so an item settled while it was
+ * hidden still has its row, gray, while it stays chosen. While the pointer is over
  * the list every row keeps the place it was first drawn in, when its item
  * changed, so nothing moves under the reader's
  * hand; once it leaves, every row but the chosen one stands where its item
@@ -160,11 +160,13 @@ export function useHeldInboxList(
       const places = heldPlaces(held, chosen, pointing);
       const matching = inboxList(groups, { ...filter, chosen: undefined, places });
       const listed = listedItems(matching).some(({ item }) => item.id === chosen);
-      // Note that an item just chosen is kept whatever the scope, and one chosen before only while its row stood under the same scope.
+      // Note that an item just chosen is kept whatever the scope, and one chosen before only while its row stood under the same scope or the list was hidden.
       const chosenNow = last.current === undefined || last.current.from.chosen !== chosen;
       const kept =
         chosen !== undefined &&
-        (listed || chosenNow || (keptLast.current === chosen && sameScope(was, filter)))
+        (listed ||
+          chosenNow ||
+          (keptLast.current === chosen && (was === undefined || sameScope(was, filter))))
           ? chosen
           : undefined;
       const list =
@@ -184,7 +186,7 @@ export function useHeldInboxList(
   };
   const drawn = useHeldOrder(filter, shown, order);
   useLayoutEffect(() => {
-    keptLast.current = shown ? drawn.kept : undefined;
+    keptLast.current = drawn.kept;
     last.current = { from, drawn };
   });
   // Note that only the pointer leaving a list it held apart from where its items stand draws it again.

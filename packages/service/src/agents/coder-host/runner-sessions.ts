@@ -163,7 +163,6 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import {
   AgentMachine,
   type AgentMachineService,
-  CREDENTIAL_RENEWAL,
   type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
@@ -346,7 +345,6 @@ function runnerBearer(bearer: string, host: string): RunnerCredential {
     header: BEARER_HEADER,
     scheme: BEARER_PREFIX,
     slot: LAUNCH_SWAP.RUNNER,
-    renewal: CREDENTIAL_RENEWAL.FIXED,
   };
 }
 
@@ -522,7 +520,7 @@ function launchFingerprint(
   const names = integrations.map((each) => each.name).sort();
   const slots = declared.filter(isHeld).map((each) => ({
     slot: each.slot,
-    credential: each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+    credential: Redacted.value(each.value),
   }));
   // Note that one slot is digested alone, under the key it was digested by, as the one a launch could hold before credentials were declared.
   const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
@@ -2403,9 +2401,7 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
     return RUNNER_ENDED.HELD;
   }
-  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
-  // credentials stay on its firewall until the stop.
-  yield* machine.firewall.clear(running);
+  // Its credentials stay on its firewall until the stop.
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });
