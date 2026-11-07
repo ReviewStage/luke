@@ -9,6 +9,7 @@ import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./agent-wire.js";
 import { FAILURE_FACT } from "./failure-facts.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
+import { WRITE_UNTAKEN, writeUntakenOf } from "./keyed-write.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
   PROVIDER_KEY_KIND,
@@ -459,6 +460,28 @@ it.effect(
       assert.deepEqual(missing, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(malformed, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 4, "nothing is sent for a workspace that is no id");
+    }),
+);
+
+it.effect(
+  "an inbox write the service took already under its key reads as taken already, so the host keeps what it drew",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const taken = fakeCloudApi({
+        [`PUT /api/inbox/${itemId}/read`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.ALREADY_WRITTEN }),
+          status: HTTP_STATUS.CONFLICT,
+        },
+      });
+
+      const read = yield* Effect.provide(client().markInboxItemRead(itemId, "key-1"), taken.layer);
+
+      assert.equal("failure" in read ? read.failure : undefined, AGENT_CALL_FAILURE.UNANSWERED);
+      assert.equal(
+        writeUntakenOf("cause" in read ? read.cause : undefined),
+        WRITE_UNTAKEN.ALREADY_WRITTEN,
+      );
     }),
 );
 

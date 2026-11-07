@@ -108,7 +108,7 @@ import {
   planLimitReachedDataSchema,
 } from "./contract/errors.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
-import type { FailureFacts } from "./failure-facts.js";
+import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   HOST_PAIRING_RENAMES,
@@ -373,13 +373,34 @@ function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Respons
   return { ...UNANSWERED, cause: hostedFailureFacts(unanswered) };
 }
 
-/** How a member's write on the inbox taken once under its idempotency key is asked: under `deadline` and the key given where one is, a key already written under read as no answer (`AGENT_INBOX_WRITE_RENAMES`). */
+/** How a member's write on the inbox taken once under its idempotency key is asked: under `deadline`, and the key given where one is. */
 function inboxWrite(deadline: HostedDeadline, key: string | undefined) {
-  return {
-    as: AGENT_INBOX_WRITE_RENAMES,
-    deadline,
-    ...(key === undefined ? undefined : { idempotencyKey: key }),
-  };
+  return { deadline, ...(key === undefined ? undefined : { idempotencyKey: key }) };
+}
+
+/** A keyed write the service took already under its key, as the host reads it: no answer, its cause that refusal (`keyed-write.ts`). */
+const WRITTEN_ALREADY = {
+  failure: AGENT_INBOX_WRITE_RENAMES[HOSTED_API_ERROR.ALREADY_WRITTEN],
+  cause: { _tag: FAILURE_FACT.HOSTED_REFUSED, refusal: HOSTED_API_ERROR.ALREADY_WRITTEN },
+} as const;
+
+/**
+ * A member's keyed write on the inbox, a key already written under read as
+ * no answer whose cause is that refusal, as it always read. Note that the
+ * cause is what tells the host the write landed and keeps what it drew
+ * (`writeUntakenOf`), so the refusal is never renamed away, which would
+ * drop it and take the write back. The trace it traveled under is not kept.
+ */
+function writtenAlreadyKept<Answer extends object>(
+  answer: Answer,
+):
+  | Exclude<Answer, { readonly failure: typeof HOSTED_API_ERROR.ALREADY_WRITTEN }>
+  | typeof WRITTEN_ALREADY {
+  if ("failure" in answer && answer.failure === HOSTED_API_ERROR.ALREADY_WRITTEN) {
+    return WRITTEN_ALREADY;
+  }
+  // SAFETY: an answer that is no key already written under is one of the others.
+  return answer as Exclude<Answer, { readonly failure: typeof HOSTED_API_ERROR.ALREADY_WRITTEN }>;
 }
 
 /** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
@@ -1461,10 +1482,13 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxAcknowledgeRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedCall(
-      this.#hosted.inbox.answer,
-      { params: { id: itemId }, body },
-      inboxWrite(HOSTED_DEADLINE.STEER, key),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.inbox.answer,
+        { params: { id: itemId }, body },
+        inboxWrite(HOSTED_DEADLINE.STEER, key),
+      ),
+      writtenAlreadyKept,
     );
   }
 
@@ -1482,10 +1506,13 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxCloseRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedCall(
-      this.#hosted.inbox.close,
-      { params: { id: itemId }, body },
-      inboxWrite(HOSTED_DEADLINE.STEER, key),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.inbox.close,
+        { params: { id: itemId }, body },
+        inboxWrite(HOSTED_DEADLINE.STEER, key),
+      ),
+      writtenAlreadyKept,
     );
   }
 
@@ -1540,10 +1567,13 @@ export class HostedAgentClient {
     itemId: string,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedCall(
-      this.#hosted.inbox.markItemRead,
-      { id: itemId },
-      inboxWrite(HOSTED_DEADLINE.USUAL, key),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.inbox.markItemRead,
+        { id: itemId },
+        inboxWrite(HOSTED_DEADLINE.USUAL, key),
+      ),
+      writtenAlreadyKept,
     );
   }
 
@@ -1552,10 +1582,13 @@ export class HostedAgentClient {
     itemId: string,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedCall(
-      this.#hosted.inbox.markItemUnread,
-      { id: itemId },
-      inboxWrite(HOSTED_DEADLINE.USUAL, key),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.inbox.markItemUnread,
+        { id: itemId },
+        inboxWrite(HOSTED_DEADLINE.USUAL, key),
+      ),
+      writtenAlreadyKept,
     );
   }
 
@@ -1565,10 +1598,13 @@ export class HostedAgentClient {
     until: number | null,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedCall(
-      this.#hosted.inbox.remindItem,
-      { params: { id: itemId }, body: { until } },
-      inboxWrite(HOSTED_DEADLINE.USUAL, key),
+    return Effect.map(
+      hostedCall(
+        this.#hosted.inbox.remindItem,
+        { params: { id: itemId }, body: { until } },
+        inboxWrite(HOSTED_DEADLINE.USUAL, key),
+      ),
+      writtenAlreadyKept,
     );
   }
 
@@ -1585,6 +1621,9 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxReadAllView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxReadAllRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedCall(this.#hosted.inbox.markAllRead, body, inboxWrite(HOSTED_DEADLINE.USUAL, key));
+    return Effect.map(
+      hostedCall(this.#hosted.inbox.markAllRead, body, inboxWrite(HOSTED_DEADLINE.USUAL, key)),
+      writtenAlreadyKept,
+    );
   }
 }
