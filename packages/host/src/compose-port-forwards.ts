@@ -124,6 +124,8 @@ interface Forwarding {
   /** The port shared by public link and its link; none until read, or where none is. */
   shared: { readonly port: number; readonly url: string } | undefined;
   sharedRead: boolean;
+  /** How many times a share or its close set `shared`, so a read begun before one does not undo it. */
+  shareMoves: number;
 }
 
 const readFrame = readEither(Schema.fromJsonString(tunnelFrameSchema), {
@@ -301,8 +303,9 @@ export function composePortForwards(
             current.forwards.set(port, yield* forwarded(current, port));
         }
         if (answer.running && (!current.sharedRead || current.shared !== undefined)) {
+          const moves = current.shareMoves;
           const read = yield* withHttp(client.shared(current.agentId));
-          if (!("failure" in read)) {
+          if (!("failure" in read) && moves === current.shareMoves) {
             current.shared = read.shared ?? undefined;
             current.sharedRead = true;
           }
@@ -334,6 +337,7 @@ export function composePortForwards(
           forwards: new Map(),
           shared: undefined,
           sharedRead: false,
+          shareMoves: 0,
         };
         forwarding = current;
         yield* tell;
@@ -391,6 +395,8 @@ export function composePortForwards(
             if ("failure" in answer) return yield* Effect.fail(new ActRefused({}));
             current.shared = { port, url: answer.url };
           }
+          current.shareMoves++;
+          current.sharedRead = true;
           yield* tell;
           return standing(agentId);
         }),
