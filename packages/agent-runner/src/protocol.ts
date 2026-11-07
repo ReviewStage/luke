@@ -403,9 +403,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
    */
   allowedDomains: Schema.optionalKey(Schema.Array(Schema.String)),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
-  installedSkills: Schema.optionalKey(
-    Schema.String,
-  ) /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */,
+  installedSkills: Schema.optionalKey(Schema.String),
+  /** Whether the launch stays warm while no turn of it runs (`RUNNER_WARM`): from its start until a message comes, and once the agent's turn is over, posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
