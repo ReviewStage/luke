@@ -62,7 +62,8 @@ const released = (agentId: string, holder: string) =>
 /**
  * The body run holding the agent's runner lease, waiting behind another
  * call's for at most `wait` (`CODER.RUNNER_LEASE.WAIT` unless the caller
- * names longer, as work past a request's answer may), let go as it ends
+ * names another: longer, as work past a request's answer may, or shorter,
+ * as a send inside the store's dispatch deadline must), let go as it ends
  * however it ends, an interruption included.
  */
 export const holdingRunner = <A, E, R>(
