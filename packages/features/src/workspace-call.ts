@@ -1,4 +1,5 @@
 import { githubContract } from "./contract/github.js";
+import { workspaceEnvironmentContract } from "./contract/workspace-environment.js";
 import { workspaceGithubContract } from "./contract/workspace-github.js";
 import { workspaceInvitationsContract } from "./contract/workspace-invitations.js";
 import { workspaceSentryContract } from "./contract/workspace-sentry.js";
@@ -37,6 +38,7 @@ export const WORKSPACE_RENAMES = {
 export const WORKSPACE_CALLS = {
   workspaces: workspacesContract,
   workspaceInvitations: workspaceInvitationsContract,
+  workspaceEnvironment: workspaceEnvironmentContract,
   workspaceGithub: workspaceGithubContract,
   workspaceSentry: workspaceSentryContract,
   workspaceSlackBot: workspaceSlackBotContract,

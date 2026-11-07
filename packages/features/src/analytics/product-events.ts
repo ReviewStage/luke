@@ -153,6 +153,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
+  ENVIRONMENT: "environment",
   ACCOUNT: "account",
   NOTIFICATIONS: "notifications",
   THIS_MAC: "this_mac",
