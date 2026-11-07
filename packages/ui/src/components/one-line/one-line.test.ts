@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@repo/brand";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -120,13 +118,7 @@ function restOn(target: Element): void {
 /** A line as the window draws it, its box `width` wide against words 120 wide, with no hint of its caller's. */
 function renderUnhinted(width: number): { view: HTMLElement; line: Element } {
   vi.stubGlobal("ResizeObserver", StandInObserver);
-  const view = render(
-    createElement(
-      RegistryContext.Provider,
-      { value: AtomRegistry.make() },
-      createElement(OneLine, { children: "A very long task name" }),
-    ),
-  );
+  const view = render(createElement(OneLine, { children: "A very long task name" }));
   const line = view.querySelector(".ui-one-line") ?? assert.fail("the line");
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(width);
@@ -149,13 +141,7 @@ test("a line drawn whole raises no tooltip of its own", () => {
 
 test("a caller's own hint stands in the tooltip's place", () => {
   vi.stubGlobal("ResizeObserver", StandInObserver);
-  const view = render(
-    createElement(
-      RegistryContext.Provider,
-      { value: AtomRegistry.make() },
-      createElement(OneLine, { hint, children: "sam@example.com" }),
-    ),
-  );
+  const view = render(createElement(OneLine, { hint, children: "sam@example.com" }));
   const line = view.querySelector(".ui-one-line") ?? assert.fail("the line");
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(120);
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(80);

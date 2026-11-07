@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { StatusTone } from "../../status-tone.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
@@ -165,7 +166,7 @@ type ButtonChipProps = ChipFace & {
 /** A chip that is a link: its face, and the address a press goes to. */
 type LinkChipProps = ChipFace & {
   href: string;
-  /** Called as the press leaves, before the browser follows the link; `preventDefault` leaves the following to the caller. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link; `preventDefault` leaves the following to the caller. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   chevron?: never;
   busy?: never;
@@ -323,7 +324,10 @@ function faceClasses(
   const smallGlyphs = look === CHIP_LOOK.PILL && size === CHIP_SIZE.COMPACT;
   return [
     FACE_BASE,
-    smallGlyphs ? "[&>:is(svg,img)]:size-chip-chevron" : "[&>:is(svg,img)]:size-control-icon",
+    // Note that a glyph wearing a status dot is sized as a bare one, its own glyph inside the dot's box.
+    smallGlyphs
+      ? "[&>:is(svg,img)]:size-chip-chevron [&>.ui-status-glyph>svg]:size-chip-chevron"
+      : "[&>:is(svg,img)]:size-control-icon [&>.ui-status-glyph>svg]:size-control-icon",
     look === CHIP_LOOK.FIELD && !iconOnly ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
     iconOnly ? "[&>.settings-chevron]:hidden" : "",
     // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
@@ -412,13 +416,15 @@ function LinkChip({
   children,
   ...anchor
 }: LinkChipProps): React.JSX.Element {
+  const press = pulseOnPress(onClick, PRESS_PULSE.FACE);
   return (
     <a
       {...anchor}
       className={chipClasses({ look, tone, width, size, iconOnly }, false, false)}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
       href={href}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.FACE)}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       <span className={faceClasses({ look, size, iconOnly }, false)} {...PRESS_FACE}>
         {children}

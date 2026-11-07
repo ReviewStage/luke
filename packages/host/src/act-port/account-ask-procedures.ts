@@ -1,5 +1,5 @@
 import type { MemoriesFollowParams } from "@repo/features/agent-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { ACCOUNT_ASK_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -43,24 +43,21 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function accountAskProcedures(dependencies: AccountAskProceduresDependencies) {
   const { host } = dependencies;
   /** The account's keys while a window holds a stream open of them, so the host lets them go only with the last. */
-  const openKeys: OpenFollows<never> = MutableHashMap.empty();
+  const openKeys: OpenFollows = MutableHashMap.empty();
   /** The account's GitHub token while a window holds a stream open of it, so the host lets it go only with the last. */
-  const openToken: OpenFollows<never> = MutableHashMap.empty();
+  const openToken: OpenFollows = MutableHashMap.empty();
   /** Each workspace's memories while a window holds a stream open of them, by the workspace. */
-  const openMemories: OpenFollows<never> = MutableHashMap.empty();
+  const openMemories: OpenFollows = MutableHashMap.empty();
   return {
     [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actPort[
       ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held keys reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: () => "keys",
           follow: () => host.providerKeysFollow(),
           unfollow: () => host.providerKeysUnfollow(),
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openKeys,
         input,
@@ -77,14 +74,11 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held token reaches the panel on app state.
       const hold = followedStream(
         {
           keyOf: () => "token",
           follow: () => host.githubTokenFollow(),
           unfollow: () => host.githubTokenUnfollow(),
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openToken,
         input,
@@ -100,14 +94,11 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
     [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that nothing is heard down the hold, since the held memories reach the panel on app state.
         const hold = followedStream(
           {
             keyOf: (held: MemoriesFollowParams) => held.workspaceId,
             follow: host.memoriesFollow,
             unfollow: host.memoriesUnfollow,
-            onChanged: () => () => undefined,
-            valueOf: () => Option.none<never>(),
           },
           openMemories,
           input,

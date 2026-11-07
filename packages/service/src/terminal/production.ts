@@ -6,7 +6,9 @@
  * store that cannot take a keystroke's renewal is logged, since the next
  * keystroke tries again; one that cannot claim the credential's renewal is
  * read as not claimed, and one that cannot give a claim back is logged, so
- * the claim lapses on the agent's own rule. A keep-alive of the sandbox
+ * the claim lapses on the agent's own rule. One that cannot say when the
+ * credential was last renewed is logged and read as never, so the claim
+ * decides. A keep-alive of the sandbox
  * Vercel did not confirm is logged, since the next one tries again.
  */
 
@@ -15,6 +17,7 @@ import { hasRepository, readVisibleAgent } from "@repo/database/models/agent-sto
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import {
   claimCredentialRenewal,
+  credentialRenewedAt,
   holdSandbox,
   releaseCredentialRenewal,
 } from "@repo/database/models/sandbox-terminal-lease";
@@ -78,6 +81,15 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
       claimRenewal: (conversationId, sandboxSessionId, now, renewedBefore) =>
         run(claimCredentialRenewal(conversationId, sandboxSessionId, now, renewedBefore)).pipe(
           Effect.orElseSucceed(() => false),
+        ),
+      renewedAt: (conversationId, sandboxSessionId) =>
+        run(credentialRenewedAt(conversationId, sandboxSessionId)).pipe(
+          Effect.catch(() =>
+            Effect.as(
+              Effect.logWarning("a terminal's credential renewal was not read"),
+              Option.none(),
+            ),
+          ),
         ),
       releaseRenewal: (conversationId, sandboxSessionId, claimedAt) =>
         run(releaseCredentialRenewal(conversationId, sandboxSessionId, claimedAt)).pipe(

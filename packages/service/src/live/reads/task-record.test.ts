@@ -11,12 +11,12 @@ import {
 } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
-import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@repo/features/live-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
+import { TASK_RECORD_READ, type TaskRecordLiveRows } from "@repo/features/task-record-live";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { taskRecordLiveStatements } from "./task-record-live.js";
+import { taskRecordRead } from "./task-record.js";
 
 /**
  * An open task's record as Realtime would deliver it, over the real
@@ -50,10 +50,11 @@ const runLive = (statement: LiveStatement) =>
 /** The task's record as Realtime would deliver it to `reader`, decoded as the desktop decodes it. */
 const liveRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
-    const statements = Option.getOrThrow(taskRecordLiveStatements(reader, taskId));
-    return yield* Schema.decodeUnknownEffect(taskRecordLiveRowsSchema)({
+    const statements = Option.getOrThrow(taskRecordRead.statements({ userId: reader, id: taskId }));
+    return yield* Schema.decodeUnknownEffect(TASK_RECORD_READ.rows)({
       description: yield* runLive(statements.description),
       pages: yield* runLive(statements.pages),
+      calls: yield* runLive(statements.calls),
       code: yield* runLive(statements.code),
     });
   });
@@ -116,6 +117,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             { taskId: task.id, savedAt: Option.getOrThrow(held.description).updatedAt },
           ],
           pages: [],
+          calls: [],
           code: [],
         });
 
@@ -153,6 +155,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
           description: [],
           pages: [],
+          calls: [],
           code: [],
         });
       }),

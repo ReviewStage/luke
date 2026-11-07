@@ -44,12 +44,13 @@ import {
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
-import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AGENT_ORIGIN_READ, agentOriginOfLive } from "@repo/features/agent-origin-live";
 import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { TASK_BROWSER_TABS_READ } from "@repo/features/browser-tabs-live";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
-import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
+import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOSTS_READ, hostsOfLiveRows } from "@repo/features/host-live";
@@ -80,12 +81,6 @@ import {
   macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
   scopeInboxLiveAnswerSchema,
-  taskBrowserTabsLiveAnswerSchema,
-  taskBrowserTabsLiveRowsSchema,
-  taskHistoryLiveAnswerSchema,
-  taskPagesLiveAnswerSchema,
-  taskPagesLiveRowsSchema,
-  taskRecordLiveAnswerSchema,
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import {
@@ -100,7 +95,10 @@ import {
   pullRequestChaptersOfLive,
 } from "@repo/features/pull-request-chapters-live";
 import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
+import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TASK_PAGES_READ } from "@repo/features/task-pages-live";
+import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import {
   workspaceIntegrationsLiveAnswerSchema,
@@ -130,7 +128,6 @@ import {
 } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -161,6 +158,7 @@ import {
 import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
+import { agentOriginRead } from "./reads/agent-origin.js";
 
 /**
  * The reads the desktop follows, answered by the procedure the way the
@@ -476,7 +474,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const own = yield* ask(dana);
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(taskRecordLiveAnswerSchema)(own.body);
+        const answer = Schema.decodeUnknownSync(TASK_RECORD_READ.answer)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         for (const query of [answer.queries.pages, answer.queries.calls]) {
           assert.deepEqual(query.rows, [], "the task holds no pages or calls yet");
@@ -531,10 +529,10 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const polled = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const rows = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(polled.body);
+        const rows = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(polled.body);
         assert.equal(rows.url, LIVE_POLL_URL);
         assert.deepEqual(
-          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+          Schema.decodeUnknownSync(TASK_PAGES_READ.rows)({
             pages: rows.queries.pages.rows,
           }).pages.map((page) => [page.id, page.version]),
           [[shown.id, 1]],
@@ -589,9 +587,9 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const polled = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const rows = Schema.decodeUnknownSync(taskBrowserTabsLiveAnswerSchema)(polled.body);
+        const rows = Schema.decodeUnknownSync(TASK_BROWSER_TABS_READ.answer)(polled.body);
         assert.equal(rows.url, LIVE_POLL_URL);
-        const [line] = Schema.decodeUnknownSync(taskBrowserTabsLiveRowsSchema)({
+        const [line] = Schema.decodeUnknownSync(TASK_BROWSER_TABS_READ.rows)({
           tabs: rows.queries.tabs.rows,
         }).tabs;
         assert.deepEqual(
@@ -619,7 +617,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const own = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(own.body);
+        const answer = Schema.decodeUnknownSync(TASK_HISTORY_READ.answer)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(answer.queries.revisions.rows, [], "the description is not saved yet");
         assert.deepEqual(
@@ -663,7 +661,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const polled = yield* askTask({ bearer: teammate, taskId: agentId, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(agentOriginLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(AGENT_ORIGIN_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(agentOriginOfLive(answer.queries.origin.rows ?? []), {
           prompt: "Triage the inbox.",
@@ -673,7 +671,9 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
-        const statement = Option.getOrThrow(agentOriginLiveStatements(stranger, agentId)).origin;
+        const statement = Option.getOrThrow(
+          agentOriginRead.statements({ userId: stranger, id: agentId }),
+        ).origin;
         const sql = yield* SqlClient.SqlClient;
         assert.deepEqual(yield* sql.unsafe(statement.sql, [...statement.params]), []);
       }),
@@ -705,7 +705,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         );
         const path = "/api/live/task-comments";
         const threadsOf = (body: unknown) => {
-          const answer = Schema.decodeUnknownSync(taskCommentsLiveAnswerSchema)(body);
+          const answer = Schema.decodeUnknownSync(TASK_COMMENTS_READ.answer)(body);
           assert.equal(answer.url, LIVE_POLL_URL);
           return answer.queries.threads.rows;
         };
@@ -780,7 +780,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         const sql = keepingRows(yield* SqlClient.SqlClient, kept);
 
         const first = yield* askTask({ bearer: dana, taskId: started.id, path, sql });
-        const seen = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body);
+        const seen = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(first.body);
         assert.equal(rowsOfTheRead(kept).length, 1, "a first read carries the page's row");
         const digest = liveDigestOf(seen.queries);
         assert.ok(digest !== undefined);
@@ -790,7 +790,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
           askTask({ bearer: dana, taskId: started.id, path, sql, poll: true, after: digest }),
         );
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(
           (yield* Fiber.join(unchanged)).body,
         );
         assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
@@ -815,7 +815,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
           askTask({ bearer: dana, taskId: started.id, path, poll: true, after });
         const first = yield* askTask({ bearer: dana, taskId: started.id, path });
         const digest = liveDigestOf(
-          Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body).queries,
+          Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(first.body).queries,
         );
         assert.ok(digest !== undefined);
 
@@ -823,11 +823,11 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         yield* TestClock.adjust(Duration.seconds(3));
         const shown = yield* showPage(dana, started.id);
         yield* TestClock.adjust(Duration.seconds(3));
-        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+        const answer = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(
           (yield* Fiber.join(moved)).body,
         );
         assert.deepEqual(
-          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+          Schema.decodeUnknownSync(TASK_PAGES_READ.rows)({
             pages: answer.queries.pages.rows,
           }).pages.map((page) => [page.id, page.version]),
           [[shown.id, 1]],
@@ -837,7 +837,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
 
         const again = yield* Effect.forkChild(poll(standing));
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(
           (yield* Fiber.join(again)).body,
         );
         assert.equal(held.queries.pages.rows, undefined, "the rows answered stand at their digest");
@@ -1120,13 +1120,13 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         const poll = (after: string) =>
           askTask({ bearer: dana, taskId: started.id, path, poll: true, after });
         const first = yield* askTask({ bearer: dana, taskId: started.id, path });
-        const seen = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body);
+        const seen = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(first.body);
         const digest = liveDigestOf(seen.queries);
         assert.ok(digest !== undefined);
 
         const unchanged = yield* Effect.forkChild(poll(digest));
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(
           (yield* Fiber.join(unchanged)).body,
         );
         assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
@@ -1143,11 +1143,11 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           ),
         );
         yield* TestClock.adjust(Duration.seconds(3));
-        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+        const answer = Schema.decodeUnknownSync(TASK_PAGES_READ.answer)(
           (yield* Fiber.join(moved)).body,
         );
         assert.deepEqual(
-          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+          Schema.decodeUnknownSync(TASK_PAGES_READ.rows)({
             pages: answer.queries.pages.rows,
           }).pages.map((page) => [page.id, page.version]),
           [[shown.id, 1]],
@@ -1879,6 +1879,10 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
             number: 7,
             generatable: true,
             runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+            runsOnChoices: [
+              { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+              { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+            ],
             chapters: {
               status: "generating",
               headSha: "c0ffee1",

@@ -13,7 +13,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
+import type { OwnEnrollOutcome } from "@repo/features";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
@@ -105,7 +105,7 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
             enrolled.push({ deviceId, version });
             asked.push("enroll");
             listed.add(deviceId);
-            return { outcome: OWN_ENROLL_OUTCOME.ENROLLED, deviceSecret: SECRET };
+            return { deviceId, deviceSecret: SECRET };
           }),
         ),
     };

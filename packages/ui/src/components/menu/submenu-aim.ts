@@ -14,10 +14,9 @@
  * rest on it too, so passing over it on the way elsewhere opens nothing.
  */
 
-import { useAtomSet } from "@effect/atom-react";
 import { Duration, Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef } from "react";
+import { makeWait } from "../../wait.js";
 
 /** How long the pointer rests on a row before that row takes it from a submenu, or opens its own: as long as Base UI waits to open a submenu. */
 const AIM_REST = Duration.millis(100);
@@ -43,14 +42,8 @@ interface PutOff {
   readonly opening: Element | undefined;
 }
 
-/**
- * The window's one put-off move: taken once the pointer has rested
- * `AIM_REST`, each new one calling off the last. Note that the move is
- * handed inside a record, as a hint's way up is (`hint.tsx`).
- */
-const aimRestAtom = Atom.fn(({ take }: { readonly take: () => void }) =>
-  Effect.andThen(Effect.sleep(AIM_REST), Effect.sync(take)),
-);
+/** The window's one put-off move: taken once the pointer has rested `AIM_REST`, each new one calling off the last. */
+const aimRest = makeWait();
 
 /** Which side of the line from `a` to `b` the point `p` stands on: its sign. */
 function sideOf(a: Point, b: Point, p: Point): number {
@@ -88,24 +81,23 @@ export function useSubmenuAim(
 ): (take: () => void, opening?: Element) => void {
   const last = useRef<Point | undefined>(undefined);
   const putOff = useRef<PutOff | undefined>(undefined);
-  const wait = useAtomSet(aimRestAtom);
   const drop = useCallback(() => {
     putOff.current = undefined;
-    wait(Atom.Interrupt);
-  }, [wait]);
-  // Note that putting a move off again restarts its rest, since the atom calls off the last.
-  const rest = useCallback(
-    (move: PutOff) => {
-      putOff.current = move;
-      wait({
-        take: () => {
+    aimRest.stop();
+  }, []);
+  // Note that putting a move off again restarts its rest, since the wait calls off the last.
+  const rest = useCallback((move: PutOff) => {
+    putOff.current = move;
+    aimRest.start(
+      Effect.andThen(
+        Effect.sleep(AIM_REST),
+        Effect.sync(() => {
           putOff.current = undefined;
           move.take();
-        },
-      });
-    },
-    [wait],
-  );
+        }),
+      ),
+    );
+  }, []);
   // Note that the pointer is followed for as long as the menu stands, a
   // submenu or none, so the first move after the one that opened a submenu
   // already has where it came from. A move heading on into the submenu

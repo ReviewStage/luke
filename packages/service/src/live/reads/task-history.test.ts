@@ -9,14 +9,14 @@ import { user } from "@repo/database/schemas/auth";
 import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
-import { revisionsOfLiveRows, taskHistoryLiveRowsSchema } from "@repo/features/live-wire";
+import { revisionsOfLiveRows, TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { DESCRIPTION_ACTOR, DESCRIPTION_HISTORY_BOUNDS } from "@repo/features/task-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { added } from "../testing/task-contents.js";
-import { restoreRevision, saveNotes } from "./description-notes.js";
-import { taskHistoryLiveStatements } from "./task-history-live.js";
+import { restoreRevision, saveNotes } from "../../tasks/description-notes.js";
+import { added } from "../../testing/task-contents.js";
+import { taskHistoryRead } from "./task-history.js";
 
 /**
  * A task's newest page of description history as Realtime would deliver it, over
@@ -45,8 +45,10 @@ const runLive = (statement: LiveStatement) =>
 /** The newest page of the task's history as Realtime would deliver it to `reader`, as the desktop reads it. */
 const liveHistoryOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
-    const statements = Option.getOrThrow(taskHistoryLiveStatements(reader, taskId));
-    const rows = yield* Schema.decodeUnknownEffect(taskHistoryLiveRowsSchema)({
+    const statements = Option.getOrThrow(
+      taskHistoryRead.statements({ userId: reader, id: taskId }),
+    );
+    const rows = yield* Schema.decodeUnknownEffect(TASK_HISTORY_READ.rows)({
       revisions: yield* runLive(statements.revisions),
     });
     return revisionsOfLiveRows(rows);

@@ -9,8 +9,8 @@
  * `host_pairing`: a register never writes a version, an enroll writes it
  * beside the secret, a pairing's approve inserts the row with the box's
  * (`@repo/database/models/host-pairing-store`), a removal stamps
- * `removed_at`, and the sweep deletes an approved host that never collected
- * its secret. The secret's hash is never selected, since what a statement
+ * `removed_at`, and a later pairing's start deletes an approved host that
+ * never collected its secret. The secret's hash is never selected, since what a statement
  * selects is what leaves.
  *
  * It is woken on the account's topic by a host enrolled, approved, renamed,

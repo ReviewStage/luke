@@ -48,17 +48,12 @@ function originAgentOf(
   };
 }
 
-/** Every agent the window holds, by id: each task's row's, every task's live, and those with no task, the fullest last. */
+/** Every agent the window holds, by id: every task's, followed live, and those with no task. */
 const selectOriginAgents = memoizedSelect(
   (state) => [state.tasks],
   (planning): ReadonlyMap<string, OriginAgent> => {
     const agents = new Map<string, OriginAgent>();
     const names = new Map(planning.tasks.map((task) => [task.id, task.name]));
-    for (const task of planning.tasks) {
-      for (const line of task.agents?.agents ?? []) {
-        agents.set(line.id, originAgentOf(line, task.id, names));
-      }
-    }
     for (const agent of planning.taskAgents ?? []) {
       agents.set(agent.id, originAgentOf(agent, agent.planId, names));
     }

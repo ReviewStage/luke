@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
+import { TimeTicks } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -77,13 +78,18 @@ function draw(task: Task): void {
     shown.render(
       onRegistry(
         registry,
-        createElement(DescriptionBody, {
-          task,
-          reader: { readerId: DEAN.userId },
-          edit: descriptionEditMutation(task.id, NEVER_SAVED),
-          onShowHistory: () => undefined,
-          sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
-        }),
+        // The window's minute runs, as the panel's `App` runs it.
+        createElement(
+          TimeTicks,
+          null,
+          createElement(DescriptionBody, {
+            task,
+            reader: { readerId: DEAN.userId },
+            edit: descriptionEditMutation(task.id, NEVER_SAVED),
+            onShowHistory: () => undefined,
+            sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
+          }),
+        ),
       ),
     ),
   );

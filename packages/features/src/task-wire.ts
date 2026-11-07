@@ -43,9 +43,10 @@ import { trimmedText } from "./text-schema.js";
  * account's, so it follows it to every Mac it signs in on. Tasks are no
  * longer archived: a service that still answers a task's `archivedAt` is
  * read with the key ignored.
- * A row of the list also says, in brief, what the task's coding agents are
- * doing and what they published (`taskAgentsSummarySchema`), so the sidebar
- * can mark a task at work or with a pull request without a read per row.
+ * A row of the list also counts the task's coding agents, those at work and
+ * those failed, and the pull requests they published
+ * (`taskAgentsSummarySchema`); the agents and pull requests themselves are
+ * the list followed live's, every one of them.
  * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
  * A task may be the child of another, to any depth, which its summary names
@@ -739,15 +740,16 @@ const taskSummaryFields = {
   madeByRun: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
-/** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
-export const TASK_AGENTS_BOUNDS = {
-  /** The most agents a row names: those at work first, then the newest started. */
-  MAX_AGENTS: 3,
-  /** The most pull requests a row names: the newest agent's first. */
-  MAX_PULL_REQUESTS: 3,
-} as const;
+/**
+ * The most agents and the most pull requests the held list (GET) names of
+ * each task, kept for released clients only: a desktop through v0.27.0 and
+ * the command line through cli-v0.2.0 require both lists and refuse a longer
+ * one. Nothing in this build reads them; the window reads every agent and
+ * pull request of a task from the list it follows live.
+ */
+export const RELEASED_CLIENT_TASK_LINES = 3;
 
-/** One of a task's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
+/** One of a task's coding agents as the held list names it for a released client: what it is called and runs on, where it stands, since when, and who started it. */
 const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
@@ -795,7 +797,7 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
 
-/** Every pull request of one plan, uncapped, in the order its row names them: what a card naming them all reads, where the row names the first few. */
+/** Every pull request of one plan, uncapped, those still open first and the newest agent's first within each: what every reader of a task's pull requests reads. */
 export const taskPullRequestsSchema = EffectSchema.Struct({
   taskId: EffectSchema.String,
   pullRequests: EffectSchema.Array(taskPullRequestLineSchema),
@@ -835,11 +837,12 @@ export const taskAgentPinSchema = EffectSchema.Struct({
 export type TaskAgentPin = typeof taskAgentPinSchema.Type;
 
 /**
- * What a task's coding agents are doing and what they published, in brief:
+ * What a task's coding agents are doing and what they published, counted:
  * how many agents it has, how many of them are at work and how many failed,
- * the few agents the row names, and the pull requests they opened, each
- * counted once by its number. A pull request is as the service last read it
- * from GitHub, so it may trail GitHub by as long as nothing has asked.
+ * and how many pull requests they opened, each counted once by its page. The
+ * agents and pull requests themselves are read from the list the window
+ * follows live (`tasks-view.ts`'s `taskAgents` and `taskPullRequests`),
+ * every one of them, so no reader sees only some.
  */
 const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
@@ -854,16 +857,26 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
    * Absent from a service before it.
    */
   activityAt: EffectSchema.optionalKey(countedNumber),
-  agents: EffectSchema.Array(taskAgentLineSchema).check(
-    EffectSchema.isMaxLength(TASK_AGENTS_BOUNDS.MAX_AGENTS),
-  ),
   pullRequestTotal: countedNumber,
-  pullRequests: EffectSchema.Array(taskPullRequestLineSchema).check(
-    EffectSchema.isMaxLength(TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
-  ),
 });
 
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
+
+/**
+ * A task's agents in brief as the held list (GET) answers them: the counts,
+ * and beside them, kept for released clients (`RELEASED_CLIENT_TASK_LINES`),
+ * the few agents and pull requests a row of theirs names, those at work
+ * first and the open pull requests first.
+ */
+const heldTaskAgentsSummarySchema = EffectSchema.Struct({
+  ...taskAgentsSummarySchema.fields,
+  agents: EffectSchema.Array(taskAgentLineSchema).check(
+    EffectSchema.isMaxLength(RELEASED_CLIENT_TASK_LINES),
+  ),
+  pullRequests: EffectSchema.Array(taskPullRequestLineSchema).check(
+    EffectSchema.isMaxLength(RELEASED_CLIENT_TASK_LINES),
+  ),
+});
 
 /**
  * One row of the task list: everything but the document, and what its
@@ -876,6 +889,14 @@ export const taskSummarySchema = EffectSchema.Struct({
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;
+
+/** One row of the held list (GET), its agents in brief with the lines kept for released clients (`heldTaskAgentsSummarySchema`). */
+const heldTaskSummarySchema = EffectSchema.Struct({
+  ...taskSummaryFields,
+  agents: EffectSchema.optionalKey(heldTaskAgentsSummarySchema),
+});
+
+export type HeldTaskSummary = typeof heldTaskSummarySchema.Type;
 
 /** The most saves by coding agents a task answers, newest last; the same bound the service keeps. */
 const MAX_AGENT_EDITS = 50;
@@ -964,10 +985,10 @@ export const taskSchema = EffectSchema.Struct({
 export type Task = typeof taskSchema.Type;
 
 /**
- * The plan list (GET): every plan the account owns, newest started first,
- * and beside them every agent with no plan in the account's workspaces,
- * newest started first, the archived ones of each only where the query asks
- * for them. The agents are absent from a service before them.
+ * The plan list as the window draws it from the rows it follows live
+ * (`task-list-live.ts`): every plan the account reaches, newest started
+ * first, each with its agents counted, and beside them every agent with no
+ * plan in the account's workspaces, newest started first.
  */
 export const taskListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskSummarySchema),
@@ -975,6 +996,21 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 });
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
+
+/**
+ * The plan list (GET): every plan the account owns, newest started first,
+ * each with its agents in brief and the lines a released client requires
+ * (`heldTaskSummarySchema`), and beside them every agent with no plan in the
+ * account's workspaces, newest started first, the archived ones of each only
+ * where the query asks for them. The agents are absent from a service before
+ * them.
+ */
+export const heldTaskListAnswerSchema = EffectSchema.Struct({
+  plans: EffectSchema.Array(heldTaskSummarySchema),
+  planlessAgents: taskListAnswerSchema.fields.planlessAgents,
+});
+
+export type HeldTaskListAnswer = typeof heldTaskListAnswerSchema.Type;
 
 /**
  * The id of the transaction a write committed in, as Postgres counts it, in

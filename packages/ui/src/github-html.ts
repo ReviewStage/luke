@@ -32,9 +32,17 @@
  * picture that shares its line with words (`INLINE_PICTURE`), a bot's glyph
  * in its bold lead or a folded section's summary, so the place draws it in
  * that line as GitHub does rather than as a block of its own.
+ *
+ * Where a place reads the rendering rather than draws it, its words for a
+ * find (`renderingText`) or the pictures it opens (`renderingPictures`), the
+ * rendering is parsed here into the same tree, never into a document. Note
+ * that a document the window parses, even an inert one, is held to the
+ * window's policy, which refuses the `style` GitHub writes on every picture
+ * and logs each refusal.
  */
 
 import { githubImageOf } from "@repo/features/github-image";
+import { fromHtml } from "hast-util-from-html";
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
 type PropertyValue = string | number | boolean | readonly (string | number)[] | null | undefined;
@@ -124,7 +132,7 @@ function suggestion(blob: HtmlNode): HtmlNode {
 }
 
 /** Whether a link around a picture leads to the picture itself or to another of GitHub's own image addresses, as GitHub links every picture it renders. */
-export function linksToPicture(href: string, src: string): boolean {
+function linksToPicture(href: string, src: string): boolean {
   return href !== "" && (href === src || githubImageOf(href) !== undefined);
 }
 
@@ -238,6 +246,48 @@ function reshaped(node: HtmlNode): readonly HtmlNode[] {
 
 function reshapeChildren(children: readonly HtmlNode[]): HtmlNode[] {
   return children.flatMap(reshaped);
+}
+
+/** GitHub's rendering as the parsed tree, apart from any document. */
+function renderingTree(html: string): HtmlNode {
+  return fromHtml(html, { fragment: true });
+}
+
+/** A picture GitHub's rendering names: its address, the address it opens on GitHub, and its words. */
+export interface RenderingPicture {
+  readonly src: string;
+  readonly original: string;
+  readonly alt: string;
+}
+
+/** The pictures under a node that stand in no link but the one `link` names, each beside where it opens. */
+function picturesUnder(node: HtmlNode, link: HtmlNode | undefined): readonly RenderingPicture[] {
+  if (node.type !== "element" && node.type !== "root") return [];
+  const within = node.tagName === "a" ? node : link;
+  return (node.children ?? []).flatMap((child) => {
+    if (child.type !== "element" || child.tagName !== "img") return picturesUnder(child, within);
+    const src = String(child.properties?.src ?? "");
+    const alt = String(child.properties?.alt ?? "");
+    if (within === undefined) return [{ src, original: src, alt }];
+    // A picture in a link stands alone in it, GitHub's own wrapping, or is the link's.
+    if (within !== node || selfLinkedPicture(node) !== child) return [];
+    return [{ src, original: String(node.properties?.href ?? ""), alt }];
+  });
+}
+
+/** All the words of GitHub's rendering, in order, as a document's text would read them. */
+export function renderingText(html: string): string {
+  return textOf(renderingTree(html));
+}
+
+/**
+ * The pictures GitHub's rendering names that a place opens itself, in the
+ * order they stand: each in no link, opening on its own address, or alone
+ * in the link GitHub wraps it in (`selfLinkedPicture`), opening where that
+ * link leads. A picture inside any other link is the link's.
+ */
+export function renderingPictures(html: string): readonly RenderingPicture[] {
+  return picturesUnder(renderingTree(html), undefined);
 }
 
 /** The step that hands the words to the HTML steps whole, as one HTML node, never read as markdown. */

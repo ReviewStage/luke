@@ -6,13 +6,13 @@ import {
   readVisibleAgent,
   taskNamesOf,
 } from "@repo/database/models/agent-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { type TaskStatus, taskStatusSchema } from "@repo/features/task-wire";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { type UnparsedWireValue, wireUuidSchema } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { assigneeIdOf, memberLinkWrittenSchema } from "./task-assignee.js";
 
 /**

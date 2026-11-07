@@ -463,7 +463,7 @@ const AGENTS: ReadonlyMap<string, AgentSummary> = new Map([
   ],
 ]);
 
-/** A task's agents as its row in the list names them. */
+/** A task's agents as its row in the list counts them. */
 function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   const agent = AGENTS.get(taskId);
   if (agent === undefined) return {};
@@ -473,19 +473,7 @@ function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
       total: 1,
       working,
       activityAt: newest(INBOXES.get(taskId) ?? []),
-      agents: [
-        {
-          id: agent.id,
-          title: agent.title,
-          model: agent.model,
-          effort: agent.effort,
-          status: agent.status,
-          at: agent.runStartedAt ?? agent.createdAt,
-          startedBy: ADA,
-        },
-      ],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
 }
@@ -540,12 +528,19 @@ export function inboxTasksView(profile: string, list: TasksView): TasksView {
     ),
     ...OWN_TASKS,
   ];
-  // Note that the list follows each task's agent live too, which a person's page lists them from.
+  // Note that the list follows each task's agent live too, which its row, its Inbox items, and a person's page read.
   const followed = tasks.flatMap((task) => {
     const agent = AGENTS.get(task.id);
     return agent === undefined
       ? []
-      : [{ ...agent, workspaceId: task.workspaceId, repository: task.repository }];
+      : [
+          {
+            ...agent,
+            workspaceId: task.workspaceId,
+            repository: task.repository,
+            ...(agent.status === AGENT_STATUS.RUNNING ? undefined : { settledAt: agent.createdAt }),
+          },
+        ];
   });
   return { ...list, tasks, taskAgents: [...(list.taskAgents ?? []), ...followed] };
 }
