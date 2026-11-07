@@ -99,7 +99,7 @@ import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { useTerminalsOwner } from "./tasks/use-terminal-session.js";
 import { WindowAccountContext } from "./tasks/window-account.js";
-import { ToastHost } from "./toast.js";
+import { ToastHost, useToastsOwner } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
@@ -276,6 +276,8 @@ function AppWindow(): React.JSX.Element {
   }, [queryClient, accountKey]);
   // A terminal is its account's: another account signing in detaches the last one's, whose shells run on, and that account finds them again.
   useTerminalsOwner(accountKey);
+  // So are the toasts: another account signing in empties the stack.
+  useToastsOwner(accountKey);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // So are the description words a task was left with: another account signing in lets go of them.
