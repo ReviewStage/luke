@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { RUN_ON_MAC_REASON, runOnMacReason } from "./workspace-tools-model.js";
 import { RUN_ON_MAC_OFF } from "./workspace-tools-wire.js";
 
+/** Whose Mac the commands run on, which no case here turns on. */
+const OWNER = { userId: "user-ada", name: "Ada Lovelace" };
+
 /**
- * Why `run_on_mac` is off, in the order the popover says it: this Mac's
+ * Why `run_on_mac` is off, in the order the Runs on card says it: this Mac's
  * Settings first, since it is the one the reader can mend there and then,
  * but only where the service says it is off, since another Mac may listen;
  * on, or unread, says nothing.
@@ -13,13 +16,13 @@ describe("runOnMacReason", () => {
     {
       case: "Settings off before a Mac away",
       settingsOff: true,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY },
+      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY, owner: OWNER },
       expected: RUN_ON_MAC_REASON.SETTINGS_OFF,
     },
     {
       case: "nothing for Settings off while another Mac listens",
       settingsOff: true,
-      standing: { on: true },
+      standing: { on: true, owner: OWNER },
       expected: undefined,
     },
     {
@@ -31,10 +34,10 @@ describe("runOnMacReason", () => {
     {
       case: "a Mac away",
       settingsOff: false,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY },
+      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY, owner: OWNER },
       expected: RUN_ON_MAC_REASON.MAC_AWAY,
     },
-    { case: "on", settingsOff: false, standing: { on: true }, expected: undefined },
+    { case: "on", settingsOff: false, standing: { on: true, owner: OWNER }, expected: undefined },
     { case: "unread", settingsOff: false, standing: undefined, expected: undefined },
   ] as const)("$case", ({ settingsOff, standing, expected }) => {
     expect(runOnMacReason({ settingsOff, standing })).toBe(expected);
