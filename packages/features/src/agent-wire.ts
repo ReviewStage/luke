@@ -1179,6 +1179,15 @@ export const agentSummarySchema = EffectSchema.Struct({
    */
   stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
   /**
+   * Whether the agent's sandbox stands open: true once its conversation
+   * records the session its sandbox is tagged with, which is when its
+   * Terminal and Browser can reach it, false before. The task list carries
+   * it live, so a pane waiting on the sandbox connects as it flips. Absent
+   * from a read that does not name it, and from a service older than it,
+   * which a pane reads as not known.
+   */
+  sandboxOpen: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
    * What the agent was handed as its first message, so its tab draws a
    * description as the description's card, a task as the developer's own message, and,
    * for an agent started blank, its first line as any other line. Absent

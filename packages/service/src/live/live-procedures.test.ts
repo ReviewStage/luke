@@ -18,6 +18,7 @@ import {
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import {
   linkSlackInstallation,
   writeSlackChannelRepository,
@@ -1991,7 +1992,7 @@ const queueLine = (userId: string, agentId: string) =>
 /** The agent's row among a part's rows, as the task list reads its awaiting line. */
 const agentRowOf = (part: { readonly rows?: readonly unknown[] }, agentId: string) =>
   (part.rows ?? []).find((row) => (row as { readonly id: string }).id === agentId) as
-    | { readonly awaitingLineAt: number | null }
+    | { readonly awaitingLineAt: number | null; readonly sandboxOpen?: boolean }
     | undefined;
 
 it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
@@ -2062,6 +2063,33 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
 
         assert.deepEqual(idsOf(moved.agents), [agentId]);
         assert.equal(agentRowOf(moved.agents, agentId)?.awaitingLineAt, null);
+      }),
+  );
+
+  it.effect(
+    "a runtime session claimed moves its agent in the next delta, which reads its sandbox open",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const agentId = yield* openTaskAgent(dana, started.workspaceId, started.id);
+        const whole = yield* askTasks(dana, "");
+        const past = whole.agents.sync?.next;
+        assert.ok(past !== undefined);
+        assert.equal(agentRowOf(whole.agents, agentId)?.sandboxOpen, false);
+
+        yield* claimRuntimeSession(
+          { userId: dana, conversationId: yield* conversationOf(agentId) },
+          "session-1",
+          new Date(yield* Clock.currentTimeMillis),
+        );
+        // Note that the hold is let run to its end, so a claim no log row records answers nothing moved rather than holding the test.
+        const asked = yield* Effect.forkChild(askTasks(dana, past));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = yield* Fiber.join(asked);
+
+        assert.deepEqual(idsOf(moved.agents), [agentId]);
+        assert.equal(agentRowOf(moved.agents, agentId)?.sandboxOpen, true);
       }),
   );
 

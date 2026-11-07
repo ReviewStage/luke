@@ -85,6 +85,7 @@ import {
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
 import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
+import { useSandboxOpen } from "./use-workspace-agents.js";
 
 /**
  * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
@@ -583,7 +584,9 @@ export function CloudBrowserPane({
 
   // Note that the view stands only while someone can see it, because a socket left open in a hidden window holds its agent's sandbox.
   const visible = usePageVisible();
-  const watched = shown && visible;
+  // Note that no view opens while the task list says the agent's sandbox is not open, because the relay would only answer not opened; it opens as the list says it opened.
+  const sandboxWaited = useSandboxOpen(tab.agentId) === false;
+  const watched = shown && visible && !sandboxWaited;
   // A pane shown again opens a new view, since the one before closed as it was hidden, or as idle meanwhile.
   const live = useMemo(
     () =>
