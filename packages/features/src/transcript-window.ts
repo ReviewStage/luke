@@ -52,6 +52,8 @@ export const transcriptWindowRowSchema = Schema.Struct({
   id: Schema.String,
   seq: countedNumber,
   clientId: Schema.String,
+  /** The turn the row was written in; read beside the row's turn below, and carried for a desktop that decodes it. */
+  turnId: Schema.optionalKey(NullableString),
   role: Schema.Literals(Object.values(MESSAGE_ROLE)),
   /** How many parts the message holds, which `windowParts` carries a row each. */
   partCount: countedNumber,
@@ -74,6 +76,9 @@ export const transcriptWindowRowSchema = Schema.Struct({
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
   afterStep: NullableNumber,
+  /** Always null, since no line the voice said is folded under a turn any more; carried for a released desktop, which decodes the keys. */
+  askTurnId: Schema.optionalKey(NullableString),
+  askAfterStep: Schema.optionalKey(NullableNumber),
   /** The turn the row was written in: when it began as a working line counts it, and what it ran on and spent. */
   turnStartedAt: NullableNumber,
   turnStatus: NullableString,

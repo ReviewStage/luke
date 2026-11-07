@@ -1,13 +1,12 @@
 import { AGENT_CALL_FAILURE, type INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   inboxInOrder,
   inboxOfLiveRows,
-  type LIVE_READ,
-  LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
-  scopeInboxLiveRowsSchema,
-} from "@repo/features/live-wire";
+  TASK_INBOX_READ,
+} from "@repo/features/inbox-live";
+import type { InboxItem } from "@repo/features/inbox-wire";
+import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import type { EntityPool, HeldRows } from "@repo/sync";
 import { Data, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { type AppHolderInboxes, NO_HOLDER_INBOXES } from "./app-state.js";
@@ -129,7 +128,7 @@ export function scopeInboxes(
             },
           },
           first,
-          scopeInboxLiveRowsSchema,
+          TASK_INBOX_READ.rows,
           (rows) =>
             Effect.andThen(
               items.answer(inboxOfLiveRows(rows)),

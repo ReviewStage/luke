@@ -36,18 +36,10 @@ import type {
   GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
 import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
-import {
-  askLive,
-  HOSTED_DEADLINE,
-  type HostedClient,
-  type HostedFailure,
-  hostedClient,
-  hostedFailureFacts,
-} from "./hosted-link.js";
+import { HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
 import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
-import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import type { PagePlace, PageVersion } from "./page-wire.js";
 import {
   descriptionAttachmentPath,
@@ -60,7 +52,6 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
-import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
   type TaskSectionWrite,
@@ -199,49 +190,11 @@ const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
-const LIVE_REFUSALS = {
-  ...NOT_FOUND_REFUSAL,
-  [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
-} as const;
-
 /** A plan's write as the client answers it: the task as it then stands, and the transaction it was written in where it changed a row. */
 function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): TaskWritten {
   return changed.txid === undefined
     ? { task: changed.plan }
     : { task: changed.plan, txid: changed.txid };
-}
-
-/**
- * A live read's failure as a result, until live reads move onto
- * `hostedCall`: its refusal where it is one the caller names, unanswered
- * for everything else, with the failure beneath it, which the window
- * reports and never draws.
- */
-function hostedRefusal<Failure extends string>(
-  failed: HostedFailure,
-  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
-) {
-  const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-  if (failed._tag !== "HostedRefused" || failure === undefined) {
-    return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
-  }
-  return { ok: false, failure } as const;
-}
-
-/** A live read's answer as a result, as `hostedRefusal` reads a failure. */
-function hostedResult<Answer, Failure extends string>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
-): Effect.Effect<
-  TaskCallResult<Answer, Failure | typeof TASK_CALL_FAILURE.UNANSWERED>,
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.match(asked, {
-    onSuccess: succeeded,
-    onFailure: (failed) => hostedRefusal(failed, named),
-  });
 }
 
 /** A call's failure as `hostedCall` reads it: a refusal its procedure declares, or no answer with what failed beneath it. */
@@ -407,34 +360,6 @@ export class HostedTaskClient {
     return Effect.map(
       hostedCall(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
       (listed) => ("failure" in listed ? failedAs(listed, []) : succeeded(listed)),
-    );
-  }
-
-  /**
-   * The task list, its rows inline, read by the sync id the reader holds
-   * them at (`LIVE_POLL.SYNC`): whole, with the id to read past next, where
-   * `sync` is empty or the reader is too far behind; past an id, only the
-   * plans and agents that moved since, with the ids of those that stand no
-   * longer for it, held by the service until something moves. Without
-   * `sync`, every row whole as it stands, answered at once. Unanswered for
-   * anything that went wrong, which the caller answers by asking again.
-   */
-  listLive(
-    userId: string,
-    sync: string | undefined,
-  ): Effect.Effect<
-    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = {
-      [LIVE_USER_QUERY]: userId,
-      ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
-    };
-    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
-    return hostedResult(
-      askLive(this.#hosted.live.tasks, read, true, undefined, sync !== undefined && sync !== ""),
-      LIVE_REFUSALS,
     );
   }
 

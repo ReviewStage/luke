@@ -22,6 +22,7 @@ import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { PICTURE_TYPE } from "@repo/features/picture-wire";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_SECTION_WRITE, type TaskSection } from "@repo/features/task-section-wire";
 import {
@@ -269,8 +270,12 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
       service.workspacesFail = true;
-      service.liveRead = (() =>
-        Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED })) as TasksClient["liveRead"];
+      // Note that the list is read through the same client call as every other live read, which answers nothing here but the list.
+      const { liveRead } = service;
+      service.liveRead = ((read, params, poll) =>
+        read.name === TASK_LIST_READ.name
+          ? liveRead(read, params, poll)
+          : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED })) as TasksClient["liveRead"];
       const asked: (string | undefined)[] = [];
       const { listLive } = service;
       service.listLive = (userId, sync) => {

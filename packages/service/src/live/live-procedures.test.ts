@@ -45,6 +45,7 @@ import {
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_ORIGIN_READ, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AGENT_TRANSCRIPT_READ } from "@repo/features/agent-transcript-live";
 import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
@@ -54,6 +55,7 @@ import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOSTS_READ, hostsOfLiveRows } from "@repo/features/host-live";
+import { ACCOUNT_INBOX_READ, INBOX_ITEMS_READ, TASK_INBOX_READ } from "@repo/features/inbox-live";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
   INSTALLED_SKILLS_READ,
@@ -64,16 +66,11 @@ import { INTEGRATION_STATUSES_READ, integrationLiveRowsOf } from "@repo/features
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
-  accountInboxItemsLiveAnswerSchema,
-  accountInboxItemsLiveRowsSchema,
-  accountInboxLiveAnswerSchema,
-  agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
   LIVE_USER_QUERY,
   liveDigestOf,
   liveDigestOn,
-  scopeInboxLiveAnswerSchema,
 } from "@repo/features/live-wire";
 import { MAC_COMMANDS_READ, macCommandsOfLiveRows } from "@repo/features/mac-command-live";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
@@ -86,7 +83,7 @@ import {
 } from "@repo/features/pull-request-chapters-live";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
-import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
@@ -360,7 +357,7 @@ it.layer(getTestDB())("the account's live reads", (it) => {
       assert.ok(txid !== undefined, "a task started answers the transaction it was written in");
       const polled = yield* ask({ bearer: dana });
       assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-      const answer = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(polled.body);
+      const answer = Schema.decodeUnknownSync(ACCOUNT_INBOX_READ.answer)(polled.body);
       assert.equal(answer.url, LIVE_POLL_URL);
       assert.deepEqual(Object.keys(answer.queries).toSorted(), [
         "agents",
@@ -389,13 +386,13 @@ it.layer(getTestDB())("the account's live reads", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/tasks" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(answered.body);
+        const answer = Schema.decodeUnknownSync(TASK_LIST_READ.answer)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "issues", "plans"]);
-        const rows = Schema.decodeUnknownSync(taskListLiveRowsSchema)({
+        const rows = Schema.decodeUnknownSync(TASK_LIST_READ.rows)({
           plans: answer.queries.plans.rows,
           agents: answer.queries.agents.rows,
-          issues: answer.queries.issues.rows,
+          issues: answer.queries.issues?.rows,
         });
         assert.deepEqual(
           rows.plans.map((plan) => plan.id),
@@ -839,7 +836,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
       Effect.gen(function* () {
         const dana = yield* openUser;
         const first = yield* askTask({ bearer: dana });
-        const { agents: _, ...kept } = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(
+        const { agents: _, ...kept } = Schema.decodeUnknownSync(ACCOUNT_INBOX_READ.answer)(
           first.body,
         ).queries;
         // As v0.22.0 sends it: its schema keeps five parts and strips `agents`, which it never knew.
@@ -848,7 +845,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
 
         const unchanged = yield* Effect.forkChild(askTask({ bearer: dana, poll: true, after }));
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(ACCOUNT_INBOX_READ.answer)(
           (yield* Fiber.join(unchanged)).body,
         );
         assert.deepEqual(
@@ -892,7 +889,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
 
         const first = yield* ask({ bearer: dana, path: itemsPath({}) });
         assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
-        const seen = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(first.body);
+        const seen = Schema.decodeUnknownSync(INBOX_ITEMS_READ.answer)(first.body);
         assert.equal(seen.queries.items.rows?.length, 1, "the item is carried whole");
         const after = liveDigestOn(seen.queries, ACCOUNT_INBOX_ITEMS.HELD_ON);
         assert.ok(after !== undefined);
@@ -907,7 +904,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           }),
         );
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(INBOX_ITEMS_READ.answer)(
           (yield* Fiber.join(poll)).body,
         );
         assert.equal(held.queries.stamps.rows, undefined, "the poll was held to its end");
@@ -923,13 +920,13 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           }),
         );
         yield* TestClock.adjust(Duration.seconds(25));
-        const moved = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+        const moved = Schema.decodeUnknownSync(INBOX_ITEMS_READ.answer)(
           (yield* Fiber.join(again)).body,
         );
         assert.deepEqual(
           moved.queries.stamps.rows === undefined
             ? undefined
-            : Schema.decodeUnknownSync(accountInboxItemsLiveRowsSchema.fields.stamps)(
+            : Schema.decodeUnknownSync(INBOX_ITEMS_READ.rows.fields.stamps)(
                 moved.queries.stamps.rows,
               ).map((stamp) => stamp.unread),
           [false],
@@ -1008,7 +1005,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
 
         const own = yield* askTranscript({ bearer: owner, agentId: agent.id });
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(own.body);
+        const answer = Schema.decodeUnknownSync(AGENT_TRANSCRIPT_READ.answer)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), [
           "agent",
@@ -1029,7 +1026,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         assert.deepEqual(idsOf(answer.queries.agent.rows), [agent.id]);
 
         // Note that the call's conversation is not opened yet, so the worker's reads under it find none, beside its agent.
-        const worker = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+        const worker = Schema.decodeUnknownSync(AGENT_TRANSCRIPT_READ.answer)(
           (yield* askTranscript({ bearer: owner, agentId: agent.id, call: "call-7" })).body,
         );
         assert.equal(worker.url, LIVE_POLL_URL);
@@ -1071,7 +1068,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         });
         assert.ok(Option.isSome(started));
         const agentId = started.value.agent.id;
-        const first = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+        const first = Schema.decodeUnknownSync(AGENT_TRANSCRIPT_READ.answer)(
           (yield* askTranscript({ bearer: owner, agentId, cursor: AGENT_CURSOR_START })).body,
         );
         const cursor = first.queries.window.cursor?.next;
@@ -1085,7 +1082,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           askTranscript({ bearer: owner, agentId, poll: true, after, cursor }),
         );
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(AGENT_TRANSCRIPT_READ.answer)(
           (yield* Fiber.join(unchanged)).body,
         );
         assert.deepEqual(
@@ -1247,7 +1244,7 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
         for (const scope of scopes) {
           const polled = yield* askScope({ bearer: owner, ...scope });
           assert.equal(polled.status, HOSTED_HTTP_STATUS.OK, scope.path);
-          const answer = Schema.decodeUnknownSync(scopeInboxLiveAnswerSchema)(polled.body);
+          const answer = Schema.decodeUnknownSync(TASK_INBOX_READ.answer)(polled.body);
           assert.equal(answer.url, LIVE_POLL_URL);
           assert.deepEqual(Object.keys(answer.queries).toSorted(), ["files", "items", "messages"]);
           for (const [part, query] of Object.entries(answer.queries)) {
@@ -1894,7 +1891,7 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
 });
 
 /** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock and on `hub` where one is named; its answer's body. */
-const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =>
+const askHeld = (bearer: string, path: string, sync?: string, hub?: SyncShape) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -1923,8 +1920,8 @@ const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =
 /** The task list asked as `bearer`, in delta mode past `sync` where it names one, on `hub` where one is named, its parts decoded. */
 const askTasks = (bearer: string, sync?: string, hub?: SyncShape) =>
   Effect.map(
-    askLive(bearer, "/api/live/tasks", sync, hub),
-    (body) => Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries,
+    askHeld(bearer, "/api/live/tasks", sync, hub),
+    (body) => Schema.decodeUnknownSync(TASK_LIST_READ.answer)(body).queries,
   );
 
 /**
@@ -2158,8 +2155,8 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
 /** The account's inbox items asked as `bearer` in delta mode past `sync` ("" for none yet), its parts decoded. */
 const askItems = (bearer: string, sync: string) =>
   Effect.map(
-    askLive(bearer, "/api/live/inbox-items", sync),
-    (body) => Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(body).queries,
+    askHeld(bearer, "/api/live/inbox-items", sync),
+    (body) => Schema.decodeUnknownSync(INBOX_ITEMS_READ.answer)(body).queries,
   );
 
 /** An item of an agent of the member's on a task of theirs, the agent's message opening its thread; the item's id. */

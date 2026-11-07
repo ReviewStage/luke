@@ -37,16 +37,15 @@
  * list and the inbox items asked with `&sync=` are answered what moved past
  * that sync id alone, held until something does. Each
  * names the account it was started for under `?userId=`, and a session of
- * any other is answered as signed out. Each output is the wire schema flipped
- * (`packages/service/src/orpc/base.ts`).
+ * any other is answered as signed out. Each is declared once
+ * (`../live-read.ts`), and its procedure is that declaration's
+ * (`liveProcedure`): its query, its answer flipped
+ * (`packages/service/src/orpc/base.ts`), and its refusals.
  */
 
-import { openapi } from "@orpc/openapi";
-import { HTTP_METHOD } from "@repo/wire";
-import { Schema as EffectSchema } from "effect";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import { ACCOUNT_PREFERENCES_READ } from "../account-preferences-live.js";
 import { AGENT_ORIGIN_READ } from "../agent-origin-live.js";
+import { AGENT_TRANSCRIPT_READ } from "../agent-transcript-live.js";
 import {
   AUTOMATION_RUNS_READ,
   AUTOMATION_WORKSPACE_RUNS_READ,
@@ -55,25 +54,21 @@ import {
 import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "../browser-tabs-live.js";
 import { TASK_COMMENTS_READ } from "../description-comment-live.js";
 import { HOSTS_READ } from "../host-live.js";
+import {
+  ACCOUNT_INBOX_READ,
+  AGENT_INBOX_READ,
+  INBOX_ITEMS_READ,
+  TASK_INBOX_READ,
+} from "../inbox-live.js";
 import { INSTALLED_SKILLS_READ } from "../installed-skill-live.js";
 import { INTEGRATION_STATUSES_READ } from "../integration-live.js";
 import { liveProcedure } from "../live-read.js";
-import {
-  ACCOUNT_INBOX_ITEMS,
-  accountInboxItemsLiveAnswerSchema,
-  accountInboxLiveAnswerSchema,
-  agentTranscriptLiveAnswerSchema,
-  LIVE_POLL,
-  LIVE_USER_QUERY,
-  scopeInboxLiveAnswerSchema,
-} from "../live-wire.js";
 import { MAC_COMMANDS_READ } from "../mac-command-live.js";
 import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
 import { PULL_REQUEST_CHAPTERS_READ } from "../pull-request-chapters-live.js";
-import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { SIDEBAR_READ } from "../sidebar-live.js";
 import { TASK_HISTORY_READ } from "../task-history-live.js";
-import { taskListLiveAnswerSchema } from "../task-list-live.js";
+import { TASK_LIST_READ } from "../task-list-live.js";
 import { AGENT_PAGES_READ, TASK_PAGES_READ } from "../task-pages-live.js";
 import { TASK_RECORD_READ } from "../task-record-live.js";
 import { WORKSPACE_INTEGRATIONS_READ } from "../workspace-integrations-live.js";
@@ -82,95 +77,10 @@ import {
   WORKSPACE_MEMBERS_READ,
   WORKSPACES_READ,
 } from "../workspace-live.js";
-import { hostedProcedure } from "./base.js";
-
-/** Whether the reader asks for the rows inline, polling while Realtime fails it (`LIVE_POLL`). */
-const pollField = EffectSchema.optionalKey(EffectSchema.Literal(LIVE_POLL.ON));
-
-/** Where the rows stood when the reader last polled (`liveDigestOf`); the poll is held until they move past it. */
-const afterField = EffectSchema.optionalKey(EffectSchema.String);
-
-/** The sync id the reader holds every row at, as text, past which it is answered what moved alone; empty where it holds none yet (`LIVE_POLL.SYNC`). */
-const syncField = EffectSchema.optionalKey(EffectSchema.String);
-
-/** The account the reader started following for, which the session must be (`LIVE_USER_QUERY`). */
-const userField = EffectSchema.optionalKey(EffectSchema.String);
-
-/** A live read's own query: whether it polls. */
-const _liveReadSchema = EffectSchema.Struct({
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The task list as a live read follows it: the sync id the reader holds every row at (`syncField`). */
-const liveTasksSchema = EffectSchema.Struct({
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_POLL.SYNC]: syncField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The account's inbox as a live read follows it: whether it is carried the items of agents with no repository (`ACCOUNT_INBOX_REPOSITORYLESS`), which a build from before it never asks for. */
-const liveAccountInboxSchema = EffectSchema.Struct({
-  [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: EffectSchema.optionalKey(
-    EffectSchema.Literal(ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
-  ),
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text, none for every item; and the sync id it holds every item at, past which it is answered what moved alone (`LIVE_POLL.SYNC`). */
-const liveAccountInboxItemsSchema = EffectSchema.Struct({
-  [ACCOUNT_INBOX_ITEMS.SINCE]: EffectSchema.optionalKey(EffectSchema.String),
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_POLL.SYNC]: syncField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The plan or agent a scope's inbox is followed for; one that is no UUID is answered as not found, so it is read as text here. */
-const liveScopeSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/**
- * The agent a transcript is followed for, and the delegation call of the
- * worker where it is a worker's; each read as text, an id or call of no
- * shape answered as not found. A reader that names where it holds the
- * newest messages (`LIVE_POLL.CURSOR`) is answered them past it; one of no
- * shape is refused.
- */
-const liveTranscriptSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  call: EffectSchema.optionalKey(EffectSchema.String),
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_POLL.CURSOR]: EffectSchema.optionalKey(EffectSchema.String),
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The kinds of command a Mac's live read follows, as its held read names them (`macCommandKindsQuery`). */
-const _liveMacCommandsSchema = EffectSchema.Struct({
-  kinds: EffectSchema.optionalKey(EffectSchema.String),
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
 
 export const liveContract = {
-  inbox: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
-    .input(liveAccountInboxSchema)
-    .output(EffectSchema.flip(accountInboxLiveAnswerSchema)),
-  inboxItems: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX_ITEMS }))
-    .input(liveAccountInboxItemsSchema)
-    .output(EffectSchema.flip(accountInboxItemsLiveAnswerSchema)),
+  [ACCOUNT_INBOX_READ.name]: liveProcedure(ACCOUNT_INBOX_READ),
+  [INBOX_ITEMS_READ.name]: liveProcedure(INBOX_ITEMS_READ),
   [TASK_RECORD_READ.name]: liveProcedure(TASK_RECORD_READ),
   [TASK_PAGES_READ.name]: liveProcedure(TASK_PAGES_READ),
   [AGENT_PAGES_READ.name]: liveProcedure(AGENT_PAGES_READ),
@@ -179,26 +89,14 @@ export const liveContract = {
   [TASK_COMMENTS_READ.name]: liveProcedure(TASK_COMMENTS_READ),
   [TASK_BROWSER_TABS_READ.name]: liveProcedure(TASK_BROWSER_TABS_READ),
   [AGENT_BROWSER_TABS_READ.name]: liveProcedure(AGENT_BROWSER_TABS_READ),
-  tasks: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
-    .input(liveTasksSchema)
-    .output(EffectSchema.flip(taskListLiveAnswerSchema)),
+  [TASK_LIST_READ.name]: liveProcedure(TASK_LIST_READ),
   [AUTOMATIONS_READ.name]: liveProcedure(AUTOMATIONS_READ),
   [AUTOMATION_WORKSPACE_RUNS_READ.name]: liveProcedure(AUTOMATION_WORKSPACE_RUNS_READ),
   [AUTOMATION_RUNS_READ.name]: liveProcedure(AUTOMATION_RUNS_READ),
-  agentTranscript: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
-    .input(liveTranscriptSchema)
-    .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
+  [AGENT_TRANSCRIPT_READ.name]: liveProcedure(AGENT_TRANSCRIPT_READ),
   [MAC_COMMANDS_READ.name]: liveProcedure(MAC_COMMANDS_READ),
-  taskInbox: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX }))
-    .input(liveScopeSchema)
-    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
-  agentInbox: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
-    .input(liveScopeSchema)
-    .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
+  [TASK_INBOX_READ.name]: liveProcedure(TASK_INBOX_READ),
+  [AGENT_INBOX_READ.name]: liveProcedure(AGENT_INBOX_READ),
   [SIDEBAR_READ.name]: liveProcedure(SIDEBAR_READ),
   [WORKSPACES_READ.name]: liveProcedure(WORKSPACES_READ),
   [WORKSPACE_MEMBERS_READ.name]: liveProcedure(WORKSPACE_MEMBERS_READ),

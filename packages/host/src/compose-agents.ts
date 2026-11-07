@@ -1,6 +1,8 @@
 import type { HostedAgentClient } from "@repo/features";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { ACCOUNT_PREFERENCES_READ } from "@repo/features/account-preferences-live";
 import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
+import { AGENT_TRANSCRIPT_READ } from "@repo/features/agent-transcript-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -42,6 +44,12 @@ import {
 import { AGENT_ARCHIVER, type AgentSummary, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
+import {
+  ACCOUNT_INBOX_READ,
+  AGENT_INBOX_READ,
+  INBOX_ITEMS_READ,
+  TASK_INBOX_READ,
+} from "@repo/features/inbox-live";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -245,7 +253,6 @@ export type AgentClient = Pick<
   | "agentPart"
   | "messagesNewest"
   | "messagesBefore"
-  | "agentTranscriptLive"
   | "message"
   | "choose"
   | "rename"
@@ -278,10 +285,6 @@ export type AgentClient = Pick<
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
-  | "taskInboxLive"
-  | "agentInboxLive"
-  | "accountInboxLive"
-  | "accountInboxItemsLive"
   | "inboxAttachment"
   | "agentPicture"
 >;
@@ -403,13 +406,15 @@ export function composeAgents(
     const transcripts = yield* transcriptFollows({
       seal: (key, poll, userId, after, cursor) =>
         asked(
-          dependencies.client.agentTranscriptLive(
-            key.agentId,
-            userId,
-            key.callId,
-            poll,
-            after,
-            cursor,
+          dependencies.client.liveRead(
+            AGENT_TRANSCRIPT_READ,
+            {
+              id: key.agentId,
+              userId,
+              ...(cursor === undefined ? undefined : { cursor }),
+              ...(key.callId === undefined ? undefined : { call: key.callId }),
+            },
+            poll ? { after } : undefined,
           ),
         ),
       accountId: dependencies.accountId,
@@ -451,14 +456,32 @@ export function composeAgents(
       seal: (scope, poll, userId, after) =>
         asked(
           scope.kind === INBOX_SCOPE_KIND.PLAN
-            ? client.taskInboxLive(scope.id, userId, poll, after)
-            : client.agentInboxLive(scope.id, userId, poll, after),
+            ? client.liveRead(
+                TASK_INBOX_READ,
+                { id: scope.id, userId },
+                poll ? { after } : undefined,
+              )
+            : client.liveRead(
+                AGENT_INBOX_READ,
+                { id: scope.id, userId },
+                poll ? { after } : undefined,
+              ),
         ),
       accountId: dependencies.accountId,
       pool: dependencies.pool,
     });
     const accounts = yield* accountInboxes({
-      seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(
+          client.liveRead(
+            ACCOUNT_INBOX_READ,
+            {
+              userId,
+              [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE,
+            },
+            poll ? { after } : undefined,
+          ),
+        ),
       pool: dependencies.pool,
       accountWide,
     });
@@ -499,7 +522,15 @@ export function composeAgents(
     const followItems = (userId: string) =>
       followAccountItems(
         {
-          seal: (account, sync) => asked(client.accountInboxItemsLive(account, sync)),
+          // Note that the items are always read polled, their rows inline, and past a sync id the service holds the read until something moves.
+          seal: (account, sync) =>
+            asked(
+              client.liveRead(
+                INBOX_ITEMS_READ,
+                { userId: account, ...(sync === undefined ? undefined : { sync }) },
+                {},
+              ),
+            ),
           pool: dependencies.pool,
           accountWide,
         },
