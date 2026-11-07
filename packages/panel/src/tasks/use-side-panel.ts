@@ -747,8 +747,8 @@ export interface SidePanelControl {
   onOpen: (tab: SidePanelTab, place?: PagePlace) => void;
   /** The agent the task's column shows, whose tabs alone the strip draws and the "+" offers; none while it shows none. */
   agent: string | undefined;
-  /** The agent whose strip the tab stands in on the open task, as `onShow` must show that agent's tab in the task's column for the tab to be drawn; none for a tab every agent's strip draws. */
-  ownerOf: (tab: SidePanelTab) => string | undefined;
+  /** The agent whose strip the tab stands in on the task given, as `onShow` must show that agent's tab in the task's column for the tab to be drawn; none for a tab every agent's strip draws. */
+  ownerOf: (taskId: string, tab: SidePanelTab) => string | undefined;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
   /**
@@ -2497,7 +2497,11 @@ export function useSidePanel(
     },
     [update, drawn, taskId, pagePlace, opener],
   );
-  const tabOwner = useCallback((tab: SidePanelTab) => ownerOf(state, drawn, tab), [state, drawn]);
+  const tabOwner = useCallback(
+    (on: string, tab: SidePanelTab) =>
+      ownerOf(state, { ...drawn, task: { ...drawn.task, id: on } }, tab),
+    [state, drawn],
+  );
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most (`withFileShown`).
   const onBrowseFile = useCallback(
