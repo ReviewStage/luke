@@ -6,10 +6,10 @@
  * reads what another cached and a failed read shows at once. One client
  * stands for the whole test, so a surface drawn again keeps its cache.
  *
- * The window's drafts owner (`useDraftsOwner`) stands for each test in a
- * root of its own, no one signed in, and goes after it, so what one test
- * typed, attached, or held unsent is let go before the next, as the window's
- * root going lets it go.
+ * The window's drafts owner (`useDraftsOwner`) stands, no one signed in, in
+ * a root of its own from the first tree a test draws here until the test
+ * ends, so what one test typed, attached, or held unsent is let go before
+ * the next, as the window's root going lets it go.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -56,19 +56,25 @@ let heldForFile: AppStateSnapshot | undefined;
 
 let testQueryClient = freshQueryClient();
 
-/** The root the window's drafts owner stands in for the test. */
-let draftsRoot: Root | undefined;
-
 /** No one signed in to the window, whose drafts it reads and writes. */
 function NoOneSignedIn(): null {
   useDraftsOwner(undefined);
   return null;
 }
 
+/** The root the window's drafts owner stands in for the test, none until the test draws a tree. */
+let draftsRoot: Root | undefined;
+
+/** Stands the window's drafts owner up for the test, where it is not standing already. */
+function standDraftsOwner(): void {
+  if (draftsRoot !== undefined) return;
+  const root = createRoot(document.createElement("div"));
+  draftsRoot = root;
+  act(() => root.render(createElement(NoOneSignedIn)));
+}
+
 beforeEach(() => {
   testQueryClient = freshQueryClient();
-  draftsRoot = createRoot(document.createElement("div"));
-  act(() => draftsRoot?.render(createElement(NoOneSignedIn)));
 });
 
 afterEach(() => {
@@ -100,6 +106,7 @@ function TestAppStateSubscription(): ReactElement {
  * under the registry React provides when none is given.
  */
 export function withQueryClient(element: ReactNode): ReactElement {
+  standDraftsOwner();
   return createElement(
     QueryClientProvider,
     { client: testQueryClient },

@@ -44,16 +44,15 @@ import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { changesTab, STRIP_TAB_KIND, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -1793,11 +1792,10 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   );
 });
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+/** A registry for a window whose waits run on this clock, as the window's run on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
+  serveEffectsOn(Context.make(Clock.Clock, clock));
+  return AtomRegistry.make();
 }
 
 /** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
