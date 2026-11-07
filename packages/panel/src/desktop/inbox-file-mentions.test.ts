@@ -232,7 +232,7 @@ function panelTabs(container: HTMLElement): string[] | undefined {
   );
 }
 
-test("a file an item of a task names in the older form opens beside the Inbox as the panel's preview, the Inbox still standing", async () => {
+test("a file an item of a task names in the older form opens beside the Inbox in the panel, the Inbox still standing", async () => {
   const { container, links, went } = await inbox();
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 

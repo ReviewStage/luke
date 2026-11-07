@@ -1043,7 +1043,7 @@ export function paneDoors(
       code: {
         repository: task.repository,
         place: { taskId: task.id },
-        // Note that code is a link like any other: beside the item it opens as the panel's preview.
+        // Note that code is a link like any other: beside the item it opens in a File tab of the panel.
         onOpenFile: (ref, commit) =>
           seams.panelFor === task.id
             ? tasks.sidePanel.onOpenFile(ref, commit)
