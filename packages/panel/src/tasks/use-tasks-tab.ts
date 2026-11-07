@@ -3310,8 +3310,8 @@ export function useTasksTab(input: {
     closeHistory();
     mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
   };
-  // A link to a tab of the task standing opens it as the panel's preview, as
-  // any link pressed there does; one to another task's goes there and opens
+  // A link to a tab of the task standing opens it in the panel, as any link
+  // pressed there does; one to another task's goes there and opens
   // it as a tab of its own (`route.ts`).
   const linkPanelTab = (place: TaskTabPlace, tab: SidePanelTab) => {
     const standing = !overPlan && !historyRoute.open;
@@ -3319,7 +3319,7 @@ export function useTasksTab(input: {
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
     );
-    if (routed.kind === ROUTE.PREVIEW) sidePanel.onPreview(tab);
+    if (routed.kind === ROUTE.BESIDE) sidePanel.onOpen(tab);
     else showPanelTab(place.planId, tab);
   };
 

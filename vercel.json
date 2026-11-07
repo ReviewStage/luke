@@ -204,6 +204,10 @@
           "dest": "/api/default.js?route=hosts/install-script"
         },
         {
+          "src": "/api/maintenance/automation-schedules",
+          "dest": "/api/default.js?route=maintenance/automation-schedules"
+        },
+        {
           "src": "/api/maintenance/provider-keys-rewrap",
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },

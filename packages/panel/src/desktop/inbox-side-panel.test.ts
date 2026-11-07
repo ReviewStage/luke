@@ -345,12 +345,6 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
   await settle();
 }
 
-/** How many tabs of the panel beside the Inbox stand as its preview. */
-function previewTabs(container: HTMLElement): number {
-  return container.querySelectorAll('aside[aria-label="Panel"] .ui-tab[data-preview="true"]')
-    .length;
-}
-
 /** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */
 function panelTabs(container: HTMLElement): string[] | undefined {
   const panel = container.querySelector('aside[aria-label="Panel"]');
@@ -360,15 +354,18 @@ function panelTabs(container: HTMLElement): string[] | undefined {
   );
 }
 
-test("a pull request, a page, and a file the item names open one after another in the one preview tab of the panel beside the Inbox, which still stands, and a page of another plan opens there too, its Open task going to that plan with the page chosen", async () => {
+test("a pull request, a page, and a file the item names each open a tab of their own in the panel beside the Inbox, which still stands, and a page of another plan opens there too, its Open task going to that plan with the page chosen", async () => {
   const { container, left } = await inbox();
   assert.equal(panelTabs(container), undefined, "no panel stands until the item opens one");
 
   await pressChip(container, "relay#42");
   await pressChip(container, "Invite funnel");
   await pressChip(container, "invites.ts");
-  assert.deepEqual(panelTabs(container), ["▸ invites.ts"], "each link took the last one's place");
-  assert.equal(previewTabs(container), 1, "and it stands as the panel's preview");
+  assert.deepEqual(
+    panelTabs(container),
+    ["#42 Send invitations in batches", "Invite funnel", "▸ invites.ts"],
+    "each link opened a tab of its own",
+  );
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 
@@ -392,7 +389,7 @@ test("a pull request, a page, and a file the item names open one after another i
 test("a file opened on another task reads from that task in the panel standing for this one", async () => {
   const { container, panel } = await inbox();
   const ledger = { place: { taskId: OTHER_TASK }, repository: "acme/ledger" };
-  act(() => panel().onPreviewFile({ path: "src/ledger.ts" }, undefined, ledger));
+  act(() => panel().onOpenFile({ path: "src/ledger.ts" }, undefined, ledger));
   await settle();
   assert.deepEqual(panelTabs(container), ["▸ ledger.ts"]);
   assert.ok(filesRead.length > 0, "the tab read its file");
@@ -401,20 +398,6 @@ test("a file opened on another task reads from that task in the panel standing f
     [],
     "every read went to the task the file was opened on",
   );
-});
-
-test("a preview beside the Inbox kept by a double-click stands as a tab of its own, so the next link opens beside it", async () => {
-  const { container } = await inbox();
-  await pressChip(container, "relay#42");
-  const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
-  assert.ok(tab);
-  act(() => {
-    tab.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-  });
-  await settle();
-  assert.equal(previewTabs(container), 0, "kept");
-  await pressChip(container, "invites.ts");
-  assert.deepEqual(panelTabs(container), ["#42 Send invitations in batches", "▸ invites.ts"]);
 });
 
 test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
@@ -441,14 +424,13 @@ test("an archived agent's Pull request tab stands beside the Inbox as any other,
   assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
 });
 
-test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel", async () => {
+test("an agent the item names reads beside the Inbox, its transcript in the panel", async () => {
   const { container, left } = await inbox();
   await pressChip(container, "Batch the invitations");
   const tabs = panelTabs(container);
   assert.ok(tabs, "the panel stands beside the Inbox");
   assert.equal(tabs.length, 1);
   assert.match(tabs[0] ?? "", /^▸ Batch the invitations/);
-  assert.equal(previewTabs(container), 1, "as the panel's preview");
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.ok(
     container.querySelector('aside[aria-label="Panel"] .desktop-agent'),
@@ -541,7 +523,11 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   act(() => chip.click());
   await settle();
 
-  assert.deepEqual(panelTabs(container), ["▸ Invite funnel"], "the page took the preview's place");
+  assert.deepEqual(
+    panelTabs(container),
+    ["Batch the invitations", "▸ Invite funnel"],
+    "the page opened beside the agent's tab",
+  );
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 });

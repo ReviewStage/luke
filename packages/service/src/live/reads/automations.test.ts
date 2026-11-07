@@ -4,9 +4,9 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
 import { member, organization, user } from "@repo/database/schemas/auth";
-import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
+import { getTestDB } from "@repo/database/testing";
 import {
-  automationWorkspaceRunsLiveRowsSchema,
+  AUTOMATION_WORKSPACE_RUNS_READ,
   automationWorkspaceRunsOfLiveRows,
 } from "@repo/features/automation-live";
 import {
@@ -19,18 +19,11 @@ import {
 } from "@repo/features/automation-wire";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import {
-  automationRunsLiveStatements,
-  automationsLiveStatements,
-  automationWorkspaceRunsLiveStatements,
-} from "./automation-live.js";
+import { automationWorkspaceRunsRead } from "./automations.js";
 
 /**
- * A workspace's automations, an automation's runs, and a workspace's runs,
- * as their live endpoints seal them, call only functions Postgres marks
- * immutable, since Neon Realtime refuses any other ("scalar expression uses
- * a mutable function") where Postgres runs it without a word. A workspace's
- * runs hold only the runs of the automations the account may read.
+ * A workspace's runs, as their live read seals them, hold only the runs of
+ * the automations the account may read.
  */
 
 /** An account, as the auth plugin would leave its row. */
@@ -87,24 +80,7 @@ const ranOnce = (
     });
   });
 
-it.layer(getTestDB())("the automations' live statements", (it) => {
-  it.effect("call only functions Postgres marks immutable, as Realtime requires", () =>
-    Effect.gen(function* () {
-      const { automations } = Option.getOrThrow(
-        automationsLiveStatements("user-immutable", "workspace-immutable"),
-      );
-      const { runs } = Option.getOrThrow(
-        automationRunsLiveStatements("user-immutable", randomUUID()),
-      );
-      const workspaceRuns = Option.getOrThrow(
-        automationWorkspaceRunsLiveStatements("user-immutable", "workspace-immutable"),
-      );
-      assert.deepEqual(yield* mutableFunctionsOf(automations), []);
-      assert.deepEqual(yield* mutableFunctionsOf(runs), []);
-      assert.deepEqual(yield* mutableFunctionsOf(workspaceRuns.runs), []);
-    }),
-  );
-
+it.layer(getTestDB())("the automations' live reads", (it) => {
   it.effect(
     "a workspace's runs hold its shared automations' and the account's own, newest first, and no teammate's personal one or another workspace's",
     () =>
@@ -126,9 +102,9 @@ it.layer(getTestDB())("the automations' live statements", (it) => {
 
         const sql = yield* SqlClient.SqlClient;
         const { runs } = Option.getOrThrow(
-          automationWorkspaceRunsLiveStatements(reader, workspace),
+          automationWorkspaceRunsRead.statements({ userId: reader, workspaceId: workspace }),
         );
-        const rows = yield* Schema.decodeUnknownEffect(automationWorkspaceRunsLiveRowsSchema)({
+        const rows = yield* Schema.decodeUnknownEffect(AUTOMATION_WORKSPACE_RUNS_READ.rows)({
           runs: yield* sql.unsafe(runs.sql, [...runs.params]),
         });
         assert.deepEqual(

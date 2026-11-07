@@ -48,9 +48,9 @@ import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import { ACCOUNT_PREFERENCES_READ } from "../account-preferences-live.js";
 import { AGENT_ORIGIN_READ } from "../agent-origin-live.js";
 import {
-  automationRunsLiveAnswerSchema,
-  automationsLiveAnswerSchema,
-  automationWorkspaceRunsLiveAnswerSchema,
+  AUTOMATION_RUNS_READ,
+  AUTOMATION_WORKSPACE_RUNS_READ,
+  AUTOMATIONS_READ,
 } from "../automation-live.js";
 import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "../browser-tabs-live.js";
 import { TASK_COMMENTS_READ } from "../description-comment-live.js";
@@ -69,7 +69,7 @@ import {
 } from "../live-wire.js";
 import { MAC_COMMANDS_READ } from "../mac-command-live.js";
 import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
-import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
+import { PULL_REQUEST_CHAPTERS_READ } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { SIDEBAR_READ } from "../sidebar-live.js";
 import { TASK_HISTORY_READ } from "../task-history-live.js";
@@ -130,14 +130,6 @@ const liveAccountInboxItemsSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
-const liveTaskSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
 /** The plan or agent a scope's inbox is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveScopeSchema = EffectSchema.Struct({
   id: EffectSchema.String,
@@ -170,28 +162,6 @@ const _liveMacCommandsSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/**
- * The agent whose pull request's chapters a live read follows, and the
- * pull request's number, as the agent's read of them names it; each read as
- * text, an agent of no shape answered as not found and a number of none
- * refused.
- */
-const livePullRequestChaptersSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  number: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
-/** The workspace a live read is followed for; one that names no workspace of the account's is answered as not found, so it is read as text here. */
-const liveWorkspaceSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
 export const liveContract = {
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
@@ -213,30 +183,9 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
     .input(liveTasksSchema)
     .output(EffectSchema.flip(taskListLiveAnswerSchema)),
-  automations: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS }))
-    .input(
-      EffectSchema.Struct({
-        workspaceId: EffectSchema.String,
-        [LIVE_POLL.QUERY]: pollField,
-        [LIVE_POLL.AFTER]: afterField,
-        [LIVE_USER_QUERY]: userField,
-      }),
-    )
-    .output(EffectSchema.flip(automationsLiveAnswerSchema)),
-  automationWorkspaceRuns: hostedProcedure
-    .meta(
-      openapi({
-        method: HTTP_METHOD.GET,
-        path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_WORKSPACE_RUNS,
-      }),
-    )
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(automationWorkspaceRunsLiveAnswerSchema)),
-  automationRuns: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(automationRunsLiveAnswerSchema)),
+  [AUTOMATIONS_READ.name]: liveProcedure(AUTOMATIONS_READ),
+  [AUTOMATION_WORKSPACE_RUNS_READ.name]: liveProcedure(AUTOMATION_WORKSPACE_RUNS_READ),
+  [AUTOMATION_RUNS_READ.name]: liveProcedure(AUTOMATION_RUNS_READ),
   agentTranscript: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
@@ -258,12 +207,7 @@ export const liveContract = {
   [WORKSPACE_MEMORIES_READ.name]: liveProcedure(WORKSPACE_MEMORIES_READ),
   [INSTALLED_SKILLS_READ.name]: liveProcedure(INSTALLED_SKILLS_READ),
   [WORKSPACE_INTEGRATIONS_READ.name]: liveProcedure(WORKSPACE_INTEGRATIONS_READ),
-  pullRequestChapters: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),
-    )
-    .input(livePullRequestChaptersSchema)
-    .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
+  [PULL_REQUEST_CHAPTERS_READ.name]: liveProcedure(PULL_REQUEST_CHAPTERS_READ),
   [INTEGRATION_STATUSES_READ.name]: liveProcedure(INTEGRATION_STATUSES_READ),
   [ACCOUNT_PREFERENCES_READ.name]: liveProcedure(ACCOUNT_PREFERENCES_READ),
 };

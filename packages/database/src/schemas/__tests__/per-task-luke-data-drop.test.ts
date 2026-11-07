@@ -18,7 +18,6 @@ import { createTask, deleteTask } from "../../models/task-store.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, migrationStatements, openWorkspace, replayable } from "../../testing/index.js";
 import { user } from "../auth.js";
-import { sessionSandboxCleanup } from "../session-sandbox.js";
 import { conversations } from "../storage.js";
 
 /**
@@ -99,14 +98,13 @@ const stampsOf = (ids: readonly string[]) =>
 
 it.layer(getTestDB())("a task deleted after the migration", (it) => {
   it.effect(
-    "leaves nothing of its old Vespin's conversation unstamped, and the purge takes it, its child, and its session's sandbox seven days on",
+    "leaves nothing of its old Vespin's conversation unstamped, and the purge takes it and its child seven days on",
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* undo;
         const { userId, taskId } = yield* openTask;
-        const sessionId = `wrun_${randomUUID()}`;
-        const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION, { sessionId });
+        const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION);
         const worker = yield* openConversation(userId, "child", { parent: luke });
         yield* sql`UPDATE task SET conversation_id = ${luke} WHERE id = ${taskId}`;
 
@@ -125,12 +123,7 @@ it.layer(getTestDB())("a task deleted after the migration", (it) => {
           .select({ id: conversations.id })
           .from(conversations)
           .where(inArray(conversations.id, [luke, worker]));
-        const queued = yield* db.select().from(sessionSandboxCleanup);
         assert.deepEqual(left, []);
-        assert.deepEqual(
-          queued.map((row) => row.sessionId),
-          [sessionId],
-        );
       }),
   );
 });

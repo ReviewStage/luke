@@ -626,7 +626,7 @@ export interface TasksComposer extends Composer {
   listed: (txid: string | undefined) => Effect.Effect<void>;
   /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
   queueable: readonly AnyWrite[];
-  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`). */
+  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`), and a terminal waiting on its agent's sandbox reads the list again on (`compose-host.ts`). */
   pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them, answering once each has landed. */
   repositoriesMoved: Effect.Effect<void>;

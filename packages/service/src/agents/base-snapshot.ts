@@ -188,8 +188,8 @@ const deleteIfStill = (api: VercelSandboxApi, read: ListedSandbox) =>
     return true;
   });
 
-/** The dependencies installed in the checkout the sandbox holds, or the refusal in the installer's own words: a fill's, and an agent's after its fast-forward, which installs only what changed since. */
-export const installDependencies = Effect.fn("web/installCheckoutDependencies")(function* (
+/** The dependencies installed in the checkout the sandbox holds, or the refusal in the installer's own words. */
+const installDependencies = Effect.fn("web/installCheckoutDependencies")(function* (
   sandbox: RepositorySandbox,
 ) {
   const installed = yield* runInSandbox(

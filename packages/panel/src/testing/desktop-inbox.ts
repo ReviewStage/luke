@@ -838,7 +838,7 @@ export function mount(
       listRead,
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,
-        onPreview: (tab) => {
+        onOpen: (tab) => {
           if (typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TRANSCRIPT) {
             asked.previewedAgents.push(tab.transcript);
           }
