@@ -249,6 +249,7 @@ export type AgentClient = Pick<
   | "markRead"
   | "stop"
   | "rewind"
+  | "warm"
   | "delete"
   | "agent"
   | "pullRequest"
@@ -1220,6 +1221,7 @@ function composed(
       asked(client.addRepository(agentId, { addRepository })),
     AGENTS_STOP: ({ agentId }) => asked(client.stop(agentId)),
     AGENTS_REWIND: ({ agentId, messageId }) => asked(client.rewind(agentId, messageId)),
+    AGENTS_WARM: ({ agentId }) => asked(client.warm(agentId)),
     AGENTS_DELETE: declaredWrite(dependencies.pool, deleted),
     AGENTS_PAGE: ({ agentId }) => asked(client.agent(agentId)),
     AGENTS_CHANGES: ({ agentId, number }) => asked(client.changes(agentId, number)),

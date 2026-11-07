@@ -245,6 +245,7 @@ import {
   useSidePanel,
 } from "./use-side-panel.js";
 import { useEndTerminalTab, useHeldTerminalTabs } from "./use-terminal-session.js";
+import { useWarmAgent } from "./use-warm-agent.js";
 import { listedAgentIn } from "./use-workspace-agents.js";
 import { sayRestored } from "./version-view.js";
 
@@ -2058,6 +2059,8 @@ export function useTasksTab(input: {
     reportedAgent.current = shownAgent;
     tellShown({ agentId: shownAgent });
   }, [shownAgent, tellShown]);
+  // The agent on screen is kept warm for the next message while the page is visible.
+  useWarmAgent((liveAgents ?? agents.agents)?.find((agent) => agent.id === shownAgent));
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the task takes its ask

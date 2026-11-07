@@ -52,15 +52,7 @@ import {
   MousePointerClickIcon,
   RotateCwIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -69,6 +61,7 @@ import { failureShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { appStateIn } from "../use-app-state.js";
+import { usePageVisible } from "../use-page-visible.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -170,17 +163,6 @@ function modifiersOf(held: RemoteModifiers): number {
     (held.meta ? BROWSER_LIVE_MODIFIER.META : 0) |
     (held.shift ? BROWSER_LIVE_MODIFIER.SHIFT : 0)
   );
-}
-
-/** Hears the window's page shown or hidden. */
-function onVisibilityChange(changed: () => void): () => void {
-  document.addEventListener("visibilitychange", changed);
-  return () => document.removeEventListener("visibilitychange", changed);
-}
-
-/** Whether the window's page is visible: not while the window is hidden or minimized, or its browser tab is in the background. */
-function usePageVisible(): boolean {
-  return useSyncExternalStore(onVisibilityChange, () => document.visibilityState !== "hidden");
 }
 
 /** The largest box of the page's shape that fits the body, or the body itself before the shape is known. */

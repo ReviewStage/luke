@@ -47,6 +47,7 @@ import {
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentReviewOptionsAnswerView,
+  type AgentWarmAnswerView,
   type AgentWorkspaceListParams,
   type AgentWorkspaceToolsAnswerView,
   type ChaptersProviderAnswer,
@@ -955,6 +956,11 @@ export class HostedAgentClient {
       hostedCall(this.#hosted.agents.stop, { id: agentId }, { as: AGENT_NOT_FOUND_RENAMES }),
       unansweredBare,
     );
+  }
+
+  /** Keeps one agent on screen warm for the next message (`agentWarmAnswerSchema`). */
+  warm(agentId: string): Effect.Effect<AgentWarmAnswerView, never, HttpClient.HttpClient> {
+    return hostedCall(this.#hosted.agents.warm, { id: agentId });
   }
 
   /** Takes one agent back to just before one of the developer's lines, stopping it first where it still works, answering it as it then stands. */

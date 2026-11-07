@@ -583,6 +583,11 @@ export const agentDeleteAnswerViewSchema = answerView(agentsContract.delete, {
 
 export type AgentDeleteAnswerView = typeof agentDeleteAnswerViewSchema.Type;
 
+/** An agent on screen kept warm, as the window hears it: that the service took the call, or why not. */
+export const agentWarmAnswerViewSchema = answerView(agentsContract.warm);
+
+export type AgentWarmAnswerView = typeof agentWarmAnswerViewSchema.Type;
+
 /** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const agentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
