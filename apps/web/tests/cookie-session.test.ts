@@ -264,11 +264,11 @@ it.effect(
   "a write to the deployed oRPC route from the deployment's own page, or from a desktop, goes on to its procedure, which answers for its caller itself; a cookie's from any other page is refused",
   () =>
     Effect.gen(function* () {
-      const deleteAccount = (headers: Record<string, string>) =>
+      const writePreferences = (headers: Record<string, string>) =>
         answered(
           deployedOrpc,
-          new Request(new URL(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, OWN_ORIGIN), {
-            method: HTTP_METHOD.POST,
+          new Request(new URL(HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES, OWN_ORIGIN), {
+            method: HTTP_METHOD.PUT,
             headers,
           }),
         );
@@ -283,20 +283,20 @@ it.effect(
       };
 
       assert.deepEqual(
-        yield* deleteAccount({ cookie: UNHELD_COOKIE, origin: OWN_ORIGIN }),
+        yield* writePreferences({ cookie: UNHELD_COOKIE, origin: OWN_ORIGIN }),
         callerChecked,
       );
       assert.deepEqual(
-        yield* deleteAccount({ cookie: UNHELD_COOKIE, "sec-fetch-site": "same-origin" }),
+        yield* writePreferences({ cookie: UNHELD_COOKIE, "sec-fetch-site": "same-origin" }),
         callerChecked,
       );
       assert.deepEqual(
-        yield* deleteAccount({ authorization: "Bearer not-a-token" }),
+        yield* writePreferences({ authorization: "Bearer not-a-token" }),
         callerChecked,
       );
-      assert.deepEqual(yield* deleteAccount({ cookie: UNHELD_COOKIE }), refused);
+      assert.deepEqual(yield* writePreferences({ cookie: UNHELD_COOKIE }), refused);
       assert.deepEqual(
-        yield* deleteAccount({
+        yield* writePreferences({
           cookie: UNHELD_COOKIE,
           origin: FOREIGN_ORIGIN,
           authorization: "Bearer not-a-token",

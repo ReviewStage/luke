@@ -29,7 +29,6 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   accountAccessAnswerSchema,
-  accountDeleteAnswerSchema,
   accountPreferencesAnswerSchema,
   accountPreferencesWriteSchema,
 } from "../account-wire.js";
@@ -68,9 +67,6 @@ const MEMORY_SAVE_BODY_BYTES = 4_096;
 const CHATGPT_DEVICE_LOGIN_BODY_BYTES = 512;
 
 export const accountContract = {
-  delete: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_DELETE }))
-    .output(EffectSchema.flip(accountDeleteAnswerSchema)),
   preferences: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),

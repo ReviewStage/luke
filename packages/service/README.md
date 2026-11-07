@@ -1526,7 +1526,7 @@ credentials, and names agents by a model only where it holds
 ## The account group
 
 `src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
-router (`src/orpc/`): the signed-in desktop's own delete, preferences, access,
+router (`src/orpc/`): the signed-in desktop's own preferences, access,
 provider-key, memory, and ChatGPT-credential procedures, on the paths `@repo/features/contract`'s `account.ts`
 declares, each answering from this deployment's own database.
 Each procedure resolves the bearer against the deployment's own account store
@@ -1538,8 +1538,14 @@ store, which `apps/web/server/orpc-route.ts` hands the router; the reads and the
 `packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the procedures as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `apps/web/tests/hosted-account-store.test.ts`
-exercises the erasure's cascade and the snapshot's replacement against a real
-dialect; the analytics erasure key and project are
+exercises the snapshot's replacement against a real dialect. The erasure itself is Better Auth's own `/delete-user`, which the
+Mac and the browser call under their Better Auth session; its `beforeDelete`
+and `afterDelete` run the erasure's own steps (`src/accounts/account-deletion.ts`)
+on the services the auth route hands them (`src/accounts/deletion-hooks.ts`)
+and delete the workspaces the account is the only member of
+(`src/auth/auth-policy.ts`'s `accountDeletion`), each through the organization
+plugin, whose own hooks stamp its agents' conversations deleted
+(`src/accounts/workspace-deletion.ts`, `workspaceDeletion`); the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`

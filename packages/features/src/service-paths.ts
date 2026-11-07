@@ -6,7 +6,6 @@
  */
 
 export const HOSTED_SERVICE_PATH = {
-  ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
   /**
    * Store and read account preferences (GET, PUT). Only settings named by

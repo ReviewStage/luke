@@ -226,6 +226,7 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/create",
   "/organization/update",
   "/organization/delete",
+  "/delete-user/callback",
   "/organization/check-slug",
   "/organization/set-active",
   "/organization/add-member",
@@ -324,11 +325,13 @@ export const ADMIN_OPTIONS = {
 export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
 /**
- * How Better Auth keeps workspaces, each an organization of its members. A
- * workspace is never deleted, so no task is lost with one, and no signed-in
- * user creates one: the plugin still lets a server-only call that names a
- * `userId` and carries no session through, which is the one way we
- * create a workspace.
+ * How Better Auth keeps workspaces, each an organization of its members. No
+ * signed-in user creates or deletes one over HTTP: `/organization/create`
+ * and `/organization/delete` are shut (`DISABLED_AUTH_PATHS`), and the
+ * server calls `auth.api` instead. A workspace is created by a server-only
+ * call that names a `userId` and carries no session, and deleted only with
+ * the account of its last member (`accountDeletion`), its own steps run by
+ * the plugin's hooks (`workspaceDeletion`).
  *
  * An invitation's id is the accept link the service emails the invitee and
  * an owner may also copy and share by hand, so it can travel outside the
@@ -338,9 +341,104 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
  */
 export const ORGANIZATION_OPTIONS = {
   allowUserToCreateOrganization: false,
-  disableOrganizationDeletion: true,
   requireEmailVerificationOnInvitation: true,
 } as const;
+
+/** What `accountDeletion` asks of the organization plugin, as `auth.api` answers it, under the headers of the session being deleted. */
+export interface OrganizationDeletionApi {
+  listOrganizations(input: { headers: Headers }): Promise<readonly { id: string }[]>;
+  listMembers(input: {
+    headers: Headers;
+    query: { organizationId: string };
+  }): Promise<{ total: number }>;
+  hasPermission(input: {
+    headers: Headers;
+    body: { organizationId: string; permissions: { organization: ["delete"] } };
+  }): Promise<{ success: boolean }>;
+  deleteOrganization(input: {
+    headers: Headers;
+    body: { organizationId: string };
+  }): Promise<unknown>;
+}
+
+/** What the account's deletion does of its own around Better Auth's, as its hooks await it (`accounts/deletion-hooks.ts`). */
+export interface AccountDeletionSteps<Pending> {
+  readonly before: (userId: string) => Promise<Pending>;
+  readonly after: (userId: string, pending: Pending) => Promise<void>;
+}
+
+/**
+ * Better Auth's account deletion
+ * (https://www.better-auth.com/docs/concepts/users-accounts#delete-user),
+ * which the Mac and the browser ask for at its own `/delete-user` under the
+ * account's session, as `authClient.deleteUser()` does. Better Auth checks
+ * the session is fresh, signed in within its `freshAge`, and refuses an older
+ * one (`SESSION_EXPIRED`) before anything below runs. Its `beforeDelete` runs
+ * the deletion's own steps first, then deletes every workspace the account is
+ * the only member of and may delete through the organization plugin, under
+ * the request's own session, so nothing stays behind that nobody can open;
+ * a workspace others belong to keeps them, and loses only the account's
+ * member row. Better Auth then deletes the account's sessions, sign-in
+ * accounts, and user row, and its `afterDelete` settles what the steps read.
+ * The email-verification callback is shut (`DISABLED_AUTH_PATHS`), since no
+ * verification is configured.
+ */
+export function accountDeletion<Pending>(
+  api: () => OrganizationDeletionApi,
+  steps: AccountDeletionSteps<Pending>,
+) {
+  const pending = new WeakMap<Request, Pending>();
+  return {
+    enabled: true,
+    beforeDelete: async (user: { id: string }, request?: Request) => {
+      if (request === undefined) throw new Error("An account is deleted only at /delete-user.");
+      pending.set(request, await steps.before(user.id));
+      const { headers } = request;
+      for (const { id: organizationId } of await api().listOrganizations({ headers })) {
+        const { total } = await api().listMembers({ headers, query: { organizationId } });
+        if (total !== 1) continue;
+        const permissions: { organization: ["delete"] } = { organization: ["delete"] };
+        const { success } = await api().hasPermission({
+          headers,
+          body: { organizationId, permissions },
+        });
+        if (success) await api().deleteOrganization({ headers, body: { organizationId } });
+      }
+    },
+    afterDelete: async (user: { id: string }, request?: Request) => {
+      const read = request === undefined ? undefined : pending.get(request);
+      if (read !== undefined) await steps.after(user.id, read);
+    },
+  };
+}
+
+/** What a workspace's deletion does of its own around Better Auth's, as its hooks await it (`accounts/deletion-hooks.ts`). */
+export interface WorkspaceDeletionSteps<Pending> {
+  readonly before: (organizationId: string) => Promise<Pending>;
+  readonly after: (pending: Pending) => Promise<void>;
+}
+
+/**
+ * The organization plugin's delete hooks, which every workspace's deletion
+ * runs whoever asked for it: its `beforeDeleteOrganization` runs the
+ * deletion's own steps while the workspace's rows still stand, and its
+ * `afterDeleteOrganization` settles what they read once the plugin has
+ * deleted the workspace. What was read is kept by the workspace's id
+ * between the two, since the plugin hands them nothing else in common.
+ */
+export function workspaceDeletion<Pending>(steps: WorkspaceDeletionSteps<Pending>) {
+  const pending = new Map<string, Pending>();
+  return {
+    beforeDeleteOrganization: async ({ organization }: { organization: { id: string } }) => {
+      pending.set(organization.id, await steps.before(organization.id));
+    },
+    afterDeleteOrganization: async ({ organization }: { organization: { id: string } }) => {
+      const read = pending.get(organization.id);
+      pending.delete(organization.id);
+      if (read !== undefined) await steps.after(read);
+    },
+  };
+}
 
 export const JWT_KEY_STORAGE = {
   jwks: {

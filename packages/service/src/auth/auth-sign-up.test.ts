@@ -18,6 +18,7 @@ import { TestClock } from "effect/testing";
 import { onboardingEventsFromEnvironment } from "../accounts/onboarding-events.js";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { accountDeletionTestServices } from "../testing/account-deletion-services.js";
 import { authApp } from "./auth-app.js";
 import { authDatabaseHooks } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
@@ -81,6 +82,7 @@ it.effect(
           Layer.succeed(Database, yield* Database),
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
           welcomeMail,
+          accountDeletionTestServices,
           onboarding,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(

@@ -1,5 +1,5 @@
 /**
- * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its access, and its provider keys.
+ * account-procedures.ts -- the signed-in account's own procedures: its preferences, its access, and its provider keys; its deletion is Better Auth's (`account-deletion.ts`).
  *
  * Each resolves the caller before touching anything, and answers nothing
  * about any account but the one the caller is: root AGENTS.md pins that no
@@ -45,7 +45,6 @@ import type {
   AccountPreferencesWritten,
   AccountSeamEffect,
 } from "@repo/database/models/account-store";
-import type { StandingSession } from "@repo/database/models/recorded-session";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import { contextWindowSchema } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@repo/features/chapters-model-choice";
@@ -61,22 +60,17 @@ import {
 } from "@repo/settings";
 import type { UnparsedWireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Clock, Effect, Redacted, Result, Schema } from "effect";
-import type { HttpClient } from "effect/http";
+import { Clock, Effect, Result, Schema } from "effect";
 import { isAdminRole } from "../admin/admin-access.js";
 import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
 import { accountModelChoices } from "../agents/coder-host/start.js";
-import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { standingSupportAccess } from "../auth/auth-policy.js";
-import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
-import { readIntegrationConnections } from "../integrations/integration-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   type AccountFastOffer,
@@ -84,16 +78,11 @@ import {
   type ModelCatalog,
   providerModelOf,
 } from "../providers/model-catalog.js";
-import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { memoriesProcedures } from "./memories-procedures.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
-  /** The sessions the account's standing conversations run in, which the delete retires first. */
-  standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
-  /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
-  deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
   /** The role and the grant of support access on the account's own row, as Better Auth stores them. */
   readAccess: (userId: string) => AccountSeamEffect<AccountAccessRow>;
@@ -154,31 +143,6 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoi
 }
 
 /**
- * Without both halves of the analytics configuration there is no person to
- * erase and nothing to erase it with, so the erasure is simply skipped.
- */
-const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(function* (
-  userId: string,
-): Effect.fn.Return<void, never, HostedEnvironment | HttpClient.HttpClient> {
-  const environment = yield* HostedEnvironment;
-  if (!environment.posthogPersonalApiKey || !environment.posthogProjectId) return;
-  const personalApiKey = Redacted.value(environment.posthogPersonalApiKey);
-  const projectId = environment.posthogProjectId;
-  const host = environment.posthogApiHost;
-  yield* forgetPosthogPersonEffect(userId, {
-    personalApiKey,
-    projectId,
-    ...(host ? { host } : undefined),
-  }).pipe(
-    Effect.catch((error) =>
-      Effect.sync(() =>
-        process.stderr.write(`Analytics erasure did not complete: ${error.message}\n`),
-      ),
-    ),
-  );
-});
-
-/**
  * The write's coding-agent part, as the catalog accepts it for the
  * account (`offeredToAccount`): a choice it does not offer is a bad request,
  * as is one that moves the default to a model of a provider no credential
@@ -221,37 +185,6 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 export function accountProcedures(seams: AccountProcedureSeams) {
   const signedIn = hosted.account.use(accountMiddleware(seams.resolveUserId));
   return {
-    /**
-     * Erases the signed-in account. The caller's bearer, or for a request
-     * that carries none the browser's session cookie, is the whole
-     * authority, so nothing a caller sends can choose a different account
-     * to erase. Where the deployment can, the analytics person is asked to
-     * be erased first, because nothing after the delete would still name
-     * it; a refusal or an outage there must not hold up the delete, so it
-     * is logged as a status and the delete proceeds. Every session the
-     * account's standing conversations run in is retired before anything is
-     * deleted, for the account the request resolved to, while those
-     * conversations still stand (`retire-sessions.ts`); a session not
-     * retired is logged and the delete proceeds; a sandbox left behind expires
-     * on Vercel's own schedule (`CODER.SANDBOX_SNAPSHOTS`). Every grant the
-     * account's integration rows name is revoked at Vercel Connect once the
-     * rows are gone, as a Disconnect revokes one, so no grant outlives the
-     * account; a revoke that fails is logged by its word and the account is
-     * deleted all the same.
-     */
-    delete: signedIn.delete.effect(function* ({ context }) {
-      const { userId } = context;
-      const retiring = yield* retiringReach(userId);
-      const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
-      yield* retireSessions(retiring, sessions);
-      yield* forgetAnalytics(userId);
-      // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
-      const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
-      yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
-      yield* revokeIntegrationGrants(userId, grants);
-      return { deleted: true } as const;
-    }),
-
     /** The caller's own stored snapshot, or the defaults for a user with none stored, the coding agents' the one its credentials pay for. */
     preferences: signedIn.preferences.effect(function* ({ context }) {
       const row = yield* hostedStoreOrUnavailable(seams.readPreferences(context.userId));

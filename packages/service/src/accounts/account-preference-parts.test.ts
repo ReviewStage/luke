@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
-  deleteAccount,
   readAccountAccess,
   readAccountPreferences,
   writeAccountPreferences,
@@ -107,9 +106,6 @@ const openAccounts = Effect.gen(function* () {
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
-    // This suite deletes nothing, so it retires no session and reaches no harness.
-    standingSessions: () => Effect.die(new Error("this suite deletes no account")),
-    deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
     readAccess: readAccountAccess,
     accountFastOffer,

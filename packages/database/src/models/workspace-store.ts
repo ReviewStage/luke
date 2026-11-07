@@ -291,6 +291,18 @@ const findMemberWorkspaceIds = SqlSchema.findAll({
     ),
 });
 
+const findWorkspaceConversationIds = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .where(eq(agentTable.organizationId, organizationId)),
+    ),
+});
+
 const findWorkspaceLogo = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ logo: Schema.NullOr(Schema.String) }),
@@ -743,6 +755,20 @@ export function isWorkspaceMember(
 export function memberWorkspaceIds(userId: string): WorkspaceStoreEffect<readonly string[]> {
   return Effect.map(findMemberWorkspaceIds(userId), (rows) =>
     rows.map((row) => row.organizationId),
+  );
+}
+
+/**
+ * The conversations of every agent of the workspace, whoever ran it. A
+ * conversation names the account that ran it rather than the workspace, so
+ * a workspace's delete reads these while its agents stand and stamps them
+ * deleted once they are gone, as a task's delete does its own.
+ */
+export function workspaceConversationIds(
+  organizationId: string,
+): WorkspaceStoreEffect<readonly string[]> {
+  return Effect.map(findWorkspaceConversationIds(organizationId), (rows) =>
+    rows.map((row) => row.conversationId),
   );
 }
 

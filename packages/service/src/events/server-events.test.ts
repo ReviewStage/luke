@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { deleteAccount } from "@repo/database/models/account-store";
 import { organization, user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import { AGENT_KIND } from "@repo/features/agent-wire";
@@ -221,7 +220,7 @@ it.layer(getTestDB())("server events", (it) => {
     const processor = analytics({ posthogProjectApiKey: Redacted.make("phc_project") });
     return Effect.gen(function* () {
       const userId = yield* openUser;
-      yield* deleteAccount(userId);
+      yield* Database.use((db) => db.delete(user).where(eq(user.id, userId)));
       yield* agentStart(userId);
       expect(processor.posted).toEqual([]);
     }).pipe(Effect.provide(processor.layer));

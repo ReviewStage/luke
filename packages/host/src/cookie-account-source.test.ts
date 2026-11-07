@@ -113,9 +113,9 @@ function respond(
       if (state.signOutDown) return new Response(null, { status: 503 });
       state.user = undefined;
       return jsonResponse({ success: true });
-    case HOSTED_SERVICE_PATH.ACCOUNT_DELETE:
+    case "/api/auth/delete-user":
       state.user = undefined;
-      return jsonResponse({ deleted: true });
+      return jsonResponse({ success: true, message: "User deleted" });
     case HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES:
       if (request.method === HTTP_METHOD.PUT) {
         const body = JSON.parse(request.body ?? "{}");
@@ -411,7 +411,7 @@ describe("the cookie account source", () => {
       const account = yield* session.deleteEverywhere();
 
       assert.deepEqual(account, { status: ACCOUNT_STATUS.SIGNED_OUT });
-      assert.equal(sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE)[0]?.method, HTTP_METHOD.POST);
+      assert.equal(sent("/api/auth/delete-user")[0]?.method, HTTP_METHOD.POST);
       // The account's settings are dropped and its gate closed, in that order.
       assert.deepEqual(gate.slice(1), ["forget", "close"]);
     }).pipe(Effect.scoped),

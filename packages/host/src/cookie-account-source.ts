@@ -22,7 +22,6 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
-  HOSTED_SERVICE_PATH,
   NO_CREDENTIAL,
 } from "@repo/features";
 import { pinnedPictureUrl } from "@repo/features/account-picture";
@@ -52,6 +51,7 @@ const AUTH_PATH = {
   SIGN_IN_SOCIAL: "/sign-in/social",
   LINK_SOCIAL: "/link-social",
   SIGN_OUT: "/sign-out",
+  DELETE_USER: "/delete-user",
 } as const;
 
 /**
@@ -218,10 +218,6 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AccountSession, never, Scope.Scope> {
   const { runMode, report } = host;
   const authCall = accountCall({ baseUrl: host.accountBaseUrl, credential: NO_CREDENTIAL });
-  const serviceCall = accountCall({
-    baseUrl: host.hostedServiceBaseUrl,
-    credential: NO_CREDENTIAL,
-  });
   const changesPubSub = yield* PubSub.unbounded<AccountSnapshot>();
   let account: AccountSnapshot = SIGNED_OUT;
   /**
@@ -659,9 +655,11 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       }),
     deleteEverywhere: () =>
       Effect.gen(function* () {
-        const answer = yield* send(serviceCall, {
+        // Better Auth deletes the account at its own endpoint, as `authClient.deleteUser()` asks it.
+        const answer = yield* send(authCall, {
           method: HTTP_METHOD.POST,
-          path: HOSTED_SERVICE_PATH.ACCOUNT_DELETE,
+          path: AUTH_PATH.DELETE_USER,
+          body: "{}",
         });
         if (!callAnswered(answer) || !answer.response.ok) {
           return yield* failed("Account deletion failed", answer);

@@ -31,8 +31,8 @@ import { accountPreference } from "../schemas/preferences.js";
 import { InstantColumnSchema } from "./columns.js";
 
 /**
- * What the account group reads and writes of an account: the erasure, the
- * cross-device snapshot behind `/api/account/preferences`, which is the
+ * What the account group reads and writes of an account: the cross-device
+ * snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
  * context window, the model the account's Generate chapters runs on, and
  * the experiments the account turned on. Every function here is an effect over the ambient `SqlClient`
@@ -88,31 +88,6 @@ export interface AccountPreferencesWrite {
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
 export type AccountSeamEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
-
-/**
- * The account's erasure is the one delete, and the row's own foreign keys are
- * what carry it: every table naming a user declares `on delete cascade`, so
- * the dependent rows go with the row that names them, in one statement and
- * therefore as one unit. Nothing here enumerates the dependents, because a
- * list here could fall behind a table added later and leave a row standing
- * after the account it belongs to is gone. A workspace the account owns,
- * the first one made for it included, names the account only through its
- * member row, so it stands, and only that row goes with the account.
- */
-const deleteUserRow = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) => Database.use((db) => db.delete(user).where(eq(user.id, userId))),
-});
-
-/**
- * Erases the user row; every dependent row cascades with it. The sandboxes
- * the account's sessions ran in are not deleted here: the account's delete
- * retires its standing sessions first (`account-procedures.ts`), and what is
- * left expires on Vercel's own schedule (`CODER.SANDBOX_SNAPSHOTS`).
- */
-export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return deleteUserRow(userId);
-}
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
