@@ -3,14 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
-import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
-import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { turns } from "../../schemas/storage.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
@@ -26,7 +22,6 @@ import {
   reorderAgentQueue,
   resumeAgentQueue,
   takeQueuedMessage,
-  unpausedQueues,
 } from "../agent-queue-store.js";
 import { createAgent } from "../agent-store.js";
 
@@ -200,37 +195,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           "a message let go of is its member's to edit again",
         );
       }),
-  );
-
-  it.effect("the queues a sweep hands on leave out an agent at work before their bound", () =>
-    Effect.gen(function* () {
-      const busy = yield* openAccount;
-      const idle = yield* openAccount;
-      for (const each of [busy, idle]) {
-        yield* queueAgentMessage(each.userId, each.agentId, {
-          id: randomUUID(),
-          text: "Next",
-        });
-      }
-      const db = yield* Database;
-      const [agent] = yield* db
-        .select({ conversationId: agentTable.conversationId })
-        .from(agentTable)
-        .where(eq(agentTable.id, busy.agentId));
-      assert.ok(agent !== undefined);
-      yield* db.insert(turns).values({
-        userId: busy.userId,
-        conversationId: agent.conversationId,
-        origin: TURN_ORIGIN.TYPED,
-        status: TURN_STATUS.RUNNING,
-        queuedAt: new Date(0),
-      });
-
-      const swept = (yield* unpausedQueues(1_000)).map((queue) => queue.agentId);
-
-      assert.ok(swept.includes(idle.agentId));
-      assert.ok(!swept.includes(busy.agentId), "an agent at work takes none of the sweep's bound");
-    }),
   );
 
   it.effect("no account reads or writes the queue of an agent it does not reach", () =>

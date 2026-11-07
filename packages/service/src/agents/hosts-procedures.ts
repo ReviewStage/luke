@@ -79,8 +79,8 @@ export function installScriptUrlOf(request: Request): string {
  * because a removed host may enroll again under its id and begin a turn
  * while this runs, and that turn is the new enrollment's. A failure here is
  * logged and the remove still answers done, because the host is already
- * removed and a retry would find no host to remove; the sweep's bound
- * settles whatever was left.
+ * removed and a retry would find no host to remove; whatever was left reads
+ * as lost once its lease runs out, and is settled at the agent's next touch.
  */
 const endedHostAgents = (userId: string, deviceId: string) =>
   Effect.gen(function* () {

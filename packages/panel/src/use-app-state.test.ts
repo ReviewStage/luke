@@ -94,7 +94,7 @@ test("a delivery that moves only the settings leaves every other slice the objec
   const { drawn, deliver } = await window(first);
   const held = drawn.at(-1);
 
-  const moved = stateWith(experimentsOn(EXPERIMENT.MEMORY), { version: 2 });
+  const moved = stateWith(experimentsOn(EXPERIMENT.SKILLS), { version: 2 });
   await deliver(moved);
   await vi.waitFor(() => expect(drawn.at(-1) === held).toBe(false));
   const now = drawn.at(-1);

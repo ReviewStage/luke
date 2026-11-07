@@ -1,6 +1,8 @@
 import { Schema as EffectSchema } from "effect";
+import { pullRequestChaptersContract } from "./contract/pull-request-chapters.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
-import { pullRequestChaptersAnswerSchema } from "./pull-request-chapters-wire.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * pull-request-chapters-view.ts -- a pull request's chapters as one Mac's window hears them: the answer whole, or why there is none.
@@ -18,19 +20,24 @@ import { pullRequestChaptersAnswerSchema } from "./pull-request-chapters-wire.js
  * same host on the same terms: the model as kept, or why there is none.
  */
 
-/** Why a read or a Generate of a pull request's chapters answered nothing the tab can draw. */
-export const PULL_REQUEST_CHAPTERS_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The agent is not one the account reaches: deleted, or never the caller's. */
-  NOT_FOUND: "not-found",
-  /** The agent's workspace's GitHub installation no longer reaches its repository. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** GitHub did not answer; the same call a moment later may be taken. */
-  GITHUB_UNANSWERED: "github-unanswered",
-  /** The service cannot read or generate chapters right now: it holds no key for the model, or its store did not answer. */
-  UNAVAILABLE: "unavailable",
+/** How a Generate reads its refusals: the service unable to generate chapters right now as its own failure, which any procedure may answer besides. */
+export const PULL_REQUEST_CHAPTERS_RENAMES = {
+  [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_API_ERROR.UNAVAILABLE,
 } as const;
+
+/**
+ * Why a read or a Generate of a pull request's chapters answered nothing
+ * the tab can draw, as a Generate's contract declares its refusals: the
+ * call never reached an answer (`unanswered`), the agent is not one the
+ * account reaches (`not-found`), the App no longer reaches its repository
+ * (`repository-not-reachable`), GitHub did not say (`github-unanswered`),
+ * or the service cannot generate chapters right now, holding no key for
+ * the model or its store down (`unavailable`).
+ */
+export const PULL_REQUEST_CHAPTERS_CALL_FAILURE = failureSetOf(
+  { generate: pullRequestChaptersContract.generate },
+  { as: PULL_REQUEST_CHAPTERS_RENAMES },
+);
 
 /** One agent's Pull request tab, as the panel names the pull request whose chapters it reads or generates: the agent's own, or the one of its repository by number. */
 export const pullRequestChaptersParamsSchema = EffectSchema.Struct({
@@ -49,11 +56,11 @@ export const pullRequestChaptersReadParamsSchema = EffectSchema.Struct({
 export type PullRequestChaptersReadParams = typeof pullRequestChaptersReadParamsSchema.Type;
 
 /** A pull request's chapters, as the panel hears a read or a Generate: the answer, or why there is none. */
-export const pullRequestChaptersAnswerViewSchema = EffectSchema.Union([
-  pullRequestChaptersAnswerSchema,
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(PULL_REQUEST_CHAPTERS_CALL_FAILURE)),
-  }),
-]);
+export const pullRequestChaptersAnswerViewSchema = answerView(
+  pullRequestChaptersContract.generate,
+  {
+    as: PULL_REQUEST_CHAPTERS_RENAMES,
+  },
+);
 
 export type PullRequestChaptersAnswerView = typeof pullRequestChaptersAnswerViewSchema.Type;

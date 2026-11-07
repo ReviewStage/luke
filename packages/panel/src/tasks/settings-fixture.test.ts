@@ -185,7 +185,7 @@ test("a signed-in profile lays the synthetic account, an admin, over main's sign
 
   assert.equal(staged.account.status, "signed-in");
   assert.equal(staged.access.admin, true);
-  assert.equal(staged.settings?.experiments.memory, true);
+  assert.equal(staged.settings?.experiments.skills, true);
   const other = fixtureAppState(tasks);
   assert.equal(other.account, tasks.account);
   assert.equal(other.access, tasks.access);

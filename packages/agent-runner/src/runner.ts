@@ -86,12 +86,14 @@ import {
   RUNNER_RELEASE,
   RUNNER_UNANSWERED,
   RUNNER_WARM,
+  type RunnerConfig,
   RunnerConfigSchema,
   type RunnerEnd,
   type RunnerEndEvent,
   type RunnerWaiting,
   type RunnerWakeup,
 } from "./protocol.js";
+import { type LaunchTrace, launchTrace, RUNNER_SPAN } from "./trace.js";
 import { transcriptStore } from "./transcripts.js";
 import { oneShotDueAt } from "./wakeups.js";
 
@@ -183,6 +185,7 @@ function queryOptions(
   onStop: HookCallback,
   from: ResumePoint,
   bearer: Redacted.Redacted,
+  traceHeaders: LaunchTrace["headers"],
 ): Options {
   const options: Options = {
     cwd: config.cwd,
@@ -216,7 +219,7 @@ function queryOptions(
   if (config.fork === true) options.forkSession = true;
   // The SDK mirrors the transcript to the service as the CLI writes it, and loads it from there to resume.
   if (config.transcriptsUrl !== undefined) {
-    options.sessionStore = transcriptStore(config.transcriptsUrl, bearer);
+    options.sessionStore = transcriptStore(config.transcriptsUrl, bearer, traceHeaders);
   }
   // The member's installed skills load as a local plugin, which leaves the checkout and the
   // settings Claude Code reads (`project` alone) as they stand; we hold its MCP servers.
@@ -251,6 +254,7 @@ interface Launch {
   readonly session: ClaudeCodeSession;
   readonly prompts: Queue.Queue<SDKUserMessage, Cause.Done>;
   readonly sink: EventSink;
+  readonly trace: LaunchTrace;
   readonly inFlight: MutableRef.MutableRef<InFlight | undefined>;
   /** Whether the CLI is in a turn: from a message the service sent, or from the CLI's own output, a wakeup's turn included. */
   readonly turnRunning: Ref.Ref<boolean>;
@@ -316,6 +320,7 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
               "agent-runner: skipped a message for a released launch",
             );
           }
+          yield* launch.trace.taken;
           const running = yield* Ref.getAndSet(launch.turnRunning, true);
           yield* Ref.set(launch.warm, false);
           yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
@@ -610,7 +615,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   context: LaunchContext<ClaudeCodeConfig>,
 ) {
   const claudeCode = yield* ClaudeCode;
-  const { config, lines, sink, bearer } = context;
+  const { config, lines, sink, bearer, trace } = context;
   const inFlight = MutableRef.make<InFlight | undefined>(undefined);
   const onStop: HookCallback = async (hook) => {
     if (hook.hook_event_name === "Stop") {
@@ -621,24 +626,32 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     }
     return { continue: true };
   };
-  const servers: Record<string, McpSdkServerConfigWithInstance> = {
-    [MCP_SERVER]: yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer),
-  };
-  // Each integration the agent is handed is a server of its own, its tools named `mcp__<connection>__<tool>`.
-  for (const integration of config.integrations ?? []) {
-    if (integration.name === MCP_SERVER) continue;
-    servers[integration.name] = yield* openMcpRelay(integration.name, integration.url, bearer);
-  }
+  const servers = yield* trace.step(
+    RUNNER_SPAN.MCP_RELAY,
+    Effect.gen(function* () {
+      const opened: Record<string, McpSdkServerConfigWithInstance> = {
+        [MCP_SERVER]: yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer),
+      };
+      // Each integration the agent is handed is a server of its own, its tools named `mcp__<connection>__<tool>`.
+      for (const integration of config.integrations ?? []) {
+        if (integration.name === MCP_SERVER) continue;
+        opened[integration.name] = yield* openMcpRelay(integration.name, integration.url, bearer);
+      }
+      return opened;
+    }),
+  );
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
   const from = yield* resumePointOf(claudeCode, config);
+  yield* trace.cliStarted;
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, servers, onStop, from, bearer),
+    options: queryOptions(config, context.env, servers, onStop, from, bearer, trace.headers),
   });
   const launch: Launch = {
     session,
     prompts,
     sink,
+    trace,
     inFlight,
     turnRunning: yield* Ref.make(false),
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
@@ -743,20 +756,45 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     Effect.mapError(() => new RunnerFailed({ detail: "the config line is not a runner config" })),
   );
   yield* Deferred.succeed(readsLines, config.linesUrl !== undefined);
+  const trace = yield* launchTrace(config.trace, config.harness ?? RUNNER_HARNESS.CLAUDE_CODE);
+  return yield* runLaunch({ config, lines, bearer, secrets, trace, input }).pipe(trace.traced);
+});
 
-  const sink = yield* makeEventSink({
+/** What a launch runs on once its config is read. */
+interface ReadLaunch {
+  readonly config: RunnerConfig;
+  readonly lines: Queue.Queue<string, Cause.Done>;
+  readonly bearer: Redacted.Redacted;
+  readonly secrets: readonly Redacted.Redacted[];
+  readonly trace: LaunchTrace;
+  readonly input: RunnerInput;
+}
+
+/**
+ * A launch from its config on: its events' sink, the service's lines read
+ * where the config names the read, its harness run, and its last event
+ * posted. Answers why it ended; fails where the service would not take its events.
+ */
+const runLaunch = Effect.fn("agent-runner/runLaunch")(function* (read: ReadLaunch) {
+  const { config, lines, bearer, secrets, trace, input } = read;
+  const posted = yield* makeEventSink({
     url: config.eventsUrl,
     bearer,
     firstSequence: config.firstSequence,
     secrets,
   });
+  // Each message is watched for the startup's milestones as it is posted (`trace.ts`).
+  const sink: EventSink = {
+    ...posted,
+    emit: (message) => Effect.andThen(trace.observe(message), posted.emit(message)),
+  };
   // A config that names the read has the service's later lines read from it, beside any
   // stdin still carries, into the same queue, so neither harness knows where a line came from.
   if (config.linesUrl !== undefined) {
     const read = { url: config.linesUrl, bearer, launch: config.firstSequence };
     yield* Effect.forkScoped(readLines(read, lines));
   }
-  const context = { lines, env: input.env, bearer, sink, self: input.self };
+  const context = { lines, env: input.env, bearer, sink, trace, self: input.self };
   const outcome: LaunchOutcome =
     config.harness === RUNNER_HARNESS.CODEX
       ? yield* runCodex({ ...context, config })

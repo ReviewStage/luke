@@ -11,9 +11,10 @@
  * here too, by the code its link named, as Settings › Hosts asks. Only a
  * panel draws a task's agents, so every ask is the panel's alone, and a
  * refusal or a defect of the host's is drawn as the ask's unanswered
- * failure, as every one was before it was declared. Each hold, its Try
- * again, and the notes of which agent is shown and seen stay procedures of
- * their own.
+ * failure, as every one was before it was declared. The account's hosts and
+ * an agent's origin are live follows, declared once (`live-follow.ts`); every
+ * other hold, its Try again, and the notes of which agent is shown and seen
+ * stay procedures of their own.
  */
 
 import { eventIterator, type } from "@orpc/contract";
@@ -69,12 +70,14 @@ import {
   hostPairingParamsSchema,
   hostPairingViewSchema,
 } from "@repo/features/host-pairing-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { AGENT_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /**
  * An identifier that has to match the one it names elsewhere, a task or a
@@ -350,8 +353,31 @@ export const AGENT_ACTS = declaredActs({
   }),
 });
 
+/** The agents' live reads the host follows for the windows: the account's hosts, and the run that started an agent. */
+export const AGENT_FOLLOWS = liveFollows({
+  HOSTS_FOLLOW: liveFollow({
+    slice: LIVE_READ.HOSTS,
+    hold: HOLD.ACCOUNT,
+    refusal: "Could not follow your hosts on this system.",
+    panelOnly: true,
+    retry: { name: "HOSTS_RETRY", refusal: "Could not read your hosts again on this system." },
+  }),
+  AGENTS_ORIGIN_FOLLOW: liveFollow({
+    slice: LIVE_READ.AGENT_ORIGINS,
+    hold: HOLD.WINDOW,
+    key: agentPageParamsSchema,
+    refusal: "Could not follow the run that started the agent on this system.",
+    panelOnly: true,
+    retry: {
+      name: "AGENTS_ORIGIN_RETRY",
+      refusal: "Could not read the run that started the agent again on this system.",
+    },
+  }),
+});
+
 export const agentActsContract = {
   ...contractOf(AGENT_ACTS),
+  ...followsContractOf(AGENT_FOLLOWS),
   [AGENT_ACT_KIND.AGENTS_MODELS_FOLLOW]: actProcedure("Could not follow the models on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(eventIterator(type<never>())),
@@ -363,13 +389,6 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: actProcedure(
     "Could not read your preferences again on this system.",
   )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held hosts reach the panel on app state, and the stream is the window's hold on them.
-  [AGENT_ACT_KIND.HOSTS_FOLLOW]: actProcedure("Could not follow your hosts on this system.")
-    .input(exactInput(EffectSchema.Undefined))
-    .output(eventIterator(type<never>())),
-  [AGENT_ACT_KIND.HOSTS_RETRY]: actProcedure("Could not read your hosts again on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held beats reach the panel on app state, and the stream is the window's hold on them.
@@ -399,17 +418,6 @@ export const agentActsContract = {
     .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_SEEN]: actProcedure("Could not mark the agent as read on this system.")
     .input(exactInput(EffectSchema.Struct({ agentId: exactId })))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held origin reaches the panel on app state, and the stream is the window's hold on it.
-  [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: actProcedure(
-    "Could not follow the run that started the agent on this system.",
-  )
-    .input(exactInput(agentPageParamsSchema))
-    .output(eventIterator(type<never>())),
-  [AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY]: actProcedure(
-    "Could not read the run that started the agent again on this system.",
-  )
-    .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held part reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actProcedure(

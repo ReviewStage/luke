@@ -135,7 +135,6 @@
   "src/live/live-statements.test.ts": 2330,
   "src/maintenance/maintenance-app.test.ts": 4697,
   "src/maintenance/maintenance-sweep.test.ts": 34,
-  "src/maintenance/native-sandbox-sweep.test.ts": 3423,
   "src/maintenance/native-wakeup-sweep.test.ts": 2186,
   "src/observability/sentry-ai-content.test.ts": 71,
   "src/observability/sentry-tool-errors.test.ts": 208,

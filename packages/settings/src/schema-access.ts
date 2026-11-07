@@ -338,7 +338,7 @@ export function settingIdVisible(id: string, view: SettingsVisibility): boolean 
  * One record, so a result can never lead to a page without its row.
  */
 export interface SettingsRowsInput extends SettingsVisibility {
-  /** The settings as they stand, and the experiments the account has on, which decide whether a gated feature's rows stand. */
+  /** The settings as they stand, and the experiments on where they are drawn, the account's own and the workspace's, which decide whether a gated feature's rows stand. */
   settings: Pick<StoredAppSettings, AppSettingField> & { experiments: ExperimentChoices };
 }
 

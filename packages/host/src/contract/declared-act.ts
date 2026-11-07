@@ -16,14 +16,14 @@ import { type ActUse, PORT_ACT_KIND, PORT_ACT_USE } from "./kinds.js";
  * reads a kind's use from. An act that does work of its own at the window,
  * a follow's hold, a dialog, an address opened, keeps a procedure written
  * by hand, built on its declaration (`byHand`), which calls the composer's
- * handler itself and does its own work around it. A live read is not a plain act: its variant is declared beside
- * this one, never by widening it.
+ * handler itself and does its own work around it. A live read is not a plain act: its variant
+ * (`live-follow.ts`) is declared beside this one, never by widening it.
  */
 
 /** Marks a procedure only a panel may ask, which the act port reads before anything else of the procedure runs. */
 const [panelOnlyMeta, panelOnlyOf] = defineMeta("panelOnly", (incoming: true) => incoming);
 
-export { panelOnlyOf };
+export { panelOnlyMeta, panelOnlyOf };
 
 /** An act's name as a call site spells it, the key of its kind in `PORT_ACT_KIND`. */
 type PortActName = keyof typeof PORT_ACT_KIND;

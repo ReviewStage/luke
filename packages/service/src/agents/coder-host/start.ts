@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@repo/database/core/query";
-import { accountExperimentOn, readAccountPreferences } from "@repo/database/models/account-store";
+import { readAccountPreferences } from "@repo/database/models/account-store";
 import { agentOwnerFactsOf } from "@repo/database/models/agent-owners";
 import {
   type Agent,
@@ -23,6 +23,7 @@ import {
   readTask,
   type StoredTask,
 } from "@repo/database/models/task-store";
+import { workspaceExperimentOn } from "@repo/database/models/workspace-experiment-store";
 import { isWorkspaceMember, readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
@@ -96,7 +97,6 @@ import {
   validateModelChoice,
 } from "../../providers/model-catalog.js";
 import { keptHandedImages, turnContent } from "../attached-files.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -107,6 +107,7 @@ import {
   SESSION_TURN,
   type TypedTurn,
 } from "../sessions/agent-sessions.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -471,15 +472,12 @@ const handedOf = Effect.fnUntraced(function* (
 /**
  * What a fresh Start on the task asks for: its pilot where the task is worked
  * in pilot mode and no pilot of it stands unarchived, whoever started it,
- * else a coder. A pilot is refused as not permitted for an account with the
- * Pilot experiment off: the account the Start is made for, which for a coding
- * agent's `start_agent` is its starter, so a sub-pilot is held to whoever
- * started the pilot above it. Note that the store asks again under the task's
- * lock (`createAgent`), so a Start that raced another to the task's pilot
- * makes a coder.
+ * else a coder. A pilot is refused as not permitted where the task's
+ * workspace has the Pilot experiment off, whoever the Start is made for.
+ * Note that the store asks again under the task's lock (`createAgent`), so a
+ * Start that raced another to the task's pilot makes a coder.
  */
 const freshKindOn = Effect.fnUntraced(function* (
-  userId: string,
   task: Task,
 ): Effect.fn.Return<
   typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT,
@@ -488,13 +486,15 @@ const freshKindOn = Effect.fnUntraced(function* (
 > {
   if (task.mode !== TASK_MODE.PILOT) return AGENT_KIND.CODER;
   if (yield* hostedStoreOrUnavailable(taskPilotStands(task.id))) return AGENT_KIND.CODER;
-  if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)))) {
+  if (
+    !(yield* hostedStoreOrUnavailable(workspaceExperimentOn(task.workspaceId, EXPERIMENT.PILOT)))
+  ) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, its brief or name in place of its document where the account has Descriptions off, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, its brief or name in place of its document where its workspace has Task descriptions off, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -534,7 +534,7 @@ const landingOf = Effect.fnUntraced(function* (
   const { task, ownerId } = read.value;
   const mover = ownerId === userId ? userId : undefined;
   // A Start from another agent goes its source's way; only a fresh one can make the task's pilot.
-  const kind = takeover === TAKEOVER.FRESH ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;
+  const kind = takeover === TAKEOVER.FRESH ? yield* freshKindOn(task) : AGENT_KIND.CODER;
   if (place.blank === true) {
     return {
       startedFrom: undefined,
@@ -545,9 +545,9 @@ const landingOf = Effect.fnUntraced(function* (
       place: { taskId: place.taskId, descriptionSnapshot: null, prompt: null, kind },
     };
   }
-  // A starter with Descriptions off hands no description: the task's brief in its place, or else its name.
+  // A workspace with Task descriptions off hands no description: the task's brief in its place, or else its name.
   const words =
-    brief === undefined && !(yield* descriptionsOnFor(userId, kind))
+    brief === undefined && !(yield* experimentOnIn(task.workspaceId, EXPERIMENT.DESCRIPTIONS))
       ? (read.value.brief ?? task.name)
       : brief;
   const handed = yield* handedOf(words ?? descriptionMarkdown(task), place, fitter, noteFiles);
@@ -1073,7 +1073,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
               landing.task,
               reads,
               undefined,
-              yield* descriptionsOnFor(agent.userId, agent.kind),
+              yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS),
             );
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).

@@ -146,6 +146,14 @@ const OPEN: TasksView = {
   activeTaskId: TASK.id,
 };
 
+/** The open task's view with its own workspace listed, whose choices a task its list holds none of stands by. */
+const LISTING: TasksView = {
+  ...OPEN,
+  workspaces: [
+    { id: TASK.workspaceId, name: "Personal", role: WORKSPACE_ROLE.OWNER, github: null },
+  ],
+};
+
 /** The descriptions the host holds for the window as a test's tab opens on them: the open task's, unless a test names others. */
 const HELD_DESCRIPTIONS: AppDescriptionDocuments = { [TASK.id]: { rows: { task: TASK } } };
 
@@ -1155,7 +1163,7 @@ test("a Vespin link naming a task by its number opens the task the service finds
 
 test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", async () => {
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: LISTING },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const section = { kind: MENTION_KIND.SECTION, taskId: OTHER_TASK_ID, anchor: "rollout" } as const;
@@ -1792,7 +1800,7 @@ test("a version history opened on a held task lists its versions in its first fr
 
 test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: LISTING },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const section = { kind: MENTION_KIND.SECTION, taskId: OTHER_TASK_ID, anchor: "rollout" } as const;

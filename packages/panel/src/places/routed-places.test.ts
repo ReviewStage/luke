@@ -104,7 +104,16 @@ test.each<readonly [string, string, Partial<PlaceThere>]>([
     { historyTask: TASK_ID, taskStands: () => false },
   ],
 ])("Back passes over %s", (_skipped, address, gone) => {
-  const descriptionsOn = { ...ACCESS, experiments: { [EXPERIMENT.DESCRIPTIONS]: true } };
+  // Task descriptions is the workspace's choice, which its version history stands on.
+  const descriptionsOn = {
+    ...ACCESS,
+    workspaces: ACCESS.workspaces.map((workspace) => ({
+      ...workspace,
+      experiments: [
+        { experiment: EXPERIMENT.DESCRIPTIONS, on: true, changedBy: null, changedAt: 1 },
+      ],
+    })),
+  };
   assert.equal(stepStands(address, descriptionsOn, THERE), true, "it stands while there");
   assert.equal(stepStands(address, descriptionsOn, { ...THERE, ...gone }), false);
 });

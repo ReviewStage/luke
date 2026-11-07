@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Database } from "@repo/database/core/query";
-import { sweepAbandonedTurns, TURN_ABANDON } from "@repo/database/models/abandoned-turns";
 import {
   readAccountPreferences,
   writeAccountPreferences,
@@ -43,6 +42,7 @@ import {
   saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -161,12 +161,12 @@ import {
   START_AGENT_REFUSAL,
   START_AGENT_TOOL,
   STOP_AGENT_REFUSAL,
+  startAgentToolOf,
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../agent-tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { AgentBrowser } from "../browser/agent-browser.js";
-import { MEMORY_REFUSAL } from "../memory-tools.js";
 import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   type AgentSessions,
@@ -181,6 +181,7 @@ import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-t
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { callTool, type ServedTool } from "../tool-catalog/catalog.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
+import { EXPERIMENT_OFF_REFUSAL, NO_EXPERIMENT_ON } from "../workspace-experiment-on.js";
 import type { AgentDoorSeams } from "./agent-doors.js";
 import {
   MAX_MESSAGE_WORDS_CHARS,
@@ -227,6 +228,9 @@ const AGENT_CHOICE = {
 /** The name an untitled agent on that model goes by, as its tab names it. */
 const AGENT_CHOICE_NAME = "Opus 5.5";
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
+
+/** The words a start that is not about them hands its agent. */
+const PROMPT = "Send the reminder before the invitation expires.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
 const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
@@ -1210,7 +1214,7 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
 test("start_agent on the description with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
-  await turnDescriptions(caller.userId, true);
+  await turnDescriptions(workspaceId, caller.userId, true);
   const agentSessions = await fakeCoderSessions(workspaceId);
   const call = await peerCaller(hostOf(), caller, agentSessions.services);
   const shown = pngOf(64, 1);
@@ -1257,8 +1261,13 @@ test("start_agent on the description with a note hands the agent the pictures im
 /** The JSON Schema goldens of this package, where a tool's input a model is shown is recorded. */
 const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../../fixtures/json-schema");
 
-test("start_agent shows the model the recorded input, images among it", async () => {
+test("start_agent shows the model the recorded input, images among it, and one that names no description where the workspace has Task descriptions off", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "start-agent-input", START_AGENT_TOOL.inputSchema);
+  await settleJsonSchemaGolden(
+    GOLDEN_ROOT,
+    "start-agent-input-off",
+    startAgentToolOf(NO_EXPERIMENT_ON).inputSchema,
+  );
 });
 
 test("message_agent shows the model the recorded input", async () => {
@@ -1346,7 +1355,11 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
     ],
   ] as const) {
     assert.deepEqual(
-      await call(AGENT_TOOL.START_AGENT, { note: NOTE, images }, `call-${randomUUID()}`),
+      await call(
+        AGENT_TOOL.START_AGENT,
+        { prompt: PROMPT, note: NOTE, images },
+        `call-${randomUUID()}`,
+      ),
       { status: ACTION_RESULT_STATUS.REJECTED, reason },
     );
   }
@@ -1395,7 +1408,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   }
 });
 
-test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the caller's starter has it rather than the task's owner, and refused saying why where it is off", async () => {
+test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the task's workspace has it, and refused saying why where it is off", async () => {
   const { workspaceId, agents, plans } = await openWorkspaces();
   const { caller, teammates } = agents;
   const agentSessions = await fakeCoderSessions(workspaceId);
@@ -1405,16 +1418,21 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
       db.update(task).set({ mode: TASK_MODE.PILOT }).where(eq(task.id, plans.billing)),
     ),
   );
-  const pilotOn = { experiments: { [EXPERIMENT.PILOT]: true } };
-  await database.run(writeAccountPreferences(teammates.userId, pilotOn));
   const start = { taskId: plans.billing, prompt: "Bill by seat." };
 
   assert.deepEqual(await call(AGENT_TOOL.START_AGENT, start, "call-pilot-off"), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: START_AGENT_REFUSAL.PILOT_OFF,
+    reason: EXPERIMENT_OFF_REFUSAL,
   });
   assert.equal(agentSessions.sent.length, 0, "a refused pilot starts nothing");
-  await database.run(writeAccountPreferences(caller.userId, pilotOn));
+  await database.run(
+    setWorkspaceExperiment({
+      organizationId: workspaceId,
+      experiment: EXPERIMENT.PILOT,
+      on: true,
+      by: teammates.userId,
+    }),
+  );
   const started = await call(AGENT_TOOL.START_AGENT, start, "call-pilot-on");
 
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
@@ -1510,7 +1528,11 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
   for (const model of [OPUS, SOL]) {
     for (const effort of model === OPUS ? ["low", "medium", "high", "max"] : ["low", "high"]) {
       calls += 1;
-      const started = await call(AGENT_TOOL.START_AGENT, { model, effort }, `call-${calls}`);
+      const started = await call(
+        AGENT_TOOL.START_AGENT,
+        { prompt: PROMPT, model, effort },
+        `call-${calls}`,
+      );
       assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
       assert.ok(isRecord(started.agent));
       assert.deepEqual([started.agent.model, started.agent.effort], [model, effort]);
@@ -1518,7 +1540,7 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
   }
   const fast = await call(
     AGENT_TOOL.START_AGENT,
-    { model: OPUS_FAST, effort: "high" },
+    { prompt: PROMPT, model: OPUS_FAST, effort: "high" },
     "call-fast",
   );
   assert.equal(fast.status, ACTION_RESULT_STATUS.REJECTED);
@@ -1529,7 +1551,7 @@ test("list_models answers exactly the choices start_agent takes, as the caller's
     ),
     String(fast.reason),
   );
-  const unnamed = await call(AGENT_TOOL.START_AGENT, {}, "call-default");
+  const unnamed = await call(AGENT_TOOL.START_AGENT, { prompt: PROMPT }, "call-default");
   assert.ok(isRecord(unnamed.agent), JSON.stringify(unnamed));
   assert.deepEqual(
     [unnamed.agent.model, unnamed.agent.effort],
@@ -1560,7 +1582,7 @@ test("list_models says the default is no longer offered where the catalog droppe
     effort: "high",
     offered: false,
   });
-  const unnamed = await call(AGENT_TOOL.START_AGENT, {}, "call-default");
+  const unnamed = await call(AGENT_TOOL.START_AGENT, { prompt: PROMPT }, "call-default");
   assert.equal(unnamed.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(agentSessions.sent.length, 0);
 
@@ -1575,7 +1597,11 @@ test("list_models says the default is no longer offered where the catalog droppe
     }),
   });
   const once = await peerCaller(hostOf(), agents.caller, agentSessions.services, flaky);
-  const refused = await once(AGENT_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
+  const refused = await once(
+    AGENT_TOOL.START_AGENT,
+    { prompt: PROMPT, model: SOL, effort: "max" },
+    "call-max",
+  );
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
   assert.ok(String(refused.reason).endsWith("The choices are: openai/gpt-6.1-sol (low, high)."));
 
@@ -2140,7 +2166,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
-  await turnDescriptions(bob, true);
+  await turnDescriptions(workspaceId, bob, true);
   const caller = await agentOn(bob, tasks.invitations);
   const agentSessions = await fakeCoderSessions(workspaceId);
   const call = await peerCaller(hostOf(), caller, agentSessions.services);
@@ -2274,8 +2300,8 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(agentSessions.sent.length, 1, "a refused start starts nothing");
 
-  // With Descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
-  await turnDescriptions(bob, false);
+  // With Task descriptions off a description given is not written, and a start names its prompt, since no description is handed.
+  await turnDescriptions(workspaceId, bob, false);
   const planless = await call(
     AGENT_TOOL.CREATE_TASK,
     { name: "Seat audit", brief: "Audit seat counts.", description: "## Goal\n\nCount seats." },
@@ -2283,9 +2309,11 @@ test("create_task makes a task in the caller's workspace for the member the agen
   );
   assert.ok(isRecord(planless.task) && isWireString(planless.task.id), JSON.stringify(planless));
   assert.equal(Option.getOrThrow(await database.run(readTask(bob, planless.task.id))).text, "");
-  await call(AGENT_TOOL.START_AGENT, { taskId: planless.task.id }, "call-planless-start");
-  const opening = sentWords(agentSessions.sent[1]?.body);
-  assert.ok(opening.startsWith("Audit seat counts."), opening);
+  assert.deepEqual(
+    await call(AGENT_TOOL.START_AGENT, { taskId: planless.task.id }, "call-planless-start"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.PROMPT_NEEDED },
+  );
+  assert.equal(agentSessions.sent.length, 1, "a start with no prompt starts nothing");
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {
@@ -3090,7 +3118,7 @@ async function failedTurnOn(agent: StartedAgent): Promise<void> {
   );
 }
 
-test("list_agents and read_agent say why each failed agent failed: a turn failed midway, a session that never started, a turn the sweep abandoned, and a failure after an earlier turn completed", async () => {
+test("list_agents and read_agent say why each failed agent failed: a turn failed midway, a session that never started, and a failure after an earlier turn completed", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const agentSessions = await fakeCoderSessions(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, agentSessions.services);
@@ -3106,11 +3134,6 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
         .where(eq(agentTable.id, unstarted.id)),
     ),
   );
-  const abandoned = await agentOn(bob, tasks.billing);
-  await turnOn(abandoned, false);
-  await database.run(
-    sweepAbandonedTurns({ writer }, { now: NOW + TURN_ABANDON.AGENT_AFTER_MS + 1 }),
-  );
   const afterCompleted = await agentOn(bob, tasks.billing);
   await turnOn(afterCompleted, true);
   await failedTurnOn(afterCompleted);
@@ -3118,7 +3141,6 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
   const failed = (failure: string) => [AGENT_STATUS.FAILED, failure, AGENT_STATUS.FAILED, failure];
   assert.deepEqual(await standingAsRead(call, midway.id), failed(AGENT_FAILURE.MODEL));
   assert.deepEqual(await standingAsRead(call, unstarted.id), failed(AGENT_FAILURE.NOT_STARTED));
-  assert.deepEqual(await standingAsRead(call, abandoned.id), failed(AGENT_FAILURE.ABANDONED));
   assert.deepEqual(await standingAsRead(call, afterCompleted.id), failed(AGENT_FAILURE.MODEL));
 });
 
@@ -3926,10 +3948,10 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   );
 });
 
-test("read_task reads a teammate's task of the caller's workspace with its description as saved, cuts a long description on a line, reads no description once the caller's starter turned Descriptions off, and reads no task of another workspace", async () => {
+test("read_task reads a teammate's task of the caller's workspace with its description as saved, cuts a long description on a line, reads no description once the caller's workspace turned Task descriptions off, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
-  await turnDescriptions(caller.userId, true);
+  await turnDescriptions(workspaceId, caller.userId, true);
   const agentSessions = await fakeCoderSessions(workspaceId);
   const call = await peerCaller(hostOf(), caller, agentSessions.services);
   const description = "# Billing\n\nCharge by seat.";
@@ -3963,8 +3985,8 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   assert.equal(cut.description.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.description.leftOutChars, long.length - (line.length * 40 - 1));
 
-  // With Descriptions off the task is read all the same, without its description.
-  await turnDescriptions(caller.userId, false);
+  // With Task descriptions off the task is read all the same, without its description.
+  await turnDescriptions(workspaceId, caller.userId, false);
   const planless = await call(AGENT_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
   assert.deepEqual([isRecord(planless.task), "description" in planless], [true, false]);
@@ -4501,20 +4523,24 @@ test("create_automation and update_automation take a Sentry trigger once the wor
   );
 });
 
-/** Turns the Descriptions experiment on or off for a member, whose agents read and write no description while it is off. */
-async function turnDescriptions(userId: string, on: boolean): Promise<void> {
-  await database.run(
-    writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }),
-  );
+/** Turns the experiment on or off for everyone in the workspace, as the admin named would; its agents read and write no description, or keep no memory, while it is off. */
+async function turnExperiment(
+  organizationId: string,
+  by: string,
+  experiment: typeof EXPERIMENT.DESCRIPTIONS | typeof EXPERIMENT.MEMORY,
+  on: boolean,
+): Promise<void> {
+  await database.run(setWorkspaceExperiment({ organizationId, experiment, on, by }));
 }
 
-/** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
-async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
-  for (const userId of userIds) {
-    await database.run(
-      writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } }),
-    );
-  }
+/** Turns Task descriptions on or off for everyone in the workspace. */
+async function turnDescriptions(organizationId: string, by: string, on: boolean): Promise<void> {
+  await turnExperiment(organizationId, by, EXPERIMENT.DESCRIPTIONS, on);
+}
+
+/** Turns Memory on for everyone in the workspace, whose agents are refused memory otherwise. */
+async function turnMemoryOn(organizationId: string, by: string): Promise<void> {
+  await turnExperiment(organizationId, by, EXPERIMENT.MEMORY, true);
 }
 
 /** The words of the memories a recall answered. */
@@ -4529,7 +4555,8 @@ test("a coding agent remembers for its workspace, as its starter's words: a team
   const agentSessions = await fakeCoderSessions(workspaceId);
   const host = hostOf();
   const fact = "Every hosted route is an oRPC procedure declared in the features contract.";
-  await turnMemoryOn(agents.caller.userId, agents.teammates.userId, agents.otherWorkspaces.userId);
+  await turnMemoryOn(workspaceId, agents.caller.userId);
+  await turnMemoryOn(elsewhere, agents.otherWorkspaces.userId);
   const asCaller = await peerCaller(host, agents.caller, agentSessions.services);
 
   const kept = await asCaller(AGENT_TOOL.SAVE_MEMORY, {
@@ -4557,7 +4584,7 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   const { workspaceId, agents } = await openWorkspaces();
   const agentSessions = await fakeCoderSessions(workspaceId);
   const host = hostOf();
-  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  await turnMemoryOn(workspaceId, agents.caller.userId);
   const asCaller = await peerCaller(host, agents.caller, agentSessions.services);
   const asTeammate = await peerCaller(host, agents.teammates, agentSessions.services);
   const kept = await asCaller(AGENT_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
@@ -4579,21 +4606,22 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   );
 });
 
-test("while its starter has Memory off, a coding agent's remember and recall are refused at the catalog's gate and nothing is kept", async () => {
+test("while its workspace has Memory off, a coding agent's remember and recall are refused at the catalog's gate and nothing is kept", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const agentSessions = await fakeCoderSessions(workspaceId);
   const host = hostOf();
-  await turnMemoryOn(agents.teammates.userId);
+  await turnMemoryOn(workspaceId, agents.teammates.userId);
   const asCaller = await peerCaller(host, agents.caller, agentSessions.services);
   const asTeammate = await peerCaller(host, agents.teammates, agentSessions.services);
   await asTeammate(AGENT_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
+  await turnExperiment(workspaceId, agents.teammates.userId, EXPERIMENT.MEMORY, false);
 
   const kept = await asCaller(AGENT_TOOL.SAVE_MEMORY, {
     text: "Every route is an oRPC procedure.",
   });
   const recalled = await asCaller(AGENT_TOOL.SEARCH_MEMORY, {});
 
-  const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: MEMORY_REFUSAL.OFF };
+  const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: EXPERIMENT_OFF_REFUSAL };
   assert.deepEqual(kept, refused);
   assert.deepEqual(recalled, refused);
   assert.deepEqual(

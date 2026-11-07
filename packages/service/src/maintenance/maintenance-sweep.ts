@@ -9,9 +9,7 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
-import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
 
 /**
@@ -25,20 +23,14 @@ type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
-  /** Settles every turn still running past its kind's bound, an hour for a brain turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
-  sweepAbandonedTurns: (now: number) => SweepRead<number>;
-  /** Takes every open launch of the devices that have not beaten within their lease from them, a sweep's worth, its turn ended naming the device. */
-  sweepDeviceLeases: (now: number) => SweepRead<DeviceLeaseSweepOutcome>;
   /** Retires the local agents' runners left warm past their device's window, or past its grace on a host waiting to update, a sweep's worth. */
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
-  /** Settles as failed the turns of the running native agents whose runner died mid-turn, a sweep's worth. */
-  sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
-  sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
+  /** Closes the shared ports' links no one has visited for their idle bound, holding the rest's sandboxes, answering how many closed. */
+  sweepPortShares: (now: number) => SweepRead<number>;
 }
 
 /**
@@ -61,16 +53,12 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: Swept<number>;
-  /** Turns still running past their kind's bound, settled as failed for abandonment. */
-  abandoned: Swept<number>;
-  deviceLeases: Swept<DeviceLeaseSweepOutcome>;
   deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
-  nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
-  agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
+  /** Shared ports' links closed for going unvisited. */
+  portShares: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -106,16 +94,13 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   const now = yield* Clock.currentTimeMillis;
   return {
     purged: yield* isolated("purgeCleared", sweeps.purgeCleared(now)),
-    abandoned: yield* isolated("sweepAbandonedTurns", sweeps.sweepAbandonedTurns(now)),
-    deviceLeases: yield* isolated("sweepDeviceLeases", sweeps.sweepDeviceLeases(now)),
     deviceWarmRunners: yield* isolated(
       "sweepDeviceWarmRunners",
       sweeps.sweepDeviceWarmRunners(now),
     ),
-    nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
+    portShares: yield* isolated("sweepPortShares", sweeps.sweepPortShares(now)),
   };
 });
 

@@ -129,3 +129,19 @@ test("an agent started blank with no turn reads completed however long ago it st
   assert.equal(agentStatusAt(undefined, blank), AGENT_STATUS.COMPLETED);
   assert.equal(statusClockEdge(undefined, { ...standing(0), blank: true }), undefined);
 });
+
+test("a turn still running past its lease reads failed, or canceled where a Stop was asked, from the edge just past it, and a line it held then counts from that end", () => {
+  const leaseUntil = STARTED + 15 * 60 * 1_000;
+  const running = turn(TURN_STATUS.RUNNING, { leaseUntil });
+  const edge = statusClockEdge(running, standing(0));
+  const lapsed = standing(leaseUntil + 1 - STARTED);
+  assert.equal(edge, leaseUntil + 1);
+  assert.equal(agentStatusAt(running, standing(leaseUntil - STARTED)), AGENT_STATUS.RUNNING);
+  assert.equal(agentStatusAt(running, lapsed), AGENT_STATUS.FAILED);
+  assert.equal(agentStatusAt({ ...running, cancelRequested: true }, lapsed), AGENT_STATUS.CANCELED);
+  assert.equal(
+    agentStatusAt(running, standing(leaseUntil + 1 - STARTED, STARTED + 2_000)),
+    AGENT_STATUS.RUNNING,
+    "a steer it never answered awaits a turn of its own for its grace",
+  );
+});

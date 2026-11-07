@@ -44,6 +44,7 @@ import {
 } from "@repo/database/models/provider-key-store";
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -82,7 +83,7 @@ import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { USER_ROLE } from "../../admin/admin-access.js";
-import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
+import { MESSAGE_AUTHOR, TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
@@ -127,6 +128,7 @@ import { RUNNER_ENDED, type RunnerSessionsOptions, runnerEnded } from "./runner-
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
+import { recordNativeTurnHanded } from "./turn-message.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -1451,6 +1453,154 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual((yield* handedLines(userId, api.commands[1])).map(developerContent), [
           [{ type: "text", text: "Now the emails." }],
         ]);
+      }),
+  );
+
+  /**
+   * An agent whose session opened with every experiment of its workspace off
+   * and took one step, its runner since ended, and whose workspace then
+   * turned Task descriptions on: the next message finds the session opened
+   * on experiments no longer standing.
+   */
+  const flippedSession = (api: ReturnType<typeof runnerSandboxApi>) =>
+    Effect.gen(function* () {
+      const { userId, agent } = yield* openAgent;
+      const sequence = { next: 0 };
+      const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+      assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+      sequence.next = 42;
+      yield* runnerTook(agent.id);
+      const target = { userId, conversationId: agent.conversationId };
+      // The session opened with every experiment of its workspace off, and took one step.
+      yield* recordNativeTurnHanded(target, {
+        experiments: { descriptionsOn: false, pilotOn: false, memoryOn: false },
+      });
+      yield* (yield* Database).insert(messages).values({
+        id: randomUUID(),
+        ...target,
+        seq: 1,
+        clientId: "first-step",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "I renamed InviteToken to InvitationToken." }],
+        metadata: { author: MESSAGE_AUTHOR.MODEL },
+        placedAt: new Date(0),
+        finishedAt: new Date(0),
+      });
+      yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
+        Effect.provide(api.layer),
+      );
+      yield* setWorkspaceExperiment({
+        organizationId: agent.organizationId,
+        experiment: EXPERIMENT.DESCRIPTIONS,
+        on: true,
+        by: userId,
+      });
+      return { userId, agent, sessions, opened };
+    });
+
+  it.effect(
+    "a message to an agent whose workspace's experiments changed since its session opened opens a fresh session in the same sandbox, its conversation so far replayed ahead of the turn's words",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions, opened } = yield* flippedSession(api);
+        const kept = keptAfterResponse();
+
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
+
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 2);
+        assert.equal(api.sandboxes.length, 1);
+        const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+        assert.equal(config.resume, undefined);
+        const [line] = yield* handedLines(userId, api.commands[1]);
+        const [ahead] = line?.type === INPUT_LINE.MESSAGE ? line.content : [];
+        assert.ok(
+          ahead?.type === "text" &&
+            ahead.text.includes("I renamed InviteToken to InvitationToken."),
+          JSON.stringify(ahead),
+        );
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
+        assert.equal(routing.nativeSession, null);
+      }),
+  );
+
+  it.effect(
+    "a fresh session's replay is fitted beside the rest of its line, so a long message leaves out the older steps it no longer has room for",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions, opened } = yield* flippedSession(api);
+        const target = { userId, conversationId: agent.conversationId };
+        // Two later steps: a long one, which fits the window alone, then a short one.
+        for (const [seq, text] of [
+          [2, `LONG-STEP ${"x".repeat(250_000)}`],
+          [3, "I ran the invitation tests."],
+        ] as const) {
+          yield* (yield* Database).insert(messages).values({
+            id: randomUUID(),
+            ...target,
+            seq,
+            clientId: `step-${seq}`,
+            role: MESSAGE_ROLE.ASSISTANT,
+            parts: [{ type: "text", text }],
+            metadata: { author: MESSAGE_AUTHOR.MODEL },
+            placedAt: new Date(0),
+            finishedAt: new Date(0),
+          });
+        }
+        const kept = keptAfterResponse();
+
+        yield* sessions
+          .send(opened.sessionId, message(agent, `Now the emails. ${"y".repeat(60_000)}`))
+          .pipe(Effect.provide(kept.layer));
+        yield* across(kept.run, CODER.RESUME_WHILE_ENDING.SPACING, 4);
+
+        const [line] = yield* handedLines(userId, api.commands[1]);
+        const [ahead] = line?.type === INPUT_LINE.MESSAGE ? line.content : [];
+        assert.ok(ahead?.type === "text");
+        assert.ok(ahead.text.includes("I ran the invitation tests."), ahead.text.slice(0, 400));
+        assert.ok(
+          !ahead.text.includes("LONG-STEP"),
+          "the long step no longer fits beside the message",
+        );
+      }),
+  );
+
+  it.effect(
+    "a fresh session a message opened for experiments since changed, whose launch failed, is opened again with its replay by the next message",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions, opened } = yield* flippedSession(api);
+        // The relaunch's policy write is refused, so its runner never takes the line.
+        api.failPolicy.remaining = 10;
+        const failed = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        api.failPolicy.remaining = 0;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.notEqual(failed.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
+        const relaunch = api.commands.at(-1);
+        const [config] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig];
+        assert.equal(config.resume, undefined);
+        const [line] = yield* handedLines(userId, relaunch);
+        const [ahead] = line?.type === INPUT_LINE.MESSAGE ? line.content : [];
+        assert.ok(
+          ahead?.type === "text" &&
+            ahead.text.includes("I renamed InviteToken to InvitationToken."),
+          JSON.stringify(ahead),
+        );
       }),
   );
 

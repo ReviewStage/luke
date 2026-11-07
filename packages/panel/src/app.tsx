@@ -19,7 +19,6 @@ import {
   EXPERIMENT,
   type Experiment,
   type HostCapability,
-  NO_EXPERIMENTS,
 } from "@repo/settings";
 import {
   agentKeyLink,
@@ -110,7 +109,6 @@ import {
   selectAdminAccessPending,
   selectAppSettingsView,
   selectExperiment,
-  selectExperimentChoices,
   selectInbox,
   selectRun,
   selectSessionReplay,
@@ -124,6 +122,7 @@ import { useVersionHistoryRoute } from "./version-history-route.js";
 import { ViewingAs } from "./viewing-as.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
+import { useExperimentsIn } from "./workspace-experiments.js";
 import { useBoardRoute, usePersonRoute, useUnknownWorkspaceRoute } from "./workspace-routes.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -511,8 +510,7 @@ function AppWindow(): React.JSX.Element {
   });
   settingsRoute.current = settingsPlace;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const experiments =
-    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
+  const experiments = useExperimentsIn(settingsPlace.workspaceId);
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,

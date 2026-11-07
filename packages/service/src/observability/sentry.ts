@@ -33,6 +33,7 @@
  * nothing.
  */
 
+import type { RunnerTrace } from "@repo/agent-runner/protocol";
 import {
   scrubbedAttributes,
   scrubbedQueryParams,
@@ -531,6 +532,27 @@ export function sentryQueueSent(): Promise<boolean> {
  */
 export function sentryStep<A>(name: string, step: () => Promise<A>): Promise<A> {
   return Sentry.startSpan({ name }, step);
+}
+
+/**
+ * What a runner in the cloud's sandbox is handed to trace its startup in the
+ * launch's own trace (`@repo/agent-runner`'s `trace.ts`): this deployment's
+ * project, environment and release, and the active span's `sentry-trace`
+ * and `baggage`, so it is read on the fiber of the span the runner is to
+ * continue. None where this process sends Sentry nothing.
+ */
+export function sentryRunnerTrace(): Omit<RunnerTrace, "path"> | undefined {
+  const options = Sentry.getClient()?.getOptions();
+  if (options?.dsn === undefined || options.dsn === "") return undefined;
+  const { "sentry-trace": sentryTrace, baggage } = Sentry.getTraceData();
+  if (sentryTrace === undefined) return undefined;
+  return {
+    dsn: options.dsn,
+    environment: options.environment ?? UNNAMED_DEPLOYMENT,
+    ...(options.release === undefined ? undefined : { release: options.release }),
+    sentryTrace,
+    ...(baggage === undefined ? undefined : { baggage }),
+  };
 }
 
 /** A web function's handler, as the platform calls it. */

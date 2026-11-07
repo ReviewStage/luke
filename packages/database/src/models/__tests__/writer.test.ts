@@ -24,7 +24,7 @@ import { user } from "../../schemas/auth.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { TURN_ABANDON } from "../abandoned-turns.js";
+import { LOST_TURNS } from "../abandoned-turns.js";
 import { lineSendersOf } from "../agent-store.js";
 import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -530,7 +530,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
           );
         const standing = standingIn(target.conversationId);
 
-        yield* TestClock.adjust(TURN_ABANDON.AGENT_AFTER_MS);
+        yield* TestClock.adjust(LOST_TURNS.WITHDRAWN_LINE_KEEP_MS);
         yield* withdrawn("Open the PR.");
         const withinBound = yield* standing;
         yield* TestClock.adjust(1);

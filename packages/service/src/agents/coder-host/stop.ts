@@ -35,6 +35,7 @@ import {
   describeUnreachable,
   SESSION_CANCEL_OUTCOME,
 } from "../sessions/agent-sessions.js";
+import { settleLapsedRunner } from "./lapsed-runner.js";
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
@@ -213,6 +214,8 @@ export const canceledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // turn, so nothing more goes until Resume. Note that it pauses before the cancel goes out, because the turn's
   // end may land before the harness answers it, and would hand on a queue not yet paused.
   yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
+  // A turn whose runner stopped posting has nothing to stop, and is settled lost first (`lapsed-runner.ts`).
+  yield* settleLapsedRunner(agent);
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));

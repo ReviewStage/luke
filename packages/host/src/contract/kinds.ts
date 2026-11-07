@@ -617,7 +617,8 @@ export const UPDATE_ACT_KIND = {
 /**
  * The account's workspaces: one made under a name, answered as made, which
  * the account owns; one renamed by its owners and admins, answered under
- * its new name; one's photo set as a `data:` URL or removed with null by
+ * its new name; one experiment turned on or off for everyone in one by its
+ * owners and admins, drawn at once and answered with the workspace; one's photo set as a `data:` URL or removed with null by
  * its owners and admins, answered with the photo's new version or none;
  * one's pending invitations held, one made, answered
  * with its accept link, and one canceled, for its owners and admins; a GitHub
@@ -635,6 +636,7 @@ export const UPDATE_ACT_KIND = {
 export const WORKSPACE_ACT_KIND = {
   WORKSPACE_CREATE: "workspace.create",
   WORKSPACE_RENAME: "workspace.rename",
+  WORKSPACE_EXPERIMENT_SET: "workspace.experimentSet",
   WORKSPACE_INVITE: "workspace.invite",
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
@@ -1026,6 +1028,7 @@ export const PORT_ACT_USE = {
 
   WORKSPACE_CREATE: ACT_USE.WRITE,
   WORKSPACE_RENAME: ACT_USE.WRITE,
+  WORKSPACE_EXPERIMENT_SET: ACT_USE.WRITE,
   WORKSPACE_INVITE: ACT_USE.WRITE,
   WORKSPACE_INVITATION_CANCEL: ACT_USE.WRITE,
   WORKSPACE_GITHUB_CONNECT: ACT_USE.WRITE,

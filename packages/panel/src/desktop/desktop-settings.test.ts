@@ -76,10 +76,10 @@ const PERSONAL: Workspace = {
   github: null,
 };
 
-/** The Workspace page's control with `listed` the workspace the tasks' sidebar lists. */
+/** The Workspace page's control with `listed` the workspace the tasks' sidebar lists, as given. */
 function listing(listed: Workspace): WorkspaceSettingsControl {
   return {
-    workspaces: [PERSONAL, ACME],
+    workspaces: [PERSONAL, ACME].map((each) => (each.id === listed.id ? listed : each)),
     workspaceId: listed.id,
     onLeft: ignore,
     listFailed: false,
@@ -328,14 +328,17 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
   assert.deepEqual(pageGroups(page)[0]?.rows, ["Workspace", "Environment"]);
 });
 
-test("the sidebar lists Memory under Workspace and its search finds it only while the account has the Memory experiment on", async () => {
-  const off = mount(createElement(SettingsHarness));
+test("the sidebar lists Memory under Workspace and its search finds it only while the workspace Settings shows has the Memory experiment on", async () => {
+  const off = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
   assert.deepEqual(pageGroups(off)[0]?.rows, ["Workspace", "Environment"]);
   // While off, the search finds only the experiment's own switch, where Memory is turned on.
   assert.deepEqual(foundUnder(off, "Memory"), ["Experimental"]);
 
-  handState(experimentsOn(EXPERIMENT.MEMORY));
-  const on = mount(createElement(SettingsHarness));
+  const remembering: Workspace = {
+    ...PERSONAL,
+    experiments: [{ experiment: EXPERIMENT.MEMORY, on: true, changedBy: null, changedAt: 1 }],
+  };
+  const on = mount(createElement(SettingsHarness, { workspace: listing(remembering) }));
   await vi.waitFor(() =>
     expect(pageGroups(on)[0]?.rows).toEqual(["Workspace", "Environment", "Memory"]),
   );

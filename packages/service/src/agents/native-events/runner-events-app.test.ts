@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
+import { lapsedTurnIds } from "@repo/database/models/abandoned-turns";
 import {
   createAgent,
   readAgent,
@@ -427,7 +428,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a heartbeat with no events keeps a run's sandbox alive through its harness's silence, applying nothing, and none before the launch applied an event",
+    "a heartbeat with no events keeps a run's sandbox alive and its turn's lease running through its harness's silence, applying nothing, and none before the launch applied an event",
     () =>
       Effect.gen(function* () {
         const told: RunnerAlive[] = [];
@@ -446,6 +447,10 @@ it.layer(getTestDB())("the runner events route", (it) => {
           silence.push(yield* post(agent.bearer, []));
         }
         const midway = yield* transcriptOf(agent.target.conversationId);
+        const lapsed = yield* lapsedTurnIds(
+          agent.target.conversationId,
+          yield* Clock.currentTimeMillis,
+        );
         // The END, a moment after the last heartbeat, is the stop's to settle.
         yield* post(agent.bearer, events.slice(9));
 
@@ -456,6 +461,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           midway.turns.map((turn) => turn.status),
           [TURN_STATUS.RUNNING],
         );
+        assert.deepEqual(lapsed, [], "a runner still beating holds its turn");
       }),
   );
 

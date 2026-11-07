@@ -15,7 +15,6 @@
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
-  type AgentPageParams,
   type AgentPullRequestParams,
   type AgentTranscriptKey,
   type PullRequestPart,
@@ -37,11 +36,6 @@ export interface AgentProceduresDependencies {
     agentModelsUnfollow(): Effect.Effect<void>;
     agentModelsRetry(): Effect.Effect<void>;
     agentPreferencesRetry(): Effect.Effect<void>;
-    /** The account's hosts held at the host while any stream of them stands; what it holds reaches the panel on app state. */
-    hostsFollow(): Effect.Effect<void>;
-    hostsUnfollow(): Effect.Effect<void>;
-    /** The account's held hosts read again at once, as Try again asks. */
-    hostsRetry(): Effect.Effect<void>;
     /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     hostsPresenceFollow(): Effect.Effect<void>;
     hostsPresenceUnfollow(): Effect.Effect<void>;
@@ -51,11 +45,6 @@ export interface AgentProceduresDependencies {
     transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
     /** A held transcript read again at once, as Try again asks. */
     transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
-    /** One agent's origin held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
-    agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
-    agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
-    /** One agent's held origin read again at once, as Try again asks. */
-    agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
     /** One part of one agent's pull request held at the host while any stream of it stands; what it holds reaches the panel on app state. */
     pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
     pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
@@ -135,14 +124,10 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, acts, notices } = dependencies;
   /** Every transcript a window holds a stream open of, so the host lets one go only with the last. */
   const openTranscripts: OpenFollows<TranscriptStreamKey> = MutableHashMap.empty();
-  /** Every agent's origin a window holds a stream open of, so the host lets one go only with the last. */
-  const openOrigins: OpenFollows = MutableHashMap.empty();
   /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
   const openPresence: OpenFollows = MutableHashMap.empty();
   /** Whether a window holds a stream of the models open, so the host lets them go only with the last. */
   const openModels: OpenFollows = MutableHashMap.empty();
-  /** The account's hosts while a window holds a stream open of them, so the host lets them go only with the last. */
-  const openHosts: OpenFollows = MutableHashMap.empty();
   /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
   const openTools: OpenFollows = MutableHashMap.empty();
   /** Every pull request's part a window holds a stream open of, so the host lets it go only with the last. */
@@ -178,30 +163,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     ].effect(function* ({ context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.agentPreferencesRetry();
-    }),
-    [AGENT_ACT_KIND.HOSTS_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_FOLLOW].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const hold = followedStream(
-        {
-          keyOf: () => "hosts",
-          follow: () => host.hostsFollow(),
-          unfollow: () => host.hostsUnfollow(),
-        },
-        openHosts,
-        input,
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(hold));
-    }),
-    [AGENT_ACT_KIND.HOSTS_RETRY]: actPort[AGENT_ACT_KIND.HOSTS_RETRY].effect(function* ({
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.hostsRetry();
     }),
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW].effect(
       function* ({ input, context, errors }) {
@@ -349,27 +310,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       notices.seen(input.agentId);
     }),
-    [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: actPort[AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const hold = followedStream(
-          {
-            keyOf: (params: AgentPageParams) => params.agentId,
-            follow: host.agentOriginFollow,
-            unfollow: host.agentOriginUnfollow,
-          },
-          openOrigins,
-          input,
-        );
-        return streamed(yield* Stream.toAsyncIterableEffect(hold));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY]: actPort[AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.agentOriginRetry(input);
-      },
-    ),
     [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actPort[
       AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW
     ].effect(function* ({ input, context, errors }) {

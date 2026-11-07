@@ -16,9 +16,7 @@
  * a fresh agent on no task. Outputs are the
  * wire schemas flipped (`packages/service/src/orpc/base.ts`).
  *
- * The lists, the Starts, a change, a delete, and the sandbox's routes each
- * declare their own refusals (`declaredProcedure`); the rest still declare
- * every refusal (`hostedProcedure`).
+ * Every procedure declares its own refusals (`declaredProcedure`).
  */
 
 import { openapi } from "@orpc/openapi";
@@ -55,7 +53,7 @@ import {
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
 import { workspaceToolsAnswerSchema } from "../workspace-tools-wire.js";
-import { bodyCap, declaredProcedure, exactBodyInput, hostedProcedure, refuses } from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, refuses } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const CHOICE_BODY_BYTES = 4_096;
@@ -96,6 +94,20 @@ export const STOP_REFUSALS = [
   HOSTED_API_ERROR.NOT_FOUND,
   HOSTED_API_ERROR.NOT_PERMITTED,
   HOSTED_API_ERROR.AGENT_NOT_READY,
+  HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.DEVICE_REMOVED,
+  HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+] as const;
+
+/**
+ * What one agent stopped refuses (`coder-host/stop.ts`'s `stoppedAgent`): as
+ * an agent stopped for good does, but that a Stop never waits on a turn
+ * still starting, so never answers that the agent is not ready.
+ */
+const AGENT_STOP_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
   HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
   HOSTED_API_ERROR.AGENT_RETIRED,
   HOSTED_API_ERROR.DEVICE_REMOVED,
@@ -252,7 +264,8 @@ export const agentsContract = {
     .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
   /** One agent as its own page. */
-  read: hostedProcedure
+  read: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: AGENT_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(agentPageAnswerSchema)),
@@ -270,12 +283,14 @@ export const agentsContract = {
     .input(idParams)
     .output(EffectSchema.flip(agentDeleteAnswerSchema)),
   /** One agent stopped. */
-  stop: hostedProcedure
+  stop: declaredProcedure
+    .errors(refuses(...AGENT_STOP_REFUSALS))
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))
     .input(idParams)
     .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works. */
-  rewind: hostedProcedure
+  rewind: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(
       openapi({
@@ -287,7 +302,8 @@ export const agentsContract = {
     .input(exactBodyInput(idParams, agentRewindRequestSchema))
     .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent's changes, or those of the pull request of its repository the query numbers. */
-  changes: hostedProcedure
+  changes: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/changes` }))
     .input(
       EffectSchema.Struct({
@@ -297,12 +313,14 @@ export const agentsContract = {
     )
     .output(EffectSchema.flip(agentChangesAnswerSchema)),
   /** What the reviewer and label pickers of one agent's Pull request tab offer. */
-  reviewOptions: hostedProcedure
+  reviewOptions: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
   /** Whose Mac one agent's `run_on_mac` runs on, and whether it would run there now, as its composer reads it. */
-  workspaceTools: hostedProcedure
+  workspaceTools: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)
     .output(EffectSchema.flip(workspaceToolsAnswerSchema)),

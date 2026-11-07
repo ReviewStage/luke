@@ -157,6 +157,9 @@ const INTEGRATION_WORDS = "connect disconnect integration";
 /** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
 const EXPERIMENT_WORDS = "experiment preview beta labs early try";
 
+/** The words Experimental's group for everyone in a workspace is named by, before the workspace's own name. */
+const EXPERIMENTS_WORKSPACE_LABEL = "For everyone in ";
+
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
@@ -216,6 +219,27 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "GitHub personal access token",
           page: SETTINGS_VIEW.ACCOUNT,
           haystack: ["GitHub personal access token", "classic token PAT add manage"],
+        }
+      : undefined,
+    // Experimental's two groups, the workspace's for everyone in the one Settings shows and the account's own, each found by whom it reaches.
+    input.accountDrawn && input.workspace
+      ? {
+          id: SETTINGS_SEARCH_ROW.EXPERIMENTS_WORKSPACE,
+          label: `${EXPERIMENTS_WORKSPACE_LABEL}${input.workspace.name}`,
+          replayMaskedFrom: EXPERIMENTS_WORKSPACE_LABEL.length,
+          page: SETTINGS_VIEW.EXPERIMENTAL,
+          haystack: [
+            `${EXPERIMENTS_WORKSPACE_LABEL}${input.workspace.name}`,
+            "workspace team everyone members admins experiments",
+          ],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.EXPERIMENTS_ACCOUNT,
+          label: "Just for you",
+          page: SETTINGS_VIEW.EXPERIMENTAL,
+          haystack: ["Just for you", "personal only me mine account experiments"],
         }
       : undefined,
     // Each experiment's row on Experimental, drawn once an account is signed in: found by its name, what it brings, and the pages it holds.
