@@ -14,7 +14,9 @@
  * admits only for the session's own and binds from it, a text the query
  * names (`LIVE_PARAM.TEXT`), read as text so one of no shape is answered as
  * not found rather than refused, or may leave out (`LIVE_PARAM.OPTIONAL_TEXT`),
- * bound as empty then, or a value the service binds itself and no query
+ * bound as empty then, the id of a row it names (`LIVE_PARAM.ID`) or may
+ * leave out (`LIVE_PARAM.OPTIONAL_ID`), read as text and bound as the id it
+ * spells, or not found where it spells none, or a value the service binds itself and no query
  * names (`LIVE_PARAM.SERVED`), such as an instant read from its clock. The mode adds the fields a reader polls
  * with (`LIVE_POLL`): every read takes `poll` and `after`, and a cursor read
  * `cursor` too.
@@ -50,6 +52,8 @@ export const LIVE_PARAM = {
   TEXT: "text",
   OPTIONAL_TEXT: "optionalText",
   SERVED: "served",
+  ID: "id",
+  OPTIONAL_ID: "optionalId",
 } as const;
 
 type LiveParam = (typeof LIVE_PARAM)[keyof typeof LIVE_PARAM];
@@ -59,6 +63,8 @@ const PARAM_FIELD = {
   [LIVE_PARAM.USER]: Schema.optionalKey(Schema.String),
   [LIVE_PARAM.TEXT]: Schema.String,
   [LIVE_PARAM.OPTIONAL_TEXT]: Schema.optionalKey(Schema.String),
+  [LIVE_PARAM.ID]: Schema.String,
+  [LIVE_PARAM.OPTIONAL_ID]: Schema.optionalKey(Schema.String),
 } as const;
 
 /** A param the read's query names. */
@@ -190,7 +196,7 @@ export type LiveReadParams<Read extends AnyLiveRead> = Readonly<
 >;
 
 /** The params a read's query may leave out. */
-type OptionalParam = typeof LIVE_PARAM.OPTIONAL_TEXT;
+type OptionalParam = typeof LIVE_PARAM.OPTIONAL_TEXT | typeof LIVE_PARAM.OPTIONAL_ID;
 
 /** The params a reader asks a read with, each as text: every one but those the service binds itself, and those its query may leave out left out where it does. */
 export type LiveReadAsked<Read extends AnyLiveRead> = Readonly<

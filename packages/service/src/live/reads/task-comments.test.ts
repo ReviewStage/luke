@@ -18,24 +18,24 @@ import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import {
-  taskCommentsLiveRowsSchema,
-  threadsOfLiveRows,
-} from "@repo/features/description-comment-live";
+import { TASK_COMMENTS_READ, threadsOfLiveRows } from "@repo/features/description-comment-live";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_SCOPE,
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import {
-  type TaskCommentsSubject,
-  taskCommentsLiveStatements,
-} from "./description-comments-live.js";
+import { taskCommentsRead } from "./task-comments.js";
+
+/** Which of the task's threads a read follows: the description's own where it names no page, or the page's it names. */
+interface TaskCommentsSubject {
+  readonly taskId: string;
+  readonly pageId?: string;
+}
 
 /**
  * One subject of a task's comments as Realtime would deliver it, over the
@@ -83,8 +83,14 @@ const runLive = (statement: LiveStatement) =>
 /** One subject's threads as Realtime would deliver them to `reader`, as the desktop reads them. */
 const liveThreadsOf = (reader: string, subject: TaskCommentsSubject) =>
   Effect.gen(function* () {
-    const statements = Option.getOrThrow(taskCommentsLiveStatements(reader, subject));
-    const rows = yield* Schema.decodeUnknownEffect(taskCommentsLiveRowsSchema)({
+    const statements = Option.getOrThrow(
+      taskCommentsRead.statements({
+        userId: reader,
+        id: subject.taskId,
+        page: subject.pageId ?? "",
+      }),
+    );
+    const rows = yield* Schema.decodeUnknownEffect(TASK_COMMENTS_READ.rows)({
       threads: yield* runLive(statements.threads),
       entries: yield* runLive(statements.entries),
       files: yield* runLive(statements.files),

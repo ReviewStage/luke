@@ -623,7 +623,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
   const working: TaskSummary = {
     ...STRANDED,
-    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+    agents: { total: 1, working: 1, pullRequestTotal: 0 },
   };
   const container = mount(withQueryClient(sidebarTask(tasks, working, asked)));
   const card = mount(withQueryClient(taskCardOf(tasks, working, working.updatedAt)));
@@ -850,7 +850,7 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
     ...OTHER,
     ...STANDING,
     status: TASK_STATUS.IN_PROGRESS,
-    agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+    agents: { total: 2, working: 1, pullRequestTotal: 0 },
   };
   const done: TaskSummary = { ...working, status: TASK_STATUS.DONE };
   const settled: [string[], TaskStatus][] = [];

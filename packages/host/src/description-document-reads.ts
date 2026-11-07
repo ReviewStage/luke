@@ -1,9 +1,6 @@
 import type { TaskCallResult } from "@repo/features";
-import {
-  type LIVE_READ,
-  LIVE_SIGNED_OUT,
-  type TaskRecordLiveAnswer,
-} from "@repo/features/live-wire";
+import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import type { TaskRecordLiveAnswer } from "@repo/features/task-record-live";
 import type { Task } from "@repo/features/task-wire";
 import {
   type HeldDescriptionDocument,
@@ -69,15 +66,13 @@ export interface DescriptionDocumentReadsDependencies {
   readonly accountId: () => string | undefined;
   /** The task whole, its description among it, as the service holds it now. */
   readonly open: (taskId: string) => Effect.Effect<TaskCallResult<Task, TaskCallFailure>>;
-  /** The task's record with its rows inline, held past `after`. */
+  /** The task's record sealed, or with its rows inline where `poll` asks, held past `after`; why not where the service answered none (`TASK_RECORD_READ`). */
   readonly recordLive: (
     taskId: string,
     userId: string,
     poll: boolean,
     after: string | undefined,
-  ) => Effect.Effect<
-    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>
-  >;
+  ) => Effect.Effect<TaskRecordLiveAnswer | { readonly failure: string }>;
   /** `task` with what its row of the list reads laid over it, its name, status, and pin among it; the very task where the list holds no row of it. */
   readonly listed: (task: Task) => Task;
   readonly tell: (held: AppDescriptionDocuments) => void;
@@ -193,8 +188,8 @@ export const descriptionDocumentReads = /* @__PURE__ */ Effect.fn("host/descript
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
           : Effect.map(dependencies.recordLive(taskId, userId, poll, after), (sealed) =>
-              sealed.ok
-                ? sealed.answer
+              !("failure" in sealed)
+                ? sealed
                 : {
                     failure: sealed.failure,
                     gone:

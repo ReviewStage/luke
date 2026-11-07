@@ -53,12 +53,9 @@ import { stripTabKept, stripTabStays } from "./strip-tab-kinds.js";
  * agent a notification, a pin, or a Start names is shown by viewing it on
  * its task. An agent's tab stands only once the task's agents are read and
  * hold it, so the column never shows an agent its strip draws no tab for: a
- * task opened on an agent waits on the list in the agent's shape. Before the list answers, the task's row
- * in the sidebar may already settle which tab it will be (`NamedAgents`):
- * the agent last viewed, where the row names it, or the task's one agent,
- * where none viewed stands. The column then shows it
- * at once, its transcript read beside the list, and only where the row
- * cannot settle it does the column wait.
+ * task opened on an agent waits on the list in the agent's shape. Before the
+ * list answers, the column shows at once only a tab that needs no agent:
+ * Overview, or the task's draft, where it was the last viewed.
  *
  * The agents' tabs are dragged or moved from the keyboard among themselves,
  * always after Overview, and the task keeps the order from then on: an
@@ -303,23 +300,10 @@ export interface MainTabsControl {
   onWake: (agents: readonly string[]) => void;
 }
 
-/**
- * The agents the open task's row in the sidebar names before its list is
- * read: at most a few (`TASK_AGENTS_BOUNDS`), those at work first and then
- * the rest, newest started first within each, and none archived.
- */
-export interface NamedAgents {
-  /** The agents named, by id, in the row's order. */
-  ids: readonly string[];
-  /** How many agents the task has in all. */
-  total: number;
-}
-
 /** What the open task holds for the tabs: its id, its agents, or nothing while unread, what its row names of them meanwhile, and its draft's key. */
 interface DrawnTabs {
   taskId: string | undefined;
   agents: readonly string[] | undefined;
-  named: NamedAgents | undefined;
   draft: string | undefined;
   /** Whether a task none of whose tabs viewed stands opens on its details rather than its agents: a phone's, whose details list its agents as its first screen. */
   detailsFirst: boolean;
@@ -408,24 +392,13 @@ function returnedTo(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
 }
 
 /**
- * Whether the row names every one of the task's agents, so an agent it does
- * not name is none of the task's.
- */
-function namesAll(named: NamedAgents): boolean {
-  return named.ids.length === named.total;
-}
-
-/**
- * The tab the task will show once its agents are read, where its row
- * already settles it, else none, which waits on the read. The latest tab
- * viewed that the row shows standing is it, Overview among them, which
- * always stands; one the row cannot place, an agent it does not name among
- * more than it names, leaves the choice to the read, as a task none of
- * whose tabs viewed stands does.
+ * The tab the task will show once its agents are read, where it needs none
+ * of them, else none, which waits on the read: the latest tab viewed, where
+ * it is Overview, which always stands, or the task's draft; an agent's tab
+ * leaves the choice to the read, as a task none of whose tabs viewed stands
+ * does.
  */
 function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
-  const { named } = drawn;
-  const all = named !== undefined && namesAll(named);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
   for (const tab of [...recent].reverse()) {
     if (isOverviewTab(tab)) return tab;
@@ -435,10 +408,7 @@ function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined
         continue;
       case STRIP_TAB_KIND.AGENT:
         if (held.closedAgents.includes(tab.agent)) continue;
-        if (named?.ids.includes(tab.agent) === true) return tab;
-        // An agent the row does not name may stand where the row names only some of the agents.
-        if (!all) return undefined;
-        continue;
+        return undefined;
       default:
         return absurd(tab);
     }
@@ -716,7 +686,7 @@ function stagedOn(
 /**
  * The column's tabs over the open task: `taskId`, none while no task is
  * open, `agents` its agents by id in the order started, or nothing while
- * unread, `named` what its row names of them meanwhile, and `draft` its
+ * unread, and `draft` its
  * draft agent's key, if it holds one; `detailsFirst` where a task none of
  * whose tabs viewed stands opens on its details, as a phone's does. A fixture run's column keeps nothing,
  * and starts from the tab the run names (`fixture`), its Overview where it
@@ -726,7 +696,6 @@ export function useMainTabs(
   fixture: { readonly tab: MainTab | undefined } | undefined,
   taskId: string | undefined,
   agents: readonly string[] | undefined,
-  named: NamedAgents | undefined,
   draft: string | undefined,
   detailsFirst = false,
 ): MainTabsControl {
@@ -749,8 +718,8 @@ export function useMainTabs(
     [staging, taskId, fixtureTab],
   );
   const drawn = useMemo(
-    () => ({ taskId, agents, named, draft, detailsFirst }),
-    [taskId, agents, named, draft, detailsFirst],
+    () => ({ taskId, agents, draft, detailsFirst }),
+    [taskId, agents, draft, detailsFirst],
   );
   // A task left on its details lets them go, so it opens on its agents again wherever it is opened
   // from; a phone's, whose details are where a task opens, keeps them.

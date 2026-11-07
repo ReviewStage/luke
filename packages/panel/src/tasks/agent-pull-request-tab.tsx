@@ -111,6 +111,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { actorName } from "@repo/ui/actor-model";
+import { renderingText } from "@repo/ui/github-html";
 import {
   CheckIcon,
   CircleSlashIcon,
@@ -1596,7 +1597,7 @@ const entryWordsFound = new WeakMap<ConversationEntry, string>();
 /** The text of words GitHub rendered, or the words as written where it rendered none. */
 function plainWords(words: Pick<ConversationEntry, "html" | "body">): string {
   if (words.html === null) return words.body;
-  return new DOMParser().parseFromString(words.html, "text/html").body.textContent ?? "";
+  return renderingText(words.html);
 }
 
 /** The words an entry's card draws that a find counts before it is drawn: who wrote it, its words, and each thread's file and comments with who wrote them. */

@@ -29,6 +29,7 @@ import {
   descriptionRevisionAnswerSchema,
   descriptionRevisionSeqSchema,
   descriptionRevisionsAnswerSchema,
+  heldTaskListAnswerSchema,
   TASK_BOUNDS,
   TASK_LIST_QUERY,
   taskAnswerSchema,
@@ -36,7 +37,6 @@ import {
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
   taskFoundAnswerSchema,
-  taskListAnswerSchema,
   taskNumberSchema,
   taskParentRequestSchema,
   taskRelationChangeRequestSchema,
@@ -119,7 +119,7 @@ export const tasksContract = {
         [TASK_LIST_QUERY.ARCHIVED]: EffectSchema.optionalKey(EffectSchema.String),
       }),
     )
-    .output(EffectSchema.flip(taskListAnswerSchema)),
+    .output(EffectSchema.flip(heldTaskListAnswerSchema)),
   /** A plan started, and the agent it names started on it where it names one. */
   create: declaredProcedure
     .errors(

@@ -1,5 +1,6 @@
+import type { ListedAgent } from "@repo/features/agent-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
-import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
+import type { TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
 import {
   AttentionMark,
@@ -16,7 +17,9 @@ import {
   linesCount,
   ProgressCount,
   RepositoryPicture,
+  TASK_AGENTS_MARK_SIZE,
   TaskAgentsMark,
+  type TaskAgentsMarkSize,
   TaskPriorityMark,
   TaskStatusMark,
   TIME_LOOK,
@@ -42,7 +45,7 @@ import {
 } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
-import { useTaskWork } from "../tasks/use-task-work.js";
+import { useTaskPullRequests, useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { priorityOf, statusOf } from "./task-row-parts.js";
@@ -118,8 +121,15 @@ export const TASK_MARK_GLYPH =
  * wears no mark of its own here, because its card and its banner name that
  * workspace, and the row's one icon stays how its agents stand.
  */
-export function TaskRowStatus({ task }: { task: TaskSummary }): React.JSX.Element | null {
-  return <TaskAgentsMark agents={task.agents} />;
+export function TaskRowStatus({
+  task,
+  size = TASK_AGENTS_MARK_SIZE.SMALL,
+}: {
+  task: TaskSummary;
+  size?: TaskAgentsMarkSize;
+}): React.JSX.Element | null {
+  const pullRequests = useTaskPullRequests(task.id);
+  return <TaskAgentsMark agents={task.agents} pullRequests={pullRequests} size={size} />;
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
@@ -198,7 +208,7 @@ function AgentLine({
   models,
   onShow,
 }: {
-  agent: TaskAgentLine;
+  agent: ListedAgent;
   models: readonly CatalogModel[];
   onShow: () => void;
 }): React.JSX.Element {
@@ -406,7 +416,7 @@ export function TaskCard({
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task);
+  const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task.id);
   const parent =
     task.parentTaskId === undefined || task.parentTaskId === task.id
       ? undefined

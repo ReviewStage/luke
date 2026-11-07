@@ -18,24 +18,23 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import {
+  AGENT_BROWSER_TABS_READ,
+  browserTabsOfLiveRows,
+  nextBrowserTabLapse,
+  TASK_BROWSER_TABS_READ,
+} from "@repo/features/browser-tabs-live";
+import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
-import {
-  browserTabsOfLiveRows,
-  type LIVE_READ,
-  LIVE_SIGNED_OUT,
-  nextBrowserTabLapse,
-  pagesOfLiveRows,
-  revisionsOfLiveRows,
-  taskBrowserTabsLiveRowsSchema,
-  taskHistoryLiveRowsSchema,
-  taskPagesLiveRowsSchema,
-} from "@repo/features/live-wire";
+import type { AnyLiveRead, LiveReadAnswer, LiveReadAsked } from "@repo/features/live-read";
+import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   PAGE_OWNER,
   type PageLine,
   type PageOwner,
   type PagePlace,
+  pagePlaceId,
 } from "@repo/features/page-wire";
 import { markedAs, readMarkOf } from "@repo/features/read-mark";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
@@ -44,7 +43,10 @@ import type {
   SlackListedChannel,
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
+import { revisionsOfLiveRows, TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { AGENT_PAGES_READ, pagesOfLiveRows, TASK_PAGES_READ } from "@repo/features/task-pages-live";
+import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
   type DescriptionRevisionsAnswer,
   startRelationsOf,
@@ -478,6 +480,17 @@ const startKeptSchema = Schema.Struct({
 /** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its description laid as held. */
 const OPENED_EARLIER: StartOpened = { asked: -1, drawn: true, before: undefined };
 
+/** A live read the service did not seal, `gone` where what it names is no longer the account's or the session another's. */
+interface LiveUnsealed {
+  readonly failure: string;
+  readonly gone: boolean;
+}
+
+/** Whether a live read's seal is why it failed rather than its answer, which names no failure. */
+function unsealed(sealed: unknown): sealed is { readonly failure: string } {
+  return typeof sealed === "object" && sealed !== null && "failure" in sealed;
+}
+
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
@@ -493,10 +506,7 @@ export type TasksClient = Pick<
   | "pinRepository"
   | "liveRead"
   | "writeTaskSection"
-  | "recordLive"
-  | "pagesLive"
-  | "historyLive"
-  | "browserTabsLive"
+  | "liveRead"
   | "readFile"
   | "readTree"
   | "readSkills"
@@ -512,7 +522,6 @@ export type TasksClient = Pick<
   | "readPageVersion"
   | "readPicture"
   | "keepPicture"
-  | "commentsLive"
   | "startComment"
   | "actOnComment"
   | "restore"
@@ -747,6 +756,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** One ask of the service, over the host's own HTTP client. */
   const served = <Answer, Failure>(call: Effect.Effect<Answer, Failure, HttpClient.HttpClient>) =>
     Effect.provideService(call, HttpClient.HttpClient, http);
+  /** A declared live read sealed, or polled where `poll` asks past `after`, as a follow reads it: its answer, or why not and whether the read is gone for good, a task or an agent the account no longer reaches or a session another's. */
+  const sealedLive = <Read extends AnyLiveRead>(
+    read: Read,
+    params: LiveReadAsked<Read>,
+    poll: boolean,
+    after: string | undefined,
+  ): Effect.Effect<LiveReadAnswer<Read> | LiveUnsealed> =>
+    Effect.map(
+      served(client.liveRead(read, params, poll ? { after } : undefined)),
+      (sealed): LiveReadAnswer<Read> | LiveUnsealed =>
+        unsealed(sealed)
+          ? {
+              failure: sealed.failure,
+              gone:
+                sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
+                sealed.failure === LIVE_SIGNED_OUT.failure,
+            }
+          : sealed,
+    );
   const idleView = (): TasksView => IDLE_TASKS_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -932,7 +960,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
+  const decodeHistory = Schema.decodeUnknownOption(TASK_HISTORY_READ.rows);
   /** How to wait for a write's transaction on each task's held history, while its follow stands. */
   const historyTxWaits = new Map<string, TxWait>();
 
@@ -949,16 +977,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
-          ? Effect.map(served(client.historyLive(taskId, userId, poll, after)), (sealed) =>
-              sealed.ok
-                ? sealed.answer
-                : {
-                    failure: sealed.failure,
-                    gone:
-                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                      sealed.failure === LIVE_SIGNED_OUT.failure,
-                  },
-            )
+          ? sealedLive(TASK_HISTORY_READ, { id: taskId, userId }, poll, after)
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
@@ -994,7 +1013,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The windows' hold on each task's history, one fiber standing until let go. */
   const historyHolds = yield* FiberMap.make<string>();
 
-  const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
+  const decodeBrowserTabs = Schema.decodeUnknownOption(TASK_BROWSER_TABS_READ.rows);
 
   /**
    * Follows the Browser tabs of `owner`, one agent's or a task's agents',
@@ -1007,7 +1026,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     owner: BrowserTabsOwnerKey,
     answers: HeldAnswers<readonly AgentBrowserTab[]>,
   ) {
-    type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    type Rows = typeof TASK_BROWSER_TABS_READ.rows.Type;
     const place = browserTabsPlaceOf(owner);
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
@@ -1038,15 +1057,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* pushLive({
           seal: (poll, after) =>
             gate() && userId !== undefined
-              ? Effect.map(served(client.browserTabsLive(place, userId, poll, after)), (sealed) =>
-                  sealed.ok
-                    ? sealed.answer
-                    : {
-                        failure: sealed.failure,
-                        gone:
-                          sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                          sealed.failure === LIVE_SIGNED_OUT.failure,
-                      },
+              ? sealedLive(
+                  "taskId" in place ? TASK_BROWSER_TABS_READ : AGENT_BROWSER_TABS_READ,
+                  { id: browserTabsPlaceId(place), userId },
+                  poll,
+                  after,
                 )
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
@@ -1061,7 +1076,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  const decodePages = Schema.decodeUnknownOption(taskPagesLiveRowsSchema);
+  const decodePages = Schema.decodeUnknownOption(TASK_PAGES_READ.rows);
 
   /** Follows the pages of `owner`, a task or an agent on no task, live until let go, each change told through `answers`. */
   function followPages(owner: PageOwnerKey, answers: HeldAnswers<readonly PageLine[]>) {
@@ -1071,15 +1086,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
-          ? Effect.map(served(client.pagesLive(place, userId, poll, after)), (sealed) =>
-              sealed.ok
-                ? sealed.answer
-                : {
-                    failure: sealed.failure,
-                    gone:
-                      sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                      sealed.failure === LIVE_SIGNED_OUT.failure,
-                  },
+          ? sealedLive(
+              "taskId" in place ? TASK_PAGES_READ : AGENT_PAGES_READ,
+              { id: pagePlaceId(place), userId },
+              poll,
+              after,
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
@@ -1135,15 +1146,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const comments = yield* descriptionCommentReads({
     pool: dependencies.pool,
     seal: (subject, userId, poll, after) =>
-      Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
-        sealed.ok
-          ? sealed.answer
-          : {
-              failure: sealed.failure,
-              gone:
-                sealed.failure === TASK_CALL_FAILURE.NOT_FOUND ||
-                sealed.failure === LIVE_SIGNED_OUT.failure,
-            },
+      sealedLive(
+        TASK_COMMENTS_READ,
+        {
+          id: subject.taskId,
+          ...(subject.pageId === undefined ? undefined : { page: subject.pageId }),
+          userId,
+        },
+        poll,
+        after,
       ),
     accountId: dependencies.accountId,
     gate,
@@ -1174,7 +1185,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     accountId: dependencies.accountId,
     open: (taskId) => served(client.open(taskId)),
     recordLive: (taskId, userId, poll, after) =>
-      served(client.recordLive(taskId, userId, poll, after)),
+      served(
+        client.liveRead(TASK_RECORD_READ, { id: taskId, userId }, poll ? { after } : undefined),
+      ),
     listed: asListed,
     tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED, carried(held)),
   });
@@ -1826,7 +1839,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const read = githubRead;
     githubAskedAt = yield* Clock.currentTimeMillis;
     const status = yield* served(client.github.status());
-    if (read === githubRead && status.ok) write({ github: status.answer });
+    if (read === githubRead && !("failure" in status)) write({ github: status });
   });
 
   /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
@@ -3273,7 +3286,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return GITHUB_PAGE_UNANSWERED;
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        return page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED;
+        return "failure" in page ? GITHUB_PAGE_UNANSWERED : { url: page.url };
       }),
     // The view takes the connection the service answers at once, so Settings
     // reads disconnected without waiting for the next read of it. Note that
@@ -3285,7 +3298,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         githubAskedAt = undefined;
         // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
-        if (!disconnected.ok) {
+        if ("failure" in disconnected) {
           return yield* new ActRefused(
             disconnected.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
               ? { sentence: GITHUB_LAST_SIGN_IN_REFUSAL }
@@ -3295,7 +3308,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // Note that a read started before the answer is made stale, because
         // the status it read may predate the unlink.
         githubRead += 1;
-        write({ github: disconnected.answer });
+        write({ github: disconnected });
       }),
     // An admin read is answered to the caller as the service answered it and
     // held nowhere, since it is other accounts' data, which no view keeps.

@@ -149,9 +149,9 @@ export interface FirewallLaunch {
   readonly swaps: LaunchSwaps;
 }
 
-/** A launch as its session's row holds it: the agent, none in a row kept before agents were named, and its swaps. */
+/** A launch as its session's row holds it: the agent and its swaps. */
 export interface KeptLaunch {
-  readonly agentId: string | undefined;
+  readonly agentId: string;
   readonly swaps: LaunchSwaps;
 }
 
@@ -451,7 +451,7 @@ const launchKept = (session: FirewallOwner) =>
       yield* Effect.logWarning("a sandbox firewall's launch would not open, and is sent as none");
       return undefined;
     }
-    return { agentId: row.agentId ?? undefined, swaps } satisfies KeptLaunch;
+    return { agentId: row.agentId, swaps } satisfies KeptLaunch;
   });
 
 /** A store failure as the policy write unavailable, in words naming no value. */

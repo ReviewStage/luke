@@ -533,7 +533,10 @@ function AppWindow(): React.JSX.Element {
   }, [launched, goSettings, adminView, listedForLaunch, openAutomations]);
   // An app link, handed by the system or pressed in the window, opens where its place stands (`@repo/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
-  const listedTasks = tasks.tasks;
+  const listedTasks = useMemo(() => {
+    const ids = new Set(tasks.tasks.map((task) => task.id));
+    return (planning?.taskPullRequests ?? []).filter((each) => ids.has(each.taskId));
+  }, [tasks.tasks, planning?.taskPullRequests]);
   const listedAgents = planning?.tasklessAgents;
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin

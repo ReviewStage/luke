@@ -34,7 +34,7 @@ const TASK: TaskSummary = {
   createdAt: AT,
   updatedAt: AT,
   repository: "acme/relay",
-  agents: { total: 0, working: 0, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  agents: { total: 0, working: 0, pullRequestTotal: 0 },
 };
 
 let root: Root | undefined;

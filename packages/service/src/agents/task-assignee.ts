@@ -1,9 +1,9 @@
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { MENTION_KIND, memberMentionOf } from "@repo/features/mention-link";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { describeWire } from "@repo/wire/effect";
 import { Schema } from "effect";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { writtenMention } from "./written-mentions.js";
 
 /**

@@ -1,5 +1,5 @@
 import type { AgentMachineKind, ContextWindow } from "@repo/features/agent-wire";
-import type { ChaptersModelId } from "@repo/features/chapters-model-choice";
+import type { ChaptersPick } from "@repo/features/chapters-model-choice";
 import type { LinkOpen } from "@repo/features/link-open";
 import type { AgentEnter, CommitAuthor, ExperimentChoices } from "@repo/settings";
 import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -65,12 +65,15 @@ export const accountPreference = pgTable("account_preference", {
   agentEffort: text("agent_effort"),
   agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
   /**
-   * The Claude model a Generate chapters this account presses runs on
-   * (`@repo/features/chapters-model-choice`); null until the account
-   * chooses, and a value no build lists any more, both read as Haiku.
-   * Written alone, it moves no `updated_at`.
+   * The model the account last picked its chapters to run on
+   * (`@repo/features/chapters-model-choice`'s `CHAPTERS_PICK_LIST`): Haiku,
+   * or OpenAI's model of its tier, whose provider's key a Generate it
+   * presses tries first where it saved both; Sonnet or Opus as an earlier
+   * build wrote them reads as Anthropic's. Null until the account picks, and
+   * a value no build lists any more, both read as Haiku. Written alone, it
+   * moves no `updated_at`.
    */
-  chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
+  chaptersModel: text("chapters_model").$type<ChaptersPick>(),
   /**
    * Each experiment the account turned on or back off, by its key
    * (`@repo/settings`'s `EXPERIMENT`); null on a row that never chose one,

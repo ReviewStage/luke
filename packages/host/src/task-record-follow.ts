@@ -1,8 +1,8 @@
 import {
+  TASK_RECORD_READ,
   type TaskRecordLiveAnswer,
   type TaskRecordLiveRows,
-  taskRecordLiveRowsSchema,
-} from "@repo/features/live-wire";
+} from "@repo/features/task-record-live";
 import { type Effect, Stream } from "effect";
 import { decodedLiveRows, type LiveBroken, type TxWait } from "./live-follow.js";
 
@@ -56,7 +56,7 @@ export function taskRecordMoves(
   return decodedLiveRows(
     { poll: dependencies.poll, onTxWait: dependencies.onTxWait },
     first,
-    taskRecordLiveRowsSchema,
+    TASK_RECORD_READ.rows,
   ).pipe(
     Stream.mapAccum(
       (): string | undefined => undefined,

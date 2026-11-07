@@ -57,7 +57,7 @@ const WINDOW: Here = {
   kind: HERE.WINDOW,
   opensPlaces: true,
   listed: {
-    tasks: [{ id: TASK, agents: { pullRequests: [{ url: PR, agentId: AGENT }] } }],
+    tasks: [{ taskId: TASK, pullRequests: [{ url: PR, agentId: AGENT }] }],
     agents: [{ id: OTHER, pullRequest: { url: "https://github.com/acme/relay/pull/43" } }],
   },
 };

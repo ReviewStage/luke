@@ -19,6 +19,7 @@ import {
 } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
@@ -42,7 +43,6 @@ import type { AdmittedConversation } from "../sessions/admitted-conversation.js"
 import { runAgentComment, runAgentEditDescription, runAgentLookAtPicture } from "./agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { CODER_TOOL } from "./tool-set.js";
 
 /**
  * agent-doors.test.ts -- the doors a coding agent's description, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
@@ -361,10 +361,10 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           input: Readonly<Record<string, string | boolean>>,
         ) => runAgentComment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }), true);
 
-        const read = yield* call(CODER_TOOL.READ_COMMENTS, {});
-        const replied = yield* call(CODER_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
-        const resolved = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: true });
-        const reopened = yield* call(CODER_TOOL.UPDATE_COMMENT, { thread, resolved: false });
+        const read = yield* call(AGENT_TOOL.READ_COMMENTS, {});
+        const replied = yield* call(AGENT_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
+        const resolved = yield* call(AGENT_TOOL.UPDATE_COMMENT, { thread, resolved: true });
+        const reopened = yield* call(AGENT_TOOL.UPDATE_COMMENT, { thread, resolved: false });
 
         assert.deepEqual(
           [read, replied, resolved, reopened].map((answer) => answer.status),
@@ -404,13 +404,13 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const agent = yield* tasklessAgentOn(userId, own.workspaceId);
         const admitted = admittedOf(agent);
         const reply = (input: Readonly<Record<string, string>>) =>
-          runAgentComment(admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input), true);
+          runAgentComment(admitted, AGENT_TOOL.REPLY_TO_COMMENT, unparsedWire(input), true);
 
         const unnamed = yield* reply({ thread, words: "Done." });
         const outside = yield* reply({ taskId: elsewhere.id, thread: outsideThread, words: "x" });
         const read = yield* runAgentComment(
           admitted,
-          CODER_TOOL.READ_COMMENTS,
+          AGENT_TOOL.READ_COMMENTS,
           unparsedWire({ taskId: theirs.id }),
           true,
         );

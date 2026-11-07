@@ -6,6 +6,7 @@ import {
   type Ref,
   useContext,
 } from "react";
+import { middlePressOf } from "../../middle-press.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { CountFigure } from "../count-figure/count-figure.js";
@@ -269,11 +270,12 @@ export function NavItemLink({
   title?: string | undefined;
   /** Whether it opens in a tab of its own rather than in this one. */
   newTab?: boolean | undefined;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, a middle-click's included, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
   "aria-label"?: string | undefined;
 }): React.JSX.Element {
+  const press = pulseOnPress(onClick, PRESS_PULSE.QUIET);
   return (
     <a
       className={ROW}
@@ -284,7 +286,8 @@ export function NavItemLink({
       title={title}
       aria-label={props["aria-label"]}
       aria-current={current}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
+      onClick={press}
+      onAuxClick={onClick === undefined ? undefined : middlePressOf(press)}
     >
       {said(icon) ? <Glyph icon={icon} /> : null}
       <Name>{children}</Name>

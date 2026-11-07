@@ -5,10 +5,10 @@ import {
   type TaskBlockPair,
 } from "@repo/database/models/task-block-store";
 import { readTaskHeaders } from "@repo/database/models/task-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { describeWire } from "@repo/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { wireUuidSchema } from "../core.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { writtenTaskMention } from "./written-mentions.js";
 
 /**

@@ -4,7 +4,12 @@ import {
   type AccountPreferencesLiveRow,
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
-import type { AgentDefaultAnswer } from "@repo/features/agent-view";
+import type {
+  AgentDefaultAnswer,
+  ChaptersProviderAnswer,
+  ChaptersProviderWriteParams,
+} from "@repo/features/agent-view";
+import { CHAPTERS_MODEL, chaptersModelOn } from "@repo/features/chapters-model-choice";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import type {
@@ -207,6 +212,31 @@ export function agentDefaultWritten(
     send: (choice) =>
       Effect.map(send(choice), (answer) =>
         "choice" in answer ? { answer, txid: answer.txid } : { refused: answer },
+      ),
+  };
+}
+
+/** Whose API key the account's chapters run on, kept as its chapters model, its provider's model of Haiku's tier, drawn at once over its row, sent as `send` asks, standing until the read carries the transaction it committed in. */
+export function chaptersProviderWritten(
+  send: (
+    provider: ChaptersProviderWriteParams["provider"],
+  ) => Effect.Effect<ChaptersProviderAnswer>,
+  readerId: () => string | undefined,
+): WriteDeclaration<
+  AccountPreferencesPoolRow,
+  PreferencesChange,
+  ChaptersProviderWriteParams,
+  ChaptersProviderAnswer
+> {
+  return {
+    kind: ACCOUNT_PREFERENCES,
+    keys: () => readerRow(readerId),
+    change: (write) => () => ({
+      chaptersModel: chaptersModelOn(write.provider, CHAPTERS_MODEL.HAIKU),
+    }),
+    send: (write) =>
+      Effect.map(send(write.provider), (answer) =>
+        "provider" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }

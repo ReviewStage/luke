@@ -36,6 +36,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
 import { TERMINAL_KIND } from "./terminal-session.js";
 import { TerminalCount, TerminalTab } from "./terminal-tab.js";
@@ -255,7 +256,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Each registry lets its terminals go, as a window's does as it closes.
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
@@ -293,6 +293,7 @@ async function mount(
   serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
   const registry = AtomRegistry.make();
   registries.push(registry);
+  const terminals = windowTerminals();
   const wrapped = (tab: React.ReactElement) =>
     findable
       ? createElement(FindScope, {
@@ -317,7 +318,10 @@ async function mount(
     handed = drawn.handed;
     act(() =>
       root.render(
-        onRegistry(registry, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
+        onRegistry(
+          registry,
+          onTerminals(terminals, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
+        ),
       ),
     );
   };
@@ -338,7 +342,7 @@ async function mount(
       render(on);
       await settle();
     },
-    registry,
+    terminals,
     /** Presses the button the label names, wherever it stands in the tab. */
     press: async (label: string) => {
       const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
@@ -595,8 +599,8 @@ function lastPayload(kind: PortActKind | ShellKind) {
 test("a terminal's row in the panel's + counts the agent's Local terminals, leaving whether the agent works to its glyph", async () => {
   const tab = await mount();
   const standing = renderToStaticMarkup(
-    onRegistry(
-      tab.registry,
+    onTerminals(
+      tab.terminals,
       createElement(TerminalCount, { kind: TERMINAL_KIND.LOCAL, agentId: AGENT.id }),
     ),
   );
@@ -607,8 +611,8 @@ test("a terminal's row in the panel's + counts the agent's Local terminals, leav
 function localDoors(
   open: readonly LocalStripTab[] = [],
   viewedAt: ViewedAt<SidePanelTab>[] = [],
-  /** The window's atoms, a tab's own where the doors stand beside one. */
-  registry = AtomRegistry.make(),
+  /** The window's terminals, a tab's own where the doors stand beside one. */
+  terminals = windowTerminals(),
 ) {
   const chosen: SidePanelTab[] = [];
   let doors: { open: (agentId: string, fresh: boolean) => void; end: (tab: LocalStripTab) => void };
@@ -624,7 +628,7 @@ function localDoors(
   const container = document.createElement("div");
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(Doors))));
+  act(() => root.render(onTerminals(terminals, createElement(Doors))));
   return {
     chosen,
     open: (fresh: boolean) => act(() => doors.open(AGENT.id, fresh)),
@@ -667,7 +671,7 @@ test("Show local goes to the agent's Local tab viewed last, and with none open, 
 test("closing a Local tab ends its terminal: out of the window's list, its port closed, and its shell ended in main", async () => {
   const tab = await mount();
   const port = main.post(MADE);
-  const doors = localDoors([], [], tab.registry);
+  const doors = localDoors([], [], tab.terminals);
   await doors.end(localTab(AGENT.id, FIRST, "Local 1"));
   assert.deepEqual(
     kept().map((each) => each.shell),
@@ -759,6 +763,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
+  const terminals = windowTerminals();
   const tab = createElement(TerminalTab, {
     tab: localTab(AGENT.id, FIRST, "Local 1"),
     agents,
@@ -772,13 +777,16 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
       root.render(
         onRegistry(
           registry,
-          onSideBundles(
-            FITTED,
-            createElement(FindScope, {
-              active: true,
-              subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
-              children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
-            }),
+          onTerminals(
+            terminals,
+            onSideBundles(
+              FITTED,
+              createElement(FindScope, {
+                active: true,
+                subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
+                children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
+              }),
+            ),
           ),
         ),
       ),

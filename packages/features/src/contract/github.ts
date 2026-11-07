@@ -17,6 +17,11 @@
  * is read exactly, a key it does not name refused. Each output is the wire
  * schema flipped, so oRPC's output check encodes the handler's value into
  * the bytes the wire carries (`packages/service/src/orpc/base.ts`).
+ *
+ * The connection's procedures declare their own refusals: each refuses as
+ * any procedure may (a bearer or session not taken, a store that could not
+ * answer), and the disconnect also refuses GitHub as the account's last
+ * way to sign in as not permitted.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -84,18 +89,19 @@ export const numberedQuerySchema = EffectSchema.Struct({
 });
 
 export const githubContract = {
-  connect: hostedProcedure
+  connect: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT }))
     .output(EffectSchema.flip(githubConnectAnswerSchema)),
-  claim: hostedProcedure
+  claim: declaredProcedure
     .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM }))
     .input(exactInput(githubConnectClaimRequestSchema))
     .output(EffectSchema.flip(githubConnectClaimAnswerSchema)),
-  connection: hostedProcedure
+  connection: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_CONNECTION }))
     .output(EffectSchema.flip(githubConnectionAnswerSchema)),
-  disconnect: hostedProcedure
+  disconnect: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_DISCONNECT }))
     .output(EffectSchema.flip(githubConnectionAnswerSchema)),
   repositories: hostedProcedure

@@ -14,6 +14,7 @@ import {
 import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
@@ -28,7 +29,6 @@ import type { UnparsedWireValue } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import { heldUntil } from "../http/held-read.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { githubShapes, INLINE_PICTURE, inlinePictures, wholeRendering } from "./github-html.js";
+import {
+  githubShapes,
+  INLINE_PICTURE,
+  inlinePictures,
+  renderingPictures,
+  wholeRendering,
+} from "./github-html.js";
 
 /**
  * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
@@ -9,7 +15,8 @@ import { githubShapes, INLINE_PICTURE, inlinePictures, wholeRendering } from "./
  * a diagram into a fenced mermaid block of its source, a themed picture
  * into its `<img>` alone, and a picture GitHub links to itself into the
  * picture alone; and a picture sharing its line with words is marked to
- * stand in it. The trees are as the parse leaves them.
+ * stand in it. The trees are as the parse leaves them. And a place that
+ * opens the rendering's pictures itself reads those no other link takes.
  */
 
 /** A node of the parsed tree, as the step reads it. */
@@ -168,5 +175,26 @@ test("a picture sharing its line with words is marked to stand in it, a bot's gl
       element("summary", {}, [element("picture", {}, [inline()]), text(" Supported")]),
       element("p", {}, [screenshot]),
     ]),
+  ]);
+});
+
+test("the pictures a place opens are each one in no link, and each one alone in the link GitHub wraps it in, opening where it leads; one in any other link is the link's", () => {
+  const upload = "https://github.com/user-attachments/assets/0b6f3a9c-1d2e-4f5a-8b7c-9d0e1f2a3b4c";
+  const html = [
+    '<p><img src="https://camo.githubusercontent.com/plain" alt="plain" style="max-width: 100%;"></p>',
+    `<p><a href="${upload}" target="_blank"> <img src="https://private-user-images.githubusercontent.com/signed" alt="shot" style="max-width: 100%;"> </a></p>`,
+    '<p><a href="https://example.com/ci"><img src="https://camo.githubusercontent.com/badge" alt="CI"></a></p>',
+  ].join("\n");
+  assert.deepEqual(renderingPictures(html), [
+    {
+      src: "https://camo.githubusercontent.com/plain",
+      original: "https://camo.githubusercontent.com/plain",
+      alt: "plain",
+    },
+    {
+      src: "https://private-user-images.githubusercontent.com/signed",
+      original: upload,
+      alt: "shot",
+    },
   ]);
 });

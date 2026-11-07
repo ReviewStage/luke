@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { type TerminalAction, type TerminalBar, terminalLook } from "@repo/features/terminal-model";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
@@ -15,7 +14,7 @@ import {
   TextButton,
 } from "@repo/ui";
 import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { unreadShown } from "../failure-report.js";
@@ -25,7 +24,7 @@ import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
-import { terminalsHeld } from "./terminal-held.js";
+import { useHeldShells } from "./terminal-held.js";
 import {
   TERMINAL_BODY_CLASS,
   TERMINAL_HOST_CLASS,
@@ -33,7 +32,7 @@ import {
 } from "./terminal-look.js";
 import type { TerminalKind } from "./terminal-session.js";
 import type { AgentsControl } from "./use-agents.js";
-import { type ShellTab, useTerminalTabSession } from "./use-terminal-session.js";
+import { type ShellTab, TerminalsContext, useTerminalTabSession } from "./use-terminal-session.js";
 
 /**
  * terminal-tab.tsx -- one terminal tab, "Cloud 1" in the agent's own sandbox or "Local 1" on this Mac in the agent's mirrored files: its shell's screen, under a bar naming the agent and where the connection stands.
@@ -225,6 +224,6 @@ export function TerminalCount({
   kind: TerminalKind;
   agentId: string;
 }): React.JSX.Element {
-  const count = useAtomValue(terminalsHeld[kind](agentId)).length;
+  const count = useHeldShells(useContext(TerminalsContext).held, kind, agentId).length;
   return <>{count === 0 ? null : `${count} ${count === 1 ? "terminal" : "terminals"}`}</>;
 }
