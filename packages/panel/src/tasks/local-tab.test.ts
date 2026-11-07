@@ -23,7 +23,7 @@ import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -42,7 +42,12 @@ import { TERMINAL_KIND } from "./terminal-session.js";
 import { TerminalCount, TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 import type { SidePanelTab } from "./use-side-panel.js";
-import { useEndTerminalTab, useOpenTerminalTab } from "./use-terminal-session.js";
+import {
+  useEndTerminalTab,
+  useOpenTerminalTab,
+  useTerminalsOwner,
+} from "./use-terminal-session.js";
+import { WindowAccountContext } from "./window-account.js";
 
 /**
  * A cloud agent's Local tab as the developer meets it: one terminal on
@@ -286,6 +291,8 @@ async function mount(
   phone = false,
   /** The terminal the tab shows, by the id the window minted it under. */
   shell = FIRST,
+  /** The account signed in, none for no account. */
+  account?: string,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -308,7 +315,13 @@ async function mount(
       : tab;
   let agentOpened = 0;
   let handed = onPhone(null).handed;
-  const render = (on: boolean) => {
+  // The account signed in, as the window's root hands it on.
+  const Owner = ({ of }: { of: string | undefined }) => {
+    useTerminalsOwner(of);
+    return null;
+  };
+  let signedIn = account;
+  const render = (on: boolean, drawn = true) => {
     const tab = createElement(TerminalTab, {
       tab: localTab(AGENT.id, shell, "Local 1"),
       agents,
@@ -318,13 +331,24 @@ async function mount(
       },
       onClose: () => undefined,
     });
-    const drawn = onPhone(tab);
-    handed = drawn.handed;
+    const shown = onPhone(tab);
+    handed = shown.handed;
     act(() =>
       root.render(
         onRegistry(
           registry,
-          onTerminals(terminals, onSideBundles(bundles, wrapped(phone ? drawn.element : tab))),
+          onTerminals(
+            terminals,
+            createElement(
+              WindowAccountContext.Provider,
+              { value: signedIn },
+              createElement(Owner, { of: signedIn }),
+              onSideBundles(
+                bundles,
+                drawn ? wrapped(phone ? shown.element : tab) : createElement(Fragment),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -344,6 +368,12 @@ async function mount(
     agentOpened: () => agentOpened,
     render: async (on: boolean) => {
       render(on);
+      await settle();
+    },
+    /** Another account signs in, the tab no longer drawn, as the strip draws none of the first's. */
+    signIn: async (next: string) => {
+      signedIn = next;
+      render(true, false);
       await settle();
     },
     terminals,
@@ -456,6 +486,26 @@ test("a shell that ended takes any key for a new one in the same tab, and is let
     agentId: AGENT.id,
     terminalId: MADE,
   });
+});
+
+test("another account signing in detaches the tab's shell on this Mac and ends none: its port closes", async () => {
+  const tab = await mount(true, false, FITTED, false, FIRST, "ada");
+  const port = main.post(MADE);
+
+  await tab.signIn("grace");
+
+  assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
+});
+
+test("a port that arrives after another account signed in is let go, its shell on this Mac ended by nothing", async () => {
+  const tab = await mount(true, false, FITTED, false, FIRST, "ada");
+  await tab.signIn("grace");
+
+  const port = main.post(MADE);
+
+  assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
 });
 
 test("a mirror main could not make shows a bar that says so, whose action asks again", async () => {

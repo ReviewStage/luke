@@ -474,6 +474,7 @@ test("a switch moves the last account's terminals under its own key before the n
   assert.deepEqual(value.accounts?.ada?.cloud[AGENT.id], [
     { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
   ]);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
 test("the terminals a build before this one kept are the signed-in account's, and no other's", async () => {
@@ -494,6 +495,7 @@ test("the terminals a build before this one kept are the signed-in account's, an
   await tab.signIn("grace", false);
 
   assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
 test("while another account is signed in, nothing the first's shell says reaches the window, and nothing typed reaches that shell", async () => {
@@ -518,6 +520,7 @@ test("while another account is signed in, nothing the first's shell says reaches
   );
   assert.notEqual(tab.standing(), "· exited", "the first account's shell said nothing here");
   assert.deepEqual(ada.state, detached, "nor to its own detached session");
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
 test("a port that arrives after another account signed in is let go, so its shell is held by no connection", async () => {
@@ -528,6 +531,7 @@ test("a port that arrives after another account signed in is let go, so its shel
   const port = main.post(MADE);
 
   assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
 test("the first account signing in again finds its terminal, which attaches to the same shell, starting none", async () => {
