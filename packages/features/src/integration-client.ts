@@ -1,20 +1,15 @@
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import { hostedCall } from "./hosted-call.js";
-import { askLive, type HostedClient, hostedClient } from "./hosted-link.js";
-import type { IntegrationStatusesLiveAnswer } from "./integration-live.js";
-import {
-  INTEGRATION_CALL_FAILURE,
-  INTEGRATION_RENAMES,
-  type IntegrationCallFailure,
-} from "./integration-view.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
+import { type HostedClient, hostedClient } from "./hosted-link.js";
+import { INTEGRATION_CALL_FAILURE, INTEGRATION_RENAMES } from "./integration-view.js";
 import {
   INTEGRATION_ADD_ACCOUNT,
   INTEGRATION_QUERY,
   type IntegrationProvider,
 } from "./integration-wire.js";
-import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
@@ -35,9 +30,10 @@ export interface HostedIntegrationsClientOptions {
   requestTimeoutMs?: number;
 }
 
-type Failed = { readonly failure: IntegrationCallFailure };
-
-const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
+/** The refusal a live read of the account's integrations reads as its own: the service unavailable. */
+const LIVE_RENAMES = {
+  [HOSTED_API_ERROR.UNAVAILABLE]: INTEGRATION_CALL_FAILURE.UNAVAILABLE,
+} as const;
 
 /** Which account a call is about, and on a Connect whether it signs in a new one: none named is the provider's first. */
 export interface IntegrationAccountTarget {
@@ -77,31 +73,12 @@ export class HostedIntegrationsClient {
   }
 
   /**
-   * Every integration row the account holds, sealed for following over Neon
-   * Realtime, with the providers it is offered and those that take several
-   * accounts, or with `poll` its rows inline, held past `after`; signed out
-   * where the session is not the account `userId` names.
+   * A declared live read sealed for following, or polled where `poll` asks
+   * (`askLiveRead`); the service unavailable read as this domain's own
+   * failure, as its reads always read it.
    */
-  statusesLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    IntegrationStatusesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.catch(
-      askLive(this.#hosted.live.integrationStatuses, { [LIVE_USER_QUERY]: userId }, poll, after),
-      (failed) =>
-        Effect.succeed(
-          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
-            ? LIVE_SIGNED_OUT
-            : failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.UNAVAILABLE
-              ? { failure: INTEGRATION_CALL_FAILURE.UNAVAILABLE }
-              : UNANSWERED,
-        ),
-    );
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll, LIVE_RENAMES);
   }
 
   /**

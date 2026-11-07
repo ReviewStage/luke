@@ -17,23 +17,45 @@
  *   failure, raises the FAILED toast `pressAct` raises, so a press never fails
  *   silently, and reports it by the act's kind and the ids its payload names.
  *
+ * A send, an agent started or a message sent, is `sendMutation`: read as
+ * `actMutation` is, and run under a span of the window's SDK whose trace the
+ * act carries to the host (`send-traces.ts`).
+ *
  * A setting written by a field named in place is `actMutation` over
  * `ACT_KIND.SETTING_UPDATE`; `settingMutation` is for a writer generic in
  * the field, such as a settings row.
  */
 
+import type { SentrySendSpan } from "@repo/features/sentry-tracing";
 import { FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind, SettingUpdatePayload } from "@repo/host/contract";
 import type { AppSettingField, AppSettingValue } from "@repo/settings";
 import { mutationOptions } from "@tanstack/react-query";
 import { type ActResult, type ActVariables, sendAct, toastActFailure } from "./act.js";
+import { tracedSend } from "./send-traces.js";
 
 /** One act as a mutation whose caller reads its answer and its failure. */
 export function actMutation<Kind extends PortActKind>(kind: Kind) {
   return mutationOptions<ActResult<Kind>, Error, ActVariables<Kind>>({
     mutationKey: [kind],
     mutationFn: (variables) => sendAct(kind, variables),
+  });
+}
+
+/**
+ * One send as a mutation whose caller reads its answer and its failure, as
+ * `actMutation`, traced under the span `spanOf` names it by; one it names
+ * none for goes untraced.
+ */
+export function sendMutation<Kind extends PortActKind>(
+  kind: Kind,
+  spanOf: (variables: ActVariables<Kind>) => SentrySendSpan | undefined,
+) {
+  return mutationOptions<ActResult<Kind>, Error, ActVariables<Kind>>({
+    mutationKey: [kind],
+    mutationFn: (variables) =>
+      tracedSend(spanOf(variables), (trace) => sendAct(kind, variables, trace)),
   });
 }
 

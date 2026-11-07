@@ -14,6 +14,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useAdminRoute } from "./admin/admin-route.js";
+import { type AgentRoute, useAgentRoute } from "./agent-route.js";
 import { runAppCommand } from "./app-commands.js";
 import { type AutomationsRoute, useAutomationsRoute } from "./automations-route.js";
 import { type InboxRoute, useInboxRoute } from "./inbox-route.js";
@@ -85,8 +86,6 @@ interface Standing {
     /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
     readonly single?: boolean;
   };
-  /** The coding agent whose page stands, while one does. */
-  readonly agent: string | undefined;
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
   readonly unsaved?: boolean | undefined;
   /** How many times a door naming a thing opened it in the side panel, as the real one counts them. */
@@ -99,7 +98,6 @@ interface Standing {
 const ON_TASK: Standing = {
   panel: { open: false, tab: undefined },
   inbox: { open: false, chosen: undefined },
-  agent: undefined,
 };
 
 /** The Tasks tab over where the window stands, each press moving it as the real one does, its version history where the router stands it. */
@@ -109,6 +107,7 @@ function tasksTab(
   room: ShellRoom,
   versions: VersionHistoryRoute,
   inbox: InboxRoute,
+  agent: AgentRoute,
 ): TasksControl {
   const base = tasksControl();
   const panel = (next: Standing["panel"]) => patch((held) => ({ ...held, panel: next }));
@@ -173,11 +172,12 @@ function tasksTab(
       return true;
     },
     leaveGuard,
+    // As the real one does, an agent's page opens and leaves by the router.
     agentView: {
       ...base.agentView,
-      agentId: at.agent,
-      onOpen: (agent) => patch((held) => ({ ...held, agent })),
-      onClose: () => patch((held) => ({ ...held, agent: undefined })),
+      agentId: agent.agentId,
+      onOpen: (agentId) => agent.onOpen(agentId, ACME.slug),
+      onClose: agent.onClose,
     },
     // As the real doors do, the Inbox opens by the router, narrowed to the task named or to none.
     onShowInbox: ({ taskId }) => inbox.onOpen(inboxAt(taskId)),
@@ -243,6 +243,7 @@ function mount(
   let automations: AutomationsRoute | undefined;
   let versions: VersionHistoryRoute | undefined;
   let inbox: InboxRoute | undefined;
+  let agent: AgentRoute | undefined;
   function Probe() {
     const [at, setAt] = useState(start);
     standing = at;
@@ -268,7 +269,11 @@ function mount(
       onClose: () => history?.onLeaveRouted(),
       onStay: () => history?.onStayRouted(),
     });
-    const tab = tasksTab(at, setAt, room, versions, inbox);
+    agent = useAgentRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    const tab = tasksTab(at, setAt, room, versions, inbox, agent);
     const tasks: TasksControl = {
       ...tab,
       adminView: admin,
@@ -333,6 +338,8 @@ function mount(
     }),
     /** The Inbox as the router stands it. */
     inbox: () => inbox ?? assert.fail("the Inbox's route stands"),
+    /** The agent whose page the router stands, while one does. */
+    agent: () => agent?.agentId,
     /** Settings as the router stands it, and the navigation a Settings link makes. */
     settings: () => settings ?? assert.fail("Settings stands"),
     /** Admin as the router stands it. */
@@ -512,20 +519,33 @@ test("on a narrow stage a task opened from a list on its plan is one step, whose
 
 test("on a narrow stage a side panel shut over a page other than its plan's is no step: it neither steps back to the plan behind nor takes the step of the plan opened after it", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
-  // A coding agent's page draws the task's side panel, which a narrow room holds full screen over it.
-  window.move((held) => ({ ...held, agent: AGENT, panel: { open: true, tab: PAGE_TAB } }));
+  // An agent's page draws a side panel of its own, which a narrow room holds full screen over it.
+  window.press(() => window.shown().agentView.onOpen(AGENT));
+  window.move((held) => ({ ...held, panel: { open: true, tab: PAGE_TAB } }));
   assert.equal(window.addresses().length, 2);
 
   window.press(() => window.shown().sidePanel.onToggleFullScreen());
   assert.equal(window.at().panel.open, false);
-  assert.equal(window.at().agent, AGENT, "shutting the panel leaves the agent's page standing");
+  assert.equal(window.agent(), AGENT, "shutting the panel leaves the agent's page standing");
   assert.equal(window.addresses().length, 2, "and is no step");
 
-  window.move((held) => ({ ...held, agent: undefined }));
+  window.press(() => window.shown().agentView.onClose());
   assert.equal(window.addresses().length, 3, "the plan opened after it is a step of its own");
   assert.equal(window.standingAddress(), TASK_PATH);
   act(() => window.history().onBack());
-  assert.equal(window.at().agent, AGENT, "Back returns to the agent's page");
+  assert.equal(window.agent(), AGENT, "Back returns to the agent's page");
+});
+
+test("Back to an agent's page stands the side panel beside it on the tab its step held, which the address does not say", () => {
+  const window = mount(SHELL_ROOM.WIDE, ON_TASK);
+  window.press(() => window.shown().agentView.onOpen(AGENT));
+  window.move((held) => ({ ...held, panel: { open: true, tab: PAGE_TAB } }));
+  window.press(() => window.shown().agentView.onClose());
+  window.move((held) => ({ ...held, panel: { open: false, tab: undefined } }));
+
+  act(() => window.history().onBack());
+  assert.equal(window.agent(), AGENT);
+  assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB });
 });
 
 test("on a narrow stage an Inbox item opened from its list is a step, and the Inbox's way back steps back to the list", () => {

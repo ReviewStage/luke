@@ -11,17 +11,11 @@ import {
   openWorkspace,
   WORKSPACE_ROLE,
 } from "@repo/database/testing";
-import {
-  workspaceMembersLiveRowsSchema,
-  workspaceMembersOfLiveRows,
-} from "@repo/features/workspace-live";
+import { WORKSPACE_MEMBERS_READ, workspaceMembersOfLiveRows } from "@repo/features/workspace-live";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import {
-  listFormerMembers,
-  listMembers,
-  workspaceMembersLiveStatements,
-} from "./workspace-members.js";
+import { workspaceMembersRead } from "../live/reads/workspace-members.js";
+import { listFormerMembers, listMembers } from "./workspace-members.js";
 
 /**
  * A workspace's people as the live statements deliver them: the members and
@@ -46,13 +40,15 @@ const openUser = (name: string, image: string | null = null) =>
 const livePeopleOf = (readerId: string, organizationId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const statements = Option.getOrThrow(workspaceMembersLiveStatements(readerId, organizationId));
+    const statements = Option.getOrThrow(
+      workspaceMembersRead.statements({ userId: readerId, workspaceId: organizationId }),
+    );
     const rows = yield* Effect.all({
       members: sql.unsafe(statements.members.sql, [...statements.members.params]),
       former: sql.unsafe(statements.former.sql, [...statements.former.params]),
     });
     return workspaceMembersOfLiveRows(
-      yield* Schema.decodeUnknownEffect(workspaceMembersLiveRowsSchema)(rows),
+      yield* Schema.decodeUnknownEffect(WORKSPACE_MEMBERS_READ.rows)(rows),
     );
   });
 

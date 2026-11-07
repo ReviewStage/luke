@@ -41,6 +41,7 @@ import {
 } from "./terminal-session.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
+import { useSandboxOpen } from "./use-workspace-agents.js";
 
 /**
  * use-terminal-session.ts -- one terminal tab's shell, in its agent's cloud sandbox or on this Mac in the agent's mirror: opened at the screen's first size and attached for the tab's life; and the doors that open such a tab and end its shell as it closes.
@@ -59,7 +60,11 @@ import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
  * cloud tab shown over a stopped sandbox resumes it, saying it is connecting
  * meanwhile, and a hidden one waits until it is shown, so a reload never
  * wakes every tab's sandbox. While the agent has not opened its sandbox, a
- * shown cloud tab asks again every few seconds.
+ * shown cloud tab waits on the task list, which carries the agent's
+ * sandbox live (`AgentSummary.sandboxOpen`), and asks again as it opens;
+ * one the service still answers as starting after that, its sandbox
+ * tagged with the session but not yet running, asks again after a wait
+ * that doubles to thirty seconds, as a failed ask.
  *
  * A window holds its terminals in one `Terminals`, their lists and their
  * sessions, which every door here reads through `TerminalsContext`: the
@@ -67,8 +72,21 @@ import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
  * stand as a window of its own.
  */
 
-/** How often a shown cloud tab waiting on an agent that has not opened its sandbox asks again. */
-const STARTING_RETRY = Duration.seconds(5);
+/** How long a shown cloud tab waits to ask again where the sandbox the list says opened still answers as starting. */
+const OPENING_RETRY = {
+  /** The first wait, doubling on each ask that still answers starting. */
+  FIRST: Duration.seconds(1),
+  /** The longest wait. */
+  LONGEST: Duration.seconds(30),
+} as const;
+
+/** The wait before the ask after `asked` asks that still answered starting, doubling to the longest. */
+function openingWait(asked: number): Duration.Duration {
+  return Duration.min(
+    Duration.times(OPENING_RETRY.FIRST, 2 ** Math.max(asked - 1, 0)),
+    OPENING_RETRY.LONGEST,
+  );
+}
 
 /** The terminals one window holds: their lists, kept across a reload, and their sessions, let go as the window closes. */
 export interface Terminals {
@@ -307,20 +325,28 @@ export function useTerminalTabSession(
     [held, sessions, kind, agentId, shell],
   );
   const view = useTerminalView(session, shown);
+  const sandboxOpen = useSandboxOpen(kind === TERMINAL_KIND.CLOUD ? agentId : null);
   // Note that a later ask stands in for one still waiting, and the tab let go calls it off.
   const retry = useWait();
-  // A shown tab waiting on the agent to open its sandbox asks again a while on.
+  // How many times this session asked since the list said the sandbox opened.
+  const askedOpen = useRef<{ readonly session: typeof session; readonly asked: number }>(undefined);
+  // A shown tab waiting on the agent to open its sandbox asks again as the task list says it opened, and after a wait where it still starts.
   useEffect(() => {
-    if (!shown || view.state.kind !== TERMINAL_STATE.STARTING) return;
+    if (!shown || sandboxOpen !== true || view.state.kind !== TERMINAL_STATE.STARTING) return;
+    const asked = askedOpen.current?.session === session ? askedOpen.current.asked : 0;
+    askedOpen.current = { session, asked: asked + 1 };
+    if (asked === 0) return session.connect();
     retry.start(
       Effect.andThen(
-        Effect.sleep(STARTING_RETRY),
+        Effect.sleep(openingWait(asked)),
         Effect.sync(() => {
           if (session.state.kind === TERMINAL_STATE.STARTING) session.connect();
         }),
       ),
     );
-  }, [shown, view.state, session, retry]);
+    // Note that a tab hidden calls the ask off, so only a tab on screen asks again.
+    return retry.stop;
+  }, [shown, sandboxOpen, view.state, session, retry]);
   return view;
 }
 

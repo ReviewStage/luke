@@ -20,9 +20,9 @@ import {
 import { INBOX_ATTACHMENT_KIND, type InboxAttachmentKind } from "../storage-vocabulary.js";
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
+import { descriptionComment } from "./description-comment.js";
 import { inboxItem } from "./inbox.js";
 import { inboxMessage } from "./inbox-message.js";
-import { descriptionComment } from "./description-comment.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 
@@ -75,7 +75,9 @@ export const ownedByTaskAlone = (table: {
  * A plan's picture is owned by its task directly: it names its task and no
  * other owner (`ownedByTaskAlone`). Its uploader stays its account until the
  * account is gone, and `saved_at` is when a save of the plan's text first
- * named it, so the scheduled sweep can delete an upload no save ever did.
+ * named it. Nothing reads the stamp now; it is still written so that a
+ * rollback to a release that still runs the old unsaved-picture purge spares
+ * the pictures saved since, and a later release drops it.
  *
  * A plan comment's file is owned by its comment, and goes with it, its
  * thread, and its plan. It names its task and the task's workspace beside
@@ -160,7 +162,7 @@ export const attachment = pgTable(
     uniqueIndex("attachment_conversation_sha256").on(table.conversationId, table.sha256),
     // A task's attachments are moved with it, and a plan's pictures read, counted, and stamped by it.
     index("attachment_task").on(table.taskId).where(sql`${table.taskId} is not null`),
-    // The sweep reads the plan uploads no save named, oldest first.
+    // The old unsaved-picture purge read the plan uploads no save named, oldest first; kept for a rollback to it, and dropped with `saved_at`.
     index("attachment_unsaved")
       .on(table.createdAt)
       .where(sql`${ownedByTaskAlone(table)} and ${table.savedAt} is null`),

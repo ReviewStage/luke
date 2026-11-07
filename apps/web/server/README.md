@@ -353,6 +353,18 @@ Vercel deploys: `.vercel/output/config.json` (version 3), the site under
 bundle as `index.mjs` beside a `.vc-config.json` that names it as `handler`
 under the Node launcher with `shouldAddHelpers`, the fields Vercel's own Node
 builder writes (`packages/node/src/build.ts`), and the plan's `maxDuration`.
+A queue's consumer, the automation-runs consumer
+(`routes/automations/runs.ts`) alone today, is a function of its own whose
+`.vc-config.json` also carries the `queue/v2beta` trigger Vercel's builder
+writes for one (its topic, and its consumer group named from its path as
+the builder names one), since a tree deployed as it stands
+takes no trigger from `vercel.json`'s `functions`; it has no rewrite and no
+public path, and the queue alone invokes it. Every automation's schedule is
+kept in Vercel Schedules on production
+(`packages/service/src/automations/automation-cadence.ts`); the automations
+saved before that are given theirs once, after the deploy, by
+`scripts/backfill-automation-schedules.sh` against
+`/api/maintenance/automation-schedules` under the deployment's `CRON_SECRET`.
 When that tree exists `@vercel/static-build` adopts it as the deployment's
 final form instead of serving `dist/`, so this build decides the deploy shape
 on every preset: under Vite today, and as the `web` service of a services

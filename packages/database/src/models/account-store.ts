@@ -24,14 +24,11 @@ import {
 import { WireValueSchema } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
-import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -107,46 +104,14 @@ const deleteUserRow = SqlSchema.void({
   execute: (userId) => Database.use((db) => db.delete(user).where(eq(user.id, userId))),
 });
 
-const lockUserRow = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) =>
-    Database.use((db) =>
-      db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
-    ),
-});
-
-const findAccountSessions = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ runtimeSessionId: conversations.runtimeSessionId })
-        .from(conversations)
-        .where(eq(conversations.userId, userId))
-        .for("update"),
-    ),
-});
-
 /**
- * Erases the user row; every dependent row cascades with it. The runtime session
- * each of the account's conversations ran in, a deleted task's too, is
- * queued for its sandbox's deletion in the same transaction, since nothing
- * after it names them. The user's row is locked first, so a conversation
- * opened meanwhile waits on it and finds no account, and every conversation
- * of the account is locked as its session is read, so a session claimed
- * meanwhile waits and finds no row to claim, rather than landing unqueued.
+ * Erases the user row; every dependent row cascades with it. The sandboxes
+ * the account's sessions ran in are not deleted here: the account's delete
+ * retires its standing sessions first (`account-procedures.ts`), and what is
+ * left expires on Vercel's own schedule (`CODER.SANDBOX_SNAPSHOTS`).
  */
 export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        yield* lockUserRow(userId);
-        yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
-        yield* deleteUserRow(userId);
-      }),
-    ),
-  );
+  return deleteUserRow(userId);
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
@@ -216,31 +181,6 @@ const findPreference = SqlSchema.findOneOption({
         .limit(1),
     ),
 });
-
-/**
- * The account's preferences row written for its live read: the coding
- * agents' default as its three columns stand, the chapters model, and
- * whether our Slack bot writes the account, each as stored, null where
- * never chosen, which the reader reads as the snapshot does
- * (`@repo/features/account-preferences-live`). No row for an account that
- * stored none. None where a value cannot be carried.
- */
-export function accountPreferencesLiveStatement(userId: string): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          agentModel: accountPreference.agentModel,
-          agentEffort: accountPreference.agentEffort,
-          agentContextWindow: accountPreference.agentContextWindow,
-          chaptersModel: accountPreference.chaptersModel,
-          slackNotifications: accountPreference.slackNotifications,
-        }),
-      )
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId)),
-  );
-}
 
 /** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(

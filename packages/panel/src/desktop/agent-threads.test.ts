@@ -24,12 +24,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handInboxItems } from "../testing/app-state.js";
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import {
-  agentsControl,
-  pushedTranscripts,
-  tasksControl,
-  UNPINNED_SUMMARY,
-} from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -159,7 +154,7 @@ async function mount(
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        createElement(DesktopTasks, { looks: NO_LOOKS, tasks: control }),
       ),
     ),
   );

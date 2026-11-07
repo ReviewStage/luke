@@ -1,33 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
-import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
-import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
-import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
-import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
-import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
-import {
-  slackChannelRepositoriesLiveStatement,
-  slackInstallationLiveStatement,
-} from "@repo/database/models/slack-installation-store";
-import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
-import { workspacesLiveStatements } from "@repo/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
 import { LIVE_PARAM } from "@repo/features/live-read";
-import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
-import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
-import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
-import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { BOUND_READS } from "../sync/live-queries.js";
 
 /**
@@ -74,57 +57,12 @@ function liveStatements() {
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
-    "agent.pullRequestChapters": Option.getOrThrow(
-      pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
-    ),
-    "account.integrations": Option.getOrThrow(
-      integrationStatusesLiveStatement(USER_ID, new Date(0)),
-    ),
-    "account.preferences": Option.getOrThrow(accountPreferencesLiveStatement(USER_ID)),
-    "mac.commands": Option.getOrThrow(
-      macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
-    ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(workspacesLiveStatements(USER_ID))).map(([part, query]) => [
-        `workspaces.${part}`,
-        query,
-      ]),
-    ),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(workspaceMembersLiveStatements(USER_ID, randomUUID()))).map(
-        ([part, query]) => [`workspace-members.${part}`, query],
-      ),
-    ),
-    "workspace-invitations.invitations": Option.getOrThrow(
-      workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
-    ),
-    "workspace-memories.memories": Option.getOrThrow(
-      workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
-    ),
-    "installed-skills.skills": Option.getOrThrow(
-      installedSkillsLiveStatement(USER_ID, randomUUID()),
-    ),
-    "workspace-integrations.sentryInstallations": Option.getOrThrow(
-      sentryInstallationsLiveStatement(USER_ID, randomUUID()),
-    ),
-    "workspace-integrations.slackInstallation": Option.getOrThrow(
-      slackInstallationLiveStatement(USER_ID, randomUUID()),
-    ),
-    "workspace-integrations.slackChannelRepositories": Option.getOrThrow(
-      slackChannelRepositoriesLiveStatement(USER_ID, randomUUID()),
-    ),
     ...boundStatements(),
-    ...Object.fromEntries(
-      Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
-        ([part, query]) => [`sidebar.${part}`, query],
-      ),
-    ),
-    "sidebar.pins": Option.getOrThrow(repositoryPinsLiveStatement(USER_ID)),
   };
 }
 

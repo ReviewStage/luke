@@ -9,18 +9,14 @@ import {
   agentBeforeSchema,
   agentCallIdSchema,
   agentChangesAnswerSchema,
-  agentDeleteAnswerSchema,
-  agentMessageAnswerSchema,
   agentMessageRequestSchema,
   agentMessagesAnswerSchema,
   agentOverviewChecksAnswerSchema,
   agentOverviewConversationAnswerSchema,
   agentOverviewPullRequestAnswerSchema,
   agentPageAnswerSchema,
-  agentPartAnswerSchema,
   agentPinRequestSchema,
   agentPullRequestAnswerSchema,
-  agentQueueAnswerSchema,
   agentQueueChangeSchema,
   agentReadRequestSchema,
   agentRenameRequestSchema,
@@ -33,9 +29,12 @@ import {
   refusedDeviceSchema,
 } from "./agent-wire.js";
 import { accountContract } from "./contract/account.js";
+import { agentsContract } from "./contract/agents.js";
 import { dictationContract } from "./contract/dictation.js";
 import { githubTokenContract } from "./contract/github-token.js";
 import { hostsContract } from "./contract/hosts.js";
+import { inboxContract } from "./contract/inbox.js";
+import { messagesContract } from "./contract/messages.js";
 import { modelsContract } from "./contract/models.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
@@ -44,18 +43,13 @@ import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import { hostIdRequestSchema } from "./host-wire.js";
-import { answerView, failureSetOf } from "./hosted-failure.js";
+import { answerView, failureSetOf, HOSTED_CALL_FAILURE } from "./hosted-failure.js";
 import {
   inboxAcknowledgeRequestSchema,
-  inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
-  inboxItemHomeSchema,
-  inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
-  inboxReadAllSchema,
-  inboxReadStateSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import { memoryIdSchema } from "./memory-wire.js";
@@ -138,53 +132,135 @@ const AGENT_HOST_CALLS = {
   },
 };
 
+/** The refusals a call reads as no answer though its procedure declares them, as the table it read its refusals through before read every one it did not name. */
+const READ_AS_UNANSWERED = HOSTED_CALL_FAILURE.UNANSWERED;
+
+/** How a delete reads its refusals: the agent gone, or one still starting with no turn to stop yet; a Stop's other refusals are no answer. */
+export const AGENT_DELETE_RENAMES = {
+  [HOSTED_API_ERROR.NOT_PERMITTED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: READ_AS_UNANSWERED,
+} as const;
+
+/** How an archive reads its refusals: as a delete does, every other refusal of a change no answer. */
+export const AGENT_ARCHIVE_RENAMES = {
+  ...AGENT_DELETE_RENAMES,
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a model and effort chosen reads its refusals: the agent gone, or a choice the catalog does not offer; every other refusal of a change no answer. */
+export const AGENT_CHOOSE_RENAMES = {
+  ...AGENT_ARCHIVE_RENAMES,
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a repository added reads its refusals: the agent gone, one only its starter adds to, a repository refused beside its own for why, out of reach, or not read off GitHub; every other refusal of a change no answer. */
+export const AGENT_ADD_REPOSITORY_RENAMES = {
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a Start reads its refusals: each as its own failure, a choice the catalog does not offer as one the service does not offer now, and a branch gone or an agent gone from its routing as no answer. */
+export const AGENT_START_RENAMES = {
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+} as const;
+
+/**
+ * How the agent rows and the Starts read their refusals as one set: a
+ * choice refused as an invalid request is one the service does not offer
+ * now, and a key already written under, a branch gone, and an agent gone
+ * from its routing are no answer to every one of them.
+ */
+const AGENT_ROW_RENAMES = {
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+} as const;
+
+/** A task's and a workspace's agents listed, an agent started, changed, and deleted, as the agent client asks them through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_ROW_CALLS = {
+  agents: {
+    listOfTask: agentsContract.listOfTask,
+    listOfWorkspace: agentsContract.listOfWorkspace,
+    start: agentsContract.start,
+    startFrom: agentsContract.startFrom,
+    change: agentsContract.change,
+    delete: agentsContract.delete,
+  },
+};
+
+/** How a member's answer, close, or read state written reads a key already written under: no answer, as the table each read its refusals through before read every refusal it did not name. */
+export const AGENT_INBOX_WRITE_RENAMES = {
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+} as const;
+
+/** An agent's transcript and its workers' read, a message and a change of the queue, and the member's writes on the inbox and an item's home read, as the agent client asks them through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_MESSAGE_CALLS = {
+  messages: {
+    agent: messagesContract.agent,
+    agentWorker: messagesContract.agentWorker,
+    send: messagesContract.send,
+    queue: messagesContract.queue,
+    agentNewest: messagesContract.agentNewest,
+    agentWorkerNewest: messagesContract.agentWorkerNewest,
+    agentPart: messagesContract.agentPart,
+    agentWorkerPart: messagesContract.agentWorkerPart,
+  },
+  inbox: {
+    answer: inboxContract.answer,
+    close: inboxContract.close,
+    message: inboxContract.message,
+    start: inboxContract.start,
+    home: inboxContract.home,
+    markItemRead: inboxContract.markItemRead,
+    markItemUnread: inboxContract.markItemUnread,
+    remindItem: inboxContract.remindItem,
+    markAllRead: inboxContract.markAllRead,
+  },
+};
+
 /**
  * Why a coding-agent call answered nothing a window can draw: the failures
- * the account's own procedures and its hosts' declare (`AGENT_ACCOUNT_CALLS`,
- * `AGENT_HOST_CALLS`), among them
+ * the account's own procedures, its hosts', the agent rows' and Starts', and
+ * the messages' and the inbox's declare (`AGENT_ACCOUNT_CALLS`,
+ * `AGENT_HOST_CALLS`, `AGENT_ROW_CALLS`, `AGENT_MESSAGE_CALLS`), among them
  * no answer at all (`unanswered`), the task, agent, workspace, or host not one
  * the account holds (`not-found`), one only another member may act on
  * (`not-permitted`), a model or effort the service does not offer now
  * (`invalid-choice`), a clip dictated with no OpenAI key saved
  * (`openai-key-missing`), and a ChatGPT sign-in braked (`quota-exhausted`)
- * or given no code (`upstream-error`); and beside them those of the calls
- * that still read their refusals through a table of their own.
+ * or given no code (`upstream-error`), a task that names no repository for
+ * a Start to check out (`no-repository`), repositories a Start or an agent
+ * named beside its own refused (`extra-repository-refused`), a repository
+ * out of reach (`repository-not-reachable`) or not read off GitHub
+ * (`github-unanswered`), words past a message's bound (`message-too-long`),
+ * a session still coming up (`agent-not-ready`), ended for good
+ * (`agent-retired`), on a device removed (`device-removed`) or one that
+ * would not take it (`local-agent-refused`), or on a harness not reached
+ * from here (`native-agent-not-here`), and a plan or a key that cannot pay
+ * (`agent-plan-*`, `agent-credential-missing`, `agent-api-key-unreadable`),
+ * each with the facts that travel beside it where the service said.
  */
 export const AGENT_CALL_FAILURE = {
   ...failureSetOf(AGENT_ACCOUNT_CALLS, { as: AGENT_RENAMES }),
   ...failureSetOf(AGENT_HOST_CALLS),
-  /** The task names no repository, so there is nothing for an agent to check out. */
-  NO_REPOSITORY: "no-repository",
-  /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
-  GITHUB_UNANSWERED: "github-unanswered",
-  /** The message spells more characters than one message to an agent may; shortened, it is taken. */
-  MESSAGE_TOO_LONG: "message-too-long",
-  /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
-  AGENT_NOT_READY: "agent-not-ready",
-  /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
-  AGENT_RETIRED: "agent-retired",
-  /** The agent ran on a host its starter removed, so no message reaches it again; only a new agent goes on from here. */
-  DEVICE_REMOVED: "device-removed",
-  /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
-  NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
-  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
-  AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
-  /** The agent runs on its starter's plan, whose provider did not answer; the same call a little later may be taken. */
-  AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
-  /** The agent runs on its starter's plan, whose usage limit is reached until it resets. */
-  AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
-  /** The agent runs on its starter's plan, which its provider said is not eligible to run it. */
-  AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
-  /** The account keeps neither the model provider's subscription nor its API key, so no coding agent on that provider starts or takes a message until one is connected in Settings › Agents. */
-  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
-  /** The agent runs on its starter's API key, which is saved but cannot be read here, so it is saved again in Settings › Agents. */
-  AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
-  /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
-  LOCAL_AGENT_REFUSED: "local-agent-refused",
-  /** The repositories the Start named beside its agent's own were refused, for the reason that travels beside it where the service said (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. */
-  EXTRA_REPOSITORY_REFUSED: "extra-repository-refused",
+  ...failureSetOf(AGENT_ROW_CALLS, { as: AGENT_ROW_RENAMES }),
+  ...failureSetOf(AGENT_MESSAGE_CALLS, { as: AGENT_INBOX_WRITE_RENAMES }),
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
@@ -208,6 +284,29 @@ const failedReaching = EffectSchema.Struct({
   extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
   refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
 });
+
+/**
+ * A member's words on an inbox thread as the window hears them: the
+ * answer, or the failure alone, without the facts a message to an agent
+ * carries beside its refusal (why a repository is out of reach, when a
+ * plan's limit resets, whose credential is missing, why a device would not
+ * take it), which the window has never heard for these calls.
+ */
+function factsUnheard<
+  Output extends EffectSchema.Top,
+  Failure extends EffectSchema.Top,
+  Cause extends EffectSchema.Top,
+>(
+  view: EffectSchema.Union<
+    readonly [Output, EffectSchema.Struct<{ readonly failure: Failure; readonly cause: Cause }>]
+  >,
+) {
+  const [output, failed] = view.members;
+  return EffectSchema.Union([
+    output,
+    EffectSchema.Struct({ failure: failed.fields.failure, cause: failed.fields.cause }),
+  ]);
+}
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */
 export const agentModelsAnswerSchema = answerView(modelsContract.list);
@@ -383,10 +482,7 @@ export const agentWorkspaceListParamsSchema = EffectSchema.Struct({
 export type AgentWorkspaceListParams = typeof agentWorkspaceListParamsSchema.Type;
 
 /** One task's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
-export const agentListAnswerViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ agents: EffectSchema.Array(agentSummarySchema) }),
-  failed,
-]);
+export const agentListAnswerViewSchema = answerView(agentsContract.listOfTask);
 
 export type AgentListAnswer = typeof agentListAnswerViewSchema.Type;
 
@@ -418,7 +514,7 @@ export const agentAgentAnswerSchema = EffectSchema.Union([
 export type AgentAgentAnswer = typeof agentAgentAnswerSchema.Type;
 
 /** A message handed to an agent, as the host hears the service answer it: the agent, and the transaction that wrote its row where one did; or why there is none. */
-const agentMessageAnswerViewSchema = EffectSchema.Union([agentMessageAnswerSchema, failedReaching]);
+const agentMessageAnswerViewSchema = answerView(messagesContract.send);
 
 export type AgentMessageAnswerView = typeof agentMessageAnswerViewSchema.Type;
 
@@ -441,15 +537,14 @@ export const agentQueueParamsSchema = EffectSchema.Struct({
 export type AgentQueueParams = typeof agentQueueParamsSchema.Type;
 
 /** A change of an agent's queue, as the window hears the service answer it: the queue as it then stands, or why it did not change. */
-export const agentQueueAnswerViewSchema = EffectSchema.Union([
-  agentQueueAnswerSchema,
-  failedReaching,
-]);
+export const agentQueueAnswerViewSchema = answerView(messagesContract.queue);
 
 export type AgentQueueAnswerView = typeof agentQueueAnswerViewSchema.Type;
 
 /** An agent deleted for good, as the window hears it: that it was, or why it was not. */
-export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswerSchema, failed]);
+export const agentDeleteAnswerViewSchema = answerView(agentsContract.delete, {
+  as: AGENT_DELETE_RENAMES,
+});
 
 export type AgentDeleteAnswerView = typeof agentDeleteAnswerViewSchema.Type;
 
@@ -773,7 +868,9 @@ export const agentInboxAnswerParamsSchema = EffectSchema.Struct({
 export type AgentInboxAnswerParams = typeof agentInboxAnswerParamsSchema.Type;
 
 /** A nod or a close, as the window hears it: the item as it then stands and whether it was taken, or why there is no answer. */
-export const agentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
+export const agentInboxAnsweredViewSchema = factsUnheard(
+  answerView(inboxContract.answer, { as: AGENT_INBOX_WRITE_RENAMES }),
+);
 
 export type AgentInboxAnsweredView = typeof agentInboxAnsweredViewSchema.Type;
 
@@ -817,7 +914,7 @@ export const agentInboxMessageParamsSchema = EffectSchema.Struct({
 export type AgentInboxMessageParams = typeof agentInboxMessageParamsSchema.Type;
 
 /** A message on an item's thread, as the window hears it: the item as it then stands, its thread with the message on it, or why there is no answer. */
-export const agentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
+export const agentInboxMessagedViewSchema = factsUnheard(answerView(inboxContract.message));
 
 export type AgentInboxMessagedView = typeof agentInboxMessagedViewSchema.Type;
 
@@ -834,7 +931,7 @@ export const agentInboxItemHomeParamsSchema = EffectSchema.Struct({
 export type AgentInboxItemHomeParams = typeof agentInboxItemHomeParamsSchema.Type;
 
 /** Where one item stands, as the window hears it: its agent, its task, and its workspace, or why there is no answer, not found for one the account may not read. */
-export const agentInboxItemHomeViewSchema = EffectSchema.Union([inboxItemHomeSchema, failed]);
+export const agentInboxItemHomeViewSchema = answerView(inboxContract.home);
 
 export type AgentInboxItemHomeView = typeof agentInboxItemHomeViewSchema.Type;
 
@@ -855,7 +952,9 @@ export const agentInboxRemindParamsSchema = EffectSchema.Struct({
 export type AgentInboxRemindParams = typeof agentInboxRemindParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
-export const agentInboxReadStateViewSchema = EffectSchema.Union([inboxReadStateSchema, failed]);
+export const agentInboxReadStateViewSchema = answerView(inboxContract.markItemRead, {
+  as: AGENT_INBOX_WRITE_RENAMES,
+});
 
 export type AgentInboxReadStateView = typeof agentInboxReadStateViewSchema.Type;
 
@@ -872,7 +971,9 @@ export const agentInboxReadAllParamsSchema = EffectSchema.Struct({
 export type AgentInboxReadAllParams = typeof agentInboxReadAllParamsSchema.Type;
 
 /** Every item of the Inbox marked read, as the window hears it: how many were unread, or why there is no answer. */
-export const agentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);
+export const agentInboxReadAllViewSchema = answerView(inboxContract.markAllRead, {
+  as: AGENT_INBOX_WRITE_RENAMES,
+});
 
 export type AgentInboxReadAllView = typeof agentInboxReadAllViewSchema.Type;
 
@@ -912,7 +1013,7 @@ export const agentPartParamsSchema = EffectSchema.Struct({
 export type AgentPartParams = typeof agentPartParamsSchema.Type;
 
 /** The part whole, as the window hears it, or why there is none. */
-export const agentPartViewSchema = EffectSchema.Union([agentPartAnswerSchema, failed]);
+export const agentPartViewSchema = answerView(messagesContract.agentPart);
 
 export type AgentPartView = typeof agentPartViewSchema.Type;
 

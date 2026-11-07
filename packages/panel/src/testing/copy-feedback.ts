@@ -5,6 +5,11 @@
  * docs' Testing guide makes one per test with `retry: false`, so no test
  * reads what another cached and a failed read shows at once. One client
  * stands for the whole test, so a surface drawn again keeps its cache.
+ *
+ * The window's drafts owner (`useDraftsOwner`) stands, no one signed in, in
+ * a root of its own from the first tree a test draws here until the test
+ * ends, so what one test typed, attached, or held unsent is let go before
+ * the next, as the window's root going lets it go.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -25,10 +30,13 @@ import {
   useContext,
   useEffect,
 } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { appStateQuery, followAppState } from "../use-app-state.js";
+import { seedLanded } from "./landed-reads.js";
 
 /**
  * A client as the Testing guide makes one, a failed read not tried again,
@@ -47,6 +55,7 @@ function freshQueryClient(): QueryClient {
   });
   client.setQueryDefaults(appStateQuery.queryKey, { enabled: false });
   if (heldForFile !== undefined) client.setQueryData(appStateQuery.queryKey, heldForFile);
+  seedLanded(client);
   return client;
 }
 
@@ -55,12 +64,32 @@ let heldForFile: AppStateSnapshot | undefined;
 
 let testQueryClient = freshQueryClient();
 
+/** No one signed in to the window, whose drafts it reads and writes. */
+function NoOneSignedIn(): null {
+  useDraftsOwner(undefined);
+  return null;
+}
+
+/** The root the window's drafts owner stands in for the test, none until the test draws a tree. */
+let draftsRoot: Root | undefined;
+
+/** Stands the window's drafts owner up for the test, where it is not standing already. */
+function standDraftsOwner(): void {
+  // Note that a static render in a node test opens no window, so it holds no drafts to let go.
+  if (draftsRoot !== undefined || typeof document === "undefined") return;
+  const root = createRoot(document.createElement("div"));
+  draftsRoot = root;
+  act(() => root.render(createElement(NoOneSignedIn)));
+}
+
 beforeEach(() => {
   testQueryClient = freshQueryClient();
 });
 
 afterEach(() => {
   testQueryClient.clear();
+  act(() => draftsRoot?.unmount());
+  draftsRoot = undefined;
 });
 
 /** Whether a tree already stands on the test's client, so a second `withQueryClient` inside it is caught. */
@@ -95,6 +124,7 @@ function TestAppStateSubscription(): null {
  * under the registry React provides when none is given.
  */
 export function withQueryClient(element: ReactNode): ReactElement {
+  standDraftsOwner();
   return createElement(
     QueryClientProvider,
     { client: testQueryClient },

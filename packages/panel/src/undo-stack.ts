@@ -9,7 +9,7 @@
  * its own entry through the same lists, so a write is never taken back
  * twice, once by the toast and once by the key. Every run waits for the one
  * before it, so two quick presses never send their writes out of order.
- * The lists are this window's alone, on its own registry, and go when the
+ * The lists are this window's alone, in a store of its own, and go when the
  * account signed in changes, since a write is its presser's own.
  *
  * A row entry (`pressRows`) is built from a declaration of its write's kind
@@ -24,7 +24,6 @@
  * chosen anew, and an undo must not take that choice back.
  */
 
-import { useAtomValue } from "@effect/atom-react";
 import type { AgentAgentAnswer } from "@repo/features/agent-view";
 import type { AgentSummary } from "@repo/features/agent-wire";
 import type { LIVE_READ } from "@repo/features/live-wire";
@@ -35,7 +34,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import type { PortActKind } from "@repo/host/contract";
 import { STATUS_TONE } from "@repo/ui";
-import * as Atom from "effect/reactivity/Atom";
+import { Store, useSelector } from "@tanstack/react-store";
 import {
   type ActResult,
   type ActVariables,
@@ -47,7 +46,6 @@ import {
 } from "./act.js";
 import { priorityOf, statusOf } from "./desktop/task-row-parts.js";
 import type { ShownFailure } from "./failure-report.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
 
 /** The most entries each list keeps; an older one leaves as a newer one comes. */
@@ -119,8 +117,8 @@ const REFUSED_WORDS = {
 
 const EMPTY_LINE: UndoLine = { undo: [], redo: [] };
 
-/** This window's lists, kept alive as its toasts are, since a press's entry outlives the menu that pushed it. */
-const undoLineAtom = Atom.keepAlive(Atom.make<UndoLine>(EMPTY_LINE));
+/** This window's lists, the module's as its toasts are, since a press's entry outlives the menu that pushed it. */
+const undoLine = new Store<UndoLine>(EMPTY_LINE);
 
 /** The run every next run waits for: the newest asked. */
 let turn: Promise<unknown> = Promise.resolve();
@@ -130,7 +128,7 @@ let generation = 0;
 
 /** The lists as they stand. */
 function lineNow(): UndoLine {
-  return rendererRegistry.get(undoLineAtom);
+  return undoLine.state;
 }
 
 /** `entry` laid on top of `entries`, the oldest leaving past the bound. */
@@ -171,10 +169,7 @@ function said(entry: UndoEntry, way: UndoWay, run: UndoRun, keyed: boolean): voi
 function ran(entry: UndoEntry, way: UndoWay, keyed: boolean): Promise<UndoRan | undefined> {
   const line = lineNow();
   if (!line[way].includes(entry)) return Promise.resolve(undefined);
-  rendererRegistry.set(undoLineAtom, {
-    ...line,
-    [way]: line[way].filter((each) => each !== entry),
-  });
+  undoLine.setState(() => ({ ...line, [way]: line[way].filter((each) => each !== entry) }));
   const asked = generation;
   const run = turn
     .then(() => entry[way]())
@@ -182,8 +177,7 @@ function ran(entry: UndoEntry, way: UndoWay, keyed: boolean): Promise<UndoRan | 
       if (asked !== generation) return answered.ran;
       if (answered.ran === UNDO_RAN.APPLIED) {
         const back = BACK_WAY[way];
-        const now = lineNow();
-        rendererRegistry.set(undoLineAtom, { ...now, [back]: stacked(now[back], entry) });
+        undoLine.setState((now) => ({ ...now, [back]: stacked(now[back], entry) }));
       }
       said(entry, way, answered, keyed);
       return answered.ran;
@@ -200,7 +194,7 @@ function ranNewest(way: UndoWay): Promise<UndoRan | undefined> {
 
 /** Keeps `entry` as the newest for ⌘Z, leaving nothing for ⇧⌘Z, and answers its toast's Undo, which runs it through the lists. */
 function undoable(entry: UndoEntry): () => void {
-  rendererRegistry.set(undoLineAtom, { undo: stacked(lineNow().undo, entry), redo: [] });
+  undoLine.setState((now) => ({ undo: stacked(now.undo, entry), redo: [] }));
   return () => void ran(entry, UNDO_WAY.UNDO, false);
 }
 
@@ -222,14 +216,15 @@ export interface UndoWaits {
 
 /** Which keys have an entry waiting, for the window to offer their commands by. */
 export function useUndoWaits(): UndoWaits {
-  const line = useAtomValue(undoLineAtom);
-  return { undoes: line.undo.length > 0, redoes: line.redo.length > 0 };
+  const undoes = useSelector(undoLine, (line) => line.undo.length > 0);
+  const redoes = useSelector(undoLine, (line) => line.redo.length > 0);
+  return { undoes, redoes };
 }
 
 /** Both lists emptied, as the account signed in changes, so no write is taken back under another account. */
 export function forgetUndo(): void {
   generation += 1;
-  rendererRegistry.set(undoLineAtom, EMPTY_LINE);
+  undoLine.setState(() => EMPTY_LINE);
 }
 
 /** How a row write's act is sent: the `mutateAsync` of its kind's mutation (`act-mutations.ts`). */

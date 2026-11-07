@@ -10,23 +10,18 @@ import {
   jsonOf,
 } from "./account-call.js";
 import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
-import { hostedCall } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import { spelledFailure } from "./hosted-failure.js";
-import { askLive, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import { type HostedClient, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
-import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 import {
   type WorkspaceSentry,
   workspaceSentryDisconnectRequestSchema,
   workspaceSentryRequestSchema,
 } from "./sentry-install-wire.js";
 import { workspacePhotoPath } from "./service-paths.js";
-import {
-  HOSTED_API_ERROR,
-  type HostedApiError,
-  hostedErrorSchema,
-  readServiceAnswer,
-} from "./service-wire.js";
+import { type HostedApiError, hostedErrorSchema, readServiceAnswer } from "./service-wire.js";
 import {
   WORKSPACE_SLACK_BOT_QUERY,
   type WorkspaceSlackBot,
@@ -42,17 +37,16 @@ import {
   type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "./workspace-call.js";
-import type { WorkspaceIntegrationsLiveAnswer } from "./workspace-integrations-live.js";
+import {
+  type WorkspaceEnvironmentAnswer,
+  workspaceVariableDeleteRequestSchema,
+  workspaceVariablePutRequestSchema,
+} from "./workspace-environment-wire.js";
 import {
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
-import type {
-  WorkspaceInvitationsLiveAnswer,
-  WorkspaceMembersLiveAnswer,
-  WorkspacesLiveAnswer,
-} from "./workspace-live.js";
 import {
   type Workspace,
   type WorkspaceMember,
@@ -146,32 +140,6 @@ function resultOf<Answered extends object, Picked>(
   });
 }
 
-/**
- * A live read's answer as a result, as `hostedResult` reads one, but signed
- * out where the service refused the session, as it answers a live read
- * started for another account (`LIVE_SIGNED_OUT`).
- */
-function liveResult<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<
-  WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.match(asked, {
-    onSuccess: (answer): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => ({
-      ok: true,
-      answer,
-    }),
-    onFailure: (failed): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => {
-      if (failed._tag !== "HostedRefused") return UNANSWERED;
-      if (failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN) return LIVE_SIGNED_OUT;
-      const failure = workspaceFailureOf(failed.refusal);
-      return failure === undefined ? UNANSWERED : { ok: false, failure };
-    },
-  });
-}
-
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
   /** The hosted contract's client under the account's credential. */
@@ -198,103 +166,9 @@ export class HostedWorkspaceClient {
     });
   }
 
-  /**
-   * The account's workspaces sealed for following over Neon Realtime, for
-   * the account named, or with their rows inline where `poll` asks for
-   * them, held by the service until they move past `after`; signed out
-   * where the session is another account's, or why not.
-   */
-  live(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceCallResult<WorkspacesLiveAnswer> | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveResult(
-      askLive(this.#hosted.live.workspaces, { [LIVE_USER_QUERY]: userId }, poll, after),
-    );
-  }
-
-  /**
-   * A workspace's people sealed for following over Neon Realtime, to a member
-   * of it and for the account named, or with their rows inline where `poll`
-   * asks for them; signed out where the session is another account's, or
-   * why not.
-   */
-  peopleLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceCallResult<WorkspaceMembersLiveAnswer> | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveResult(
-      askLive(
-        this.#hosted.live.workspaceMembers,
-        { workspaceId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
-  }
-
-  /**
-   * A workspace's pending invitations sealed for following over Neon
-   * Realtime, to an owner or an admin of it and for the account named, or
-   * with their rows inline where `poll` asks for them; signed out where the
-   * session is another account's, or why not.
-   */
-  invitationsLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceCallResult<WorkspaceInvitationsLiveAnswer> | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveResult(
-      askLive(
-        this.#hosted.live.workspaceInvitations,
-        { workspaceId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
-  }
-
-  /**
-   * A workspace's Sentry installations and Slack bot sealed for following
-   * over Neon Realtime, to a member of it and for the account named, with
-   * whether this deployment holds each integration, or with their rows
-   * inline where `poll` asks for them; signed out where the session is
-   * another account's, or why not.
-   */
-  integrationsLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceCallResult<WorkspaceIntegrationsLiveAnswer> | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveResult(
-      askLive(
-        this.#hosted.live.workspaceIntegrations,
-        { workspaceId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /** A workspace created with the name given, the account its owner; a name the service would refuse by shape never travels. */
@@ -563,6 +437,47 @@ export class HostedWorkspaceClient {
     return resultOf(
       hostedCall(this.#hosted.github.setTokenRepository, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer.repositories,
+    );
+  }
+
+  /** The workspace's environment variables by name, never a value, as any member reads them. */
+  environment(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.list, { workspaceId }),
+      (answer) => answer,
+    );
+  }
+
+  /** One environment variable set by an owner or admin, replacing a value of that name, answering the names as they then stand; a variable the service would refuse by shape never travels. */
+  putVariable(
+    workspaceId: string,
+    name: string,
+    value: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceVariablePutRequestSchema)({ workspaceId, name, value }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.put, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** One environment variable deleted by an owner or admin, answering the names that remain. */
+  deleteVariable(
+    workspaceId: string,
+    name: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceVariableDeleteRequestSchema)({ workspaceId, name }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.delete, admitted),
+      (answer) => answer,
     );
   }
 

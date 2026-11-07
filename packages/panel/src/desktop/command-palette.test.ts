@@ -84,12 +84,7 @@ import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
-import {
-  agentsControl,
-  listedAgent,
-  tasksControl,
-  UNPINNED_SUMMARY,
-} from "../testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -337,6 +332,7 @@ function press(listed: string): void {
 const SETTINGS_PAGES = [
   "Account",
   "Workspace",
+  "Environment",
   "Agents",
   "Integrations",
   "Vespin MCP",
@@ -355,12 +351,12 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
-test("the Settings filter lists Memory after Workspace only while the account has the Memory experiment on", async () => {
+test("the Settings filter lists Memory after Environment only while the account has the Memory experiment on", async () => {
   handState(experimentsOn(EXPERIMENT.MEMORY));
   await paletteUnderState(tasksControl());
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 3), ["Account", "Workspace", "Memory"]);
+  assert.deepEqual(rows().slice(0, 4), ["Account", "Workspace", "Environment", "Memory"]);
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
@@ -832,7 +828,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
-test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
+test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its tab on the task", () => {
   const shown: string[] = [];
   const agent = (id: string, title: string) => ({
     id,
@@ -844,7 +840,6 @@ test("an archived agent of the open task is still found, after the standing ones
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
-  const base = tasksControl();
   openPalette(
     tasksControl({
       activeTaskId: "plan-1",
@@ -863,7 +858,7 @@ test("an archived agent of the open task is still found, after the standing ones
         archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
         agentIds: ["agent-7"],
       }),
-      agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
+      onShowAgent: (taskId, agentId) => shown.push(`${taskId}:${agentId}`),
     }),
   );
   chooseFilter("This task");
@@ -877,7 +872,7 @@ test("an archived agent of the open task is still found, after the standing ones
   type("refund");
   assert.deepEqual(rows(), ["Refund export · Archived · Billing usage alerts"]);
   press("Refund export · Archived · Billing usage alerts");
-  assert.deepEqual(shown, ["agent-8"]);
+  assert.deepEqual(shown, ["plan-1:agent-8"]);
 });
 
 test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window", async () => {
@@ -1251,10 +1246,13 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
   await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
-  assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
-    renderToStaticMarkup(fileLook(path).icon),
-    "the row wears the file's type icon",
+  // Note that the icon is drawn once the file tree bundle it rides in has landed in the row.
+  await vi.waitFor(() =>
+    assert.equal(
+      row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
+      renderToStaticMarkup(withQueryClient(fileLook(path).icon)),
+      "the row wears the file's type icon",
+    ),
   );
   restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".ui-tooltip-card [data-file-card]");
@@ -1732,12 +1730,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   act(() =>
-    root.render(
-      onRegistry(
-        registry,
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
-    ),
+    root.render(onRegistry(registry, createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))),
   );
   // The document arrives a few microtasks after the window first draws.
   await settle();
@@ -1780,7 +1773,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
     root.render(
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        createElement(DesktopTasks, { looks: NO_LOOKS, tasks }),
       ),
     ),
   );
@@ -1934,7 +1927,8 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
     });
   };
   for (const tasks of [onPage(true), onPage(false)]) {
-    openPalette(tasks);
+    // The agent's page is the router's, which offers the page's links (`places/routed-places.ts`).
+    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, ROUTED_PLACE.AGENT);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -2057,6 +2051,10 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
     }),
     undefined,
     { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
+    undefined,
+    undefined,
+    undefined,
+    ROUTED_PLACE.AGENT,
   );
   act(() => {
     runAppCommand(APP_COMMAND.COPY_LINK);
@@ -2761,7 +2759,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
           { value: room },
           createElement(Looker, { looked: DOCUMENT_TASK }),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             room,
             away: { label: "Tasks", onPress: () => undefined },

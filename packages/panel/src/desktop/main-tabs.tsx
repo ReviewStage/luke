@@ -298,7 +298,10 @@ function agentTabs(input: {
     selected: chosen(tab),
     onSelect: () => main.onChoose(tab),
   });
-  const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
+  // An archived agent's tab stands once opened, drawn as a live one's is.
+  const open = [...(agents.agents ?? []), ...(agents.archived ?? [])].filter((agent) =>
+    main.openAgents?.includes(agent.id),
+  );
   const own = open.map((agent) => {
     const tab = agentTab(agent.id);
     const label = agentName(agent, agents.models);
@@ -368,8 +371,8 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the task's agents in the order started, as History lists a closed
- * one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
+ * Each of the task's agents in the order started, or of those given (`listed`), as History lists a closed
+ * or an archived one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
  * tab's look: its harness's mark wearing where it stands, and, where the
  * row draws one, a failure at its end, as its tab does. Picking an agent
  * whose tab is open chooses that tab rather than opening another, as a
@@ -379,8 +382,9 @@ export function agentEntries(
   main: Pick<MainTabsControl, "tab" | "onChoose">,
   agents: AgentsControl,
   held?: HeldTranscripts,
+  listed: readonly AgentSummary[] = agents.agents ?? [],
 ): AddEntry[] {
-  return (agents.agents ?? []).map((agent) => {
+  return listed.map((agent) => {
     const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab(agentTab(agent.id), main.tab);
     return {
@@ -768,7 +772,9 @@ export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | unde
   return stripTabTitle(tab, {
     ...UNREAD_TAB_NAMES,
     agent: (agentId) => {
-      const agent = agents.agents?.find((each) => each.id === agentId);
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
       return agent === undefined ? undefined : agentName(agent, agents.models);
     },
   });
@@ -834,8 +840,11 @@ export function MainTabContent({
       // on an agent reads it beside the task's list of agents rather than after
       // it; what needs the agent itself waits for the list in the tab's shape.
       // Note that the tab stands for an agent the list no longer holds only until
-      // the column moves back to the task, a render away.
-      const agent = agents.agents?.find((each) => each.id === agentId);
+      // the column moves back to the task, a render away; an archived agent's
+      // stands while it is opened.
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
       return (
         <ForkProvider
           key={agentId}

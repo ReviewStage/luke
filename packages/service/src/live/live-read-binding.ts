@@ -122,6 +122,22 @@ export function outerJoined<Joined extends Column>(
 }
 
 /**
+ * A select that orders itself, such as one that takes its newest row alone
+ * by columns it never selects, built for an unordered part (`ordered:
+ * false`): the reader orders the rows it holds by the part's declared
+ * order, and the statement's own stands as written. Fails where it is
+ * handed a declared order, which would stand after its own.
+ */
+export function ownOrder(select: LiveSelect): Orderable {
+  return {
+    orderBy: (...columns) => {
+      if (columns.length > 0) throw new Error("a statement that orders itself takes no order");
+      return select;
+    },
+  };
+}
+
+/**
  * One part's statement: its columns selected under its row's keys
  * (`liveSelection`), the select `build` makes of them, and the part's
  * declared order after it; none where it names a value a live statement
@@ -182,11 +198,12 @@ interface LiveReadAnswering<Read extends AnyLiveRead> {
 }
 
 /** How a declared read is answered by the service. */
-export interface LiveReadBinding<Read extends AnyLiveRead> extends LiveReadAnswering<Read> {
+export interface LiveReadBinding<Read extends AnyLiveRead, Topics extends LiveTopics = LiveTopics>
+  extends LiveReadAnswering<Read> {
   /** The synced tables its statements read. */
   readonly reads: readonly SyncTable[];
   /** The topics a write to its rows notifies, for the params bound, or how to look them up. */
-  topics(params: LiveReadParams<Read>): LiveTopics;
+  topics(params: LiveReadParams<Read>): Topics;
   /** Each part's statement, for the params bound (`liveRowsStatement`). */
   statements(params: LiveReadParams<Read>): {
     readonly [Part in keyof Read["parts"]]: Option.Option<LiveStatement>;
@@ -194,8 +211,10 @@ export interface LiveReadBinding<Read extends AnyLiveRead> extends LiveReadAnswe
 }
 
 /** A declared read bound: the live read Sync wakes, beside its declaration and how its caller is admitted and its answer completed. */
-export interface BoundLiveRead<Read extends AnyLiveRead = AnyLiveRead>
-  extends LiveQuery<keyof Read["params"] & string, keyof Read["parts"] & string>,
+export interface BoundLiveRead<
+  Read extends AnyLiveRead = AnyLiveRead,
+  Topics extends LiveTopics = LiveTopics,
+> extends LiveQuery<keyof Read["params"] & string, keyof Read["parts"] & string, Topics>,
     LiveReadAnswering<Read> {
   readonly declaration: Read;
 }
@@ -210,15 +229,15 @@ export interface AnyBoundRead extends LiveQuery {
  * Sync wakes under the declaration's name, params, and mode. Fails as
  * `defineLiveQuery` does.
  */
-export function bindLiveRead<Read extends AnyLiveRead & { readonly name: LiveReadName }>(
-  read: Read,
-  binding: LiveReadBinding<Read>,
-): BoundLiveRead<Read> {
+export function bindLiveRead<
+  Read extends AnyLiveRead & { readonly name: LiveReadName },
+  Topics extends LiveTopics,
+>(read: Read, binding: LiveReadBinding<Read, Topics>): BoundLiveRead<Read, Topics> {
   type Param = keyof Read["params"] & string;
   type Part = keyof Read["parts"] & string;
   // SAFETY: a declaration's params are its keys, each bound as text.
   const params = Object.keys(read.params) as Param[];
-  const query = defineLiveQuery<Param, Part, LiveTopics>({
+  const query = defineLiveQuery<Param, Part, Topics>({
     name: read.name,
     params,
     reads: binding.reads,

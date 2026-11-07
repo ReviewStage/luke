@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { getSharedHighlighter } from "@pierre/diffs";
 import {
   DIFF_FONT,
   DIFF_INDICATORS,
@@ -8,12 +9,11 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@repo/settings/diff-view";
-import { getSharedHighlighter } from "@pierre/diffs";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { sideBundles } from "../bundle-loader.js";
+
 import {
   type DiffLook,
   type DiffViewModule,
@@ -22,9 +22,9 @@ import {
 } from "../diff-view/contract.js";
 import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { onSideBundles } from "../testing/side-bundles.js";
+import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { type DiffListEntry, PierreDiffList } from "./diff-list.js";
 
 /**
@@ -90,10 +90,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Lets the bundle's import land, and Pierre's next two frames, in which it draws the list. */
+/** Lets the bundle's import land and be told, and Pierre's next two frames, in which it draws the list. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  await settleQueries();
+  await act(async () => {
     for (let frame = 0; frame < 2; frame += 1) {
       await new Promise<void>((done) => requestAnimationFrame(() => done()));
     }
@@ -102,7 +105,7 @@ async function settle(): Promise<void> {
 
 test("while the diff bundle is on its way the list says the changes are being read, and is busy until it has drawn a file", async () => {
   const held = Promise.withResolvers<DiffViewModule>();
-  const bundles = sideBundles({ diffView: () => held.promise });
+  const bundles = standInBundles({ diffView: () => held.promise });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -153,7 +156,7 @@ test("a gap control's hint, once the pointer presses or leaves, is drawn through
         onRegistry(
           AtomRegistry.make(),
           onSideBundles(
-            sideBundles({ diffView: async () => diffView }),
+            standInBundles({ diffView: async () => diffView }),
             createElement(PierreDiffList, {
               entries: [ENTRY],
               look: LOOK,

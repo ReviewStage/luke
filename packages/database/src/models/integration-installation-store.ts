@@ -3,8 +3,7 @@ import { TRIGGER_PROVIDER, type TriggerProvider } from "@repo/features/trigger-c
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, queryBuilder } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { INTEGRATION_INSTALLATION_STATUS } from "../integration-vocabulary.js";
 import {
   integrationInstallation,
@@ -12,7 +11,6 @@ import {
 } from "../schemas/integration-installation.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
-import { workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * integration-installation-store.ts -- which workspace each integration's installed app stands for, and the intents that carry an install there.
@@ -301,43 +299,6 @@ export function activeInstallationWorkspace(
 ): TaskStoreEffect<Option.Option<string>> {
   return Effect.map(findActiveWorkspace({ provider, externalId }), (row) =>
     Option.map(row, (found) => found.organizationId),
-  );
-}
-
-/**
- * A workspace's active Sentry installations as one member's held read
- * answers them: Sentry's id for each and its organization's slug, null where
- * none was read, while the reader is a member of the workspace, and none at
- * all once they are not, so a subscription stays bound to the rule its
- * endpoint checked. Every column is under the key the wire reads it by
- * (`@repo/features/workspace-integrations-live`), the instant it was linked
- * as epoch milliseconds, and the order is the reader's to keep. None where a
- * statement names a value Realtime cannot carry.
- */
-export function sentryInstallationsLiveStatement(
-  readerId: string,
-  organizationId: string,
-): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            installationId: integrationInstallation.externalId,
-            account: integrationInstallation.accountLabel,
-          },
-          { createdAt: integrationInstallation.createdAt },
-        ),
-      )
-      .from(integrationInstallation)
-      .where(
-        and(
-          eq(integrationInstallation.organizationId, organizationId),
-          eq(integrationInstallation.provider, TRIGGER_PROVIDER.SENTRY),
-          eq(integrationInstallation.status, INTEGRATION_INSTALLATION_STATUS.ACTIVE),
-          workspaceReachableBy(readerId, organizationId),
-        ),
-      ),
   );
 }
 

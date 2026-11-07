@@ -47,11 +47,11 @@ import {
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { ModelCatalog } from "../../providers/model-catalog.js";
-import { standingAgentDrive } from "../agent-drive.js";
 import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
+import { agentSandboxName } from "../agent-sandbox-open.js";
 import { MENTIONED_BOUNDS } from "../mentioned-context.js";
 import type { AgentSessions, TypedTurn } from "../sessions/agent-sessions.js";
-import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
+import { deploymentOidcToken, SANDBOX_STATUS, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import type { AccountKeyRows, AgentRuntimeChoice } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
 import { agentPublished } from "./published.js";
@@ -87,8 +87,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * A Start from another agent of the task, or of the workspace where the
  * source has no task, to continue it or to fork it at one of its messages,
  * hands the new agent that agent's brief with its transcript replayed after
- * it (`replay.ts`) and its work, what it had not pushed included, on a fork
- * of the drive it stood on or copied to a branch of its own (`snapshot.ts`),
+ * it (`replay.ts`) and its work, what it had not pushed included, in a
+ * snapshot of its stopped sandbox or copied to a branch of its own
+ * (`snapshot.ts`),
  * the note after both with the files the note carries, and runs it on that
  * agent's choice, servers, place, branch, and extra repositories unless the
  * ask names its own, and an agent started from an automation's run is no run
@@ -431,14 +432,16 @@ const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullReq
       );
 
 /**
- * Where the source's work reaches the new agent. A source whose session has
- * a drive of its own hands that drive, which the new agent's is forked from
- * at its first open (`agent-drive.ts`), so its sandbox is never woken; one
- * from before drives has its work copied to a branch as it always was
- * (`snapshot.ts`). Note that a source in another repository than the one
- * the new agent works in hands no drive, since its checkout would be none
- * of the new agent's, and that a drive that could not be read is a miss,
- * logged, as a copy that failed is.
+ * Where the source's work reaches the new agent. A source whose sandbox
+ * stands under its session's name, stopped on a snapshot, hands that
+ * sandbox, whose latest snapshot the new agent's is created from at its
+ * first open (`../machine/vercel-machine.ts`), so it is never woken; any
+ * other has its work copied to a branch (`snapshot.ts`). Note that a
+ * sandbox still running is copied rather than handed, because its snapshot
+ * is its last stop's, behind what it holds now; that a source in another
+ * repository than the one the new agent works in hands no sandbox, since
+ * its checkout would be none of the new agent's; and that a sandbox that
+ * could not be read is a miss, logged, as a copy that failed is.
  */
 const sourceWorkOf = (
   userId: string,
@@ -458,14 +461,16 @@ const sourceWorkOf = (
         : [];
     if (session !== undefined) {
       const api = yield* vercelSandboxApi(deploymentOidcToken);
-      const drive = yield* standingAgentDrive(api, session.sessionId);
-      if (drive !== undefined) return { on: TAKEN_ON.DRIVE, drive } satisfies SourceWork;
+      const found = yield* api.getNamed(agentSandboxName(session.sessionId));
+      if (found?.status === SANDBOX_STATUS.STOPPED && found.currentSnapshotId !== undefined) {
+        return { on: TAKEN_ON.SNAPSHOT, sandbox: found.name } satisfies SourceWork;
+      }
     }
     const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
     return { on: TAKEN_ON.COPY, copy } satisfies SourceWork;
   }).pipe(
     Effect.catch((failure) =>
-      Effect.as(Effect.logWarning(`the source's drive was not read: ${String(failure)}`), missed),
+      Effect.as(Effect.logWarning(`the source's sandbox was not read: ${String(failure)}`), missed),
     ),
   );
 };

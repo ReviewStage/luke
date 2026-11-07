@@ -14,8 +14,10 @@
  * (`cloud-browser-pane.tsx`), so a hidden one holds no socket and lets its
  * agent's sandbox stop (`browser-live/relay.ts`). A socket that drops is
  * opened again after a wait that doubles to thirty seconds and starts over
- * once a socket has been heard on; one whose agent has not opened its
- * sandbox is asked after every five seconds; and one the relay closed as
+ * once a socket has been heard on; one the relay answers as not opened
+ * waits on the drop's wait too, since the pane opens no view while the task
+ * list says the agent's sandbox is not open (`cloud-browser-pane.tsx`), so
+ * the answer means it is still coming up; and one the relay closed as
  * idle or gone stays closed until the pane is shown again or Watch again is
  * pressed, which opens a new view. Each frame is handed to the pane to draw and let go:
  * neither a frame, an address, nor a title is kept past the view, traced, or
@@ -77,8 +79,6 @@ const CLOUD_BROWSER_RECONNECT = {
   FIRST: Duration.seconds(1),
   /** The longest wait after a drop. */
   LONGEST: Duration.seconds(30),
-  /** The wait between asks while the agent has not opened its sandbox. */
-  NOT_OPENED_EVERY: Duration.seconds(5),
 } as const;
 
 /** How often the panel says it is watching while the socket stands, well inside the relay's idle bound. */
@@ -175,9 +175,6 @@ type Arrival = { readonly text: string } | { readonly close: number };
 
 /** The socket dropped, or never opened, before it was heard on. */
 class Dropped extends Data.TaggedError("Dropped") {}
-
-/** The agent has not opened its sandbox yet. */
-class NotOpened extends Data.TaggedError("NotOpened") {}
 
 /** How one socket's life ended, where the view does not try again on its own schedule. */
 const SOCKET_ENDING = {
@@ -288,7 +285,7 @@ export function cloudBrowserLive(input: {
        * One socket's life: opened, sized, read until it closes, and its close
        * read as how the view stands. A drop before it was heard on fails, for
        * the backoff to wait on; one after answers dropped, so the wait starts
-       * over; an agent with no sandbox yet fails as not opened.
+       * over; a sandbox not opened yet fails as a drop, on the same wait.
        */
       const attempt = Effect.scoped(
         Effect.gen(function* () {
@@ -341,7 +338,7 @@ export function cloudBrowserLive(input: {
           const ended = reason ?? (code === undefined ? undefined : REASON_BY_CODE.get(code));
           if (ended === BROWSER_LIVE_CLOSE_REASON.NOT_OPENED) {
             yield* set((view) => ({ ...view, phase: CLOUD_BROWSER_PHASE.CONNECTING }));
-            return yield* Effect.fail(new NotOpened());
+            return yield* Effect.fail(new Dropped());
           }
           if (
             ended === BROWSER_LIVE_CLOSE_REASON.IDLE ||
@@ -367,14 +364,7 @@ export function cloudBrowserLive(input: {
 
       yield* Effect.forkScoped(
         attempt.pipe(
-          Effect.retry({
-            schedule: Schedule.spaced(CLOUD_BROWSER_RECONNECT.NOT_OPENED_EVERY),
-            while: (failure) => failure._tag === "NotOpened",
-          }),
-          Effect.retry({
-            schedule: RECONNECT_BACKOFF,
-            while: (failure) => failure._tag === "Dropped",
-          }),
+          Effect.retry({ schedule: RECONNECT_BACKOFF }),
           Effect.repeat({
             schedule: Schedule.spaced(CLOUD_BROWSER_RECONNECT.FIRST),
             while: (ending: SocketEnding) => ending === SOCKET_ENDING.DROPPED,

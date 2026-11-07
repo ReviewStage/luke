@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   AGENT_BOUNDS,
   AGENT_STATUS,
@@ -34,7 +33,7 @@ import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { GLYPH } from "@repo/ui/icons";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { type ReportedFailure, UNREPORTED, type Unreported } from "@repo/ui/reported-failure";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type ReactNode,
@@ -132,7 +131,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  *
  * Files go with a message the way every chat takes them: the "+" menu's
  * Attachment opens the system's file picker, an image pasted into the box
- * is taken, and files dropped on the card are, each drawn as a chip over
+ * is taken, so are words pasted long enough to bury the message, as a text
+ * file, and files dropped on the card are, each drawn as a chip over
  * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the bar while the rest still come
  * (`use-attached-files.ts`). A message is words, files, or both, as the wire
@@ -590,14 +590,14 @@ export function AgentComposer({
   const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { descriptionEditor } = useSideBundles();
-  const bundle = useAtomValue(descriptionEditor);
+  const bundle = useQuery(descriptionEditor);
   // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
-  const retryBundle = useAtomRefresh(descriptionEditor);
-  const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
+  const retryBundle = () => void bundle.refetch();
+  const module = bundle.data;
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
   const statuses = useIntegrationStatuses();
-  const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
+  const unloaded = bundle.isError ? EDITOR_LOAD_FAILED : undefined;
   const sendNote = noteWhileOffline(composer.note, connected);
   const words =
     composer.closed ??
@@ -886,6 +886,7 @@ export function AgentComposer({
               if (room.current !== null) submitPromptInput(room.current);
             }}
             onPasteFiles={files.paste}
+            onPasteText={files.pasteText}
             quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
           />
         </ComposerBody>

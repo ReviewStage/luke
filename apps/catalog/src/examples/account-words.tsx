@@ -90,7 +90,7 @@ function Rows(): React.JSX.Element {
               </SettingsRowStateLine>
             ) : (
               <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-                Connected · 12 tools
+                Connected
               </SettingsRowStateLine>
             )
           }

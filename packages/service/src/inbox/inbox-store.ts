@@ -2081,15 +2081,13 @@ const upsertUnread = SqlSchema.findOneOption({
 
 /**
  * The member's marker on the item reminding them at the instant over its
- * last change, or, where none is named, its reminder canceled now, where
+ * last change, or, where none is named, its reminder canceled, where
  * the account reaches the item. Note that it leaves whether the item is
  * read alone: a marker it makes reads through no change and is marked
  * unread by no one, which reads the item as having none does
  * (`unreadFor`). A change after it ends the reminder (`remindAtFor`). A
- * reminder canceled is one that came due now rather than none, because the
- * item came back then, which keeps a
- * settled one carried as long as it would have been had it come due
- * (`accountItemsOf`); one already past stands as it came due.
+ * reminder canceled is none, so the item stands where it stood before it
+ * was set, never as come due.
  */
 const upsertReminder = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -2121,16 +2119,10 @@ const upsertReminder = SqlSchema.findOneOption({
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
-          set:
-            until === null
-              ? // Note that `least` passes over a null, so a marker with no reminder keeps none.
-                {
-                  remindAt: sql`case when ${inboxItemRead.remindAt} is null then null else least(${inboxItemRead.remindAt}, now()) end`,
-                }
-              : {
-                  remindAt: excluded(inboxItemRead.remindAt),
-                  remindThrough: excluded(inboxItemRead.remindThrough),
-                },
+          set: {
+            remindAt: excluded(inboxItemRead.remindAt),
+            remindThrough: excluded(inboxItemRead.remindThrough),
+          },
         })
         .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
     ),
@@ -2886,7 +2878,7 @@ export function markInboxItemUnread(
 }
 
 /**
- * The item's reminder set for the member for `until`, or canceled now
+ * The item's reminder set for the member for `until`, or canceled
  * where `until` is null, leaving whether it is read alone; the transaction that
  * wrote it and whether the item is unread for them, or false where the
  * account reaches no such item. Another member's marker is never touched.

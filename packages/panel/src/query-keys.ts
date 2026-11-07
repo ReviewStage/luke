@@ -26,6 +26,8 @@ export const QUERY_ROOT = {
   /** The admin screens' reads and writes (`admin/admin-queries.ts`), each next keyed by its procedure. */
   ADMIN: "admin",
   HOST_PAIRING: "host-pairing",
+  /** Settings › Environment: a workspace's variables by name (`settings/environment-page.tsx`). */
+  WORKSPACE_ENVIRONMENT: "workspace-environment",
   INSTALLED_SKILL: "installed-skill",
   INSTALLED_SKILL_PREVIEW: "installed-skill-preview",
   TASK_NEWEST_REVISION: "task-newest-revision",
@@ -49,6 +51,8 @@ export const QUERY_ROOT = {
   TASK_REVISION: "task-revision",
   /** A picture the window reads (`picture-query.ts`'s `pictureQuery`), by what it belongs to and its id there. */
   PICTURE: "picture",
+  /** The section icon picker's wholes loaded on demand (`desktop/section-icon-picker.tsx`), Lucide's and the emoji, by which. */
+  SECTION_ICONS: "section-icons",
 } as const;
 
 /**
@@ -71,6 +75,7 @@ const ACCOUNT_SCOPED_ROOTS: ReadonlySet<unknown> = new Set<string>([
   QUERY_ROOT.INSTALLED_SKILL,
   QUERY_ROOT.INSTALLED_SKILL_PREVIEW,
   QUERY_ROOT.HOST_PAIRING,
+  QUERY_ROOT.WORKSPACE_ENVIRONMENT,
 ]);
 
 /**

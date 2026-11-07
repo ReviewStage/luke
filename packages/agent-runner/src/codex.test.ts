@@ -1,5 +1,5 @@
 /**
- * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake service: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
+ * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake service: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on a host's plan, the runner's token command run again mid-turn, and in a sandbox app-server signed in on host-supplied tokens and refreshed on asking, every notification out in order, and the launch's end at the turn's.
  */
 
 import assert from "node:assert/strict";
@@ -39,6 +39,7 @@ import {
   RUNNER_ENV,
   RUNNER_EVENT,
   RUNNER_HARNESS,
+  RUNNER_PLACE,
   type RunnerEvent,
 } from "./protocol.js";
 import { runAgent } from "./runner.js";
@@ -127,8 +128,20 @@ const SELF: RunnerSelf = {
   script: "/opt/agent/agent-runner/agent-runner.mjs",
 };
 
+/** A launch on a host, whose plan's token comes from the runner's token command. */
 const ENV = {
   [RUNNER_ENV.BEARER]: BEARER,
+  [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST,
+  CODEX_HOME: "/home/agent/.codex",
+  PATH: "/usr/bin",
+};
+
+/** A launch in the cloud's sandbox, whose bearer is the launch's placeholder and whose plan is signed in on host-supplied tokens. */
+const SANDBOX_ENV = {
+  [RUNNER_ENV.BEARER]: BEARER,
+  // Named as a host's launch names them, which a sandbox's runner reads neither of.
+  [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
+  [RUNNER_ENV.CHATGPT_ACCOUNT_ID]: "chatgpt-workspace-from-env",
   CODEX_HOME: "/home/agent/.codex",
   PATH: "/usr/bin",
 };
@@ -401,7 +414,7 @@ it.effect(
         'sandbox_mode="danger-full-access"',
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
-        'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
+        'shell_environment_policy.exclude=["APP_RUNNER_TOKEN"]',
         'shell_environment_policy.set={ PLAYWRIGHT_BROWSERS_PATH = "0" }',
       ]);
       // The bearer reaches app-server in its environment alone, never argv.
@@ -791,16 +804,17 @@ function override(process: Spawned | undefined, key: string): string | undefined
 }
 
 /**
- * The service's token route as the runner's token command reaches it: each ask under
- * the runner's bearer answers the next fresh token, `plan-token-1`, `-2`, ….
+ * The service's token route as the runner reaches it: each ask under the
+ * runner's bearer answers the next fresh token, `plan-token-1`, `-2`, …, and
+ * the workspace given, where one is.
  */
-function fakeTokenRoute() {
+function fakeTokenRoute(chatgptAccountId?: string) {
   const bearers: (string | null)[] = [];
   let issued = 0;
   const respond = async (_url: string, init: RequestInit) => {
     bearers.push(new Headers(init.headers).get("authorization"));
     issued += 1;
-    return Response.json({ accessToken: `plan-token-${issued}` });
+    return Response.json({ accessToken: `plan-token-${issued}`, chatgptAccountId });
   };
   return { bearers, respond };
 }
@@ -871,10 +885,7 @@ it.effect(
       ]);
       // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
-      assert.equal(
-        override(process, "shell_environment_policy.exclude"),
-        '["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
-      );
+      assert.equal(override(process, "shell_environment_policy.exclude"), '["APP_RUNNER_TOKEN"]');
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
@@ -887,46 +898,84 @@ it.effect(
     }),
 );
 
+/** The workspace the fake token route says the plan pays from. */
+const WORKSPACE = "chatgpt-workspace-fixture";
+
+/** App-server's ask for fresh tokens after a 401, as its own request of the runner. */
+const REFRESH_REQUEST: RecordedMessage = {
+  id: "refresh-1",
+  method: "account/chatgptAuthTokens/refresh",
+  params: { reason: "unauthorized", previousAccountId: WORKSPACE },
+};
+
 it.effect(
-  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, never asks the service, and no event carries the placeholder",
+  "in a sandbox, app-server is signed in on the service's host-supplied tokens before the thread opens, its ask after a 401 is answered with fresh ones, and no token reaches argv, its environment, an event, or a log",
   () =>
     Effect.gen(function* () {
-      const placeholder = "plan-placeholder-for-tests";
       const service = fakeService();
-      const route = fakeTokenRoute();
+      const route = fakeTokenRoute(WORKSPACE);
       const http = fakeHttpClientLayer((url, init) =>
         url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
-      const sentToOpenAi: string[] = [];
-      // A command reads app-server's environment, which no sandbox of Codex's keeps from it, and the agent says what it found.
-      const printed = {
-        method: "item/agentMessage/delta",
-        params: { threadId: THREAD, turnId: "turn", itemId: "item", delta: `found ${placeholder}` },
+      const login: Exchange = {
+        method: "account/login/start",
+        reply: [{ id: 0, result: { type: "chatgptAuthTokens" } }],
       };
+      // App-server asks for fresh tokens as the thread resumes, and the turn goes out once the runner answered.
+      const resumed: Exchange = {
+        ...exchange(RESUMED, 2),
+        reply: [REFRESH_REQUEST, ...exchange(RESUMED, 2).reply],
+      };
+      const answered: RecordedMessage[] = [];
       const turn: Exchange = {
         ...RESUMED_TURN,
-        reply: [printed, ...RESUMED_TURN.reply],
         beforeReply: (process) =>
-          Effect.gen(function* () {
-            sentToOpenAi.push(yield* runTokenCommand(process, http));
-            sentToOpenAi.push(yield* runTokenCommand(process, http));
+          Effect.map(Queue.take(process.answers), (answer) => {
+            answered.push(answer);
           }),
       };
-      const { spawned, write, run } = yield* launch(
-        [{ exchanges: [...RESUME, turn] }],
+      const { spawned, write, run, logged } = yield* launch(
+        [{ exchanges: [exchange(RESUMED, 0), exchange(RESUMED, 1), login, resumed, turn] }],
         service,
-        { ...ENV, [RUNNER_ENV.CODEX_TOKEN]: placeholder },
-        { self: SELF, http },
+        SANDBOX_ENV,
+        { http },
       );
       yield* write({ ...CONFIG, threadId: THREAD });
       yield* write(message("What exact line did you first write to PROBE.md?"));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
       const [process] = spawned;
-      assert.deepEqual(sentToOpenAi, [placeholder, placeholder]);
-      assert.deepEqual(route.bearers, []);
-      assert.ok(!(process?.args ?? []).some((arg) => arg.includes(placeholder)));
-      assert.ok(!service.bodies.join("\n").includes(placeholder));
+      assert.deepEqual(process?.unexpected, []);
+      assert.equal(received(process, "initialize")[0]?.capabilities?.experimentalApi, true);
+      assert.deepEqual(received(process, "account/login/start"), [
+        {
+          type: "chatgptAuthTokens",
+          accessToken: "plan-token-1",
+          chatgptAccountId: WORKSPACE,
+          chatgptPlanType: null,
+        },
+      ]);
+      assert.deepEqual(answered, [
+        {
+          id: "refresh-1",
+          result: {
+            accessToken: "plan-token-2",
+            chatgptAccountId: WORKSPACE,
+            chatgptPlanType: null,
+          },
+        },
+      ]);
+      assert.deepEqual(route.bearers, [`Bearer ${BEARER}`, `Bearer ${BEARER}`]);
+      // Codex's own OpenAI provider carries the sign-in: the runner names none of its own.
+      assert.equal(override(process, "model_provider"), undefined);
+
+      const posted = service.bodies.join("\n");
+      for (const secret of ["plan-token-1", "plan-token-2"]) {
+        assert.ok(!posted.includes(secret));
+        assert.ok(!logged.some((line) => line.includes(secret)));
+        assert.ok(!process?.args.some((arg) => arg.includes(secret)));
+        assert.ok(!Object.values(process?.env ?? {}).some((value) => value?.includes(secret)));
+      }
     }),
 );
 

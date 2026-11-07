@@ -10,6 +10,7 @@ import {
   listPublishedAgentsById,
   listTasklessAgentRows,
   nativeRuntimesOfReached,
+  openSandboxesOfReached,
   type PublishedAgentLine,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
@@ -255,6 +256,7 @@ export function listTasklessAgents(
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const settled = yield* lastSettledTurnsOfReached(conversationIds);
     const runtimes = yield* nativeRuntimesOfReached(conversationIds);
+    const sandboxes = yield* openSandboxesOfReached(conversationIds);
     // The member each was archived by or for is named too, as the agent's own page names them,
     // and so are the agents continued from each, and the Mac a local one runs on.
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
@@ -269,10 +271,11 @@ export function listTasklessAgents(
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
       const runtime = runtimes.get(agent.conversationId);
+      const sandboxOpen = sandboxes.has(agent.conversationId);
       return {
         ...agentSummary(
           agent,
-          { turn, awaitingLineAt, runtime },
+          { turn, awaitingLineAt, runtime, sandboxOpen },
           now,
           names,
           owners,

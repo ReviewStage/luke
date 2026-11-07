@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
-  type SidebarRows,
-  sidebarLiveRowsSchema,
-  sidebarRowsOfLive,
-} from "@repo/features/sidebar-live";
-import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
@@ -14,8 +9,7 @@ import {
   type TaskSectionWrite,
 } from "@repo/features/task-section-wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/sql";
+import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
@@ -23,17 +17,8 @@ import { organization, user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
-import {
-  listRepositoryPins,
-  repositoryPinsLiveStatement,
-  setRepositoryPin,
-} from "../repository-pin-store.js";
-import {
-  deleteTaskSectionIn,
-  listTaskSections,
-  taskSectionsLiveStatements,
-  writeTaskSections,
-} from "../task-section-store.js";
+import { setRepositoryPin } from "../repository-pin-store.js";
+import { deleteTaskSectionIn, listTaskSections, writeTaskSections } from "../task-section-store.js";
 import { createTask, deleteTask, updateTask } from "../task-store.js";
 
 /**
@@ -131,82 +116,7 @@ const placeAgent = (
   ...(position === undefined ? undefined : { position }),
 });
 
-/** Every part's rows in one order, by what keys each, since the live statements keep none and the host orders them. */
-function byKey(rows: SidebarRows): SidebarRows {
-  const sorted = <Row>(each: readonly Row[], key: (row: Row) => string) =>
-    each.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
-  return {
-    sections: sorted(rows.sections, (row) => row.id),
-    entries: sorted(rows.entries, (row) => row.taskId),
-    agentEntries: sorted(rows.agentEntries, (row) => row.agentId),
-    pins: sorted(rows.pins, (row) => row.repository),
-  };
-}
-
-/** The sidebar's rows as the host takes them from the live statements, run as the service runs them. */
-const liveSidebarOf = (userId: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const sections = Option.getOrThrow(taskSectionsLiveStatements(userId));
-    const pins = Option.getOrThrow(repositoryPinsLiveStatement(userId));
-    const rows = yield* Effect.all({
-      sections: sql.unsafe(sections.sections.sql, [...sections.sections.params]),
-      entries: sql.unsafe(sections.entries.sql, [...sections.entries.params]),
-      agentEntries: sql.unsafe(sections.agentEntries.sql, [...sections.agentEntries.params]),
-      pins: sql.unsafe(pins.sql, [...pins.params]),
-    });
-    return byKey(sidebarRowsOfLive(yield* Schema.decodeUnknownEffect(sidebarLiveRowsSchema)(rows)));
-  });
-
 it.layer(getTestDB())("an account's task sections", (it) => {
-  it.effect(
-    "the live statements deliver the sections, their tasks, and the pins the held reads answer, to their maker, and none of them to a teammate or an outsider",
-    () =>
-      Effect.gen(function* () {
-        const { dean, charles, workspace, first, second } = yield* openSharedWorkspace;
-        const outsider = yield* openAccount;
-        yield* openWorkspace(outsider);
-        const launch = randomUUID();
-        const later = randomUUID();
-        yield* written(dean, create(workspace, "Launch", launch));
-        yield* TestClock.adjust("1 minute");
-        yield* written(dean, create(workspace, "Later", later));
-        const icon = { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph: TASK_SECTION_GLYPH.ROCKET };
-        yield* written(dean, { kind: TASK_SECTION_WRITE.EDIT, id: later, title: "Later", icon });
-        yield* written(dean, { kind: TASK_SECTION_WRITE.MOVE, id: later, position: "a0" });
-        yield* written(dean, place(first, launch));
-        yield* TestClock.adjust("1 minute");
-        yield* written(dean, place(second, launch, "a1"));
-        yield* written(dean, placeAgent(yield* openAgent(dean, workspace), later, "a0"));
-        yield* setRepositoryPin(dean, "acme/relay", true);
-        yield* TestClock.adjust("1 minute");
-        yield* setRepositoryPin(dean, "acme/web", true);
-
-        for (const reader of [dean, charles, outsider]) {
-          const held = yield* listTaskSections(reader);
-          assert.deepEqual(
-            yield* liveSidebarOf(reader),
-            byKey({ ...held, pins: yield* listRepositoryPins(reader) }),
-          );
-        }
-        const deans = yield* liveSidebarOf(dean);
-        assert.deepEqual(
-          [deans.sections.length, deans.entries.length, deans.agentEntries.length],
-          [2, 2, 1],
-        );
-        assert.deepEqual(
-          deans.pins.map((pin) => pin.repository),
-          ["acme/relay", "acme/web"],
-        );
-        assert.deepEqual(yield* liveSidebarOf(outsider), {
-          sections: [],
-          entries: [],
-          agentEntries: [],
-          pins: [],
-        });
-      }),
-  );
-
   it.effect("a section and the tasks in it are its maker's alone", () =>
     Effect.gen(function* () {
       const { dean, charles, workspace, first } = yield* openSharedWorkspace;
