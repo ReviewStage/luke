@@ -188,10 +188,14 @@ export function macShellProcedures<Sender>(
         const held = named(sender, input);
         if (held === undefined) return yield* Effect.fail(errors.REFUSED());
         if (held.exitCode === undefined) held.shell.resize(input.cols, input.rows);
+        // Note that a port an earlier attach opened is closed first, because the panel asked again before taking it, and the shell writes to one port alone.
+        detach(held);
         const port = ports.open(sender, held.ticket);
         port.onMessage((message) => heard(held, message));
-        // The panel closing its port detaches, so a shell no tab draws is never paced to one.
-        port.onClose(() => detach(held));
+        // The panel closing its port detaches, so a shell no tab draws is never paced to one; a port an attach since replaced detaches nothing.
+        port.onClose(() => {
+          if (held.port === port) detach(held);
+        });
         held.port = port;
         port.post({ type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED });
       },

@@ -376,10 +376,10 @@ async function mount(
       render(on);
       await settle();
     },
-    /** Another account signs in, the tab no longer drawn, as the strip draws none of the first's. */
-    signIn: async (next: string) => {
+    /** Another account signs in, the tab no longer drawn unless asked, as the strip draws none of the first's. */
+    signIn: async (next: string, drawn = false) => {
       signedIn = next;
-      render(true, false);
+      render(true, drawn);
       await settle();
     },
     terminals,
@@ -511,6 +511,30 @@ test("a port that arrives after another account signed in is let go, its shell o
   const port = main.post(MADE);
 
   assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
+});
+
+test("a switch away and back before the first attach's port arrives keeps the screen on the latest port, the earlier one closed and no shell ended", async () => {
+  const tab = await mount(true, false, FITTED, false, FIRST, "ada");
+  await tab.signIn("grace");
+  await tab.signIn("ada", true);
+
+  const first = main.post(MADE);
+  const second = main.post(MADE);
+  second.say({ type: "state", state: "attached" });
+  await tab.type("a", 65);
+
+  assert.deepEqual(
+    tab.kinds().filter((kind) => kind === ACT_KIND.MAC_SHELL_ATTACH),
+    ["macShell.attach", "macShell.attach"],
+  );
+  assert.equal(first.closed(), true);
+  assert.equal(second.closed(), false);
+  assert.equal(tab.standing(), "· connected");
+  assert.deepEqual(
+    second.posted.filter((message) => message.type === "input"),
+    [{ type: "input", data: "a" }],
+  );
   assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
 });
 
