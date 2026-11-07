@@ -18,6 +18,7 @@ import {
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
 import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { READ_MARK } from "./read-mark.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
@@ -841,4 +842,32 @@ it.effect("a pull request's chapters are generated with the tab's number in the 
     );
     assert.equal(api.requests()[0]?.body ?? "", "");
   }),
+);
+
+it.effect(
+  "a Generate the service cannot run now reads as its own failure, and one refused for its repository's reach reads without why, as the tab has always heard it",
+  () =>
+    Effect.gen(function* () {
+      const refusedWith = (body: JsonValue) =>
+        Effect.provide(
+          client().generateChapters(AGENT_ID),
+          fakeCloudApi({
+            [`POST /api/agents/${AGENT_ID}/chapters`]: {
+              answer: () => body,
+              status: HTTP_STATUS.CONFLICT,
+            },
+          }).layer,
+        );
+
+      const unavailable = yield* refusedWith({ error: HOSTED_API_ERROR.UNAVAILABLE });
+      const unreached = yield* refusedWith({
+        error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        unreached: { reason: REPOSITORY_UNREACHED.GONE, repository: "Acme/Relay" },
+      });
+
+      assert.deepEqual(unavailable, { failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE });
+      assert.deepEqual(unreached, {
+        failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      });
+    }),
 );
