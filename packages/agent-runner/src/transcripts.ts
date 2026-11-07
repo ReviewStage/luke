@@ -30,15 +30,17 @@ function keyOf(key: SessionKey): SessionKey {
   return subpath === undefined ? { projectKey, sessionId } : { projectKey, sessionId, subpath };
 }
 
-/** The store at the URL given, called under the runner's bearer. */
+/** The store at the URL given, called under the runner's bearer, each call carrying the launch's trace where it has one (`trace.ts`). */
 export function transcriptStore(
   url: string,
   bearer: Redacted.Redacted,
+  traceHeaders: Readonly<Record<string, string>>,
 ): Required<Pick<SessionStore, "append" | "load" | "listSessions" | "delete" | "listSubkeys">> {
   const post = async (call: RunnerTranscriptCall): Promise<unknown> => {
     const response = await fetch(url, {
       method: "POST",
       headers: {
+        ...traceHeaders,
         authorization: `Bearer ${Redacted.value(bearer)}`,
         "content-type": "application/json",
       },
