@@ -22,7 +22,6 @@ import {
   automationProcedures,
 } from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
-import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import { declaredActProcedures } from "./declared-acts.js";
 import {
   type InstalledSkillProceduresDependencies,
@@ -32,6 +31,7 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
+import { liveFollowProcedures } from "./live-follows.js";
 import {
   type MacCommandProceduresDependencies,
   macCommandProcedures,
@@ -114,7 +114,6 @@ export interface ActPortDependencies {
   /** The agents' holds and notices; the acts they note are answered from `acts`. */
   readonly agents: Omit<AgentProceduresDependencies, "acts">;
   readonly automations: AutomationProceduresDependencies;
-  readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   readonly macCommands: MacCommandProceduresDependencies;
@@ -144,10 +143,10 @@ export function createActPortHandler<Sender>(
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
     ...declaredActProcedures(HOST_ACTS, dependencies.acts),
+    ...liveFollowProcedures(HOST_ACTS, dependencies.acts),
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures({ ...dependencies.agents, acts: dependencies.acts }),
     ...automationProcedures(dependencies.automations),
-    ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
     ...macCommandProcedures(dependencies.macCommands),

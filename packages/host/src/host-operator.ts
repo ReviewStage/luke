@@ -3,12 +3,10 @@ import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
   type AgentInboxScope,
-  type AgentPageParams,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
   type AgentTranscriptKey,
   agentAccountInboxAnswerViewSchema,
-  type MemoriesFollowParams,
   type PullRequestPartParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
@@ -21,13 +19,13 @@ import {
 } from "@repo/features/browser-live-acts";
 import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
+import type { LiveRead } from "@repo/features/live-wire";
 import {
   type PortForwarding,
   type PortForwardingAnswer,
   portForwardingAnswerSchema,
   portForwardingSchema,
 } from "@repo/features/port-forward-acts";
-import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import {
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
@@ -80,10 +78,8 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAccountPreferences,
-  AppAgentOrigins,
   AppAutomationReads,
   AppBrowserTabs,
-  AppChapters,
   AppDescriptionComments,
   AppDescriptionDocuments,
   AppDevicePresences,
@@ -91,14 +87,12 @@ import type {
   AppHistories,
   AppHolderInboxes,
   AppHostRead,
-  AppHosts,
   AppInboxItems,
   AppInstalledSkills,
   AppIntegrations,
   AppIntegrationTools,
   AppLinkStandings,
   AppMcpClients,
-  AppMemories,
   AppModels,
   AppPages,
   AppProviderKeys,
@@ -296,14 +290,8 @@ export interface HostOperator {
   agentModelsRetry(): Effect.Effect<void>;
   /** The models the host holds for the windows, whole, each time any of them moves. */
   onModelsChanged(listener: (held: AppModels) => void): () => void;
-  /** The account's hosts held for the windows from now until let go, followed live; what they hold is heard through `onHostsChanged`. */
-  hostsFollow(): Effect.Effect<void>;
-  /** The account's hosts let go by the windows. */
-  hostsUnfollow(): Effect.Effect<void>;
-  /** The account's held hosts read again at once, as Try again asks. */
-  hostsRetry(): Effect.Effect<void>;
-  /** The account's hosts the host holds for the windows, whole, each time they move. */
-  onHostsChanged(listener: (held: AppHosts) => void): () => void;
+  /** One live follow's slice the host holds for the windows, whole, named by its read, each time any of its keys moves (`contract/live-follow.ts`). */
+  onLiveReadChanged(listener: (changed: LiveReadChanged) => void): () => void;
   /** The account's devices' beats held for the windows from now until let go, asked again every `MAC_PRESENCE.POLL_MS` while held; what they hold is heard through `onDevicePresenceChanged`. */
   hostsPresenceFollow(): Effect.Effect<void>;
   /** The account's devices' beats let go by the windows. */
@@ -312,14 +300,6 @@ export interface HostOperator {
   hostsPresenceRefresh(): Effect.Effect<void>;
   /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
-  /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
-  agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
-  /** One agent's origin let go by the windows: it stays followed among those let go lately until later ones push it out. */
-  agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
-  /** One agent's held origin read again at once, as Try again asks. */
-  agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
-  /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
-  onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
   /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
   automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
   /** A held list or history let go, kept followed a while among those let go lately. */
@@ -336,14 +316,6 @@ export interface HostOperator {
   pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
   /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
   onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
-  /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
-  chaptersFollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** One agent's pull request's chapters let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  chaptersUnfollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** One agent's pull request's held chapters read again at once, as Try again asks. */
-  chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-  /** Every agent's pull request's chapters the host holds for the windows, whole, each time any of them moves. */
-  onChaptersChanged(listener: (held: AppChapters) => void): () => void;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -376,14 +348,6 @@ export interface HostOperator {
   githubTokenRetry(): Effect.Effect<void>;
   /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
   onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
-  /** The memories our agents kept in a workspace, held for the windows from now until let go and followed live; what they hold is heard through `onMemoriesChanged`. */
-  memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
-  /** A workspace's memories let go by the windows. */
-  memoriesUnfollow(params: MemoriesFollowParams): Effect.Effect<void>;
-  /** A workspace's held memories asked again at once, as Try again asks; done once the ask has landed. */
-  memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
-  /** Every workspace's memories the host holds for the windows, whole, each time any of them moves. */
-  onMemoriesChanged(listener: (held: AppMemories) => void): () => void;
   /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
   agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
@@ -532,6 +496,12 @@ function record(result: GatewayCallResult): WireRecord | undefined {
 function answered<Value>(value: UnparsedWireValue): Value | undefined {
   // SAFETY: the host is our own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
   return value === undefined ? undefined : (value as unknown as Value);
+}
+
+/** One live follow's slice as the host tells it: its read's name, and the slice whole. */
+export interface LiveReadChanged {
+  readonly read: LiveRead;
+  readonly held: unknown;
 }
 
 /** What a coding-agent call the host could not answer is drawn as. */
@@ -883,14 +853,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppModels>(payload) : undefined),
         listener,
       ),
-    hostsFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_FOLLOW, {})),
-    hostsUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_UNFOLLOW, {})),
-    hostsRetry: () => fire(client.call(GATEWAY_METHOD.HOSTS_RETRY, {})),
-    onHostsChanged: (listener) =>
+    onLiveReadChanged: (listener) =>
       on(
-        GATEWAY_EVENT.HOSTS_CHANGED,
-        // Note that the held hosts are the host's own, handed over in this process, so they are passed on as built, as the held beats are.
-        (payload) => (isRecord(payload) ? answered<AppHosts>(payload) : undefined),
+        GATEWAY_EVENT.LIVE_READ_CHANGED,
+        // Note that the held slice is the host's own, handed over in this process, so it is passed on as built, as the held models are.
+        (payload) =>
+          isRecord(payload) && isWireString(payload.read)
+            ? answered<LiveReadChanged>(payload)
+            : undefined,
         listener,
       ),
     hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
@@ -901,19 +871,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
         // Note that the held beats are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
-        listener,
-      ),
-    agentOriginFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, { agentId: params.agentId })),
-    agentOriginUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, { agentId: params.agentId })),
-    agentOriginRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_ORIGIN_RETRY, { agentId: params.agentId })),
-    onAgentOriginsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.AGENT_ORIGINS_CHANGED,
-        // Note that the held origins are the host's own, handed over in this process, so they are passed on as built, as the held chapters are.
-        (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
         listener,
       ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
@@ -939,34 +896,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held parts are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) =>
           isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
-        listener,
-      ),
-    chaptersFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_FOLLOW, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    chaptersUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_UNFOLLOW, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    chaptersRetry: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_RETRY, {
-          agentId: params.agentId,
-          number: params.number,
-        }),
-      ),
-    onChaptersChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHAPTERS_CHANGED,
-        // Note that the held chapters are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppChapters>(payload) : undefined),
         listener,
       ),
     installedSkillsFollow: (params) =>
@@ -1019,19 +948,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.GITHUB_TOKEN_CHANGED,
         // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
         (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
-        listener,
-      ),
-    memoriesFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: params.workspaceId })),
-    memoriesUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.MEMORIES_UNFOLLOW, { workspaceId: params.workspaceId })),
-    memoriesRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.MEMORIES_RETRY, { workspaceId: params.workspaceId })),
-    onMemoriesChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.MEMORIES_CHANGED,
-        // Note that the held memories are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppMemories>(payload) : undefined),
         listener,
       ),
     agentInboxFollow: (scope) =>

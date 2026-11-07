@@ -5,12 +5,12 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { ACCOUNT_ACTS, accountActsContract } from "./account.js";
-import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
+import { ACCOUNT_ASK_ACTS, ACCOUNT_ASK_FOLLOWS, accountAskActsContract } from "./account-asks.js";
 import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
-import { AGENT_ACTS, agentActsContract } from "./agents.js";
+import { AGENT_ACTS, AGENT_FOLLOWS, agentActsContract } from "./agents.js";
 import { AUTOMATION_ACTS, automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
-import { CHAPTERS_ACTS, chaptersActsContract } from "./chapters.js";
+import { CHAPTERS_ACTS, CHAPTERS_FOLLOWS, chaptersActsContract } from "./chapters.js";
 import { cliActsContract } from "./cli.js";
 import { INSTALLED_SKILL_ACTS, installedSkillActsContract } from "./installed-skills.js";
 import { INTEGRATION_ACTS, integrationActsContract } from "./integrations.js";
@@ -43,12 +43,12 @@ export {
   type MacCommandDecision,
 } from "../mac-command-ask.js";
 export { ACCOUNT_ACTS } from "./account.js";
-export { ACCOUNT_ASK_ACTS } from "./account-asks.js";
+export { ACCOUNT_ASK_ACTS, ACCOUNT_ASK_FOLLOWS } from "./account-asks.js";
 export { AGENT_INBOX_ACTS } from "./agent-inbox.js";
-export { AGENT_ACTS } from "./agents.js";
+export { AGENT_ACTS, AGENT_FOLLOWS } from "./agents.js";
 export { AUTOMATION_ACTS } from "./automations.js";
 export { ACT_ERROR } from "./base.js";
-export { CHAPTERS_ACTS } from "./chapters.js";
+export { CHAPTERS_ACTS, CHAPTERS_FOLLOWS } from "./chapters.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
 export {
   type ActInput,
@@ -87,6 +87,13 @@ export {
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 export {
+  type AnyLiveFollow,
+  type AnyLiveFollowDeclaration,
+  type FollowKey,
+  HOLD,
+  isLiveFollow,
+} from "./live-follow.js";
+export {
   type EventPushName,
   PUSH,
   PUSH_GUARD,
@@ -101,14 +108,17 @@ export { TASKS_ACTS } from "./tasks.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 export { WORKSPACE_ACTS } from "./workspaces.js";
 
-/** Every act declared once (`declared-act.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
+/** Every act declared once, plain (`declared-act.ts`) or a live follow (`live-follow.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
 export const HOST_ACTS = {
   ...ACCOUNT_ACTS,
   ...ACCOUNT_ASK_ACTS,
+  ...ACCOUNT_ASK_FOLLOWS,
   ...AGENT_INBOX_ACTS,
   ...AGENT_ACTS,
+  ...AGENT_FOLLOWS,
   ...AUTOMATION_ACTS,
   ...CHAPTERS_ACTS,
+  ...CHAPTERS_FOLLOWS,
   ...INSTALLED_SKILL_ACTS,
   ...INTEGRATION_ACTS,
   ...SETTINGS_ACTS,

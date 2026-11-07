@@ -14,20 +14,13 @@ import {
   type EntityPool,
   type FieldChange,
   fieldKind,
-  type HeldRows,
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
 import { Effect, type Scope } from "effect";
-import { type AppHostReads, type AppMemories, NO_KEYS_HELD } from "./app-state.js";
-import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
-import {
-  confirmWrite,
-  followTakingRows,
-  LIVE_GONE,
-  restarting,
-  type TxWait,
-} from "./live-follow.js";
+import { type AppMemories, NO_KEYS_HELD } from "./app-state.js";
+import { type HeldSlice, heldSlice } from "./live-collection.js";
+import { followLiveRead } from "./live-read-follow.js";
 
 /**
  * memory-follow.ts -- each workspace's memories the windows hold, followed over the service's held poll into the sync engine's pool by their ids, told whole on their app-state slice, and a forget drawn gone over them the moment it is asked.
@@ -37,18 +30,14 @@ import {
  * memory an agent keeps, corrects, or another member forgets draws on every
  * open page within the service's coalesce window. Each memory is one row of
  * the pool (`@repo/sync`), by its id, and the page draws them as the held
- * read answers them (`@repo/features/memory-live`). A forget is a write the
- * pool draws over its memory at once (`memoryForget`), standing until the
- * read carries its transaction, so no answer from before it puts the memory
- * back, and taken back where the service refused it. One of a memory
- * already gone commits nothing and answers no transaction, so it settles
- * on its own answer.
- *
- * A read the service did not answer is told unanswered and asked for
- * again after `LIVE_RESTART`, as a follow that stops is. One of a
- * workspace the account is no member of is told unanswered and ends; one
- * refused because the session is no longer the account the follow started
- * for ends unsaid, and the next sign-in follows it again.
+ * read answers them (`@repo/features/memory-live`), followed as every pool
+ * read is (`followLiveRead`). A forget is a write the pool draws over its
+ * memory at once (`memoryForget`), standing until the read carries its
+ * transaction, so no answer from before it puts the memory back, and taken
+ * back where the service refused it. One of a memory already gone commits
+ * nothing and answers no transaction, so it settles on its own answer. A
+ * read of a workspace the account is no member of is told unanswered and
+ * ends.
  */
 
 /** A memory as the pool holds it, by its id, every write to it a change of its fields or its deletion. */
@@ -76,85 +65,6 @@ export interface MemoriesFollowDependencies {
   readonly tell: (held: AppMemories) => void;
 }
 
-/** A refusal after which the read is followed no longer: a workspace the account is no member of, or another account's session. */
-function endsFollow(failure: string): boolean {
-  return failure === AGENT_CALL_FAILURE.NOT_FOUND || failure === LIVE_SIGNED_OUT.failure;
-}
-
-/**
- * Follows one workspace's memories until let go, each change told through
- * `answers`: the rows as the read last answered them, with every forget
- * standing drawn over them. Nothing is told before the read first answers,
- * since a forget drawn on no memories shows nothing of the workspace.
- */
-function followMemories(
-  dependencies: MemoriesFollowDependencies,
-  workspaceId: string,
-  answers: HeldAnswers<AppHostReads[typeof LIVE_READ.MEMORIES]>,
-): Effect.Effect<void> {
-  // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-  const userId = dependencies.accountId();
-  const seal = (poll: boolean, after?: string) =>
-    userId === undefined
-      ? Effect.succeed(LIVE_SIGNED_OUT)
-      : dependencies.seal(workspaceId, userId, poll, after);
-  const attempt = Effect.scoped(
-    Effect.gen(function* () {
-      const first = yield* seal(false);
-      if ("failure" in first) {
-        if (first.failure === LIVE_SIGNED_OUT.failure) return false;
-        answers.unanswered();
-        return first.failure !== AGENT_CALL_FAILURE.NOT_FOUND;
-      }
-      let wait: TxWait | undefined;
-      let answered = false;
-      /** Why a poll ended the follow for good, the first such failure kept, so one the account no longer reaches is told unanswered. */
-      let endedBy: string | undefined;
-      const drawn: Effect.Effect<void> = Effect.sync(() => {
-        if (answered) answers.answered(memoriesOfLiveRows(memories.rows()));
-      });
-      const memories: HeldRows<MemoryLiveRow> = yield* dependencies.pool.stand(MEMORY, {
-        redraw: () => drawn,
-        confirmation: () => {
-          const handed = wait;
-          return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
-        },
-      });
-      const gone = yield* followTakingRows(
-        {
-          poll: (after) =>
-            Effect.map(seal(true, after), (read) => {
-              if (!("failure" in read)) return read;
-              const ends = endsFollow(read.failure);
-              if (ends && endedBy === undefined) endedBy = read.failure;
-              return { failure: read.failure, gone: ends };
-            }),
-          onTxWait: (handed) => {
-            wait = handed;
-          },
-        },
-        first,
-        workspaceMemoriesLiveRowsSchema,
-        (rows) =>
-          Effect.andThen(
-            memories.answer(rows.memories),
-            Effect.suspend(() => {
-              answered = true;
-              return drawn;
-            }),
-          ),
-      ).pipe(
-        Effect.as(false),
-        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
-      );
-      if (!gone) return true;
-      if (endedBy === AGENT_CALL_FAILURE.NOT_FOUND) answers.unanswered();
-      return false;
-    }),
-  );
-  return restarting(attempt);
-}
-
 /**
  * The held lifetime over every workspace's memories the windows hold
  * (`heldSlice`), keyed by the workspace, told whole on their slice: each
@@ -168,7 +78,26 @@ export function heldMemories(
     empty: NO_KEYS_HELD,
     path: (workspaceId) => [workspaceId],
     gate: dependencies.gate,
-    follow: (workspaceId, answers) => followMemories(dependencies, workspaceId, answers),
+    follow: (workspaceId, answers) => {
+      // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+      const userId = dependencies.accountId();
+      return followLiveRead(
+        {
+          seal: (poll, after) =>
+            userId === undefined
+              ? Effect.succeed(LIVE_SIGNED_OUT)
+              : dependencies.seal(workspaceId, userId, poll, after),
+          rows: workspaceMemoriesLiveRowsSchema,
+          part: "memories",
+          pool: dependencies.pool,
+          kind: MEMORY,
+          // Note that a workspace the account is no member of is followed no longer.
+          endsFollow: (failure) => failure === AGENT_CALL_FAILURE.NOT_FOUND,
+          draw: memoriesOfLiveRows,
+        },
+        answers,
+      );
+    },
     tell: dependencies.tell,
   });
 }
