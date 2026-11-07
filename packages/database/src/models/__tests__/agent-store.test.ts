@@ -75,6 +75,7 @@ import {
   type NewAgent,
   nativeRouteOfReached,
   nativeRuntimesOfReached,
+  openSandboxesOfReached,
   pinAgent,
   readAgent,
   readAgentHeaderOfConversation,
@@ -104,7 +105,7 @@ import {
   updateAgentBranch,
 } from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
-import { conversationReachableBy } from "../recorded-session.js";
+import { claimRuntimeSession, conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
@@ -2266,6 +2267,35 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
         assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
         assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
+      }),
+  );
+
+  it.effect(
+    "the open sandboxes read names the conversations asked for alone, never another account's that holds a session",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openAccount;
+        const erin = yield* openAccount;
+        const danas = yield* startIn(dana, yield* openWorkspace(dana));
+        const erins = yield* startIn(erin, yield* openWorkspace(erin));
+        yield* claimRuntimeSession(
+          { userId: erin, conversationId: erins.conversationId },
+          "session-erin",
+          new Date(),
+        );
+
+        assert.deepEqual([...(yield* openSandboxesOfReached([danas.conversationId]))], []);
+
+        yield* claimRuntimeSession(
+          { userId: dana, conversationId: danas.conversationId },
+          "session-dana",
+          new Date(),
+        );
+
+        assert.deepEqual(
+          [...(yield* openSandboxesOfReached([danas.conversationId]))],
+          [danas.conversationId],
+        );
       }),
   );
 
