@@ -15,7 +15,9 @@ import {
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
+  type ReadLink,
 } from "@repo/features/link-grammar";
+import { APP_HOME_LINK, LINK_ORIGIN } from "@repo/features/link-home";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND } from "@repo/features/mention-link";
 import { PAGE_OWNER } from "@repo/features/page-wire";
@@ -70,16 +72,22 @@ import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
 import { useCopyLink } from "../links-at-hand.js";
-import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
+import {
+  type TaskVisits,
+  useWindowHistory,
+  type WindowHistoryLists,
+} from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
   PANEL_SPAN,
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
+import { useLinkPlaceLandings } from "../places/link-places.js";
 import { useLinkReads } from "../places/link-reads.js";
 import { PLACE_BINDING, usePlaceArrivals, usePlaceBinding } from "../places/place-binding.js";
 import { useWindowPlace } from "../places/routed-places.js";
+import { ADDRESS, addressOf } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useTaskRoute } from "../task-route.js";
 import {
@@ -207,6 +215,8 @@ interface Standing {
   descriptions: AppDescriptionDocuments;
   /** Whether Admin stands over the tab, as the router stands it (`admin-route.ts`). */
   admin?: boolean;
+  /** The address the window's page was loaded at, holding no step; `/app` where none is named. */
+  loadedAt?: string;
 }
 
 /**
@@ -298,7 +308,7 @@ function mount(
     ...initial,
   };
   handDescriptions(standing.descriptions);
-  let windowHistory: WindowHistoryLists | undefined;
+  let windowHistory: (WindowHistoryLists & TaskVisits) | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
   }
@@ -360,6 +370,8 @@ function mount(
       return portAnswer(ACT_KIND.AGENTS_SHOWN, payload);
     },
   });
+  /** Opens a link the router landed on, through the tab as it stands. */
+  const openLanded = (link: ReadLink) => control?.onOpenLink(link);
   function Probe() {
     const [held, setHeld] = useState(standing);
     const router = useRouter();
@@ -383,6 +395,7 @@ function mount(
     });
     restand = setHeld;
     const here = useWindowPlace();
+    const taskView = useTaskRoute();
     control = useTasksTab({
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
@@ -417,11 +430,16 @@ function mount(
         onStay: () => undefined,
       }),
       homeView,
-      taskView: useTaskRoute(),
+      taskView,
       place: here.place,
       arrivals: usePlaceArrivals(),
       linkReads: useLinkReads(),
+      // A link's step is written by the window's history beside the tab, where one stands, else the task's place opens by its own door.
+      visitTask: (at, step) =>
+        windowHistory === undefined ? taskView.onOpen(at) : windowHistory.onVisitTask(at, step),
     });
+    // A link place the router lands on is read by its route and opened as its link is, as the window's root has it.
+    useLinkPlaceLandings(openLanded);
     // The place standing and the task bound follow each other, as the window's root keeps them; with no history beside
     // the tab, the task bound's own place stands by its own door rather than as its step is written.
     const tasks = control;
@@ -456,8 +474,13 @@ function mount(
   roots.push(root);
   // Note that Admin standing is the router's, which stands at its address rather than Home's.
   const held = windowRouter(
-    createMemoryHistory({ initialEntries: [standing.admin === true ? "/acme/admin" : "/app"] }),
+    createMemoryHistory({
+      initialEntries: [standing.loadedAt ?? (standing.admin === true ? "/acme/admin" : "/app")],
+    }),
   );
+  // Every address the router's history stood at, in order, each write and move among them.
+  const passed: string[] = [];
+  held.history.subscribe(({ location }) => passed.push(location.href));
   // The test's Query client is handed the document here, its descriptions among it, rather than one an earlier test handed.
   act(() => {
     root.render(held.provide(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), surface)));
@@ -467,6 +490,8 @@ function mount(
     at: () => held.history.location.pathname,
     /** How many entries the router's history holds. */
     entries: () => held.history.length,
+    /** Every address the router's history stood at since the tab was mounted, in order. */
+    passed,
     told,
     agentActs,
     shownAgents,
@@ -1233,23 +1258,228 @@ test("a Vespin link naming a task by its number opens the task the service finds
   assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID, "43"]);
 });
 
-test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", async () => {
+/** The workspace the listing names, by its id, as its address step is written where it has no slug. */
+const LISTED_STEP = TASK.workspaceId;
+
+/** An agent on no task, whose own page a link to one of its pages opens. */
+const TASKLESS_AGENT_ID = "5e2d8c1b-7a4f-4b3e-9c6d-2f1a0b9e8d7c";
+
+/** A link as the window is handed it, by its address, in any spelling a link or a mention was written in. */
+function linkAt(href: string): ReadLink {
+  const address = addressOf(href);
+  assert.equal(address.kind, ADDRESS.PLACE, href);
+  return address.link;
+}
+
+/** What a link place opened: the section and the comment thread the task's page is asked for, the side panel, and the agent's page standing. */
+function linkOpened(tab: ReturnType<typeof mount>) {
+  const control = tab.control();
+  return {
+    section: control.sectionReveal?.reveal.anchor,
+    comment: control.commentReveal?.thread,
+    panel: panelOf(tab),
+    agent: control.agentView.agentId,
+  };
+}
+
+/** Holds the page `page-1` for every panel that asks, through the window's act port, as its tab on the page stands only once it is held. */
+function holdPageOne(): void {
+  fakeActs({
+    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  holdPages(handHostReads({}).deliverPages, () => ({
+    rows: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
+  }));
+}
+
+/** Mounts the window on the open task, numbered 7 in its listed workspace, and opens `href` as a link in it; `pages` holds the page a link names. */
+async function openedBy(href: string, pages: boolean) {
+  if (pages) holdPageOne();
+  const numbered = { ...TASK, number: 7 };
+  const tab = mount({
+    shown: true,
+    tasks: { ...withAgents([RUNNING_AGENT]), tasks: [numbered], workspaces: LISTING.workspaces },
+    descriptions: { [TASK.id]: { rows: { task: numbered } } },
+  });
+  await settle();
+  act(() => tab.control().onOpenLink(linkAt(href)));
+  await settle();
+  return linkOpened(tab);
+}
+
+test.each([
+  ["a section's link", `${LINK_ORIGIN}/${LISTED_STEP}/task/${TASK.id}#rollout`, "rollout"],
+  [
+    "a section's link written under /plan/",
+    `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}#Rollout`,
+    "rollout",
+  ],
+  [
+    "a section's link by the task's key",
+    `${LINK_ORIGIN}/${LISTED_STEP}/task/VSP-7#rollout`,
+    "rollout",
+  ],
+  [
+    "a section's link in the app's own scheme",
+    `${APP_HOME_LINK}${LISTED_STEP}/plan/${TASK.id}#rollout`,
+    "rollout",
+  ],
+  [
+    "a section's mention written before links were settled",
+    `luke://plan/${TASK.id}#rollout`,
+    "rollout",
+  ],
+])(
+  "%s opens the open task's section, matched on the route tree",
+  async (_spelling, href, anchor) => {
+    assert.equal((await openedBy(href, false)).section, anchor);
+  },
+);
+
+test.each([
+  ["a comment thread's link", `${LINK_ORIGIN}/${LISTED_STEP}/task/${TASK.id}?comment=thread-1`],
+  [
+    "a comment thread's link written under /plan/",
+    `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}?comment=thread-1`,
+  ],
+  [
+    "a comment thread's link by the task's key",
+    `${LINK_ORIGIN}/${LISTED_STEP}/task/VSP-7?comment=thread-1`,
+  ],
+])(
+  "%s asks the open task's page for the thread, matched on the route tree",
+  async (_spelling, href) => {
+    assert.equal((await openedBy(href, false)).comment, "thread-1");
+  },
+);
+
+test.each([
+  ["a page's link", `${LINK_ORIGIN}/${LISTED_STEP}/task/${TASK.id}/page/page-1`, undefined],
+  [
+    "a page's link written under /plan/",
+    `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}/page/page-1`,
+    undefined,
+  ],
+  [
+    "a page's link by the task's key",
+    `${LINK_ORIGIN}/${LISTED_STEP}/task/VSP-7/page/page-1`,
+    undefined,
+  ],
+  [
+    "a page of an agent on no task",
+    `${LINK_ORIGIN}/${LISTED_STEP}/agent/${TASKLESS_AGENT_ID}/page/page-1`,
+    TASKLESS_AGENT_ID,
+  ],
+])(
+  "%s opens the side panel on the page, matched on the route tree",
+  async (_spelling, href, agent) => {
+    const opened = await openedBy(href, true);
+    assert.deepEqual(
+      { panel: opened.panel, agent: opened.agent },
+      { panel: { open: true, tab: pageTab("page-1") }, agent },
+    );
+  },
+);
+
+test("a link to another task's section opens that task and asks its page to show the section, each ask its own", async () => {
   const tab = mount(
-    { shown: true, tasks: LISTING },
+    { shown: true, tasks: LISTING, history: true },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  const section = { kind: MENTION_KIND.SECTION, taskId: OTHER_TASK_ID, anchor: "rollout" } as const;
+  await settle();
+  const link = linkAt(`${LINK_ORIGIN}/${LISTED_STEP}/task/${OTHER_TASK_ID}#rollout`);
 
-  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onOpenLink(link));
   const first = tab.control().sectionReveal;
-  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onOpenLink(link));
 
   await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
+  assert.equal(tab.control().boundFor, OTHER_TASK_ID);
   assert.deepEqual(first, { taskId: OTHER_TASK_ID, reveal: { anchor: "rollout", ask: 1 } });
   assert.deepEqual(tab.control().sectionReveal, {
     taskId: OTHER_TASK_ID,
     reveal: { anchor: "rollout", ask: 2 },
   });
+});
+
+test("a link to a comment thread asks its task's page for the thread, each ask its own, let go once taken, so a later visit opens nothing", async () => {
+  const tab = mount({ shown: true, tasks: LISTING, history: true });
+  await settle();
+  const link = (threadId: string) =>
+    linkAt(`${LINK_ORIGIN}/${LISTED_STEP}/task/${TASK.id}?comment=${threadId}`);
+
+  act(() => tab.control().onOpenLink(link("thread-1")));
+  const first = tab.control().commentReveal;
+  act(() => tab.control().onOpenLink(link("thread-2")));
+  act(() => tab.control().onCommentRevealed(1));
+  const stale = tab.control().commentReveal;
+  act(() => tab.control().onCommentRevealed(2));
+  const taken = tab.control().commentReveal;
+  act(() => tab.control().onOpenLink(link("thread-3")));
+
+  assert.deepEqual(first, { planId: TASK.id, thread: "thread-1", ask: 1 });
+  assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
+  assert.equal(taken, undefined);
+  assert.equal(tab.control().commentReveal?.ask, 3, "an ask after one let go is still its own");
+});
+
+test("a link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
+  const page = { id: "page-1", title: "Flaky funnel", version: 1, at: 1 };
+  fakeActs({
+    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
+  const asked = holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink(linkAt(`${LINK_ORIGIN}/acme/agent/${AGENT_ID}/page/${page.id}`)),
+  );
+  await settle();
+
+  assert.equal(tab.control().agentView.agentId, AGENT_ID);
+  // Note that the open task's pages stay held beneath the agent's page.
+  assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
+  // Note that the agent's pages stand once they reach their query.
+  await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
+  assert.deepEqual(panelOf(tab), { open: true, tab: pageTab(page.id) });
+});
+
+test("in a narrow room a link to another task's page goes straight to the page's address, and no other address stands as the task opens", async () => {
+  holdPageOne();
+  const tab = mount(
+    { shown: true, tasks: LISTING, room: SHELL_ROOM.NARROW, history: true },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  const from = tab.passed.length;
+  const address = `/${LISTED_STEP}/task/${OTHER_TASK_ID}/page/page-1`;
+
+  act(() => tab.control().onOpenLink(linkAt(`${LINK_ORIGIN}${address}`)));
+  tab.stand({ tasks: { ...LISTING, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+
+  assert.deepEqual(
+    [...new Set(tab.passed.slice(from))],
+    [address],
+    "no other address stood between",
+  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: pageTab("page-1") });
+});
+
+test("a page loaded at a section's own address lands on its route, which opens the section, and its step then takes the task's address in place", async () => {
+  const task = `/${LISTED_STEP}/task/${TASK.id}`;
+  const tab = mount({ shown: true, tasks: LISTING, history: true, loadedAt: `${task}#rollout` });
+  const entries = tab.entries();
+  await settle();
+
+  assert.deepEqual(tab.control().sectionReveal, {
+    taskId: TASK.id,
+    reveal: { anchor: "rollout", ask: 1 },
+  });
+  assert.equal(tab.at(), task);
+  assert.equal(tab.entries(), entries, "the step takes the loaded entry in place");
 });
 
 test("a Vespin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
@@ -1341,51 +1571,6 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
   assert.equal(tab.told.length, told, "the late read opens no other task");
-});
-
-test("a Vespin link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
-  const page = { id: "page-1", title: "Flaky funnel", version: 1, at: 1 };
-  fakeActs({
-    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
-  });
-  // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
-  const asked = holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
-  await settle();
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.PAGE, agentId: AGENT_ID, pageId: page.id },
-    }),
-  );
-  await settle();
-
-  assert.equal(tab.control().agentView.agentId, AGENT_ID);
-  // Note that the open task's pages stay held beneath the agent's page.
-  assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
-  // Note that the agent's pages stand once they reach their query.
-  await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
-  assert.deepEqual(panelOf(tab), { open: true, tab: pageTab(page.id) });
-});
-
-test("a Vespin link to a page of the task, as Open in browser lands on, opens the task's side panel on the page's tab", async () => {
-  const page = { id: "page-1", title: "Invite funnel", version: 1, at: 1 };
-  fakeActs({
-    act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
-  });
-  holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
-  await settle();
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.PAGE, planId: TASK.id, pageId: page.id },
-    }),
-  );
-
-  assert.deepEqual(panelOf(tab), { open: true, tab: pageTab(page.id) });
 });
 
 test("a Vespin link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
@@ -1484,29 +1669,6 @@ test("a Vespin link to an agent's message opens the agent and asks its tab to br
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
   assert.deepEqual(first, { agentId: AGENT_ID, messageId: "msg-7", ask: 1 });
   assert.equal(tab.control().messageReveal, undefined);
-});
-
-test("a Vespin link to a comment thread asks its task's page for the thread, each ask its own, let go once taken, so a later visit opens nothing", () => {
-  const tab = mount({ shown: true, tasks: OPEN });
-  const link = (threadId: string) =>
-    ({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.COMMENT, planId: TASK.id, threadId },
-    }) as const;
-
-  act(() => tab.control().onOpenLink(link("thread-1")));
-  const first = tab.control().commentReveal;
-  act(() => tab.control().onOpenLink(link("thread-2")));
-  act(() => tab.control().onCommentRevealed(1));
-  const stale = tab.control().commentReveal;
-  act(() => tab.control().onCommentRevealed(2));
-  const taken = tab.control().commentReveal;
-  act(() => tab.control().onOpenLink(link("thread-3")));
-
-  assert.deepEqual(first, { planId: TASK.id, thread: "thread-1", ask: 1 });
-  assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
-  assert.equal(taken, undefined);
-  assert.equal(tab.control().commentReveal?.ask, 3, "an ask after one let go is still its own");
 });
 
 test("a Vespin link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {

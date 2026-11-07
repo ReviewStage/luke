@@ -67,6 +67,7 @@ import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
 import {
+  type TaskVisits,
   throughHistory,
   useHistoryMouseButtons,
   useRoutedStanding,
@@ -79,6 +80,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { useLinkPlaceLandings } from "./places/link-places.js";
 import { useLinkReads } from "./places/link-reads.js";
 import { usePlaceArrivals, usePlaceBinding } from "./places/place-binding.js";
 import { ROUTED_PLACE } from "./places/routed-places.js";
@@ -470,6 +472,8 @@ function AppWindow(): React.JSX.Element {
   const taskView = useTaskRoute();
   const arrivals = usePlaceArrivals();
   const linkReads = useLinkReads();
+  // The history's door for a link's step on a task's own place, made after the tab it is handed to, read as a link opens.
+  const visitTask = useRef<TaskVisits["onVisitTask"]>((at) => taskView.onOpen(at));
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -501,6 +505,7 @@ function AppWindow(): React.JSX.Element {
     place: routedHere?.place,
     arrivals,
     linkReads,
+    visitTask: (at, step) => visitTask.current(at, step),
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -626,6 +631,8 @@ function AppWindow(): React.JSX.Element {
       appBridge().onShowLink((link) => ("workspace" in link ? openLink(link) : openAccount(link))),
     [openLink, openAccount],
   );
+  // A link place loaded at its own address, or landed on with no step saved, is read by its route and opened as its link is (`places/link-places.ts`).
+  useLinkPlaceLandings(openLink);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands: past sign-in, with the account's workspaces read,
   // so a link loaded waits on its own place rather than standing anywhere
@@ -646,6 +653,7 @@ function AppWindow(): React.JSX.Element {
     tasks,
   });
   leaveRouted.current = history.onLeaveRouted;
+  visitTask.current = history.onVisitTask;
   stayRouted.current = history.onStayRouted;
   // The place standing and the task the host binds follow each other, each on the other's edge (`places/place-binding.ts`).
   usePlaceBinding({

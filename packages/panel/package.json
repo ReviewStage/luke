@@ -41,6 +41,7 @@
     "./not-found": "./src/not-found.js",
     "./panel-router": "./src/panel-router.js",
     "./panel-spans": "./src/panel-spans.js",
+    "./places/link-places": "./src/places/link-places.js",
     "./send-traces": "./src/send-traces.js",
     "./query-client": "./src/query-client.js",
     "./query-keys": "./src/query-keys.js",

@@ -31,3 +31,13 @@ test("a link written now, and a workspace whose slug is plan, stand as they are"
     assert.equal(addressBar(), address);
   }
 });
+
+test("a tab opened at a link place in an older spelling stands on its link written now in the same entry, for its route to open", () => {
+  openAt(`/acme/task/VSP-7/page/page-1`);
+  const entries = window.history.length;
+
+  installPanelDoors();
+
+  assert.equal(addressBar(), "/acme/task/7/page/page-1");
+  assert.equal(window.history.length, entries, "the older link is replaced, not stepped past");
+});
