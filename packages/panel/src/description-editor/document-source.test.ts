@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
+import { markdownExtensions } from "./description-editor.js";
 import {
   documentManager,
   documentMarkdown,
@@ -16,7 +17,6 @@ import {
   documentTook,
   sourcesOf,
 } from "./document-source.js";
-import { markdownExtensions } from "./description-editor.js";
 
 /**
  * A whole description in the editor keeps every block's exact source but the ones
@@ -241,6 +241,42 @@ test("an empty task item left at the end of a checklist is saved as a checkbox t
   const reopened = opened(saved);
   typedAtEnd(reopened.editor, "then");
   assert.equal(reopened.handedOver(), "- [x] testing here\n- [ ] then\n");
+});
+
+test("a blank line left between paragraphs is saved as one the read view draws, and opens blank", () => {
+  const { editor, handedOver } = opened("One.\n");
+  editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
+
+  editor.commands.enter();
+  editor.commands.enter();
+  editor.commands.insertContent("Two.");
+  const saved = handedOver();
+
+  assert.equal(saved, "One.\n\n&nbsp;\n\nTwo.\n");
+  assert.equal(
+    renderToStaticMarkup(withQueryClient(createElement(MarkdownMessage, { words: saved }))).split(
+      "<p",
+    ).length - 1,
+    3,
+  );
+  assert.deepEqual(
+    opened(saved).editor.state.doc.children.map((block) => block.textContent),
+    ["One.", "", "Two."],
+  );
+});
+
+test("Vespin's block merged in after a blank line the developer left is laid into the open editor", () => {
+  const { editor, handedOver, took } = opened("One.\n");
+  editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
+  editor.commands.enter();
+  editor.commands.enter();
+  editor.commands.insertContent("Two.");
+  const sent = handedOver();
+  const merged = sent.replace("Two.", "By Vespin.\n\nTwo.");
+
+  took(sent, merged);
+
+  assert.equal(handedOver(), merged);
 });
 
 test("a checked empty task item inside a checklist stays one when a later item is edited", () => {
