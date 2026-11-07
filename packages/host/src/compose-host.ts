@@ -30,6 +30,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAccountAsks } from "./compose-account-asks.js";
 import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
@@ -84,6 +85,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.TASKS,
   HOST_CONCERN.AGENTS,
+  HOST_CONCERN.ACCOUNT_ASKS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
@@ -313,6 +315,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         pullRequestListings: tasks.pullRequestListings,
         pool,
         agentListed,
+      }),
+    );
+    const accountAsks = yield* served(
+      composeAccountAsks({
+        kernel,
+        account,
+        accountId,
+        focus,
+        client: agentClient,
+        pool,
+        modelsMoved: agents.modelsMoved,
         repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
@@ -501,6 +514,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* openEntities;
         yield* tasks.open;
         yield* agents.open;
+        yield* accountAsks.open;
         yield* automations.open;
         yield* integrations.open;
         yield* installedSkills.open;
@@ -514,6 +528,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* forgetEntities;
       yield* tasks.reset;
       yield* agents.reset;
+      yield* accountAsks.reset;
       yield* integrations.reset;
       yield* automations.reset;
       yield* installedSkills.reset;
@@ -541,6 +556,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.AGENTS]: agents,
+      [HOST_CONCERN.ACCOUNT_ASKS]: accountAsks,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
@@ -611,6 +627,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       acts: {
         ...account.acts,
         ...agents.acts,
+        ...accountAsks.acts,
         ...settings.acts,
         ...thisMacHost.acts,
         ...automations.acts,
