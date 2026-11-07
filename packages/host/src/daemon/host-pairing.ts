@@ -1,5 +1,6 @@
 import {
-  HOST_PAIRING_OUTCOME,
+  HOST_PAIRING_FAILURE,
+  type HostPairingFailed,
   type HostPairingOutcome,
   pollHostPairing,
   startHostPairing,
@@ -100,51 +101,32 @@ export interface HostConnectInput {
   readonly shown: (code: HostPairingCode) => Effect.Effect<void>;
 }
 
-/** A start or poll the service did not answer, as how the connect ends. */
-function endedBy(
-  failed: Exclude<
-    HostPairingOutcome<unknown>,
-    { readonly outcome: typeof HOST_PAIRING_OUTCOME.ANSWERED }
-  >,
-): HostConnectOutcome {
-  switch (failed.outcome) {
-    case HOST_PAIRING_OUTCOME.BRAKED:
-      return { outcome: HOST_CONNECT_OUTCOME.BRAKED };
-    case HOST_PAIRING_OUTCOME.UPGRADE_NEEDED:
-      return {
-        outcome: HOST_CONNECT_OUTCOME.UPGRADE_NEEDED,
-        minimumVersion: failed.minimumVersion,
-      };
-    case HOST_PAIRING_OUTCOME.REFUSED:
-      return { outcome: HOST_CONNECT_OUTCOME.REFUSED };
-    case HOST_PAIRING_OUTCOME.UNANSWERED:
-      return { outcome: HOST_CONNECT_OUTCOME.UNANSWERED };
-  }
+/** A start or poll the service did not answer, as how the connect ends: each failure is spelled as its outcome. */
+function endedBy(failed: HostPairingFailed): HostConnectOutcome {
+  return failed.failure === HOST_PAIRING_FAILURE.UPGRADE_NEEDED
+    ? { outcome: HOST_CONNECT_OUTCOME.UPGRADE_NEEDED, minimumVersion: failed.minimumVersion }
+    : { outcome: failed.failure };
 }
 
 /** Whether a poll leaves the box waiting: pending or told to slow down, braked, or unanswered. */
 function waiting(polled: HostPairingOutcome<HostPairingPollAnswer>): boolean {
-  switch (polled.outcome) {
-    case HOST_PAIRING_OUTCOME.ANSWERED:
-      return (
-        polled.answer.status === HOST_PAIRING_POLL_STATUS.PENDING ||
-        polled.answer.status === HOST_PAIRING_POLL_STATUS.SLOW_DOWN
-      );
-    case HOST_PAIRING_OUTCOME.BRAKED:
-    case HOST_PAIRING_OUTCOME.UNANSWERED:
-      return true;
-    default:
-      return false;
+  if ("failure" in polled) {
+    return (
+      polled.failure === HOST_PAIRING_FAILURE.BRAKED ||
+      polled.failure === HOST_PAIRING_FAILURE.UNANSWERED
+    );
   }
+  return (
+    polled.status === HOST_PAIRING_POLL_STATUS.PENDING ||
+    polled.status === HOST_PAIRING_POLL_STATUS.SLOW_DOWN
+  );
 }
 
 /** Whether a poll asks the box to poll less often. */
 function slowedDown(polled: HostPairingOutcome<HostPairingPollAnswer>): boolean {
-  return (
-    polled.outcome === HOST_PAIRING_OUTCOME.BRAKED ||
-    (polled.outcome === HOST_PAIRING_OUTCOME.ANSWERED &&
-      polled.answer.status === HOST_PAIRING_POLL_STATUS.SLOW_DOWN)
-  );
+  return "failure" in polled
+    ? polled.failure === HOST_PAIRING_FAILURE.BRAKED
+    : polled.status === HOST_PAIRING_POLL_STATUS.SLOW_DOWN;
 }
 
 /**
@@ -185,14 +167,13 @@ const connected = Effect.fnUntraced(function* (input: HostConnectInput) {
     arch: input.arch,
     ...input.machine,
   });
-  if (started.outcome !== HOST_PAIRING_OUTCOME.ANSWERED) return endedBy(started);
-  const { userCode, url, expiresInMs, intervalMs } = started.answer;
+  if ("failure" in started) return endedBy(started);
+  const { userCode, url, expiresInMs, intervalMs } = started;
   yield* input.shown({ userCode, url, expiresInMs, intervalMs });
-  const settled = yield* settledPoll(input.serviceOrigin, started.answer);
+  const settled = yield* settledPoll(input.serviceOrigin, started);
   if (Option.isNone(settled)) return { outcome: HOST_CONNECT_OUTCOME.EXPIRED } as const;
-  const polled = settled.value;
-  if (polled.outcome !== HOST_PAIRING_OUTCOME.ANSWERED) return endedBy(polled);
-  const answer = polled.answer;
+  const answer = settled.value;
+  if ("failure" in answer) return endedBy(answer);
   switch (answer.status) {
     case HOST_PAIRING_POLL_STATUS.APPROVED:
       // Note that the secret is answered this once, so its record is written whole even where the connect is interrupted meanwhile.

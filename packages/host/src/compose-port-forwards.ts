@@ -8,7 +8,9 @@
  * Turning forwarding on reads the agent's listening ports every few seconds
  * for as long as it is on, forwarding what already listens; nothing is
  * started or woken in the sandbox on its behalf, and a stopped sandbox reads
- * as not running. Each port read is listened on at `127.0.0.1` (the
+ * as not running until it runs; once a sandbox seen running stops,
+ * forwarding is turned off, so it waits on no agent whose ports are gone.
+ * Each port read is listened on at `127.0.0.1` (the
  * `ListenOnLoopback` seam the desktop's launch hands over `node:net`), on
  * the same port where it is free and on the next free one where it is not;
  * a port no longer read is let go, its connections with it. Turning it on
@@ -275,6 +277,11 @@ export function composePortForwards(
           http,
         );
         if ("failure" in answer) return;
+        // Note that a sandbox seen running and now stopped ends the forward, so the next agent may take the ports, and the release is forked because it closes the scope this read runs in.
+        if (current.running && !answer.running) {
+          yield* Effect.forkIn(released(current), lifetimeScope);
+          return;
+        }
         current.running = answer.running;
         const read = new Set(answer.ports);
         for (const [port, forward] of current.forwards) {
@@ -296,6 +303,10 @@ export function composePortForwards(
         ? Effect.void
         : Effect.andThen(Scope.close(ending.scope, Exit.void), tell);
     });
+
+    /** Forwarding let go for the agent it was on, unless another agent has taken it since. */
+    const released = (current: Forwarding) =>
+      Effect.suspend(() => (forwarding === current ? turnOff : Effect.void));
 
     /** Forwarding started for the agent, and whichever agent was forwarded before let go. */
     const turnOn = (agentId: string) =>

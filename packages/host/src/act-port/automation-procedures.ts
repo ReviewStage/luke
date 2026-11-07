@@ -1,5 +1,5 @@
 import type { AutomationFollow } from "@repo/features/automation-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { AUTOMATION_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -35,23 +35,17 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function automationProcedures(dependencies: AutomationProceduresDependencies) {
   const { host } = dependencies;
   /** How many streams stand open of each list or history, so the host lets one go only with the last. */
-  const openHolds: OpenFollows<
-    never,
-    Pick<AutomationFollow, "kind" | "id">
-  > = MutableHashMap.empty();
+  const openHolds: OpenFollows<Pick<AutomationFollow, "kind" | "id">> = MutableHashMap.empty();
   return {
     [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: actPort[
       AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held read reaches the panel on app state.
       const hold = followedStream(
         {
           keyOf: (scope: AutomationFollow) => ({ kind: scope.kind, id: scope.id }),
           follow: host.automationsFollow,
           unfollow: host.automationsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openHolds,
         input,

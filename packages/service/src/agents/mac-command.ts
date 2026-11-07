@@ -14,6 +14,7 @@ import {
 import type { TaskStoreEffect } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
@@ -28,7 +29,6 @@ import type { UnparsedWireValue } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import { heldUntil } from "../http/held-read.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**
@@ -76,11 +76,16 @@ const MAC_COMMAND_SERVICE = {
   /**
    * How long a command may wait for a Mac to take it; one not taken by then
    * is never run. A listening Mac takes one within a poll, and a command
-   * taken inside this window ends inside the call's wait.
+   * taken inside this window ends inside the call's wait. Note that it
+   * outlasts the Mac's held-read deadline (`HOSTED_DEADLINE.HELD`, 35
+   * seconds), the follow's rest after a read that failed (`LIVE_RESTART`,
+   * 5), and the retried read's claim, because a read that hangs without
+   * an error just before a command is queued must still find it claimable
+   * once the Mac asks again.
    */
-  CLAIM_WINDOW: Duration.seconds(30),
+  CLAIM_WINDOW: Duration.seconds(60),
   /** How long past the command's own timeout a call waits for the Mac to say what it did: the claim window, and room for the answer to travel. */
-  ANSWER_GRACE: Duration.seconds(35),
+  ANSWER_GRACE: Duration.seconds(65),
 } as const;
 
 export const MAC_COMMAND_STATUS = {

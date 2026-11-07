@@ -31,7 +31,6 @@ import {
   type IntegrationsClient,
   type McpClientsClient,
 } from "./compose-integrations.js";
-import { INTEGRATION_SETTLE_EVERY } from "./integrations-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 import { windowFocus } from "./window-focus.js";
 
@@ -40,7 +39,7 @@ import { windowFocus } from "./window-focus.js";
  * a closed account gate nothing is asked or opened; a server's tools a
  * window holds are kept from their last read; and where the integrations
  * stand, which a window holds, is followed live, the service asked to
- * settle a sign-in only while a row stands pending, and to name an account
+ * settle a pending sign-in as it is drawn and as a window comes forward, and to name an account
  * still to be named once and again as a window comes forward, a disconnect
  * answered only once that read carries it, and a rename drawn over it at
  * once. Synthetic accounts and rows throughout.
@@ -210,6 +209,9 @@ function subject(
   });
 }
 
+/** Long enough for any wait the host keeps to have come round, so a settle on time alone would have been asked. */
+const A_WHILE = Duration.minutes(1);
+
 /** Every step a held read has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
@@ -234,7 +236,7 @@ it.effect(
         }
         yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
         yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
-        yield* after(INTEGRATION_SETTLE_EVERY);
+        yield* after(A_WHILE);
         assert.deepEqual(opened, []);
         assert.deepEqual(asked, []);
         assert.equal(script.status, INTEGRATION_STATUS.CONNECTED);
@@ -269,33 +271,46 @@ it.effect(
     }),
 );
 
-it.effect("the held integrations are settled only while a row stands pending", () =>
-  Effect.gen(function* () {
-    const { call, integrations, settles, live } = yield* subject({
-      status: INTEGRATION_STATUS.CONNECTED,
-    });
-    const drawn = () =>
-      integrations.at(-1)?.[USER_ID]?.rows?.integrations[INTEGRATION_PROVIDER.LINEAR];
-    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
-    yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
-    yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
-    assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
-    assert.equal(settles(), 0, "nothing pending, nothing settled");
+it.effect(
+  "a pending sign-in is settled as it is first drawn and as a window comes forward, never on time alone",
+  () =>
+    Effect.gen(function* () {
+      const { call, integrations, settles, live, focus } = yield* subject({
+        status: INTEGRATION_STATUS.CONNECTED,
+      });
+      const drawn = () =>
+        integrations.at(-1)?.[USER_ID]?.rows?.integrations[INTEGRATION_PROVIDER.LINEAR];
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* after(A_WHILE);
+      yield* focus.raise;
+      yield* settled;
+      assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
+      assert.equal(settles(), 0, "nothing pending, nothing settled");
 
-    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
-    yield* after(Duration.millis(500));
-    assert.equal(drawn(), INTEGRATION_STATUS.PENDING);
-    yield* after(INTEGRATION_SETTLE_EVERY);
-    yield* after(INTEGRATION_SETTLE_EVERY);
-    assert.equal(settles(), 2, "settled once each interval while the row stands pending");
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
+      yield* after(Duration.millis(500));
+      assert.equal(drawn(), INTEGRATION_STATUS.PENDING);
+      assert.equal(settles(), 1, "settled as the pending row is first drawn");
+      yield* after(A_WHILE);
+      assert.equal(settles(), 1, "not settled again while no window comes forward");
 
-    live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
-    yield* after(Duration.millis(500));
-    assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
-    yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
-    assert.equal(settles(), 2, "a sign-in settled is settled no more");
-    yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
-  }),
+      yield* focus.raise;
+      yield* settled;
+      assert.equal(settles(), 2, "settled as a window comes forward while the row stands pending");
+
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
+      yield* after(Duration.millis(500));
+      assert.equal(drawn(), INTEGRATION_STATUS.CONNECTED);
+      yield* focus.raise;
+      yield* settled;
+      assert.equal(settles(), 2, "a sign-in settled is settled no more");
+
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
+      yield* after(Duration.millis(500));
+      assert.equal(settles(), 3, "a sign-in begun again on the same row is settled as drawn");
+      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+    }),
 );
 
 it.effect(
@@ -316,7 +331,7 @@ it.effect(
       live.set({ connections: [placed, unnamed] });
       yield* after(Duration.millis(500));
       assert.equal(settles(), 1, "an empty label where the provider names its accounts is read");
-      yield* after(Duration.times(INTEGRATION_SETTLE_EVERY, 3));
+      yield* after(A_WHILE);
       assert.equal(settles(), 1, "asked once while no window comes forward");
 
       yield* focus.raise;

@@ -56,6 +56,7 @@ const scriptedConnection = Effect.gen(function* () {
 function subject(options: { taken?: number[] } = {}) {
   return Effect.gen(function* () {
     const ports = new Map<string, number[]>([[AGENT_ID, []]]);
+    const stopped = new Set<string>();
     const taken = new Set(options.taken);
     /** Each listener standing, by the local port it holds: what it accepts. */
     const listeners = new Map<number, Queue.Queue<LoopbackConnection, Cause.Done>>();
@@ -84,7 +85,11 @@ function subject(options: { taken?: number[] } = {}) {
         }),
       },
       client: {
-        list: (agentId) => Effect.sync(() => ({ running: true, ports: ports.get(agentId) ?? [] })),
+        list: (agentId) =>
+          Effect.sync(() => ({
+            running: !stopped.has(agentId),
+            ports: stopped.has(agentId) ? [] : (ports.get(agentId) ?? []),
+          })),
       },
       openSocket: (url) =>
         Effect.gen(function* () {
@@ -119,6 +124,8 @@ function subject(options: { taken?: number[] } = {}) {
       tunnels,
       /** The ports the service reads in an agent's sandbox from now on. */
       serve: (agentId: string, listening: number[]) => void ports.set(agentId, listening),
+      /** The agent's sandbox stopped, as the service reads it from now on. */
+      stop: (agentId: string) => void stopped.add(agentId),
       /** A connection made to a local port, as a browser on the Mac would. */
       connect: (localPort: number, connection: LoopbackConnection) => {
         const listener = listeners.get(localPort);
@@ -190,6 +197,23 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
     assert.deepEqual(other, { on: true, running: false, ports: [] });
 
     yield* set({ agentId: OTHER_AGENT_ID, on: false });
+    assert.deepEqual([...listeners.keys()], []);
+    assert.equal(told(), null);
+  }),
+);
+
+it.effect("forwarding is let go once a sandbox seen running stops", () =>
+  Effect.gen(function* () {
+    const { call, serve, stop, listeners, told } = yield* subject();
+    serve(AGENT_ID, [3000]);
+    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
+    yield* settle;
+    assert.deepEqual([...listeners.keys()], [3000]);
+
+    stop(AGENT_ID);
+    yield* TestClock.adjust(PORT_FORWARD.LOOK_EVERY);
+    yield* settle;
+
     assert.deepEqual([...listeners.keys()], []);
     assert.equal(told(), null);
   }),

@@ -17,8 +17,8 @@ import { appStateQuery, selectAccount } from "./use-app-state.js";
  * The host holds the preferences row on a live read, so a default or a
  * chapters model chosen on another device draws here within the service's
  * coalesce window, and a write draws at once. The models are a fetch the
- * host asks again as a window comes forward, as the account's keys move,
- * and every `MODEL_CATALOG_TTL`. Where the account stored no default, the
+ * host asks again as a window comes forward and as the account's keys
+ * move. Where the account stored no default, the
  * default drawn is the one the service answers for it
  * (`agentDefaultOf`): the fallback the models mark as paid for.
  */

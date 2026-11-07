@@ -15,7 +15,7 @@
  */
 
 import type { AgentInboxScope } from "@repo/features/agent-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -41,20 +41,17 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
-  const openInboxes: OpenFollows<never, AgentInboxScope> = MutableHashMap.empty();
+  const openInboxes: OpenFollows<AgentInboxScope> = MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held inbox reaches the panel on app state.
       const hold = followedStream(
         {
           keyOf: (scope: AgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
           follow: host.agentInboxFollow,
           unfollow: host.agentInboxUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openInboxes,
         input,

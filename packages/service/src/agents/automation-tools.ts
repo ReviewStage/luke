@@ -8,6 +8,7 @@ import {
 } from "@repo/database/models/automation-store";
 import { workspaceIntegrationInstallations } from "@repo/database/models/integration-installation-store";
 import { workspaceSlackInstallation } from "@repo/database/models/slack-installation-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { disabledServersSchema } from "@repo/features/agent-wire";
 import { readSchedule, SCHEDULE_REFUSAL } from "@repo/features/automation-schedule";
 import {
@@ -59,7 +60,6 @@ import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effec
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,

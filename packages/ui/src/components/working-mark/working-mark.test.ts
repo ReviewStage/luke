@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
 import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { test } from "vitest";
+import { onTestFinished, test } from "vitest";
+import { serveEffectsOn } from "../../testing/effect-services.js";
 import { Shimmer } from "../shimmer/shimmer.js";
-import { timeRuntime } from "../time/time-clock.js";
 import { WorkingMark } from "./working-mark.js";
 
 /**
@@ -28,7 +25,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 function render(element: React.ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
-  act(() => createRoot(container).render(element));
+  const root = createRoot(container);
+  act(() => root.render(element));
+  // Note that the root leaves with its test, so a mark's beat stops with the clock it ran on.
+  onTestFinished(() => act(() => root.unmount()));
   return container;
 }
 
@@ -48,14 +48,8 @@ test("a still working mark lights at least three cells, not one stacked dot", ()
 
 it.effect("each pixel steps one cell on along the lap on each beat", () =>
   Effect.gen(function* () {
-    const registry = AtomRegistry.make({
-      initialValues: [
-        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
-      ],
-    });
-    const mark = render(
-      createElement(RegistryContext.Provider, { value: registry }, createElement(WorkingMark)),
-    );
+    serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+    const mark = render(createElement(WorkingMark));
     const cells = () =>
       [...mark.querySelectorAll<SVGElement>(".ui-working-mark-dot")].map(
         (dot) => dot.style.transform,
@@ -80,22 +74,12 @@ it.effect("each pixel steps one cell on along the lap on each beat", () =>
 
 it.effect("a mark committed under a capture stage holds its resting frame on the beat", () =>
   Effect.gen(function* () {
-    const registry = AtomRegistry.make({
-      initialValues: [
-        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
-      ],
-    });
+    serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
     // The stage zeroes the motion tokens as it is committed, after the mark's render has read them.
     const stage = (element: HTMLElement | null) => {
       if (element !== null) document.body.style.setProperty("--ui-duration-fast", "0s");
     };
-    const mark = render(
-      createElement(
-        RegistryContext.Provider,
-        { value: registry },
-        createElement("div", { ref: stage }, createElement(WorkingMark)),
-      ),
-    );
+    const mark = render(createElement("div", { ref: stage }, createElement(WorkingMark)));
     yield* TestClock.adjust("200 millis");
     yield* Effect.promise(() => act(() => Promise.resolve()));
     document.body.style.removeProperty("--ui-duration-fast");

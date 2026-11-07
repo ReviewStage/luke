@@ -19,12 +19,11 @@ import {
   type PortActResult,
   type TERMINAL_ACT_KIND,
 } from "@repo/host/contract";
-import { timeRuntime } from "@repo/ui";
 import type { TerminalStripTab } from "@repo/ui/tab-strip-model";
 import { terminalTab } from "@repo/ui/tab-strip-model";
+import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Clock, Context, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,6 +34,7 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import { onRegistry } from "../testing/copy-feedback.js";
 import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { useEndTerminalTab } from "./use-terminal-session.js";
@@ -244,7 +244,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Each registry lets its terminals go, as a window's does as it closes.
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
@@ -260,16 +259,19 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted, shown or not, with what it draws, and the door that ends it as its × does. */
-async function mount(shown = true) {
+async function mount(shown = true, still = true) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the window's ticks never start here, because the working agent's mark steps on one
-  // forever, and a test that runs every fake timer out would never finish.
-  const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
+  // Note that the working agent's mark never steps here unless a case moves the clock itself
+  // (`still` off), because it steps on a beat forever, and a test that runs every fake timer out would
+  // never finish.
+  serveEffectsOn(still ? Context.make(Clock.Clock, STILL_CLOCK) : Context.empty());
+  const registry = AtomRegistry.make();
   registries.push(registry);
+  const terminals = windowTerminals();
   let closed = 0;
   let end: ((tab: TerminalStripTab) => void) | undefined;
   const Ender = () => {
@@ -290,7 +292,10 @@ async function mount(shown = true) {
       root.render(
         onRegistry(
           registry,
-          onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+          onTerminals(
+            terminals,
+            onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+          ),
         ),
       ),
     );
@@ -442,7 +447,7 @@ test("a resume whose snapshot is gone says the sandbox shut down and how to star
 test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again a few seconds on", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
   vi.useFakeTimers();
-  const tab = await mount();
+  const tab = await mount(true, false);
   assert.equal(tab.standing(), "· waiting for sandbox");
   assert.equal(tab.bar(), "Waiting for the agent to open its sandbox…");
   assert.equal(tab.action(), null);
@@ -496,7 +501,7 @@ test("a connection the host ended says so in the bar, and any key reconnects to 
 test("a tab says on its shell's port each minute that it is shown, only while shown in a window in use", async () => {
   vi.useFakeTimers();
   const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
-  const tab = await mount();
+  const tab = await mount(true, false);
   const port = main.post(MADE);
   port.say({ type: "state", state: "attached" });
   const shown = () => port.posted.filter((message) => message.type === "shown").length;

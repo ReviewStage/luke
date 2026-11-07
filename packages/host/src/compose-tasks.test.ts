@@ -12,7 +12,7 @@ import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallResult,
 } from "@repo/features";
-import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_TABS_PLACE } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
@@ -20,6 +20,8 @@ import {
   PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
+import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "@repo/features/browser-tabs-live";
+import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -34,10 +36,13 @@ import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
 import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
-import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageVersion } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
+import { AGENT_PAGES_READ, TASK_PAGES_READ } from "@repo/features/task-pages-live";
+import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -380,6 +385,9 @@ type CommentPart = "threads" | "entries" | "files";
 /** A live read the service answers not found, as one the account does not reach. */
 const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
+/** A live read the service did not answer. */
+const UNANSWERED_LIVE = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
 /** The origin a workspace's invitations are answered with, which each accept link is built on. */
 const INVITATIONS_ORIGIN = "https://app.test";
 
@@ -542,6 +550,26 @@ function fakeService(tasks: Task[]): FakeService {
     poll: boolean | undefined,
     after: string | undefined,
   ) => (poll === true ? read.poll(after) : Effect.succeed(read.first()));
+  /** The fake's live read of the declared read named, for the task, agent, or page its params name, first asked or polled past `after`; none where the service holds none. */
+  const liveOf = (
+    name: string,
+    params: { readonly id: string; readonly page?: string },
+    poll: boolean,
+    after: string | undefined,
+  ) => {
+    const ask = <Part extends string, Refused extends { readonly failure: string }>(
+      read: PolledLive<Part, Refused> | undefined,
+    ) => (read === undefined ? undefined : asked(read, poll, after));
+    if (name === TASK_COMMENTS_READ.name)
+      return ask(service.commentLives[params.page ?? params.id]);
+    if (name === TASK_HISTORY_READ.name) return ask(service.historyLives[params.id]);
+    if (name === TASK_RECORD_READ.name) return ask(service.recordLives[params.id]);
+    if (name === TASK_PAGES_READ.name || name === AGENT_PAGES_READ.name)
+      return ask(service.pageLives[params.id]);
+    if (name === TASK_BROWSER_TABS_READ.name || name === AGENT_BROWSER_TABS_READ.name)
+      return ask(service.browserTabLives[params.id]);
+    return undefined;
+  };
   const service: FakeService = {
     tasks,
     threads: {},
@@ -549,13 +577,6 @@ function fakeService(tasks: Task[]): FakeService {
     commentAnswer: undefined,
     commentGate: undefined,
     commentLives: {},
-    commentsLive: (subject, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["commentsLive"]> => {
-        const read = service.commentLives[subject.pageId ?? subject.taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
     // The service starts the thread as asked, the member its writer, and holds it on the description.
     startComment: (planId, start) =>
       Effect.sync(() => {
@@ -731,26 +752,24 @@ function fakeService(tasks: Task[]): FakeService {
         Effect.suspend(() => {
           const read = service.connection;
           return Effect.map(service.githubGate, () =>
-            read === undefined
-              ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
-              : { ok: true as const, answer: read },
+            read === undefined ? { failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED } : read,
           );
         }),
       connect: () =>
         Effect.sync(() => {
           const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
-          return { ok: true as const, answer: { url } };
+          return { url };
         }),
       // The service unlinks the session's GitHub and answers the connection as it then stands.
       disconnect: () =>
         Effect.sync(() => {
           service.reads.push("github-disconnect");
           if (service.notPermitted) {
-            return { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
+            return { failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
           }
           service.connection = { connected: false, login: null };
-          return { ok: true as const, answer: service.connection };
+          return service.connection;
         }),
     },
     // The service answers an admin read with what it read, and stars any account.
@@ -1074,34 +1093,19 @@ function fakeService(tasks: Task[]): FakeService {
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
     openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
-    historyLive: (taskId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["historyLive"]> => {
-        const read = service.historyLives[taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    browserTabsLive: (place, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["browserTabsLive"]> => {
-        const read = service.browserTabLives[browserTabsPlaceId(place)];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    pagesLive: (place, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["pagesLive"]> => {
-        const read = service.pageLives[pagePlaceId(place)];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    recordLive: (taskId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["recordLive"]> => {
-        const read = service.recordLives[taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
-          : called(asked(read, poll, after));
-      }),
+    // A declared live read answers as its follow asks it: first, or polled past `after`; the record of a task with none is not found, every other read unanswered.
+    liveRead: ((
+      read: { readonly name: string },
+      params: { readonly id: string; readonly page?: string },
+      poll?: { readonly after?: string | undefined },
+    ) =>
+      Effect.suspend((): Effect.Effect<unknown> => {
+        const followed = liveOf(read.name, params, poll !== undefined, poll?.after);
+        if (followed !== undefined) return followed;
+        return Effect.succeed(
+          read.name === TASK_RECORD_READ.name ? NOT_FOUND_LIVE : UNANSWERED_LIVE,
+        );
+      })) as TasksClient["liveRead"],
     // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
     listLive: (_userId, sync) =>
       Effect.suspend(() => {
@@ -4988,13 +4992,13 @@ it.effect(
       const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
       pages.refuse(NOT_FOUND_LIVE);
       service.pageLives[INVITES] = pages;
-      const { pagesLive } = service;
+      const { liveRead } = service;
       let seals = 0;
-      service.pagesLive = (...asked) =>
+      service.liveRead = ((...asked: Parameters<TasksClient["liveRead"]>) =>
         Effect.suspend(() => {
-          seals += 1;
-          return pagesLive(...asked);
-        });
+          if (asked[0].name === TASK_PAGES_READ.name) seals += 1;
+          return liveRead(...asked);
+        })) as TasksClient["liveRead"];
       const { call, pushed } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
@@ -5554,7 +5558,7 @@ it.effect(
       const drawn = last()?.tasks[0];
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
-        [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
+        [drawn?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [1, [AGENT_STATUS.STARTING]],
       );
       assert.deepEqual(
@@ -5567,9 +5571,8 @@ it.effect(
       yield* TestClock.adjust(Duration.minutes(5));
       yield* settled;
 
-      const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
-        [ended?.working, ended?.agents.map((line) => line.status)],
+        [last()?.tasks[0]?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [0, [AGENT_STATUS.FAILED]],
       );
     }),
@@ -5604,20 +5607,20 @@ it.effect(
       });
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.FAILED],
         "the line's grace ran out with no row moving",
       );

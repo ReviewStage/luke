@@ -114,9 +114,7 @@ test("a task whose agent ended a turn after another task's description was edite
       total: 1,
       working: 0,
       activityAt: 800,
-      agents: [],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   const groups = groupsByRepository([edited, worked]);
@@ -132,9 +130,7 @@ test("an agent's activity older than the description's own edit leaves the descr
       total: 1,
       working: 0,
       activityAt: 300,
-      agents: [],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   expect(taskTime(summary, TASK_ORDER.UPDATED)).toBe(900);

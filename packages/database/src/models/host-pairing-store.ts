@@ -1,5 +1,5 @@
 /**
- * host-pairing-store.ts -- the pairings a box starts to join a member's devices with a code: opened, polled and handed its secret, read, approved, and denied by code, and swept; each account's wrong guesses counted.
+ * host-pairing-store.ts -- the pairings a box starts to join a member's devices with a code: opened, polled and handed its secret, read, approved, and denied by code; each account's wrong guesses counted, and what lapsed cleared by the next start.
  *
  * Every function is an effect over the ambient `SqlClient`. The poll secret
  * and the device secret arrive here as their SHA-256 alone (the service
@@ -24,6 +24,13 @@
  * while its pairing names it (`./host-store.ts`). The box's next poll keys
  * the row with the secret it is handed and deletes the pairing, so the
  * secret is handed over once.
+ *
+ * No guess or poll waits on a lapsed row going, since each names a pairing
+ * only before it lapses; lapsed rows come only from starts, so each start
+ * clears a bounded batch of them in its own transaction, with the hosts
+ * they approved whose boxes never collected their secret and the accounts'
+ * guess windows that ended. Note that such a host stays listed until a
+ * start clears it, or its account removes it.
  */
 
 import {
@@ -55,8 +62,8 @@ export const HOST_PAIRING = {
   MISS_LIMIT: 10,
   /** How long an account's window of guesses lasts from its first. */
   MISS_WINDOW: Duration.minutes(15),
-  /** The most lapsed pairings one sweep deletes. */
-  SWEEP_BATCH: 500,
+  /** The most lapsed pairings, and the most ended guess windows, one start deletes. */
+  CLEAR_BATCH: 100,
 } as const;
 
 /** What a box opens a pairing with: its poll secret's hash, the code it shows, its name, platform, architecture, and daemon version, and the address it called from where one was named. */
@@ -356,7 +363,7 @@ const settleDenied = SqlSchema.findOneOption({
     ),
 });
 
-/** A sweep's worth of lapsed pairings deleted, answering what each was and the host an approve made for it. */
+/** A start's batch of lapsed pairings deleted, answering what each was and the host an approve made for it; a row another start holds is left to it. */
 const deleteLapsed = SqlSchema.findAll({
   Request: Schema.Struct({ now: Schema.Date }),
   Result: Schema.Struct({
@@ -374,7 +381,8 @@ const deleteLapsed = SqlSchema.findAll({
               .select({ id: hostPairing.id })
               .from(hostPairing)
               .where(lte(hostPairing.expiresAt, now))
-              .limit(HOST_PAIRING.SWEEP_BATCH),
+              .limit(HOST_PAIRING.CLEAR_BATCH)
+              .for("update", { skipLocked: true }),
           ),
         )
         .returning({ status: hostPairing.status, deviceId: hostPairing.deviceId }),
@@ -392,17 +400,48 @@ const deleteUncollected = SqlSchema.void({
     ),
 });
 
+/** A start's batch of the accounts' guess windows that ended, deleted; a window a guess holds is left to it. */
 const deleteEndedWindows = SqlSchema.void({
   Request: Schema.Struct({ now: Schema.Date }),
   execute: ({ now }) =>
     Database.use((db) =>
-      db.delete(hostPairingGuess).where(lte(hostPairingGuess.windowEndsAt, now)),
+      db
+        .delete(hostPairingGuess)
+        .where(
+          inArray(
+            hostPairingGuess.userId,
+            queryBuilder
+              .select({ userId: hostPairingGuess.userId })
+              .from(hostPairingGuess)
+              .where(lte(hostPairingGuess.windowEndsAt, now))
+              .limit(HOST_PAIRING.CLEAR_BATCH)
+              .for("update", { skipLocked: true }),
+          ),
+        ),
     ),
 });
 
 /** The effect given, in one transaction. */
 function transacted<A>(work: PairingEffect<A>): PairingEffect<A> {
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(work));
+}
+
+/**
+ * Deletes a batch of pairings whose code and stand lapsed, the address each
+ * kept with it, and the hosts approves made whose boxes never collected
+ * their secret, then a batch of the accounts' guess windows that ended.
+ */
+function clearLapsed(now: Date): PairingEffect<void> {
+  return Effect.gen(function* () {
+    const lapsed = yield* deleteLapsed({ now });
+    const uncollected = lapsed.flatMap((pairing) =>
+      pairing.status === HOST_PAIRING_STATUS.APPROVED && pairing.deviceId !== null
+        ? [pairing.deviceId]
+        : [],
+    );
+    if (uncollected.length > 0) yield* deleteUncollected({ ids: uncollected });
+    yield* deleteEndedWindows({ now });
+  });
 }
 
 /**
@@ -437,15 +476,19 @@ function guessed<A>(
 /**
  * Opens a pending pairing for `HOST_PAIRING.LIFETIME` from now, answering
  * when its code lapses; nothing where a standing pairing already shows the
- * code, which wrote nothing.
+ * code, which wrote nothing. Clears what lapsed first (`clearLapsed`), in
+ * the same transaction, so a lapsed pairing's code is free to show again.
  */
 export function openHostPairing(opening: HostPairingOpening): PairingEffect<Option.Option<Date>> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    const expiresAt = new Date(now.getTime() + Duration.toMillis(HOST_PAIRING.LIFETIME));
-    const opened = yield* insertPairing({ ...opening, now, expiresAt });
-    return Option.map(Option.fromNullishOr(opened[0]), (row) => row.expiresAt);
-  });
+  return transacted(
+    Effect.gen(function* () {
+      const now = yield* DateTime.nowAsDate;
+      yield* clearLapsed(now);
+      const expiresAt = new Date(now.getTime() + Duration.toMillis(HOST_PAIRING.LIFETIME));
+      const opened = yield* insertPairing({ ...opening, now, expiresAt });
+      return Option.map(Option.fromNullishOr(opened[0]), (row) => row.expiresAt);
+    }),
+  );
 }
 
 /**
@@ -453,7 +496,7 @@ export function openHostPairing(opening: HostPairingOpening): PairingEffect<Opti
  * hash is given where its pairing was approved: slow down where its last
  * answered poll was under `HOST_PAIRING.POLL_FLOOR` ago, which stamps
  * nothing; pending until its code lapses, expired after that, or where no
- * pairing stands under the hash (never one, swept, or already handed over);
+ * pairing stands under the hash (never one, cleared, or already handed over);
  * denied where a member denied it, or removed the host its approve made
  * before the box collected it; approved once, before its stand lapses
  * (`HOST_PAIRING.COLLECT_GRACE`), which keys that host with the secret and
@@ -484,7 +527,7 @@ export function pollHostPairing(
         case HOST_PAIRING_STATUS.DENIED:
           return { status: HOST_PAIRING_POLL_STATUS.DENIED } as const;
         case HOST_PAIRING_STATUS.APPROVED: {
-          // Note that a box past its collect grace is handed nothing, and the sweep deletes the host it never collected.
+          // Note that a box past its collect grace is handed nothing, and a later start deletes the host it never collected.
           if (pairing.expiresAt <= now)
             return { status: HOST_PAIRING_POLL_STATUS.EXPIRED } as const;
           // Note that the stamp above holds the row's lock, so a poll racing this one waits and finds it gone.
@@ -543,27 +586,5 @@ export function denyHostPairing(
       settleDenied({ userCode, userId, now }),
       Option.map(() => true as const),
     ),
-  );
-}
-
-/**
- * Deletes a sweep's worth of pairings whose code and stand lapsed, the
- * address each kept with it, and the hosts approves made whose boxes never
- * collected their secret, then every account's window of guesses that
- * ended; answers how many pairings went.
- */
-export function sweepHostPairings(now: Date): PairingEffect<number> {
-  return transacted(
-    Effect.gen(function* () {
-      const lapsed = yield* deleteLapsed({ now });
-      const uncollected = lapsed.flatMap((pairing) =>
-        pairing.status === HOST_PAIRING_STATUS.APPROVED && pairing.deviceId !== null
-          ? [pairing.deviceId]
-          : [],
-      );
-      if (uncollected.length > 0) yield* deleteUncollected({ ids: uncollected });
-      yield* deleteEndedWindows({ now });
-      return lapsed.length;
-    }),
   );
 }

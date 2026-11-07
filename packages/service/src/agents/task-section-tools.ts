@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { deleteTaskSectionIn, writeTaskSections } from "@repo/database/models/task-section-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -16,7 +17,6 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentCall,

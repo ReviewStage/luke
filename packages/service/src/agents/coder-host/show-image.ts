@@ -3,6 +3,7 @@ import { keepConversationPicture } from "@repo/database/models/conversation-pict
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { asPictureList } from "@repo/features/agent-pictures-model";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   type KeptPicture,
@@ -14,7 +15,6 @@ import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
 
 /**

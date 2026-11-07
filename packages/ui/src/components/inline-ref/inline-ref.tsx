@@ -6,6 +6,7 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
+import { middlePressOf } from "../../middle-press.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_TRUNCATE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -300,10 +301,15 @@ function InlineRefRoot({
     );
   }
   if (leaving) {
-    // Note that the press, not the browser, opens the address, because the
-    // window's opener decides where an address opens, a pull request's in
-    // its tab say; the link is what a reader and a right-click are told.
+    // Note that the press, not the browser, opens the address, a
+    // middle-click's as a click's, because the window's opener decides where
+    // an address opens, a pull request's in its tab say; the link is what a
+    // reader and a right-click are told.
     const open = pulseOnPress(onPress);
+    const press = (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      open(event);
+    };
     return (
       <a
         {...own}
@@ -312,10 +318,8 @@ function InlineRefRoot({
         target="_blank"
         rel="noreferrer"
         aria-label={pressLabel}
-        onClick={(event) => {
-          event.preventDefault();
-          open(event);
-        }}
+        onClick={press}
+        onAuxClick={middlePressOf(press)}
       >
         {face}
       </a>
