@@ -197,14 +197,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * that may wait for the service is sent under a key of the host's own
      * minting and waits while the service does not answer: kept on disk
      * beside the lists where they are kept (`openEntities`), and in a
-     * browser tab for the tab's life alone. A fixture run keeps none
-     * waiting.
+     * browser tab for the tab's life alone, and sent again only as the
+     * account that asked it. A fixture run keeps none waiting.
      */
     const pool = yield* entityPool(
       kernel.runMode.requiresAccount
         ? {
             mintKey: kernel.createId,
             replayRefused: Effect.sync(() => offlineRefused.raise()),
+            holder: accountId,
           }
         : undefined,
     );
