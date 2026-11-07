@@ -8,7 +8,6 @@ import { HttpClient, HttpRouter } from "effect/http";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -49,10 +48,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
   const sessionsFor: SessionsForAccount = routedSessions;
   const httpClient = yield* HttpClient.HttpClient;
-  const sandboxes = Layer.provide(
-    sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, httpClient),
-  );
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
@@ -70,7 +65,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepDeviceWarmRunners(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
-    sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepNativeSandboxes: (now) =>
       sweepNativeSandboxes(new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepNativeWakeups: (now) =>

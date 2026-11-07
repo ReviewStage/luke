@@ -232,8 +232,8 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * account's standing conversations run in is retired before anything is
      * deleted, for the account the request resolved to, while those
      * conversations still stand (`retire-sessions.ts`); a session not
-     * retired is logged and the delete proceeds. The delete itself queues the sandbox of
-     * every session the account ran for the sweep. Every grant the
+     * retired is logged and the delete proceeds; a sandbox left behind expires
+     * on Vercel's own schedule (`CODER.SANDBOX_SNAPSHOTS`). Every grant the
      * account's integration rows name is revoked at Vercel Connect once the
      * rows are gone, as a Disconnect revokes one, so no grant outlives the
      * account; a revoke that fails is logged by its word and the account is

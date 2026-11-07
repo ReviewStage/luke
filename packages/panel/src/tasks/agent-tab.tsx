@@ -3065,7 +3065,7 @@ function AgentTabView({
             doors={doors}
             tools={(narrow) => (
               <>
-                <AgentPlace agent={agent} narrow={narrow} />
+                <AgentPlace agent={agent} readerId={readerId} narrow={narrow} />
                 <ForwardChip agent={agent} />
               </>
             )}
@@ -3264,7 +3264,6 @@ function AgentTabBody({
     agent,
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
-    me: control.me,
   });
   const { published } = useAgentPullRequest({
     agentId: agent.id,

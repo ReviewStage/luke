@@ -171,7 +171,7 @@
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
    what is drawn into a corner rounds that corner itself (a bar at the sheet's
-   top, below, and the plan's summary). */
+   top, below). */
 /* On the Mac the window's own ground is the system's sidebar material
    (`panel-manager.ts`), so the frame is a tint laid over it rather than a
    paint: the wallpaper frosts through the frame and the columns that stand
@@ -453,7 +453,7 @@
    history, whose sheet has no row, a toolbar is a bar like any other. A
    toolbar first in its box rounds too, and one drawing no ground shows
    nothing of it. Columns laid side by side (a
-   split: a plan beside its summary, an Inbox's list beside its item, an
+   split: an Inbox's list beside its item, an
    automation beside its runs) each stand at the top, the first shown
    holding the left corner alone and the last shown the right. A layout
    that lays columns side by side at a sheet's top joins the split's list
@@ -535,16 +535,6 @@
       *
   ) {
   --sheet-top-right-radius: 0px;
-}
-
-/* What paints the page's ground at its sheet's edge, the plan's summary,
-   rounds the sheet's corners it stands in. */
-:where(:root):not([data-ui-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task-main
-  .task-summary {
-  border-radius: 0 var(--sheet-radius) var(--sheet-radius) 0;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] {

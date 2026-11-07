@@ -3,10 +3,13 @@ import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import { STARTING_GRACE_MILLIS } from "@repo/features/agent-status";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
-import type {
-  AutomationRunsLiveAnswer,
-  AutomationRunsLiveRows,
-  AutomationsLiveRows,
+import {
+  AUTOMATION_RUNS_READ,
+  AUTOMATION_WORKSPACE_RUNS_READ,
+  AUTOMATIONS_READ,
+  type AutomationRunsLiveAnswer,
+  type AutomationRunsLiveRows,
+  type AutomationsLiveRows,
 } from "@repo/features/automation-live";
 import { AUTOMATION_CALL_FAILURE, AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
@@ -230,25 +233,39 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
         ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
         : { automation: SUMMARY },
     ),
-    listLive: (workspaceId, userId, poll, after) =>
-      poll
-        ? live.list.poll(after)
-        : Effect.sync(() => {
-            asked.push(["list-live", workspaceId, userId]);
-            return live.list.first();
-          }),
-    runsLive: (automationId, userId, poll) =>
-      poll
-        ? live.runsPolled === undefined
-          ? Effect.never
-          : // A poll is held a while before it answers, as the service holds one.
-            Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
-        : Effect.sync(() => {
-            asked.push(["runs-live", automationId, userId]);
-            return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
-          }),
-    workspaceRunsLive: (_workspaceId, _userId, poll, after) =>
-      poll ? live.workspaceRuns.poll(after) : Effect.sync(() => live.workspaceRuns.first()),
+    // SAFETY: each declared read the client is asked for answers its own script's rows, as its declaration's answer.
+    liveRead: ((
+      read: { readonly name: string },
+      params: { readonly workspaceId?: string; readonly id?: string; readonly userId?: string },
+      poll?: { readonly after?: string | undefined },
+    ) =>
+      Effect.suspend((): Effect.Effect<unknown> => {
+        switch (read.name) {
+          case AUTOMATIONS_READ.name:
+            return poll !== undefined
+              ? live.list.poll(poll.after)
+              : Effect.sync(() => {
+                  asked.push(["list-live", params.workspaceId, params.userId]);
+                  return live.list.first();
+                });
+          case AUTOMATION_RUNS_READ.name:
+            return poll !== undefined
+              ? live.runsPolled === undefined
+                ? Effect.never
+                : // A poll is held a while before it answers, as the service holds one.
+                  Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
+              : Effect.sync(() => {
+                  asked.push(["runs-live", params.id, params.userId]);
+                  return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
+                });
+          case AUTOMATION_WORKSPACE_RUNS_READ.name:
+            return poll !== undefined
+              ? live.workspaceRuns.poll(poll.after)
+              : Effect.sync(() => live.workspaceRuns.first());
+          default:
+            return assert.fail(`no script answers the live read ${read.name}`);
+        }
+      })) as AutomationsClient["liveRead"],
   };
   return { client, asked, live, replies };
 }

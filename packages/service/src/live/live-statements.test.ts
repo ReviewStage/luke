@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
 import { LIVE_PARAM } from "@repo/features/live-read";
 import { Effect, Option } from "effect";
@@ -58,9 +57,6 @@ function liveStatements() {
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
-    "agent.pullRequestChapters": Option.getOrThrow(
-      pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
-    ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
     ),

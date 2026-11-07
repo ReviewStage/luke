@@ -63,6 +63,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -392,6 +393,8 @@ function fakeService() {
           case WORKSPACE_MEMORIES_READ.name:
             if (poll === undefined) asked.push(`memories-live:${params.workspaceId}`);
             return answered(live.memories);
+          case PULL_REQUEST_CHAPTERS_READ.name:
+            return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
           default:
             return assert.fail(`no script answers the live read ${read.name}`);
         }
@@ -571,7 +574,6 @@ function fakeService() {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
-    pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -3795,6 +3797,62 @@ it.effect(
       yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
       const answer = yield* Fiber.join(closing);
       assert.ok("failure" in answer, "the close is not taken, so its item stands open");
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
+it.effect(
+  "a held close its window let go while it waited behind another write is never sent once another account is signed in",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks } = yield* subject({ pool, accountId: () => account });
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+
+      account = "user-ben";
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
+it.effect(
+  "a held close still waiting behind another write as its account leaves is never sent under the next account",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks, letGoHeldCloses } = yield* subject({
+        pool,
+        accountId: () => account,
+      });
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+
+      yield* letGoHeldCloses;
+      account = "user-ben";
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
       assert.deepEqual(
         asked.filter((each) => each.startsWith("close:")),
         [],

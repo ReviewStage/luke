@@ -36,6 +36,7 @@ import { LiveReadSubscription } from "@repo/panel/live-reads";
 import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
+import { installSendTracer } from "@repo/panel/send-traces";
 import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
 import { ErrorBoundary, RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import { createBrowserHistory } from "@tanstack/react-router";
@@ -143,6 +144,8 @@ export async function mountWebApp(
     installed.push(installAppPlatform(web.platform));
     // Every failure the panel shows is reported through the tab's Sentry.
     installed.push(installShownFailureReporter(sentry.reportShownFailure, queryClient));
+    // Every send the panel is pressed for is traced through it too, its trace carried to the service.
+    installed.push(installSendTracer(sentry.traceSend));
     // The document is read into the window's Query client before anything is drawn over it, so
     // no reader draws a first frame without it.
     await queryClient.ensureQueryData(appStateQuery);

@@ -18,10 +18,11 @@
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
  * window as Settings does. Settings, Admin, a workspace's Board, a
- * person's page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
- * on them, their routes draw them, as lazy routes but for the Inbox kept drawn beside them all, and each gate is a
+ * person's page, an agent's own page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
+ * on them, their routes draw them, as lazy routes but for an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
- * (`route-gates.ts`). Every other place
+ * (`route-gates.ts`), but for an agent's page, which stands at any address
+ * as it always has. Every other place
  * is still the window's state's, which its routes draw through one
  * component (`StatePlace`), so moving a place onto the router swaps its
  * route's component and deletes its place kind from `navigation-history.ts`.
@@ -46,6 +47,7 @@ import { useEffect, useRef } from "react";
 import { App } from "./app.js";
 import {
   AdminRouteLoading,
+  AgentPlace,
   AutomationsRouteLoading,
   BoardRouteLoading,
   InboxPlace,
@@ -226,10 +228,18 @@ const taskAgentMessageRoute = createRoute({
   path: "message/$messageId",
 });
 
+/**
+ * An agent's own page, the page of an agent on no task or of an archived
+ * one opened on its own, under the workspace its address names, at its own
+ * address (`AgentPlace`). The places under it, a worker, its Changes, a
+ * message, a page, or an Inbox item of it, are what a link to them names,
+ * and what a step on a task's tab is written at, so they draw the place the
+ * window's state says, as every route not yet moved does.
+ */
 const agentRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "agent/$agentId",
-  component: StatePlace,
+  component: AgentPlace,
 });
 
 const agentIndexRoute = createRoute({ getParentRoute: () => agentRoute, path: "/" });

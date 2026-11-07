@@ -10,10 +10,9 @@
  * examples set one up: from the latest snapshot of the sandbox of the agent
  * it was continued or forked from, its checkout as that agent left it at its
  * last stop; from its workspace's repository's base snapshot
- * (`../base-snapshot.ts`), its checkout fetched up to the default branch and
- * installed again, which fills in only what landed since; or from the agents'
- * image (`../coder-host/agent-image.ts`), which carries the runner and every
- * tool the harnesses run, the repository cloned whole
+ * (`../base-snapshot.ts`), its checkout fetched up to the default branch; or
+ * from the agents' image (`../coder-host/agent-image.ts`), which carries the
+ * runner and every tool the harnesses run, the repository cloned whole
  * (`../coder-host/checkout.ts`, the token at the firewall for the clone
  * alone). A snapshot found gone at the create is passed by for the next, and
  * the base snapshot is filled past the answer where it was missing, gone, out
@@ -106,7 +105,6 @@ import {
   type BaseSnapshotOf,
   checkoutCommit,
   fillBaseSnapshot,
-  installDependencies,
   lockfileMoved,
   readBaseSnapshot,
 } from "../base-snapshot.js";
@@ -779,10 +777,8 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * The agent's checkout in the sandbox just created, as it was created:
    * from the source agent's snapshot it stands as that agent left it, and is
    * cloned only where that snapshot holds none; from the base snapshot it is
-   * brought up to the default branch and installed again, which fills in only
-   * what changed since the fill, answering whether that moved a lockfile;
-   * from the image the repository is cloned whole. An install that failed is
-   * said in the log and let be, since the agent installs for itself.
+   * brought up to the default branch, answering whether that moved a
+   * lockfile; from the image the repository is cloned whole.
    */
   const checkedOutAs = (
     agent: WithRepository<Agent>,
@@ -814,18 +810,11 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         Effect.withSpan("web/checkoutCommit"),
       );
       yield* refreshAgentCheckout(agent, sandbox, read);
-      const moved =
-        base === undefined
-          ? false
-          : yield* Effect.orElseSucceed(lockfileMoved(sandbox, base), () => false).pipe(
-              Effect.withSpan("web/lockfileMoved"),
-            );
-      yield* installDependencies(sandbox).pipe(
-        Effect.catch(() =>
-          Effect.logWarning("An agent's install on its repository's base snapshot failed"),
-        ),
-      );
-      return moved;
+      return base === undefined
+        ? false
+        : yield* Effect.orElseSucceed(lockfileMoved(sandbox, base), () => false).pipe(
+            Effect.withSpan("web/lockfileMoved"),
+          );
     });
 
   /**

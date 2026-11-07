@@ -68,6 +68,7 @@ import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
@@ -256,7 +257,6 @@ const AGENT_QUEUED_WRITE = {
 /** The service's side of the agents, as this concern asks it. */
 export type AgentClient = Pick<
   HostedAgentClient,
-  | "pullRequestChaptersLive"
   | "generateChapters"
   | "models"
   | "writeDefault"
@@ -555,7 +555,13 @@ export function composeAgents(
     });
     const chapters = yield* heldChapters({
       seal: (key, poll, userId, after) =>
-        asked(client.pullRequestChaptersLive(key.agentId, key.number, userId, poll, after)),
+        asked(
+          client.liveRead(
+            PULL_REQUEST_CHAPTERS_READ,
+            { id: key.agentId, number: String(key.number), userId },
+            poll ? { after } : undefined,
+          ),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppChapters) =>
@@ -802,7 +808,7 @@ function fetchedReads(
       focus,
       fetch: (agentId) =>
         Effect.map(asked(client.workspaceTools(agentId)), (answer) =>
-          "runOnMac" in answer ? Option.some(answer) : Option.none(),
+          "failure" in answer ? Option.none() : Option.some(answer),
         ),
       tell: (held: AppWorkspaceTools) =>
         kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),
@@ -1158,6 +1164,19 @@ function composed(
   /** The held closes told to go and not yet answered, which an account's departure drops. */
   const sendingCloses = new Set<HeldClose>();
   /**
+   * The account each held close was asked under, by its key, until it comes
+   * to be sent. Note that an account's departure keeps it, because a close
+   * still waiting behind another write comes to be sent only after, and
+   * must not read as one laid back from disk under whoever is signed in then.
+   */
+  const heldBy = new Map<string, string | undefined>();
+  /** The account the close under `clientKey` was asked under, taken so it is read once; the account signed in now where this host did not see it asked, as one laid back from disk. */
+  const takeHolder = (clientKey: string): string | undefined => {
+    const holder = heldBy.has(clientKey) ? heldBy.get(clientKey) : dependencies.accountId();
+    heldBy.delete(clientKey);
+    return holder;
+  };
+  /**
    * What a window decided of a held close before the close came to wait, by
    * its key, with when: as an Undo pressed while an earlier write on the same
    * item was still out, or while the close waited behind writes the service
@@ -1190,6 +1209,7 @@ function composed(
    */
   const released = <Answer>(
     clientKey: string,
+    holder: string | undefined,
     send: Effect.Effect<Answer>,
     undone: Answer,
   ): Effect.Effect<Answer> =>
@@ -1198,7 +1218,7 @@ function composed(
         told: yield* Deferred.make<boolean>(),
         answered: yield* Deferred.make<void>(),
         dropped: yield* Deferred.make<void>(),
-        holder: dependencies.accountId(),
+        holder,
       };
       heldCloses.set(clientKey, held);
       const settled = Effect.sync(() => {
@@ -1272,12 +1292,14 @@ function composed(
       Effect.suspend(() => {
         const send = asked(client.closeInbox(itemId, request, key));
         if (held !== true) return send;
-        // Note that a decision its window made before the close came to be sent is the one it goes by.
+        // Note that a decision its window made before the close came to be sent is the one it goes by, and only under the account that asked it.
+        const holder = takeHolder(request.clientKey);
         const decided = takeDecided(request.clientKey);
         if (decided === undefined && !waited)
-          return released(request.clientKey, send, CLOSE_UNDONE);
+          return released(request.clientKey, holder, send, CLOSE_UNDONE);
         letGoAt.set(request.clientKey, kernel.now());
-        return decided === false ? Effect.succeed(CLOSE_UNDONE) : send;
+        const goes = decided !== false && holder === dependencies.accountId();
+        return goes ? send : Effect.succeed(CLOSE_UNDONE);
       }),
     {
       name: INBOX_QUEUED_WRITE.CLOSE,
@@ -1518,7 +1540,14 @@ function composed(
       asked(client.agentPart(agentId, messageId, index, callId)),
     // The Inbox's acts (`AGENT_INBOX_ACTS`): each row write drawn over the pool the moment it is asked.
     AGENTS_INBOX_ANSWER: declaredWrite(dependencies.pool, nodded),
-    AGENTS_INBOX_CLOSE: declaredWrite(dependencies.pool, closed),
+    // Note that a held close's account is read as it is asked, since it may come to be sent only after another has signed in.
+    AGENTS_INBOX_CLOSE: declaredWrite(dependencies.pool, closed, {
+      read: (input: AgentInboxCloseParams) =>
+        Effect.sync(() => {
+          if (input.held === true) heldBy.set(input.clientKey, dependencies.accountId());
+          return input;
+        }),
+    }),
     AGENTS_INBOX_CLOSE_RELEASE: ({ clientKey, send }) =>
       Effect.gen(function* () {
         const held = heldCloses.get(clientKey);

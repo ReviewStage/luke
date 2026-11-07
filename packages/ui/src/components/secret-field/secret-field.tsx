@@ -2,10 +2,14 @@ import { FIELD_WORDS } from "@repo/features/words";
 import { type ReactNode, type Ref, useState } from "react";
 import { HideSecretIcon, ShowSecretIcon } from "../../icons/lucide-glyphs.js";
 import type { ShownError } from "../../reported-failure.js";
-import { IconButton } from "../button/button.js";
+import { BUTTON_SIZE, IconButton } from "../button/button.js";
 import { FormField } from "../form-field/form-field.js";
-import { GAP, Inline } from "../layout/layout.js";
-import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextField } from "../text-field/text-field.js";
+import {
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_END,
+  TEXT_FIELD_TYPE,
+  TextField,
+} from "../text-field/text-field.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -13,9 +17,10 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * It is a `FormField` (its label above it, its description and its error
  * under it, Optional where it may be left empty) whose control is a one-line
- * field masked as a password is, beside a press that shows what was typed
- * and masks it again. The system neither offers to fill it nor to keep what
- * it holds, checks its spelling, or corrects it.
+ * field masked as a password is, with a press inside its end that shows what
+ * was typed and masks it again, so its edges line up with the fields around
+ * it. The system neither offers to fill it nor to keep what it holds, checks
+ * its spelling, or corrects it.
  *
  * A secret already kept somewhere (`saved`) is never handed back to the
  * window, so the field cannot show it: while nothing new is typed it says
@@ -72,7 +77,7 @@ export function SecretField({
   return (
     <FormField label={label} description={description} error={error} optional={optional}>
       {(control) => (
-        <Inline wrap={false} gap={GAP.TIGHT} growFirst>
+        <div className="relative">
           <TextField
             ref={ref}
             field={control}
@@ -88,16 +93,20 @@ export function SecretField({
             onEnter={onEnter}
             onEscape={onEscape}
             onPasted={onPasted}
+            end={TEXT_FIELD_END.PRESS}
           />
-          <Tooltip label={toggle}>
-            <IconButton
-              icon={shown ? <HideSecretIcon /> : <ShowSecretIcon />}
-              label={toggle}
-              disabled={disabled || !typed}
-              onClick={() => setShown((now) => !now)}
-            />
-          </Tooltip>
-        </Inline>
+          <span className="absolute inset-y-0 end-1.5 flex items-center">
+            <Tooltip label={toggle}>
+              <IconButton
+                icon={shown ? <HideSecretIcon /> : <ShowSecretIcon />}
+                label={toggle}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={disabled || !typed}
+                onClick={() => setShown((now) => !now)}
+              />
+            </Tooltip>
+          </span>
+        </div>
       )}
     </FormField>
   );

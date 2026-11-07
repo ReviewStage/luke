@@ -14,16 +14,18 @@
  * calls, never at module load.
  */
 
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/message-port";
+import { sendTraceHeaders } from "@repo/features/sentry-tracing";
 import type { AppBridge, PushListeners } from "@repo/host/bridge";
 import {
+  type ActPortCallContext,
   type ActPortClient,
   PUSH_GUARD,
   PUSH_METHOD,
   type PushEvent,
   type PushName,
 } from "@repo/host/contract";
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
 
 let installed: AppBridge | undefined;
 let installedActPort: ActPortClient | undefined;
@@ -53,7 +55,12 @@ export function installActPort(
   port: MessagePort,
   through: (client: ActPortClient) => ActPortClient = (client) => client,
 ): () => void {
-  const uninstall = installActPortClient(through(createORPCClient(new RPCLink({ port }))));
+  const link = new RPCLink<ActPortCallContext>({
+    port,
+    // A send's trace crosses as Sentry's own headers, which the host reads into its call (`send-traces.ts`).
+    headers: ({ context }) => (context.trace === undefined ? {} : sendTraceHeaders(context.trace)),
+  });
+  const uninstall = installActPortClient(through(createORPCClient(link)));
   port.start();
   return uninstall;
 }

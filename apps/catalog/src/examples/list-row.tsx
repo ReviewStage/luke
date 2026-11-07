@@ -9,7 +9,6 @@ import {
   Inline,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
-  LIST_ROW_CHEVRON,
   LIST_ROW_CURRENT,
   LIST_ROW_CURRENT_LOOK,
   LIST_ROW_INK,
@@ -554,37 +553,20 @@ function ListRows(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="list-row-chevron" title="Rows that go deeper">
         <div className="catalog-narrow">
-          <List label="Tools" density={LIST_DENSITY.COMPACT}>
+          <List label="Mention from" density={LIST_DENSITY.COMPACT}>
             <ListRow
-              title="create_issue"
-              description="Opens an issue in a repository"
+              title="Tasks"
+              description="A task by its name or key"
               chevron
               current={LIST_ROW_CURRENT.ITEM}
               onPress={() => undefined}
             />
             <ListRow
-              title="list_issues"
-              description="Lists a repository's issues"
+              title="Files"
+              description="A file of the repository, folder by folder"
               chevron
               onPress={() => undefined}
             />
-          </List>
-        </div>
-      </CatalogSection>
-      <CatalogSection id="list-row-chevron-meta" title="A chevron in its metadata's place">
-        <div className="catalog-narrow">
-          <List label="Servers" density={LIST_DENSITY.COMPACT}>
-            {[LIST_ROW_CHEVRON.ROOM, LIST_ROW_CHEVRON.META].map((at) => (
-              <ListRow
-                key={at}
-                title="search_issues_across_every_repository_of_an_organization"
-                meta="24 tools"
-                chevron
-                chevronAt={at}
-                actions={<Switch checked label={`Chevron ${at}`} onChange={() => undefined} />}
-                onPress={() => undefined}
-              />
-            ))}
           </List>
         </div>
       </CatalogSection>

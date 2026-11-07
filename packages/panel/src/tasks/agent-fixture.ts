@@ -85,6 +85,7 @@ import {
   type AppStateSnapshot,
   type AppTranscript,
   type AppTranscripts,
+  type AppWorkspaceTools,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
   RUN_PROFILE,
@@ -1136,6 +1137,24 @@ function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): App
   return laid;
 }
 
+/** Where the agent's `run_on_mac` stands, as the card its Runs on chip hangs reads it: its starter's Mac, listening. */
+const RUN_ON_MAC_HELD = {
+  rows: { runOnMac: { on: true, owner: { userId: "user-ada", name: "Ada Lovelace" } } },
+} as const;
+
+/** Main's held `run_on_mac` reads with the agent's own laid, one object for each of main's. */
+const STAGED_RUN_ON_MAC = new WeakMap<AppWorkspaceTools, AppWorkspaceTools>();
+
+/** Lays the agent's `run_on_mac` over main's held reads of it, one object for each of main's. */
+function stagedRunOnMac(held: AppWorkspaceTools): AppWorkspaceTools {
+  let laid = STAGED_RUN_ON_MAC.get(held);
+  if (laid === undefined) {
+    laid = { ...held, [FIXTURE_AGENT_ID]: RUN_ON_MAC_HELD };
+    STAGED_RUN_ON_MAC.set(held, laid);
+  }
+  return laid;
+}
+
 /** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
 const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
 
@@ -1182,7 +1201,9 @@ const STAGED_PARTS = {
  * held as its Pull request tab's reads of them hold them
  * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings),
  * and the agent's transcript as its tab's read of it holds it
- * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached.
+ * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached, and
+ * where its `run_on_mac` stands as its Runs on card reads it
+ * (`LIVE_READ.WORKSPACE_TOOLS`).
  * The same document, the very object, under any other profile.
  */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
@@ -1212,6 +1233,7 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     [LIVE_READ.PAGES]: staged,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters,
     [LIVE_READ.TRANSCRIPT]: stagedTranscripts(state[LIVE_READ.TRANSCRIPT], stagedTranscript(stage)),
+    [LIVE_READ.WORKSPACE_TOOLS]: stagedRunOnMac(state[LIVE_READ.WORKSPACE_TOOLS]),
     [LIVE_READ.PULL_REQUEST]: STAGED_PARTS[LIVE_READ.PULL_REQUEST](state[LIVE_READ.PULL_REQUEST]),
     [LIVE_READ.PULL_REQUEST_CHECKS]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CHECKS](
       state[LIVE_READ.PULL_REQUEST_CHECKS],

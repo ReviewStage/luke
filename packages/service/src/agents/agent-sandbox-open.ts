@@ -20,6 +20,7 @@
 import { createHash } from "node:crypto";
 import { AGENT_USER, CODEX_PIN } from "@repo/agent-runner/pins";
 import { Duration, Effect, Schedule } from "effect";
+import { afterResponse } from "../http/after-response.js";
 import { AgentImage } from "./coder-host/agent-image.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
@@ -58,7 +59,8 @@ const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
  * every `SPACED`, at most `TIMES` times, as Vercel's docs say to retry once
  * the preparation finishes. Note that CI pushes each image and waits for
  * Vercel to prepare it before the deploy that names it lands, so only a
- * Preview opened as its image is pushed waits here.
+ * Preview opened as its image is pushed waits here, and that a member's
+ * open waits past its answer instead (`openAgentSandboxPromptly`).
  */
 const IMAGE_RETRY = {
   SPACED: Duration.seconds(10),
@@ -105,15 +107,14 @@ export interface AgentSandboxOf {
 }
 
 /**
- * The agent's sandbox opened through `getOrCreate`, as above, from the
- * agents' image or the snapshot named, asked again while the registry still prepares the image
- * (`IMAGE_RETRY`): running, with whether this call created it. A sandbox it
- * creates has the `agent` user made in it, and is then handed to the
- * caller's `onCreate` where it gives one; a failure of either fails the open,
- * as does an image the build named none of, which reads as the sandbox
- * unavailable.
+ * The agent's sandbox opened once through `getOrCreate`, as above, from the
+ * agents' image or the snapshot named: running, with whether this call
+ * created it. A sandbox it creates has the `agent` user made in it, and is
+ * then handed to the caller's `onCreate` where it gives one; a failure of
+ * either fails the open, as does an image the build named none of, which
+ * reads as the sandbox unavailable.
  */
-export const openAgentSandbox = (
+const openedOnce = (
   api: Pick<VercelSandboxApi, "getOrCreate">,
   of: AgentSandboxOf,
   onCreate?: (created: OpenedSandbox) => Promise<void>,
@@ -130,35 +131,66 @@ export const openAgentSandbox = (
           }
         : { snapshotId: of.snapshot.snapshotId };
     let created = false;
-    const sandbox = yield* api
-      .getOrCreate(
-        {
-          name: agentSandboxName(of.sessionId),
-          from,
-          tags: of.tags,
-          timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-          ...(of.vcpus === undefined ? undefined : { vcpus: of.vcpus }),
-          keepLastSnapshots: {
-            count: CODER.SANDBOX_SNAPSHOTS.count,
-            expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-            deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-          },
-          env: SANDBOX_ENV,
-          ...(of.snapshot?.holdsUser === true
-            ? undefined
-            : { user: { name: AGENT_USER, homeFolders: AGENT_HOME_FOLDERS } }),
+    const sandbox = yield* api.getOrCreate(
+      {
+        name: agentSandboxName(of.sessionId),
+        from,
+        tags: of.tags,
+        timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+        ...(of.vcpus === undefined ? undefined : { vcpus: of.vcpus }),
+        keepLastSnapshots: {
+          count: CODER.SANDBOX_SNAPSHOTS.count,
+          expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+          deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
         },
-        async (opened) => {
-          created = true;
-          await onCreate?.(opened);
-        },
-      )
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.spaced(IMAGE_RETRY.SPACED),
-          times: IMAGE_RETRY.TIMES,
-          while: (failure) => failure.code === IMAGE_NOT_READY,
-        }),
-      );
+        env: SANDBOX_ENV,
+        ...(of.snapshot?.holdsUser === true
+          ? undefined
+          : { user: { name: AGENT_USER, homeFolders: AGENT_HOME_FOLDERS } }),
+      },
+      async (opened) => {
+        created = true;
+        await onCreate?.(opened);
+      },
+    );
     return { sandbox, created };
   });
+
+/**
+ * The agent's sandbox opened as `openedOnce` opens it, asked again while the
+ * registry still prepares the image (`IMAGE_RETRY`): what a launch waits on,
+ * since its turn needs the sandbox before it can go on.
+ */
+export const openAgentSandbox = (
+  api: Pick<VercelSandboxApi, "getOrCreate">,
+  of: AgentSandboxOf,
+  onCreate?: (created: OpenedSandbox) => Promise<void>,
+) =>
+  openedOnce(api, of, onCreate).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced(IMAGE_RETRY.SPACED),
+      times: IMAGE_RETRY.TIMES,
+      while: (failure) => failure.code === IMAGE_NOT_READY,
+    }),
+  );
+
+/**
+ * The agent's sandbox opened for a member's request, which must answer
+ * within its client's deadline: asked once, and where the registry still
+ * prepares the image, opened after the request's answer instead, waiting on
+ * the image as `openAgentSandbox` does, while the request fails at once with
+ * the image not ready, for its caller to answer as starting. Note that the
+ * Terminal's and the Browser's panes ask again on their own wait meanwhile,
+ * and find it running once the open after the answer made it.
+ */
+export const openAgentSandboxPromptly = (
+  api: Pick<VercelSandboxApi, "getOrCreate">,
+  of: AgentSandboxOf,
+) =>
+  openedOnce(api, of).pipe(
+    Effect.tapError((failure) =>
+      failure.code === IMAGE_NOT_READY
+        ? afterResponse("an agent's sandbox opened on its image", openAgentSandbox(api, of))
+        : Effect.void,
+    ),
+  );

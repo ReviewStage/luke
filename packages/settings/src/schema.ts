@@ -37,6 +37,7 @@ import {
   MAC_COMMAND_MODE,
   MAC_COMMAND_MODE_LABEL,
   MAC_COMMAND_MODE_LIST,
+  MAC_COMMANDS_LABEL,
 } from "./mac-commands.js";
 import {
   accountHiddenSetting,
@@ -185,7 +186,7 @@ export const APP_SETTING_SCHEMA = {
   macCommands: choiceSetting({
     field: "macCommands",
     id: APP_SETTING_ID.MAC_COMMANDS,
-    label: "Let agents run commands on this Mac",
+    label: MAC_COMMANDS_LABEL,
     values: MAC_COMMAND_MODE_LIST,
     token: (mode) => mode,
     optionLabel: (mode) => MAC_COMMAND_MODE_LABEL[mode],

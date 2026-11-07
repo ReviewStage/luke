@@ -122,6 +122,22 @@ export function outerJoined<Joined extends Column>(
 }
 
 /**
+ * A select that orders itself, such as one that takes its newest row alone
+ * by columns it never selects, built for an unordered part (`ordered:
+ * false`): the reader orders the rows it holds by the part's declared
+ * order, and the statement's own stands as written. Fails where it is
+ * handed a declared order, which would stand after its own.
+ */
+export function ownOrder(select: LiveSelect): Orderable {
+  return {
+    orderBy: (...columns) => {
+      if (columns.length > 0) throw new Error("a statement that orders itself takes no order");
+      return select;
+    },
+  };
+}
+
+/**
  * One part's statement: its columns selected under its row's keys
  * (`liveSelection`), the select `build` makes of them, and the part's
  * declared order after it; none where it names a value a live statement
