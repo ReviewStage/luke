@@ -2,6 +2,7 @@ import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import {
   WORKSPACE_ENVIRONMENT_BOUNDS,
+  type WorkspaceEnvironmentAnswer,
   workspaceVariableNameSchema,
 } from "@repo/features/workspace-environment-wire";
 import { managesWorkspace } from "@repo/features/workspace-role";
@@ -33,7 +34,13 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useState } from "react";
 import { actFailureWords, askAct, sendAct } from "../act.js";
@@ -85,13 +92,24 @@ function environmentQuery(workspaceId: string) {
   });
 }
 
+/** A write's answer drawn over the list, a read still under way canceled first so its older names cannot land over it. */
+async function drawAnswer(
+  queries: QueryClient,
+  workspaceId: string,
+  answer: WorkspaceEnvironmentAnswer,
+): Promise<void> {
+  const { queryKey } = environmentQuery(workspaceId);
+  await queries.cancelQueries({ queryKey, exact: true });
+  queries.setQueryData(queryKey, answer);
+}
+
 /** A put, its answer drawn over the list at once. */
 function usePutVariable(workspaceId: string) {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: (variable: { name: string; value: string }) =>
       sendAct(ACT_KIND.WORKSPACE_ENVIRONMENT_PUT, { workspaceId, ...variable }),
-    onSuccess: (answer) => queries.setQueryData(environmentQuery(workspaceId).queryKey, answer),
+    onSuccess: (answer) => drawAnswer(queries, workspaceId, answer),
   });
 }
 
@@ -191,7 +209,7 @@ function VariableRow({
   const replace = useVariableDialog(workspaceId, name);
   const deleting = useMutation({
     mutationFn: () => sendAct(ACT_KIND.WORKSPACE_ENVIRONMENT_DELETE, { workspaceId, name }),
-    onSuccess: (answer) => queries.setQueryData(environmentQuery(workspaceId).queryKey, answer),
+    onSuccess: (answer) => drawAnswer(queries, workspaceId, answer),
   });
   const deleteAct = useConfirmAct(deleting, {
     send: () => deleting.mutateAsync(),
