@@ -3332,8 +3332,8 @@ test("Enter submits the review from its words, while Shift+Enter only adds a lin
       {
         action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
         event: REVIEW_EVENT.COMMENT,
-        // Note that Shift+Enter left a new line open after the words.
-        body: "Looks right.\n\n",
+        // Note that the line Shift+Enter left open after the words holds nothing, so it writes nothing.
+        body: "Looks right.",
       },
     ],
   ]);

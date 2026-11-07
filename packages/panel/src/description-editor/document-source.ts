@@ -49,6 +49,9 @@ const ESCAPED_ALERT = /^(>[^\S\n]*)\\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\\]
 /** What separates a re-printed block from the next. */
 const BLOCK_GAP = "\n\n";
 
+/** What a blank line the developer left is written as: TipTap's own mark for an empty paragraph, which its Markdown reads back as one. */
+const BLANK_LINE = "&nbsp;";
+
 /** The blocks a bullet list opens as, a run of plain items or of task items (`tokenSources`). */
 const LIST_BLOCKS = new Set([BulletList.name, TaskList.name]);
 
@@ -199,18 +202,35 @@ function blockMarkdown(manager: MarkdownManager, node: PmNode, held: HeldSources
   return held.sources.get(node) ?? reprinted(manager, node) + BLOCK_GAP;
 }
 
+/** Whether a block is a paragraph holding nothing: a line the developer left blank. */
+function blankLine(node: PmNode): boolean {
+  return node.type.name === "paragraph" && node.childCount === 0;
+}
+
 /**
  * The document as the editor holds it now: each block that is still the node
  * it opened as written as its source, each other block re-printed, the
- * document's own ending kept.
+ * document's own ending kept. A blank line the developer left before more
+ * text is written as TipTap's own mark for an empty paragraph, which reads
+ * back as one, since Markdown folds a run of blank lines into one gap; and
+ * the lines left blank after the text's last words write nothing, so an
+ * empty text stays empty.
  */
 export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: HeldSources): string {
+  const left = doc.children.map((node) => !held.sources.has(node) && blankLine(node));
+  const blocks = doc.children.map((node, index) =>
+    left[index] ? BLANK_LINE + BLOCK_GAP : blockMarkdown(manager, node, held),
+  );
+  // Note that a new block that writes nothing, a picture still being kept, writes no blank line either.
+  const worded = doc.children.map(
+    (node, index) => held.sources.has(node) || (!left[index] && blocks[index]?.trim() !== ""),
+  );
+  const last = worded.lastIndexOf(true);
   let out = held.lead;
-  doc.forEach((node, _offset, index) => {
-    const block = blockMarkdown(manager, node, held);
-    // Note that a new block that writes nothing, an empty paragraph or a picture still being kept, writes no blank line either.
-    if (held.sources.get(node) === undefined && block.trim() === "") return;
-    if (index === doc.childCount - 1) {
+  blocks.forEach((block, index) => {
+    const node = doc.child(index);
+    if (index > last || !(worded[index] || left[index])) return;
+    if (index === last) {
       out += block.trimEnd() + held.ending;
       return;
     }
