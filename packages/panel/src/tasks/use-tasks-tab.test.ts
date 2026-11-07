@@ -69,6 +69,7 @@ import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
 import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
+import { useCopyLink } from "../links-at-hand.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -317,9 +318,11 @@ function mount(
     inbox: InboxRoute;
     home: HomeRoute;
   }) {
+    // The step's address is the link the window's Copy link places it at, as the window's root hands it.
+    const placed = useCopyLink(tasks, undefined, true, room).placed;
     windowHistory = useWindowHistory({
       known: true,
-      link: undefined,
+      link: placed,
       routed: undefined,
       settingsList: undefined,
       onSettingsList: () => undefined,
@@ -462,6 +465,8 @@ function mount(
   return {
     /** Where the router's history stands. */
     at: () => held.history.location.pathname,
+    /** How many entries the router's history holds. */
+    entries: () => held.history.length,
     told,
     agentActs,
     shownAgents,
@@ -1088,6 +1093,30 @@ test("in a narrow room Back to a task opens it as it stood, its panel open on th
   tab.stand({ tasks: LISTING });
   await settle();
   assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
+});
+
+test("in a narrow room whose panel shows a worker of the open task, a door to the open task moves nothing", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      tasks: { ...withAgents([RUNNING_AGENT]), workspaces: LISTING.workspaces },
+      room: SHELL_ROOM.NARROW,
+      history: true,
+    },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  act(() =>
+    tab.control().sidePanel.onShow(TASK.id, subagentTab("toolu_1", { agent: AGENT_ID, task: "" })),
+  );
+  await settle();
+  const before = { at: tab.at(), entries: tab.entries() };
+
+  act(() => tab.control().onStandTask());
+  await settle();
+
+  assert.match(before.at, /\/worker\/toolu_1$/u);
+  assert.deepEqual({ at: tab.at(), entries: tab.entries() }, before);
 });
 
 test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {

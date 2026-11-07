@@ -483,6 +483,7 @@ export const TASK_AWAY: TaskRoute = {
   at: undefined,
   saved: undefined,
   atNow: () => undefined,
+  savedNow: () => undefined,
   workspaceNow: () => undefined,
   onOpen: ignore,
 };

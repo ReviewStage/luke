@@ -2303,12 +2303,14 @@ export function useTasksTab(input: {
       input.taskView.workspaceNow(),
     );
     if (at === undefined) return false;
-    // Note that a task stands where its address names it, by the window's tasks or as the same step, as a number they hold none for.
+    // Note that a task stands where its address names it, by the window's tasks or as the same step, as a number they hold none for,
+    // and where the step standing holds it whatever its address, as a narrow room's at its side panel's worker or Pull request link.
     const now = input.taskView.atNow();
     const standing =
-      now !== undefined &&
-      ((now.workspace === at.workspace && now.task === at.task) ||
-        taskOfAt(now, addressed, workspacesNow) === toward);
+      input.taskView.savedNow() === toward ||
+      (now !== undefined &&
+        ((now.workspace === at.workspace && now.task === at.task) ||
+          taskOfAt(now, addressed, workspacesNow) === toward));
     if (standing) return false;
     input.taskView.onOpen(at);
     return true;
