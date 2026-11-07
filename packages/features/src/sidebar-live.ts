@@ -1,5 +1,7 @@
-import { Schema as EffectSchema } from "effect";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import { Schema } from "effect";
+import { LIVE_MODE, LIVE_PARAM, liveRead, liveRows, ORDER } from "./live-read.js";
+import { LIVE_USER_QUERY } from "./live-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import {
   type AgentSectionEntry,
   agentSectionEntrySchema,
@@ -12,7 +14,7 @@ import {
 import { type RepositoryPin, repositoryPinSchema } from "./task-wire.js";
 
 /**
- * sidebar-live.ts -- the account's sidebar sections and pinned repositories as the host follows them over the service's held poll: the statements the service answers, and the rows they deliver.
+ * sidebar-live.ts -- the account's sidebar sections and pinned repositories as the host follows them over the service's held poll: the read declared, and the rows the host keeps of it.
  *
  * The rows are the wire's own values, each instant as epoch milliseconds and
  * what the wire leaves out as null, in no order; the host keeps them in
@@ -21,45 +23,61 @@ import { type RepositoryPin, repositoryPinSchema } from "./task-wire.js";
  */
 
 /**
- * The account's sidebar sealed for following: the address, and four
- * statements, its sections, the tasks and the agents it keeps in them, and
- * its pinned repositories. Asked to poll, or where Realtime cannot seal them, the
- * service answers each statement's rows inline instead (`LIVE_POLL`).
+ * The account's sidebar as the host follows it: four parts, its sections,
+ * the tasks and the agents it keeps in them, and its pinned repositories.
+ * The host keeps them in collections and draws them in the held reads'
+ * order, so each part's order here only fixes the one its rows are read in:
+ * each section, entry, and pin as it was made, and a pin's newest first.
  */
-export const sidebarLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    sections: sealedLiveQuerySchema,
-    entries: sealedLiveQuerySchema,
-    agentEntries: sealedLiveQuerySchema,
-    pins: sealedLiveQuerySchema,
-  }),
-});
-
-export type SidebarLiveAnswer = typeof sidebarLiveAnswerSchema.Type;
-
-/** The sidebar's rows as the live statements deliver them: what the wire leaves out where it holds nothing is null. */
-export const sidebarLiveRowsSchema = EffectSchema.Struct({
-  sections: EffectSchema.Array(
-    EffectSchema.Struct({
-      ...taskSectionSchema.fields,
-      icon: EffectSchema.NullOr(taskSectionSchema.fields.icon),
-      position: EffectSchema.NullOr(taskSectionSchema.fields.position),
+export const SIDEBAR_READ = liveRead({
+  name: "sidebar",
+  path: HOSTED_SERVICE_PATH.LIVE_SIDEBAR,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    sections: liveRows({
+      row: Schema.Struct({
+        ...taskSectionSchema.fields,
+        icon: Schema.NullOr(taskSectionSchema.fields.icon),
+        position: Schema.NullOr(taskSectionSchema.fields.position),
+      }),
+      key: "id",
+      order: [
+        ["createdAt", ORDER.ASC],
+        ["id", ORDER.ASC],
+      ],
     }),
-  ),
-  entries: EffectSchema.Array(
-    EffectSchema.Struct({
-      ...taskSectionEntrySchema.fields,
-      position: EffectSchema.NullOr(taskSectionEntrySchema.fields.position),
+    entries: liveRows({
+      row: Schema.Struct({
+        ...taskSectionEntrySchema.fields,
+        position: Schema.NullOr(taskSectionEntrySchema.fields.position),
+      }),
+      key: "taskId",
+      order: [
+        ["addedAt", ORDER.ASC],
+        ["taskId", ORDER.ASC],
+      ],
     }),
-  ),
-  agentEntries: EffectSchema.Array(
-    EffectSchema.Struct({
-      ...agentSectionEntrySchema.fields,
-      position: EffectSchema.NullOr(agentSectionEntrySchema.fields.position),
+    agentEntries: liveRows({
+      row: Schema.Struct({
+        ...agentSectionEntrySchema.fields,
+        position: Schema.NullOr(agentSectionEntrySchema.fields.position),
+      }),
+      key: "agentId",
+      order: [
+        ["addedAt", ORDER.ASC],
+        ["agentId", ORDER.ASC],
+      ],
     }),
-  ),
-  pins: EffectSchema.Array(repositoryPinSchema),
+    pins: liveRows({
+      row: repositoryPinSchema,
+      key: "repository",
+      order: [
+        ["pinnedAt", ORDER.DESC],
+        ["repository", ORDER.ASC],
+      ],
+    }),
+  },
 });
 
 /** The sidebar as the held reads answer it: the account's sections and the tasks and agents in them, and its pins. */
@@ -77,7 +95,7 @@ export interface SidebarRows {
 }
 
 /** The sidebar's rows as the live statements deliver them, each null the wire answers where a row holds nothing left out. */
-export function sidebarRowsOfLive(rows: typeof sidebarLiveRowsSchema.Type): SidebarRows {
+export function sidebarRowsOfLive(rows: typeof SIDEBAR_READ.rows.Type): SidebarRows {
   return {
     sections: rows.sections.map(({ icon, position, ...section }) => ({
       ...section,

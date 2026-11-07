@@ -109,6 +109,7 @@
     "./schemas/device": "./src/schemas/device.js",
     "./schemas/memory": "./src/schemas/memory.js",
     "./schemas/personal-workspace": "./src/schemas/personal-workspace.js",
+    "./schemas/workspace-experiment": "./src/schemas/workspace-experiment.js",
     "./schemas/description-comment": "./src/schemas/description-comment.js",
     "./schemas/task": "./src/schemas/task.js",
     "./schemas/task-block": "./src/schemas/task-block.js",

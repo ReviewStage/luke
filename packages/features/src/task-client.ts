@@ -61,7 +61,6 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
-import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
@@ -1007,26 +1006,6 @@ export class HostedTaskClient {
     return Effect.map(
       hostedCall(this.#hosted.repositoryPins.set, asked, keyedReading(key)),
       (pinned) => ("failure" in pinned ? untakenAs(pinned) : succeeded(pinned)),
-    );
-  }
-
-  /**
-   * The account's sidebar sealed for following over Neon Realtime, for the
-   * account named, or with each part's rows inline where `poll` asks for
-   * them; signed out where the session is another account's.
-   */
-  sidebarLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
     );
   }
 

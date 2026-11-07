@@ -637,7 +637,8 @@ export const messagesSync = defineSyncTable(messages, {
  * hand-over and no view reads them; a message written beside them notifies
  * the conversation's topic itself. Its rows' arrival and removal alone are
  * logged, because every streamed step moves its journal's revision, and the
- * task list reads only the harness it opened on.
+ * task list reads only the harness it opened on and whether its sandbox
+ * stands open, so the claim of its runtime session logs an update too.
  */
 export const conversationsSync = defineSyncTable(conversations, {
   topics: [
@@ -654,6 +655,7 @@ export const conversationsSync = defineSyncTable(conversations, {
     conversations.dispatchLine,
   ],
   log: LOG.ROWS,
+  logUpdatesOf: [conversations.runtimeSessionId],
 });
 
 /**

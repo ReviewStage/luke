@@ -34,7 +34,7 @@ import {
   workspaceInvitationsAnswerSchema,
 } from "@repo/features/workspace-invitation-wire";
 import {
-  workspaceInvitationsLiveRowsSchema,
+  WORKSPACE_INVITATIONS_READ,
   workspaceInvitationsOfLiveRows,
 } from "@repo/features/workspace-live";
 import {
@@ -79,6 +79,7 @@ import { GITHUB_PROVIDER_ID, GitHubApp } from "../github/github-app.js";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
+import { workspaceInvitationsRead } from "../live/reads/workspace-invitations.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
@@ -93,7 +94,6 @@ import {
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { INVITATION_MAIL_ENVIRONMENT, invitationMailFromEnvironment } from "./invitation-mail.js";
 import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
-import { workspaceInvitationsLiveStatement } from "./workspace-invitations.js";
 import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
 import { workspacesApp } from "./workspaces-app.js";
 import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspaces-procedures.js";
@@ -2485,12 +2485,14 @@ it.effect(
 const liveInvitationsOf = (readerId: string, workspaceId: string, now: number) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const statement = Option.getOrThrow(workspaceInvitationsLiveStatement(readerId, workspaceId));
+    const statement = Option.getOrThrow(
+      workspaceInvitationsRead.statements({ userId: readerId, workspaceId }),
+    ).invitations;
     const rows = yield* Effect.all({
       invitations: sql.unsafe(statement.sql, [...statement.params]),
     });
     return workspaceInvitationsOfLiveRows(
-      yield* Schema.decodeUnknownEffect(workspaceInvitationsLiveRowsSchema)(rows),
+      yield* Schema.decodeUnknownEffect(WORKSPACE_INVITATIONS_READ.rows)(rows),
       ORIGIN,
       now,
     );

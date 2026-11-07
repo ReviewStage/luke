@@ -18,7 +18,6 @@ import {
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import {
   Database,
   type DatabaseServices,
@@ -112,7 +111,7 @@ export const WORKSPACE_NAME = sql<string>`coalesce((select "owner"."name" from $
  * as one text with a space between each, empty for none: one value a live
  * row carries as it carries any other, and no slug holds a space.
  */
-const FORMER_SLUGS = sql<string>`coalesce((select string_agg("former"."slug", ' ' order by "former"."slug") from ${workspaceFormerSlug} as "former" where "former"."organization_id" = ${organization.id}), '')`;
+export const FORMER_SLUGS = sql<string>`coalesce((select string_agg("former"."slug", ' ' order by "former"."slug") from ${workspaceFormerSlug} as "former" where "former"."organization_id" = ${organization.id}), '')`;
 
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
   A,
@@ -840,11 +839,6 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
   });
 }
 
-/** The statements the account's workspaces are followed by live: the workspaces, the installations connected to them, and the experiments chosen for them. */
-export type WorkspacesLiveStatements = Readonly<
-  Record<"workspaces" | "installations" | "experiments", LiveStatement>
->;
-
 /**
  * A logo's text as its bytes, the ones the held read digests. Note that it
  * is `decode(…, 'escape')` over the text with each backslash doubled, rather
@@ -874,87 +868,15 @@ const LOGO_IS_PHOTO = sql<boolean>`case when coalesce(${organization.logo} ~ ${`
   else false end else false end`;
 
 /**
- * The account's workspaces written for Neon Realtime: the same rows, joins,
- * and rule of who may read them as `listWorkspaces`, each column under the
- * key `live-wire.ts` reads it by. What the held read works out from a row
- * here is worked out in the statement, so a row carries no photo's bytes:
- * its digest, and an installation's standing. Note that a photo is told by
- * its `data:` label alone, where the held read also reads its bytes,
- * because a photo is checked when it is set. Note too that `linearActive`
- * is still answered, as null, because a desktop from v0.22.0 fails its
- * follow on a row without it: no workspace connects Linear any more. The key
- * goes with the minimum supported desktop version, not with a service
- * deploy. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
+ * A workspace's photo's version as a held read selects it: the first
+ * characters of its bytes' digest where its logo holds a photo, else null,
+ * so a row carries no photo's bytes. Note that a photo is told by its
+ * `data:` label alone, where the held read also reads its bytes, because a
+ * photo is checked when it is set.
  */
-export function workspacesLiveStatements(userId: string): Option.Option<WorkspacesLiveStatements> {
-  const workspaces = queryBuilder
-    .select(
-      liveSelection({
-        id: organization.id,
-        name: WORKSPACE_NAME,
-        slug: organization.slug,
-        own: sql<boolean>`${personalWorkspace.userId} is not null`,
-        personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
-        role: member.role,
-        linearActive: sql<null>`null::boolean`,
-        memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
-        photoVersion: sql<
-          string | null
-        >`case when ${LOGO_IS_PHOTO} then left(encode(sha256(${LOGO_BYTES}), 'hex'), ${PHOTO_VERSION_CHARS}) end`,
-        ownerImage: user.image,
-        formerSlugs: FORMER_SLUGS,
-      }),
-    )
-    .from(member)
-    .innerJoin(organization, eq(organization.id, member.organizationId))
-    .leftJoin(
-      personalWorkspace,
-      and(
-        eq(personalWorkspace.organizationId, organization.id),
-        eq(personalWorkspace.userId, userId),
-      ),
-    )
-    .leftJoin(user, eq(user.id, personalWorkspace.userId))
-    .where(eq(member.userId, userId));
-  const installations = queryBuilder
-    .select(
-      liveSelection(
-        {
-          workspaceId: githubInstallation.organizationId,
-          installationId: sql<number>`${githubInstallation.installationId}::float8`,
-          login: githubInstallation.accountLogin,
-          active: sql<boolean>`${githubInstallation.status} = ${GITHUB_INSTALLATION_STATUS.ACTIVE}`,
-        },
-        { linkedAt: githubInstallation.createdAt },
-      ),
-    )
-    .from(githubInstallation)
-    .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
-    .where(eq(member.userId, userId));
-  const experiments = queryBuilder
-    .select(
-      liveSelection(
-        {
-          workspaceId: workspaceExperiment.organizationId,
-          experiment: workspaceExperiment.experiment,
-          on: workspaceExperiment.on,
-          changedById: workspaceExperiment.changedBy,
-          changedByName: user.name,
-        },
-        { changedAt: workspaceExperiment.changedAt },
-      ),
-    )
-    .from(workspaceExperiment)
-    .innerJoin(member, eq(member.organizationId, workspaceExperiment.organizationId))
-    .leftJoin(user, eq(user.id, workspaceExperiment.changedBy))
-    .where(eq(member.userId, userId));
-  return Option.all({
-    workspaces: liveStatementOf(workspaces),
-    installations: liveStatementOf(installations),
-    experiments: liveStatementOf(experiments),
-  });
-}
+export const LIVE_PHOTO_VERSION = sql<
+  string | null
+>`case when ${LOGO_IS_PHOTO} then left(encode(sha256(${LOGO_BYTES}), 'hex'), ${PHOTO_VERSION_CHARS}) end`;
 
 /** One workspace the account is a member of, as its list carries it; nothing for one it is not in. */
 export function workspaceOf(

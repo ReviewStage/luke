@@ -25,8 +25,7 @@ import { WireValueSchema } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { conversations } from "../schemas/storage.js";
@@ -216,31 +215,6 @@ const findPreference = SqlSchema.findOneOption({
         .limit(1),
     ),
 });
-
-/**
- * The account's preferences row written for its live read: the coding
- * agents' default as its three columns stand, the chapters model, and
- * whether our Slack bot writes the account, each as stored, null where
- * never chosen, which the reader reads as the snapshot does
- * (`@repo/features/account-preferences-live`). No row for an account that
- * stored none. None where a value cannot be carried.
- */
-export function accountPreferencesLiveStatement(userId: string): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          agentModel: accountPreference.agentModel,
-          agentEffort: accountPreference.agentEffort,
-          agentContextWindow: accountPreference.agentContextWindow,
-          chaptersModel: accountPreference.chaptersModel,
-          slackNotifications: accountPreference.slackNotifications,
-        }),
-      )
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId)),
-  );
-}
 
 /** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(

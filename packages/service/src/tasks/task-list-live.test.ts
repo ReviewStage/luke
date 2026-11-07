@@ -16,6 +16,7 @@ import {
 } from "@repo/database/models/agent-store";
 import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
 import { devicesNamed, registerDevice } from "@repo/database/models/device-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { addTaskBlock } from "@repo/database/models/task-block-store";
 import {
   assignUnassignedTaskCommitted,
@@ -722,6 +723,36 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         );
         const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);
         assert.equal(listedPilot?.pilot, true);
+      }),
+  );
+
+  it.effect(
+    "an agent's sandbox reads open once its conversation claims a session, as the held read reads it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const workspace = yield* openWorkspace(owner);
+        const agent = yield* openAgent(owner, { workspaceId: workspace }, 60_000);
+        const sandboxOf = (read: {
+          readonly planlessAgents?: readonly {
+            readonly id: string;
+            readonly sandboxOpen?: boolean;
+          }[];
+        }) => read.planlessAgents?.find((each) => each.id === agent.id)?.sandboxOpen;
+
+        const starting = yield* liveListOf(owner, NOW);
+        assert.deepEqual(starting, yield* heldListOf(owner, NOW));
+        assert.equal(sandboxOf(starting), false);
+
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          "session-1",
+          new Date(NOW),
+        );
+
+        const opened = yield* liveListOf(owner, NOW);
+        assert.deepEqual(opened, yield* heldListOf(owner, NOW));
+        assert.equal(sandboxOf(opened), true);
       }),
   );
 

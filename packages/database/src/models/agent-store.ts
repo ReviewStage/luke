@@ -1467,6 +1467,24 @@ const findNativeRuntimes = SqlSchema.findAll({
     ),
 });
 
+const findOpenSandboxes = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id })
+        .from(conversations)
+        .where(
+          and(
+            inArray(conversations.id, [...conversationIds]),
+            isNotNull(conversations.runtimeSessionId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
 const findNativeRoute = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String }),
   Result: Schema.Struct({
@@ -3593,6 +3611,22 @@ export function nativeRuntimesOfReached(
   return Effect.map(
     findNativeRuntimes({ conversationIds }),
     (rows) => new Map(rows.map((row) => [row.conversationId, row.runtime])),
+  );
+}
+
+/**
+ * The conversations named whose agent's sandbox stands open: each records
+ * the session its sandbox is tagged with, as the Terminal's and the
+ * Browser's reach of it reads it (`standingSessionsOf`). Only for ids a gate
+ * already read, as above.
+ */
+export function openSandboxesOfReached(
+  conversationIds: readonly string[],
+): AgentStoreEffect<ReadonlySet<string>> {
+  if (conversationIds.length === 0) return Effect.succeed(new Set());
+  return Effect.map(
+    findOpenSandboxes({ conversationIds }),
+    (rows) => new Set(rows.map((row) => row.conversationId)),
   );
 }
 

@@ -1,5 +1,8 @@
 import type { HostedIntegrationsClient, HostedMcpClientsClient } from "@repo/features";
-import type { IntegrationLiveRow } from "@repo/features/integration-live";
+import {
+  INTEGRATION_STATUSES_READ,
+  type IntegrationLiveRow,
+} from "@repo/features/integration-live";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationConnectView,
@@ -84,7 +87,7 @@ import type { WindowFocus } from "./window-focus.js";
 /** The service's side of the integrations, as this concern asks it. */
 export type IntegrationsClient = Pick<
   HostedIntegrationsClient,
-  "statusesLive" | "settle" | "github" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
+  "liveRead" | "settle" | "github" | "connect" | "cancel" | "disconnect" | "tools" | "rename"
 >;
 
 /** The service's side of the outside MCP clients, as this concern asks it. */
@@ -168,7 +171,8 @@ export function composeIntegrations(
         ? Effect.provideService(call, HttpClient.HttpClient, http)
         : Effect.succeed(UNANSWERED);
     const integrations = yield* heldIntegrations({
-      seal: (userId, poll, after) => asked(client.statusesLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(client.liveRead(INTEGRATION_STATUSES_READ, { userId }, poll ? { after } : undefined)),
       // Note that each ask is made afresh, behind the gate as it stands when it is asked.
       github: Effect.suspend(() => asked(client.github())),
       settle: Effect.suspend(() => Effect.asVoid(asked(client.settle()))),

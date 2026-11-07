@@ -693,7 +693,8 @@ until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
 The wait is for the swaps a runner's launch keeps at its sandbox's firewall
 (`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
-does not move and the sweep drops a day and an hour after its last write. The rewrap
+does not move and no running session holds past a day and an hour after its last write; a row
+older than that is a stopped session's, which nothing reads again. The rewrap
 does not move a workspace's environment variables (`workspace_environment_variable`)
 either, and its counts leave them out: before dropping a version, check that
 `select count(*) from workspace_environment_variable where key_version = <old>`
@@ -2641,13 +2642,10 @@ the rest still run, and any failure fails the cron's check-in. In order:
   settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `withdrawnLines`: withdrawn lines no turn took within an agent's turn
-  bound deleted.
 - `automations`: the automations whose schedule is due fired
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
-- `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `agentQueues`: unpaused queues of idle agents handed on.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every

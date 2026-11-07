@@ -15,7 +15,6 @@ import {
   personalWorkspaceOf,
   readWorkspacePhoto,
   workspaceGitHubAccountId,
-  workspacesLiveStatements,
 } from "@repo/database/models/workspace-store";
 import { member, organization, user } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
@@ -26,8 +25,9 @@ import {
   joinWorkspace,
   WORKSPACE_ROLE,
 } from "@repo/database/testing";
-import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@repo/features/workspace-live";
+import { WORKSPACES_READ, workspacesOfLiveRows } from "@repo/features/workspace-live";
 import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
+import { workspacesRead } from "@repo/service/live/reads/workspaces";
 import { openWorkspacePlugin } from "@repo/service/testing/workspace-plugin";
 import { EXPERIMENT } from "@repo/settings";
 import { eq } from "drizzle-orm";
@@ -100,13 +100,13 @@ const keepImage = (userId: string, image: string | null) =>
 const liveWorkspacesOf = (userId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const statements = Option.getOrThrow(workspacesLiveStatements(userId));
+    const statements = Option.getOrThrow(workspacesRead.statements({ userId }));
     const rows = yield* Effect.all({
       workspaces: sql.unsafe(statements.workspaces.sql, [...statements.workspaces.params]),
       installations: sql.unsafe(statements.installations.sql, [...statements.installations.params]),
       experiments: sql.unsafe(statements.experiments.sql, [...statements.experiments.params]),
     });
-    return workspacesOfLiveRows(yield* Schema.decodeUnknownEffect(workspacesLiveRowsSchema)(rows));
+    return workspacesOfLiveRows(yield* Schema.decodeUnknownEffect(WORKSPACES_READ.rows)(rows));
   });
 
 /** An installation connected to the workspace, linked at the instant given. */

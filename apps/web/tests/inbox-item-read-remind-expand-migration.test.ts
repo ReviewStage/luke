@@ -96,12 +96,12 @@ it.effect(
           mirrored: true,
         });
 
-        // This release cancels the earlier item's reminder, which the one before then reads as come due.
+        // This release cancels the earlier item's reminder, which the one before then reads as none.
         yield* remindInboxItem("dean", earlier, null);
         const [canceled] = yield* sql<{
-          readonly due: boolean;
-        }>`select snoozed_until <= now() as due from inbox_item_read where item_id = ${earlier}`;
-        assert.deepEqual(canceled, { due: true });
+          readonly none: boolean;
+        }>`select snoozed_until is null as none from inbox_item_read where item_id = ${earlier}`;
+        assert.deepEqual(canceled, { none: true });
         assert.equal((yield* marker(earlier))?.mirrored, true);
 
         // A second run of the backfill, as a deploy that ran it before recording it would, changes nothing.

@@ -7,17 +7,13 @@ import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, openTaskAgent, openWorkspace } from "../../testing/index.js";
-import {
-  dropStaleFirewalls,
-  keepFirewallLaunch,
-  readFirewallLaunch,
-} from "../sandbox-firewall-store.js";
+import { keepFirewallLaunch, readFirewallLaunch } from "../sandbox-firewall-store.js";
 
 /**
  * The swaps a runner's launch keeps for its sandbox session, over a real
  * dialect: a launch replaces the one kept before it, one account's session
- * row is never read through another's, the sweep's drop deletes rows by
- * age, and a row goes with its agent. The sealed column is
+ * row is never read through another's, a launch deletes its agent's rows
+ * for the account's other sessions, and a row goes with its agent. The sealed column is
  * opaque text here, as the store holds it. Synthetic accounts, sessions,
  * agents, and seals throughout.
  */
@@ -73,20 +69,26 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
       }),
   );
 
-  it.effect("the sweep drops only the rows last written before its bound", () =>
-    Effect.gen(function* () {
-      const stale = yield* openOwner;
-      const fresh = yield* openOwner;
-      yield* keepFirewallLaunch(stale, launchOf(stale.agentId, "sealed-stale"), AT);
-      const kept = launchOf(fresh.agentId, "sealed-fresh");
-      yield* keepFirewallLaunch(fresh, kept, LATER);
+  it.effect(
+    "a launch deletes its agent's rows for the account's other sessions, leaving the account's other agents' rows",
+    () =>
+      Effect.gen(function* () {
+        const ended = yield* openOwner;
+        const relaunched = { userId: ended.userId, sandboxSessionId: `sbx_${randomUUID()}` };
+        const neighbor = {
+          userId: ended.userId,
+          sandboxSessionId: `sbx_${randomUUID()}`,
+          agentId: yield* openTaskAgent(ended.userId, yield* openWorkspace(ended.userId), null),
+        };
+        yield* keepFirewallLaunch(ended, launchOf(ended.agentId, "sealed-ended"), AT);
+        yield* keepFirewallLaunch(neighbor, launchOf(neighbor.agentId, "sealed-neighbor"), AT);
 
-      const dropped = yield* dropStaleFirewalls(new Date(AT.getTime() + 1));
+        yield* keepFirewallLaunch(relaunched, launchOf(ended.agentId, "sealed-relaunched"), LATER);
 
-      assert.equal(yield* readFirewallLaunch(stale), undefined);
-      assert.ok(dropped >= 1);
-      assert.equal((yield* readFirewallLaunch(fresh))?.sealedEntries, kept.sealedEntries);
-    }),
+        assert.equal(yield* readFirewallLaunch(ended), undefined);
+        assert.equal((yield* readFirewallLaunch(relaunched))?.sealedEntries, "sealed-relaunched");
+        assert.equal((yield* readFirewallLaunch(neighbor))?.sealedEntries, "sealed-neighbor");
+      }),
   );
 
   it.effect("deleting the agent deletes its rows", () =>

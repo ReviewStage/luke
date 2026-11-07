@@ -137,6 +137,7 @@
     "./integrations/mcp-tools": "./src/integrations/mcp-tools.js",
     "./live/live-procedures": "./src/live/live-procedures.js",
     "./live/live-socket": "./src/live/live-socket.js",
+    "./live/reads/workspaces": "./src/live/reads/workspaces.js",
     "./local/local-server-guard": "./src/local/local-server-guard.js",
     "./maintenance/maintenance-app": "./src/maintenance/maintenance-app.js",
     "./member-mcp/admission": "./src/member-mcp/admission.js",

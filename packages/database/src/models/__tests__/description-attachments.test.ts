@@ -1,33 +1,30 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
   PICTURE_BOUNDS,
   PICTURE_MEDIA_TYPE,
   PICTURE_TYPE,
   type Picture,
 } from "@repo/features/picture-wire";
-import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
-import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import { paddedTo, pngBytes, webmBytes } from "@repo/wire/testing";
 import { Effect, Exit, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
-  keepDescriptionAttachment,
   DESCRIPTION_ATTACHMENT_KEEP,
-  purgeUnsavedAttachments,
+  keepDescriptionAttachment,
   readDescriptionAttachment,
 } from "../description-attachments.js";
-import { createTask, saveDescriptionText } from "../task-store.js";
+import { createTask } from "../task-store.js";
 
 /**
  * A description's pictures over a real dialect: kept by a member, read by every
  * member of the plan's workspace and by nobody else, held to the description's
  * bound, a video among them to a video's bound and the description's count of
- * videos, refused on a plan the account does not reach, and swept a day
- * after upload only where no save ever named them.
+ * videos, and refused on a plan the account does not reach.
  *
  * Synthetic accounts and pictures throughout.
  */
@@ -116,33 +113,6 @@ it.layer(getTestDB())("a description's pictures", (it) => {
           (yield* keepDescriptionAttachment(owner, other.taskId, PICTURE)).status,
           DESCRIPTION_ATTACHMENT_KEEP.NO_TASK,
         );
-      }),
-  );
-
-  it.effect(
-    "the sweep deletes the pictures uploaded before its cutoff that no save named, and keeps every picture a save did",
-    () =>
-      Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedTask;
-        const named = keptId(yield* keepDescriptionAttachment(owner, taskId, PICTURE));
-        const undone = keptId(yield* keepDescriptionAttachment(owner, taskId, PICTURE));
-        const address = descriptionAttachmentAddress({ taskId, attachmentId: named }, "acme");
-        yield* saveDescriptionText(owner, taskId, `## Approach\n\n![The mock](${address})\n`);
-        // A later save that no longer names it leaves it saved, since a restore can bring it back.
-        yield* saveDescriptionText(owner, taskId, "## Approach\n\nNo picture now.\n");
-
-        // Every picture here was uploaded at the test clock's start; the cutoff is the sweep's, a day before its own now.
-        assert.equal(
-          yield* purgeUnsavedAttachments(new Date(0)),
-          0,
-          "none was uploaded before the cutoff",
-        );
-        // Note that the sweep deletes a batch at a time, and other tests' uploads share the database.
-        let purged = yield* purgeUnsavedAttachments(new Date(1));
-        while (purged > 0) purged = yield* purgeUnsavedAttachments(new Date(1));
-
-        assert.ok(Option.isSome(yield* readDescriptionAttachment(owner, taskId, named)));
-        assert.ok(Option.isNone(yield* readDescriptionAttachment(owner, taskId, undone)));
       }),
   );
 

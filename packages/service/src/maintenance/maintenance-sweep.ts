@@ -39,18 +39,12 @@ interface MaintenanceSweeps {
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
-  /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
-  purgeWithdrawnLines: (now: number) => SweepRead<number>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
-  /** Deletes the descriptions' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
-  purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Prunes the sync log's transactions older than its keep, a sweep's worth, answering how many rows went. */
   pruneSyncLog: (now: number) => SweepRead<number>;
-  /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
-  purgeStaleFirewalls: (now: number) => SweepRead<number>;
 }
 
 /**
@@ -80,17 +74,11 @@ interface MaintenanceSweepAnswer {
   sandboxes: Swept<SessionSandboxSweepOutcome>;
   nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
-  /** Withdrawn lines no turn took in time, deleted. */
-  withdrawnLines: Swept<number>;
   automations: Swept<AutomationSweepOutcome>;
-  /** Pictures pasted into descriptions that no save named, deleted. */
-  purgedPictures: Swept<number>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
   /** Sync log rows older than its keep, pruned. */
   syncLog: Swept<number>;
-  /** Firewall records of sandbox sessions long ended, dropped. */
-  staleFirewalls: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -135,12 +123,9 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
-    withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
-    purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
-    staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
   };
 });
 
