@@ -257,7 +257,7 @@ test("the task's topbar names the task, as the list names it now, over a strip o
   const topbar = container.querySelector(".task-topbar .ui-toolbar");
   assert.ok(topbar, "the task's topbar");
   assert.match(topbar.textContent ?? "", /Expire invites after a week/u);
-  const agents = container.querySelector(".desktop-task-main .main-tabs");
+  const agents = container.querySelector(".task-tabs .main-tabs");
   assert.ok(agents, "the agents' strip under it");
   assert.deepEqual([...tabLooks(agents).keys()], [WORKING.title, TAB_WORDS.NEW_AGENT]);
   const panel = container.querySelector(".side-panel-tabs");

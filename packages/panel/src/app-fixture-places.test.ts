@@ -185,7 +185,7 @@ it.effect(
       assert.ok(column, "the open task's column stands");
       assert.equal(column.querySelector('[class*="skeleton"]') === null, true);
       assert.equal(
-        document.querySelector('.desktop-task-main [role="tab"]')?.getAttribute("aria-selected"),
+        document.querySelector('.task-tabs [role="tab"]')?.getAttribute("aria-selected"),
         "true",
         "the column opens on its first tab, the task's Overview",
       );

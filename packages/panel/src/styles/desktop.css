@@ -605,9 +605,66 @@ body,
   .desktop-task:has(> .desktop-task-main)
   > .side-panel
   > .side-panel-bar {
-  min-height: var(--task-tabs-height);
-  padding-top: 0;
-  padding-bottom: var(--task-tabs-gap);
+  min-height: var(--ui-pane-bar-height);
+  padding: var(--ui-row-inset) var(--column-inset);
+  border-bottom: 1px solid var(--ui-color-border);
+  -webkit-app-region: no-drag;
+}
+
+/* A task's page stands its agents' row across the window, and one sheet
+   under it holds the agent the row shows: its conversation, and its own
+   tabs beside it, parted by a hairline rather than a gap, since they are
+   the agent's (`use-side-panel.ts`'s `ownerOf`), not the task's. The row
+   spans both columns of the grid; the column and the panel, or the room a
+   panel full screen keeps, stand side by side under it. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  container-type: inline-size;
+}
+
+/* Note that the panel's widest is read off the page rather than its own
+   column, which a percentage would read in a grid, so it leaves the
+   conversation its reserve as it did beside it. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > :is(.side-panel:not([data-full-screen="true"]), .side-panel-room) {
+  max-width: max(280px, calc(100cqi - var(--document-reserve)));
+}
+
+/* Note that only a task's page holds the row, so it is placed without asking the page what it holds. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task
+  > .task-tabs
+  > * {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .desktop-task-main {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > :is(.side-panel, .side-panel-room) {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 :where(:root):not([data-ui-room="narrow"])
@@ -615,7 +672,67 @@ body,
   > .desktop-main
   .desktop-task:has(> .desktop-task-main)
   > :is(.desktop-task-main, .side-panel)::before {
-  top: var(--task-tabs-height);
+  top: 0;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel:not([data-full-screen="true"]) {
+  margin-left: 0;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel::before {
+  background: var(--ui-color-ground);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main):has(> .side-panel:not([data-full-screen="true"]))
+  > .desktop-task-main::before {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel:not([data-full-screen="true"])::before {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow:
+    1px 0 0 var(--ui-color-border),
+    0 1px 0 var(--ui-color-border),
+    0 -1px 0 var(--ui-color-border);
+}
+
+/* Full screen, the agent's tabs fill its sheet under the agents' row,
+   which stays above them. Note that an absolutely placed grid item is laid
+   in its own grid area, so the panel takes the row's two columns. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel[data-full-screen="true"] {
+  grid-column: 1 / -1;
+}
+
+/* The panel's edge is dragged on the hairline parting it from the conversation. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .ui-resize-edge {
+  top: 0;
+  left: 0;
 }
 
 /* The task's details stand across the page with no bar of their own, so

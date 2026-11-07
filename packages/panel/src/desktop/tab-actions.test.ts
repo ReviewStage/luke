@@ -238,7 +238,7 @@ interface Bars {
 /** The bars of the task's page, as it draws them. */
 function bars(container: HTMLElement): Bars {
   const task = container.querySelector<HTMLElement>(".task-topbar .ui-toolbar");
-  const main = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
+  const main = container.querySelector<HTMLElement>(".task-tabs .ui-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(task && main && side, "the page draws its bars");
   return { task, main, side };
