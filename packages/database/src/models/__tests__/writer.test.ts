@@ -16,12 +16,15 @@ import { sessionKey } from "@repo/runtime/vocabulary";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { TOOL_PART_STATE } from "@repo/wire/ui-messages";
+import { eq } from "drizzle-orm";
 import { Effect, Metric, Option, Ref, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { conversations } from "../../schemas/storage.js";
+import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
+import { TURN_ABANDON } from "../abandoned-turns.js";
 import { lineSendersOf } from "../agent-store.js";
 import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -490,6 +493,60 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
             kind: MESSAGE_SENDER.APP,
           },
         );
+      }),
+  );
+
+  it.effect(
+    "a line whose hand-over answered nothing stays until a coding agent's turn bound has passed, then the conversation's next line deletes it, and one a turn took after all, or another conversation's, stays",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const other = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        const withdrawn = (text: string, into = target) =>
+          writer.writeAwaitingLine(
+            into,
+            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.APP } },
+            Effect.succeed(false),
+          );
+        yield* withdrawn("Rerun the tests.");
+        yield* withdrawn("Push the branch.");
+        yield* withdrawn("Rebase the stack.", other);
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: "t_0",
+        });
+        yield* writer.takeAwaitingLine(target, { text: "Push the branch.", turnId });
+        const standingIn = (conversationId: string) =>
+          Effect.map(
+            db
+              .select({ clientId: messages.clientId })
+              .from(messages)
+              .where(eq(messages.conversationId, conversationId)),
+            (rows) => rows.map((row) => row.clientId).sort(),
+          );
+        const standing = standingIn(target.conversationId);
+
+        yield* TestClock.adjust(TURN_ABANDON.AGENT_AFTER_MS);
+        yield* withdrawn("Open the PR.");
+        const withinBound = yield* standing;
+        yield* TestClock.adjust(1);
+        yield* withdrawn("Merge it.");
+
+        assert.deepEqual(
+          withinBound,
+          ["Rerun the tests.", "Push the branch.", "Open the PR."].map(sentLineId).sort(),
+        );
+        assert.deepEqual(
+          yield* standing,
+          ["Push the branch.", "Open the PR.", "Merge it."].map(sentLineId).sort(),
+        );
+        assert.deepEqual(yield* standingIn(other.conversationId), [
+          sentLineId("Rebase the stack."),
+        ]);
       }),
   );
 });
