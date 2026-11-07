@@ -22,7 +22,7 @@ import { handState, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { WordsOwner } from "../testing/words-owner.js";
+import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -69,6 +69,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await letGoOfWords();
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a description left as it went answer before its atoms go.
   await settledWrites();

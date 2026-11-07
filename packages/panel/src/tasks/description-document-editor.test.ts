@@ -50,7 +50,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
-import { WordsOwner } from "../testing/words-owner.js";
+import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
@@ -156,6 +156,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await letGoOfWords();
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
@@ -1149,6 +1150,21 @@ test("words a description was left with stay once the account signed in comes to
   await settle();
 
   assert.ok(toastStood, "the toast over them stands");
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
+});
+
+test("words a description was left with stay once the window draws itself again as the same account", async () => {
+  const { container, render, unmount } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+
+  unmount();
+  mount();
+  await settle();
+
   assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
 });
 

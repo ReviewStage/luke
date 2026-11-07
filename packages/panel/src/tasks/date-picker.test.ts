@@ -18,7 +18,7 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
-import { WordsOwner } from "../testing/words-owner.js";
+import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
@@ -66,6 +66,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await letGoOfWords();
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a description left as it went answer before its atoms go.
   await settledWrites();

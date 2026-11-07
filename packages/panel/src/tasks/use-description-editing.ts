@@ -63,13 +63,8 @@ type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedStore = createStore<ReadonlyMap<string, DocumentEditor>>(new Map());
 
-/**
- * The account signed in as the window's owner hook last drew it, whose change
- * lets go of the words tasks were left with; none while no such hook stands.
- */
-const wordsOwnerStore = createStore<{ readonly account: SignedInAccount | undefined } | undefined>(
-  undefined,
-);
+/** The account signed in as the window's owner hook last drew it, whose change lets go of the words tasks were left with. */
+const wordsOwnerStore = createStore<SignedInAccount | undefined>(undefined);
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedStore = createStore<readonly string[]>([]);
@@ -269,21 +264,20 @@ export function useDescriptionWordsUnsaved(): boolean {
  * signs in, the words its tasks were left with go, and the toasts over them,
  * because they are the words of the account that wrote them and a Retry or a
  * return would save them as the next. The window calls it once; it reads
- * the account from main's document. Note that the owner goes with the hook,
- * so the hook mounting again lets go of the words kept before it, as a
- * window opened afresh holds none.
+ * the account from main's document. Note that the words outlive the hook,
+ * as they did the window's registry, so the window drawing itself again as
+ * the same account keeps them.
  */
 export function useDescriptionWordsOwner(): void {
   const account = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
   const withdrawToast = useWithdrawToast();
   useLayoutEffect(() => {
     const held = wordsOwnerStore.state;
-    wordsOwnerStore.setState(() => ({ account }));
-    if (held !== undefined && sameAccount(held.account, account)) return;
+    wordsOwnerStore.setState(() => account);
+    if (sameAccount(held, account)) return;
     for (const taskId of leftUnsavedStore.state.keys()) withdrawToast(taskId);
     leftUnsavedStore.setState(() => new Map());
   }, [withdrawToast, account]);
-  useLayoutEffect(() => () => wordsOwnerStore.setState(() => undefined), []);
 }
 
 /**
