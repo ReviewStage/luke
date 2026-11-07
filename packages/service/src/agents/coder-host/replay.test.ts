@@ -97,22 +97,26 @@ it("a source in other repositories beside its own is told to have left its unpus
   assert.doesNotMatch(replayOf(startFrom(1), [], undefined).replay.preamble, /beside its own/u);
 });
 
-it("a source on a drive is told to stand in the new agent's own checkout, its other repositories with it, and a fork to move off its branch before committing", () => {
+it("a source handed in its stopped sandbox's snapshot is told to stand in the new agent's own checkout, its other repositories with it, and a fork to move off its branch before committing", () => {
   const from = startFrom(1, [
     { repository: "acme/web", baseBranch: null, headBranch: "agent/invite", pullRequest: null },
   ]);
-  const onDrive = (inPullRequest: boolean) =>
+  const onSnapshot = (inPullRequest: boolean) =>
     replayOf(
       {
         ...from,
         source: { ...source, branch: "agent/relay" },
-        told: { ...from.told, work: { on: TAKEN_ON.DRIVE, drive: "agent-drive-1" }, inPullRequest },
+        told: {
+          ...from.told,
+          work: { on: TAKEN_ON.SNAPSHOT, sandbox: "agent-sandbox-1" },
+          inPullRequest,
+        },
       },
       from.steps,
       undefined,
     );
 
-  const forked = onDrive(false);
+  const forked = onSnapshot(false);
   assert.match(forked.replay.preamble, /Your checkout is a copy of its own/u);
   assert.match(forked.replay.preamble, /Switch to a branch of your own before you commit/u);
   assert.match(
@@ -120,10 +124,10 @@ it("a source on a drive is told to stand in the new agent's own checkout, its ot
     /`acme\/web` beside its own repository.*copied with its own/u,
   );
   assert.doesNotMatch(forked.replay.preamble, /git fetch|did not come along/u);
-  assert.equal(forked.startedFrom.drive, "agent-drive-1");
+  assert.equal(forked.startedFrom.sandbox, "agent-sandbox-1");
   assert.equal(forked.startedFrom.branch, undefined);
   assert.match(
-    onDrive(true).replay.preamble,
+    onSnapshot(true).replay.preamble,
     /work and push on `agent\/relay`, and open no new pull request/u,
   );
 });
