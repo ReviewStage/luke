@@ -1527,7 +1527,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "a reminder is its member's alone and leaves whether the item is read as it stands: a read or a mark never ends it, a change ends it, and canceling it brings it back now",
+    "a reminder is its member's alone and leaves whether the item is read as it stands: a read or a mark never ends it, a change ends it, and canceling it leaves none",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1587,10 +1587,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         yield* remindInboxItem(agent.userId, id, ahead);
         yield* remindInboxItem(agent.userId, id, null);
-        const ended = yield* reminderFor(agent.userId);
-        assert.ok(
-          ended !== undefined && ended < ahead.getTime(),
-          "canceling a reminder brings the item back now rather than forgetting when",
+        assert.equal(
+          yield* reminderFor(agent.userId),
+          undefined,
+          "canceling a reminder leaves none, rather than one come due now",
         );
         yield* markInboxItemRead(teammate, id);
         yield* remindInboxItem(teammate, id, null);

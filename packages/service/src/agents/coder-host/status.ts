@@ -323,6 +323,8 @@ export interface AgentTurnStanding {
   readonly awaitingLineAt: Date | undefined;
   /** The provider's own harness its conversation runs on; none on the retired runtime, and where the read named none. */
   readonly runtime?: NativeAgentRuntime | undefined;
+  /** Whether its sandbox stands open (`openSandboxesOfReached`); none where the read named none. */
+  readonly sandboxOpen?: boolean | undefined;
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing before its harness starts it, the agent's own before any turn, and none while a line awaits its turn. */
@@ -469,6 +471,7 @@ function summaryFields(
     ...summary,
     ...(started === undefined ? undefined : { runStartedAt: started }),
     ...(stoppable ? undefined : { stoppable: false }),
+    ...(standing.sandboxOpen === undefined ? undefined : { sandboxOpen: standing.sandboxOpen }),
   };
 }
 

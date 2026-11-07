@@ -2644,7 +2644,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
-- `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `agentQueues`: unpaused queues of idle agents handed on.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every

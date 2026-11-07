@@ -1,7 +1,7 @@
 import {
+  ACCOUNT_PREFERENCES_READ,
   type AccountPreferencesLiveAnswer,
   type AccountPreferencesLiveRow,
-  accountPreferencesLiveRowsSchema,
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
 import type {
@@ -153,7 +153,7 @@ function followPreferences(
           },
         },
         first,
-        accountPreferencesLiveRowsSchema,
+        ACCOUNT_PREFERENCES_READ.rows,
         (rows) =>
           Effect.andThen(
             row.answer([poolRowOf(userId, rows.preferences)]),

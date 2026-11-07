@@ -18,6 +18,7 @@ import {
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
+import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import {
   linkSlackInstallation,
   writeSlackChannelRepository,
@@ -39,8 +40,7 @@ import {
   startTask,
 } from "@repo/database/testing";
 import {
-  accountPreferencesLiveAnswerSchema,
-  accountPreferencesLiveRowsSchema,
+  ACCOUNT_PREFERENCES_READ,
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
@@ -56,15 +56,11 @@ import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOSTS_READ, hostsOfLiveRows } from "@repo/features/host-live";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
-  installedSkillsLiveAnswerSchema,
-  installedSkillsLiveRowsSchema,
+  INSTALLED_SKILLS_READ,
   installedSkillsOfLiveRows,
 } from "@repo/features/installed-skill-live";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
-import {
-  integrationLiveRowsOf,
-  integrationStatusesLiveAnswerSchema,
-} from "@repo/features/integration-live";
+import { INTEGRATION_STATUSES_READ, integrationLiveRowsOf } from "@repo/features/integration-live";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -77,39 +73,31 @@ import {
   LIVE_USER_QUERY,
   liveDigestOf,
   liveDigestOn,
-  macCommandsLiveAnswerSchema,
-  macCommandsLiveRowsSchema,
-  macCommandsOfLiveRows,
   scopeInboxLiveAnswerSchema,
 } from "@repo/features/live-wire";
+import { MAC_COMMANDS_READ, macCommandsOfLiveRows } from "@repo/features/mac-command-live";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
-import {
-  memoriesOfLiveRows,
-  workspaceMemoriesLiveAnswerSchema,
-  workspaceMemoriesLiveRowsSchema,
-} from "@repo/features/memory-live";
+import { memoriesOfLiveRows, WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
 } from "@repo/features/pull-request-chapters-live";
-import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
+import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import { TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import {
-  workspaceIntegrationsLiveAnswerSchema,
-  workspaceIntegrationsLiveRowsSchema,
+  WORKSPACE_INTEGRATIONS_READ,
   workspaceIntegrationsOfLive,
 } from "@repo/features/workspace-integrations-live";
 import {
-  workspaceInvitationsLiveAnswerSchema,
-  workspaceMembersLiveAnswerSchema,
-  workspacesLiveAnswerSchema,
-  workspacesLiveRowsSchema,
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
 } from "@repo/features/workspace-live";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
@@ -304,11 +292,11 @@ it.layer(getTestDB())("the account's live reads", (it) => {
           path: "/api/live/mac-commands?kinds=shell,browser",
         });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(macCommandsLiveAnswerSchema)(answered.body);
+        const answer = Schema.decodeUnknownSync(MAC_COMMANDS_READ.answer)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(
           macCommandsOfLiveRows(
-            Schema.decodeUnknownSync(macCommandsLiveRowsSchema)({
+            Schema.decodeUnknownSync(MAC_COMMANDS_READ.rows)({
               commands: answer.queries.commands.rows,
             }),
           ),
@@ -343,8 +331,8 @@ it.layer(getTestDB())("the account's live reads", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/account-preferences" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(accountPreferencesLiveAnswerSchema)(answered.body);
-        const rows = Schema.decodeUnknownSync(accountPreferencesLiveRowsSchema)({
+        const answer = Schema.decodeUnknownSync(ACCOUNT_PREFERENCES_READ.answer)(answered.body);
+        const rows = Schema.decodeUnknownSync(ACCOUNT_PREFERENCES_READ.rows)({
           preferences: answer.queries.preferences.rows,
         }).preferences;
         assert.equal(rows.length, 1, "one row, the account's own");
@@ -1306,11 +1294,11 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
         const path = "/api/live/workspaces";
         const polled = yield* ask({ bearer: dana, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACES_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
         assert.deepEqual(
-          Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
+          Schema.decodeUnknownSync(WORKSPACES_READ.rows)({
             workspaces: answer.queries.workspaces.rows,
             installations: answer.queries.installations.rows,
           }).workspaces.map(({ id }) => id),
@@ -1332,8 +1320,8 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
       const fay = yield* openUser;
       const path = "/api/live/workspaces";
       const workspaceIds = Effect.map(ask({ bearer: fay, path }), (polled) => {
-        const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
-        return Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
+        const answer = Schema.decodeUnknownSync(WORKSPACES_READ.answer)(polled.body);
+        return Schema.decodeUnknownSync(WORKSPACES_READ.rows)({
           workspaces: answer.queries.workspaces.rows,
           installations: answer.queries.installations.rows,
         }).workspaces.map(({ id }) => id);
@@ -1360,7 +1348,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
 
         const polled = yield* ask({ bearer: owner, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspaceMembersLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACE_MEMBERS_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), ["former", "members"]);
         assert.deepEqual(
@@ -1398,7 +1386,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
 
         const polled = yield* ask({ bearer: owner, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspaceInvitationsLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACE_INVITATIONS_READ.answer)(polled.body);
         assert.equal(answer.origin, ORIGIN);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(answer.queries.invitations.rows, [], "nobody is invited yet");
@@ -1468,11 +1456,11 @@ it.layer(getTestDB())("a workspace's integrations live read", (it) => {
           Effect.gen(function* () {
             const polled = yield* ask({ bearer, path });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(workspaceIntegrationsLiveAnswerSchema)(
+            const answer = Schema.decodeUnknownSync(WORKSPACE_INTEGRATIONS_READ.answer)(
               polled.body,
             );
             assert.equal(answer.url, LIVE_POLL_URL);
-            const rows = Schema.decodeUnknownSync(workspaceIntegrationsLiveRowsSchema)({
+            const rows = Schema.decodeUnknownSync(WORKSPACE_INTEGRATIONS_READ.rows)({
               sentryInstallations: answer.queries.sentryInstallations.rows,
               slackInstallation: answer.queries.slackInstallation.rows,
               slackChannelRepositories: answer.queries.slackChannelRepositories.rows,
@@ -1543,9 +1531,9 @@ it.layer(getTestDB())("a workspace's memories' live read", (it) => {
               path: `/api/live/workspace-memories?workspaceId=${workspace}`,
             });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(workspaceMemoriesLiveAnswerSchema)(polled.body);
+            const answer = Schema.decodeUnknownSync(WORKSPACE_MEMORIES_READ.answer)(polled.body);
             assert.equal(answer.url, LIVE_POLL_URL);
-            const { memories } = Schema.decodeUnknownSync(workspaceMemoriesLiveRowsSchema)({
+            const { memories } = Schema.decodeUnknownSync(WORKSPACE_MEMORIES_READ.rows)({
               memories: answer.queries.memories.rows,
             });
             return memoriesOfLiveRows(memories).map((memory) => [
@@ -1668,9 +1656,9 @@ it.layer(getTestDB())("the installed skills' live read", (it) => {
           Effect.gen(function* () {
             const polled = yield* ask({ bearer, path });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(installedSkillsLiveAnswerSchema)(polled.body);
+            const answer = Schema.decodeUnknownSync(INSTALLED_SKILLS_READ.answer)(polled.body);
             assert.equal(answer.url, LIVE_POLL_URL);
-            const { skills } = Schema.decodeUnknownSync(installedSkillsLiveRowsSchema)({
+            const { skills } = Schema.decodeUnknownSync(INSTALLED_SKILLS_READ.rows)({
               skills: answer.queries.skills.rows,
             });
             return installedSkillsOfLiveRows(skills).map((skill) => [
@@ -1704,7 +1692,7 @@ it.layer(getTestDB())("the account's sidebar's live read", (it) => {
         const path = "/api/live/sidebar";
         const polled = yield* ask({ bearer: dana, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(SIDEBAR_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), [
           "agentEntries",
@@ -1799,7 +1787,7 @@ it.layer(getTestDB())("the account's integrations' live read", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/integration-statuses" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(answered.body);
+        const answer = Schema.decodeUnknownSync(INTEGRATION_STATUSES_READ.answer)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(
           integrationLiveRowsOf(answer.queries.connections.rows ?? [])
@@ -2004,7 +1992,7 @@ const queueLine = (userId: string, agentId: string) =>
 /** The agent's row among a part's rows, as the task list reads its awaiting line. */
 const agentRowOf = (part: { readonly rows?: readonly unknown[] }, agentId: string) =>
   (part.rows ?? []).find((row) => (row as { readonly id: string }).id === agentId) as
-    | { readonly awaitingLineAt: number | null }
+    | { readonly awaitingLineAt: number | null; readonly sandboxOpen?: boolean }
     | undefined;
 
 it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
@@ -2075,6 +2063,33 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
 
         assert.deepEqual(idsOf(moved.agents), [agentId]);
         assert.equal(agentRowOf(moved.agents, agentId)?.awaitingLineAt, null);
+      }),
+  );
+
+  it.effect(
+    "a runtime session claimed moves its agent in the next delta, which reads its sandbox open",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const agentId = yield* openTaskAgent(dana, started.workspaceId, started.id);
+        const whole = yield* askTasks(dana, "");
+        const past = whole.agents.sync?.next;
+        assert.ok(past !== undefined);
+        assert.equal(agentRowOf(whole.agents, agentId)?.sandboxOpen, false);
+
+        yield* claimRuntimeSession(
+          { userId: dana, conversationId: yield* conversationOf(agentId) },
+          "session-1",
+          new Date(yield* Clock.currentTimeMillis),
+        );
+        // Note that the hold is let run to its end, so a claim no log row records answers nothing moved rather than holding the test.
+        const asked = yield* Effect.forkChild(askTasks(dana, past));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = yield* Fiber.join(asked);
+
+        assert.deepEqual(idsOf(moved.agents), [agentId]);
+        assert.equal(agentRowOf(moved.agents, agentId)?.sandboxOpen, true);
       }),
   );
 

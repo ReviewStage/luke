@@ -87,6 +87,7 @@ import {
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
 import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
+import { useSandboxOpen } from "./use-workspace-agents.js";
 import { useWindowAccount, windowAccountOf } from "./window-account.js";
 
 /**
@@ -586,7 +587,9 @@ export function CloudBrowserPane({
 
   // Note that the view stands only while someone can see it, because a socket left open in a hidden window holds its agent's sandbox.
   const visible = usePageVisible();
-  const watched = shown && visible;
+  // Note that no view opens while the task list says the agent's sandbox is not open, because the relay would only answer not opened; it opens as the list says it opened.
+  const sandboxWaited = useSandboxOpen(tab.agentId) === false;
+  const watched = shown && visible && !sandboxWaited;
   // A pane shown again opens a new view, since the one before closed as it was hidden, or as idle meanwhile.
   const live = useMemo(
     () =>

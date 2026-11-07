@@ -866,20 +866,20 @@ export function panelEntries(input: {
           }),
     onPick: () => panel.onChoose(pageTab(page.id)),
   }));
-  // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does;
+  // A cloud row opens a new terminal in its agent's sandbox, its own tab, as New terminal does,
+  // and wears the terminal's still glyph and none of its agent's state marks, as the tab it opens does;
   // its words after the name count the agent's terminals. Note that it is named by a key of its
   // own, because the agent's id names the agent's own row where the summary lists them.
   const terminalRows = (input.terminals?.offers ?? []).map(({ agent, label, showsOnChord }) => ({
     row: {
       id: terminalRowKey(TERMINAL_KIND.CLOUD, agent.id),
-      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      ...tabLook({ kind: TAB_KIND.TERMINAL, title: label }),
       detail: <TerminalCount kind={TERMINAL_KIND.CLOUD} agentId={agent.id} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.CLOUD,
       replayMasked: true,
     },
     // Note that the row hangs its tab's card: its agent's, saying under a rule whose sandbox its shell runs in.
-    endMark: agentEndMark(agent, true),
     card:
       cards === undefined
         ? undefined
@@ -899,12 +899,11 @@ export function panelEntries(input: {
   const localRows = (input.locals?.offers ?? []).map(({ agent, label }) => ({
     row: {
       id: terminalRowKey(TERMINAL_KIND.LOCAL, agent.id),
-      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      ...tabLook({ kind: TAB_KIND.LOCAL, title: label }),
       detail: <TerminalCount kind={TERMINAL_KIND.LOCAL} agentId={agent.id} />,
       section: ADD_SECTION.LOCAL,
       replayMasked: true,
     },
-    endMark: agentEndMark(agent, true),
     card:
       cards === undefined
         ? undefined

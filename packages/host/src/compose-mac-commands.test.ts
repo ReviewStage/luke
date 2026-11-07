@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MAC_COMMAND_CALL_FAILURE, MAC_COMMAND_NOT_CLAIMED } from "@repo/features";
-import {
-  LIVE_POLL_URL,
-  LIVE_SIGNED_OUT,
-  type MacCommandsLiveAnswer,
-} from "@repo/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import type { MacCommandsLiveAnswer } from "@repo/features/mac-command-live";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
+  macCommandKindsRead,
 } from "@repo/features/mac-command-wire";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
@@ -107,15 +105,21 @@ function scriptedService(
     },
   });
   const client: MacCommandClient = {
-    live: (kinds, userId, _poll, after) =>
+    // SAFETY: the Mac's commands are the one live read the client is asked for, answering the script's rows.
+    liveRead: ((
+      _read: unknown,
+      { userId, kinds }: { readonly userId: string; readonly kinds?: string },
+      poll?: { readonly after?: string | undefined },
+    ) =>
       Effect.gen(function* () {
-        reads.push({ userId, kinds });
+        const after = poll?.after;
+        reads.push({ userId, kinds: macCommandKindsRead(kinds) });
         if (options.signedOut === true) return LIVE_SIGNED_OUT;
         for (let held = 0; after === String(version) && held < 25; held += 1) {
           yield* Effect.sleep(HOLD_LOOK);
         }
         return answer(after !== String(version));
-      }),
+      })) as MacCommandClient["liveRead"],
     claim: (id) =>
       Effect.andThen(
         options.duringClaim ?? Effect.void,

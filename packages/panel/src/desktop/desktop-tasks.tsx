@@ -598,18 +598,8 @@ function DescriptionDocument({
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
-  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page
-  // instead, where it is read and brought back, a panel filling the window over it giving way and
-  // the keys handed to the page, as a tab of this column opens.
-  const openAgentColumn = (agent: string) => {
-    if (agents.archived?.some((each) => each.id === agent) !== true) {
-      openColumnTab(agentTab(agent));
-      return;
-    }
-    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    tasks.agentView.onOpen(agent);
-    setFocus(COLUMN.MAIN);
-  };
+  // An agent's tab is in this column, an archived agent's among them, which stands once it is opened.
+  const openAgentColumn = (agent: string) => openColumnTab(agentTab(agent));
   // The description stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // The task's details go back to the agent's tab they were opened over, or the agents' last, or
@@ -996,11 +986,7 @@ function DescriptionDocument({
           room === SHELL_ROOM.NARROW
             ? {
                 archived: (
-                  <ArchivedAgents
-                    agents={agents}
-                    shown={tasks.shown}
-                    onOpen={tasks.agentView.onOpen}
-                  />
+                  <ArchivedAgents agents={agents} shown={tasks.shown} onOpen={openAgentColumn} />
                 ),
                 onOpenInbox: () => {
                   if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId });

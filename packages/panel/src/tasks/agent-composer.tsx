@@ -132,7 +132,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  *
  * Files go with a message the way every chat takes them: the "+" menu's
  * Attachment opens the system's file picker, an image pasted into the box
- * is taken, and files dropped on the card are, each drawn as a chip over
+ * is taken, so are words pasted long enough to bury the message, as a text
+ * file, and files dropped on the card are, each drawn as a chip over
  * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the bar while the rest still come
  * (`use-attached-files.ts`). A message is words, files, or both, as the wire
@@ -886,6 +887,7 @@ export function AgentComposer({
               if (room.current !== null) submitPromptInput(room.current);
             }}
             onPasteFiles={files.paste}
+            onPasteText={files.pasteText}
             quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
           />
         </ComposerBody>

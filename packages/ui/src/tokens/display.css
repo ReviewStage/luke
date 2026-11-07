@@ -27,10 +27,39 @@
   --ui-display-lead-size-narrow: 1rem;
   --ui-display-lead-leading: 1.55;
 
+  /* The landing's own headings: the product's sans rather than the
+     wordmark's face, set light and close, so a line reads friendly and
+     precise rather than engineered. The display face stays the wordmark's
+     and the public pages'. */
+  --ui-display-landing-face: var(--ui-font-sans);
+  --ui-display-landing-title-size: 4rem;
+  --ui-display-landing-title-leading: 1.04;
+  --ui-display-landing-title-weight: 450;
+  --ui-display-landing-title-tracking: -0.032em;
+  --ui-display-landing-feature-size: 2.75rem;
+  --ui-display-landing-feature-tracking: -0.026em;
+
+  /* The landing's warmth over the brand's warm near-black: the hairline a
+     stage is ruled in and the line of light along its top edge, both of the
+     warm gray, the soft warm-gray glow round a product screen, and the one
+     faint copper glow behind the hero's Inbox. */
+  --ui-display-landing-rule: color-mix(in srgb, var(--ui-color-text-muted) 18%, transparent);
+  --ui-display-landing-edge: inset 0 1px 0
+    color-mix(in srgb, var(--ui-color-text-muted) 14%, transparent);
+  --ui-display-landing-screen-glow:
+    0 0 0 1px color-mix(in srgb, var(--ui-color-text-muted) 6%, transparent),
+    0 0 96px -24px color-mix(in srgb, var(--ui-color-text-muted) 12%, transparent);
+  --ui-display-landing-glow: color-mix(in srgb, var(--ui-color-accent) 15%, transparent);
+  /* The bar over the page: the page's own warm ground, a share see-through,
+     so what scrolls under it blurs rather than shows. */
+  --ui-display-landing-bar: color-mix(in srgb, var(--ui-color-ground) 76%, transparent);
+  /* A stage's corners, rounder than a card's, so the panel reads soft. */
+  --ui-display-landing-stage-radius: 1.375rem;
+
   /* The landing's devices: a Mac window's corners, and a phone's outer
      corners and its screen's, which follow them inside the bezel, as
      shares of the phone's width (`landing.css`'s devices). */
-  --ui-display-window-radius: 0.625rem;
+  --ui-display-window-radius: 0.875rem;
   /* The landing's bar once it floats: half its 56px height, a pill round
      the 44px call it holds 6px in from its end. */
   --ui-display-bar-radius: 1.75rem;

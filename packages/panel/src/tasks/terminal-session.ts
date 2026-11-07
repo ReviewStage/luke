@@ -187,10 +187,12 @@ export class TerminalSession {
     this.connect();
   }
 
-  /** The shell's port asked for, or a shell opened where the session holds none, once the screen has had room. */
+  /** The shell's port asked for, or a shell opened where the session holds none, once the screen has had room, any port it held let go first. */
   connect(): void {
     const size = this.#size;
     if (size === undefined) return;
+    // Note that the port standing is let go, because each attach opens a host connection of its own, and the one before would run on until its idle bound.
+    this.#letGo();
     this.#enter({ kind: TERMINAL_STATE.CONNECTING });
     const terminalId = this.#terminalId;
     if (terminalId === undefined) return void this.#open(size);

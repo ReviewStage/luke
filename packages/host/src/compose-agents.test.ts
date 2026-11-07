@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
-import { agentDefaultOf } from "@repo/features/account-preferences-live";
+import { ACCOUNT_PREFERENCES_READ, agentDefaultOf } from "@repo/features/account-preferences-live";
 import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
@@ -50,6 +50,7 @@ import {
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
 } from "@repo/features/live-wire";
+import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import {
   AGENT_DEFAULT_CHOICE,
@@ -355,13 +356,6 @@ function fakeService() {
         asked.push("models");
         return { models: offeredModels };
       }),
-    accountPreferencesLive: (_userId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["accountPreferencesLive"]> => {
-        if (poll !== true) asked.push("preferences-live");
-        return poll === true
-          ? live.preferences.poll(after)
-          : Effect.succeed(live.preferences.first());
-      }),
     writeDefault: (choice) =>
       Effect.sync(() => {
         asked.push(`default:${choice.model}:${choice.effort}`);
@@ -372,24 +366,34 @@ function fakeService() {
         asked.push(`chapters-provider:${provider}`);
         return { provider };
       }),
-    // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
+    // SAFETY: each declared read the client is asked for answers its own script's rows, as its declaration's answer.
     liveRead: ((
       read: { readonly name: string },
-      params: { readonly id?: string },
+      params: { readonly workspaceId?: string; readonly id?: string },
       poll?: { readonly after?: string | undefined },
-    ) => {
-      if (read.name === AGENT_ORIGIN_READ.name) {
-        if (poll === undefined) asked.push(`agent-origin-live:${params.id}`);
-        return poll === undefined
-          ? Effect.succeed(live.origin.first())
-          : live.origin.poll(poll.after);
-      }
-      assert.equal(read.name, HOSTS_READ.name);
-      return Effect.map(
-        poll === undefined ? Effect.succeed(live.hosts.first()) : live.hosts.poll(poll.after),
-        (answer) => ({ ...answer, installScriptUrl: INSTALL_SCRIPT }),
-      );
-    }) as AgentClient["liveRead"],
+    ) =>
+      Effect.suspend((): Effect.Effect<unknown> => {
+        const answered = <Part extends string>(script: PolledLive<Part>) =>
+          poll === undefined ? Effect.succeed(script.first()) : script.poll(poll.after);
+        switch (read.name) {
+          case HOSTS_READ.name:
+            return Effect.map(answered(live.hosts), (answer) => ({
+              ...answer,
+              installScriptUrl: INSTALL_SCRIPT,
+            }));
+          case ACCOUNT_PREFERENCES_READ.name:
+            if (poll === undefined) asked.push("preferences-live");
+            return answered(live.preferences);
+          case AGENT_ORIGIN_READ.name:
+            if (poll === undefined) asked.push(`agent-origin-live:${params.id}`);
+            return answered(live.origin);
+          case WORKSPACE_MEMORIES_READ.name:
+            if (poll === undefined) asked.push(`memories-live:${params.workspaceId}`);
+            return answered(live.memories);
+          default:
+            return assert.fail(`no script answers the live read ${read.name}`);
+        }
+      })) as AgentClient["liveRead"],
     devicePresence: () =>
       Effect.suspend(() => {
         asked.push("presence");
@@ -647,11 +651,7 @@ function fakeService() {
         asked.push("remove-token");
         return { token: null };
       }),
-    workspaceMemoriesLive: (workspaceId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["workspaceMemoriesLive"]> => {
-        if (poll !== true) asked.push(`memories-live:${workspaceId}`);
-        return poll === true ? live.memories.poll(after) : Effect.succeed(live.memories.first());
-      }),
+
     forgetMemory: (forget) =>
       Effect.andThen(
         Effect.sync(() => {

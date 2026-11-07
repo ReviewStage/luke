@@ -71,11 +71,10 @@ const HOLDER = { taskId: TASK };
  * the tabs below, so a kind that checks what the task draws answers no, and
  * one that draws again whatever the task draws answers yes.
  */
-const DRAWS_NOTHING: TaskDraws = { agents: [], openAgents: [], taskAgents: [], pages: [] };
+const DRAWS_NOTHING: TaskDraws = { openAgents: [], taskAgents: [], pages: [] };
 
 /** A task none of whose agents, open agent tabs, or pages are read yet. */
 const DRAWS_UNREAD: TaskDraws = {
-  agents: undefined,
   openAgents: undefined,
   taskAgents: undefined,
   pages: undefined,
@@ -363,7 +362,7 @@ describe("a strip tab's kind answers", () => {
 
   // Note that each row names its tab in its own list alone, so a kind that reads another list draws nothing.
   it.each([
-    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, agents: [AGENT] } },
+    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, taskAgents: [AGENT] } },
     {
       kind: "subagent",
       tab: subagentTab(CALL, { agent: AGENT, task: "Read the logs" }),

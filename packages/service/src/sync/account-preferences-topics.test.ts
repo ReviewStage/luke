@@ -9,7 +9,7 @@ import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { expectTopicsFire, getTestDB } from "@repo/database/testing";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect } from "effect";
-import { accountPreferencesLive } from "./live-queries.js";
+import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 
 /**
  * The account's preferences on the migrated capture: a default written
@@ -41,7 +41,7 @@ it.layer(getTestDB())("what moves the account's preferences notifies", (it) => {
         }),
         account,
       );
-      assert.deepEqual(accountPreferencesLive.topics({ userId }), account);
+      assert.deepEqual(accountPreferencesRead.topics({ userId }), account);
     }),
   );
 
