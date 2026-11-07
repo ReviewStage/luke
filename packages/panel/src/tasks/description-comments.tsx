@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@repo/features/agent-wire";
 import { textChange } from "@repo/features/description-comment-anchor";
 import {
@@ -117,6 +116,7 @@ import { useDisclosure } from "@repo/ui/use-disclosure";
 import { VIRTUAL_ROWS_ANCHOR, VirtualRows, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { useQuery } from "@tanstack/react-query";
+import { useSelector } from "@tanstack/react-store";
 import { Equal } from "effect";
 import {
   createContext,
@@ -1130,9 +1130,9 @@ function ReplyField({
   // The last send refused, whose key the same words and files sent again go under, so a send whose answer was lost is taken once.
   const attempt = useRef<CommentSend | undefined>(undefined);
   // Sends refused that the field could not take back beside what was typed or added since, kept apart in the order written, marked as not sent, with Retry under their keys.
-  const lines = useAtomValue(unsentAtom);
+  const lines = useSelector(unsentLines.store);
   const unsent = lines.filter((each) => Equal.equals(each.place, place)).map(({ send }) => send);
-  const keepUnsent = useAtomSet(unsentAtom);
+  const keepUnsent = unsentLines.set;
   const addUnsent = (sends: readonly CommentSend[]) =>
     keepUnsent((all) => [...all, ...sends.map((send) => ({ place, send }))]);
   const dropUnsent = () =>
@@ -1369,9 +1369,9 @@ interface CommentSend {
  * opened again finds its line where it was left, another account signed in
  * to the window reads none, and one written while only the account's
  * address was known stands still once its identity learns its id. Note that
- * each window's registry holds its own.
+ * each window holds its own.
  */
-const unsentAtom = heldLines<{
+const unsentLines = heldLines<{
   readonly place: DescriptionCommentPlace;
   readonly send: CommentSend;
 }>();

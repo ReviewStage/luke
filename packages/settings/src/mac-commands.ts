@@ -23,6 +23,9 @@ export type MacCommandMode = (typeof MAC_COMMAND_MODE)[keyof typeof MAC_COMMAND_
 
 export const MAC_COMMAND_MODE_LIST: readonly MacCommandMode[] = Object.values(MAC_COMMAND_MODE);
 
+/** What the setting is called, wherever its control stands. */
+export const MAC_COMMANDS_LABEL = "Let agents run commands on this Mac";
+
 /** Each mode as the setting's menu words it. */
 export const MAC_COMMAND_MODE_LABEL = {
   [MAC_COMMAND_MODE.NEVER]: "Never",

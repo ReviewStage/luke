@@ -38,6 +38,11 @@ import {
   type WorkspaceCallResult,
 } from "./workspace-call.js";
 import {
+  type WorkspaceEnvironmentAnswer,
+  workspaceVariableDeleteRequestSchema,
+  workspaceVariablePutRequestSchema,
+} from "./workspace-environment-wire.js";
+import {
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
@@ -449,6 +454,47 @@ export class HostedWorkspaceClient {
     return resultOf(
       hostedCall(this.#hosted.github.setTokenRepository, admitted, { as: WORKSPACE_RENAMES }),
       (answer) => answer.repositories,
+    );
+  }
+
+  /** The workspace's environment variables by name, never a value, as any member reads them. */
+  environment(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.list, { workspaceId }),
+      (answer) => answer,
+    );
+  }
+
+  /** One environment variable set by an owner or admin, replacing a value of that name, answering the names as they then stand; a variable the service would refuse by shape never travels. */
+  putVariable(
+    workspaceId: string,
+    name: string,
+    value: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceVariablePutRequestSchema)({ workspaceId, name, value }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.put, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** One environment variable deleted by an owner or admin, answering the names that remain. */
+  deleteVariable(
+    workspaceId: string,
+    name: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceVariableDeleteRequestSchema)({ workspaceId, name }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return resultOf(
+      hostedCall(this.#hosted.workspaceEnvironment.delete, admitted),
+      (answer) => answer,
     );
   }
 

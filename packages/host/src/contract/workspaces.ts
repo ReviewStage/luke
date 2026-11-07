@@ -23,6 +23,11 @@ import {
   tasksWorkspaceTransferParamsSchema,
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
+import {
+  workspaceEnvironmentAnswerSchema,
+  workspaceVariableDeleteRequestSchema,
+  workspaceVariablePutRequestSchema,
+} from "@repo/features/workspace-environment-wire";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace-wire";
 import { WORKSPACE_EXPERIMENT_LIST } from "@repo/settings";
@@ -204,6 +209,27 @@ export const WORKSPACE_ACTS = declaredActs({
     refusal: "Could not change that workspace's repositories on this system.",
     panelOnly: true,
     door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_ENVIRONMENT_LIST: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: workspaceEnvironmentAnswerSchema,
+    refusal: "Could not read that workspace's environment on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+  }),
+  WORKSPACE_ENVIRONMENT_PUT: hostAct({
+    input: workspaceVariablePutRequestSchema,
+    output: workspaceEnvironmentAnswerSchema,
+    refusal: "Could not save that variable on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_ENVIRONMENT_DELETE: hostAct({
+    input: workspaceVariableDeleteRequestSchema,
+    output: workspaceEnvironmentAnswerSchema,
+    refusal: "Could not delete that variable on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
   }),
 });
 

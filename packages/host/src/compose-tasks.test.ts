@@ -810,6 +810,9 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(service.tokenRepositorySet ?? UNANSWERED_WORKSPACE),
+      environment: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      putVariable: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      deleteVariable: () => Effect.succeed(UNANSWERED_WORKSPACE),
       // Each workspace read as the service answers it; a poll is not counted among the reads.
       // SAFETY: each declared read answers its own script's rows, as its declaration's answer.
       liveRead: ((

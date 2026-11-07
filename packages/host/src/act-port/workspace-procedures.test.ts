@@ -132,6 +132,18 @@ const REFUSAL_ROWS: { readonly [Name in keyof typeof WORKSPACE_ACTS]: RefusalRow
     refusal: "Could not change that workspace's repositories on this system.",
     payload: { ...WORKSPACE, repository: "acme/relay", added: true },
   },
+  WORKSPACE_ENVIRONMENT_LIST: {
+    refusal: "Could not read that workspace's environment on this system.",
+    payload: WORKSPACE,
+  },
+  WORKSPACE_ENVIRONMENT_PUT: {
+    refusal: "Could not save that variable on this system.",
+    payload: { ...WORKSPACE, name: "API_TOKEN", value: "fixture-value" },
+  },
+  WORKSPACE_ENVIRONMENT_DELETE: {
+    refusal: "Could not delete that variable on this system.",
+    payload: { ...WORKSPACE, name: "API_TOKEN" },
+  },
   WORKSPACE_GITHUB_CONNECT: {
     refusal: "Could not connect GitHub to that workspace on this system.",
     payload: WORKSPACE,

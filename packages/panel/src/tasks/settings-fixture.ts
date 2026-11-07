@@ -57,6 +57,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceVariable } from "@repo/features/workspace-environment-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -620,6 +621,21 @@ let acmeSlackBot: WorkspaceSlackBot = {
   ],
 };
 
+/* ----- Settings › Environment ----- */
+
+/** Acme's environment variables by name, as an add, a replace, and a delete leave them. */
+let acmeVariables: readonly WorkspaceVariable[] = [
+  { name: "DATABASE_URL", updatedAt: NOW - 3 * DAY },
+  { name: "OPENAI_API_KEY", updatedAt: NOW - DAY },
+  { name: "SENTRY_AUTH_TOKEN", updatedAt: NOW - 2 * HOUR },
+];
+
+/** The variables a write leaves, in name order as the service answers them. */
+function variablesAnswer(variables: readonly WorkspaceVariable[]) {
+  acmeVariables = [...variables].sort((one, other) => one.name.localeCompare(other.name));
+  return { variables: acmeVariables };
+}
+
 /* ----- The act door ----- */
 
 type StagedAnswer<Kind extends PortActKind> = (
@@ -659,6 +675,14 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     acmeSlackBot = { ...acmeSlackBot, channels };
     return acmeSlackBot;
   },
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_LIST]: () => ({ variables: acmeVariables }),
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_PUT]: ({ name }) =>
+    variablesAnswer([
+      ...acmeVariables.filter((variable) => variable.name !== name),
+      { name, updatedAt: NOW },
+    ]),
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_DELETE]: ({ name }) =>
+    variablesAnswer(acmeVariables.filter((variable) => variable.name !== name)),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
   // The command-line tool installed on this Mac, as Settings' MCP page's Install asks, without running the install script: a fixture run reaches no network and installs nothing.

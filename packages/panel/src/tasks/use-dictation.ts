@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@repo/features/dictation-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -6,15 +5,15 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { appSettingsView } from "@repo/settings/wire";
+import { useWait } from "@repo/ui";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
-import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import type { ComposerEditorHandle, ComposerMark } from "../description-editor/contract.js";
-import { rendererRuntime } from "../renderer-runtime.js";
+import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { base64Of } from "./attached-files.js";
 import { openPreferredMicrophone } from "./microphone-choice.js";
@@ -36,7 +35,7 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
  * full box has no room for are not put in at all.
  * Canceling, or a press elsewhere that unmounts the box, drops the clip
  * unsent. The recording stops itself a second short of the wire's two
- * minutes on a deadline of its own, kept on the renderer's runtime rather
+ * minutes on a deadline of its own, a wait the box holds, rather
  * than on the recorder's events, which a hidden page may hold back. ✓ waits for the microphone
  * to open, since until then there is nothing to send. Whatever fails says
  * why in the box's note and keeps nothing, the microphone let go with it.
@@ -151,11 +150,16 @@ export function useDictation(input: {
   const marked = useRef<ComposerMark | undefined>(undefined);
   const latest = useRef(input);
   latest.current = input;
-  // The deadline stands from the moment the microphone opens: an atom on the
-  // renderer's runtime, so it is let go with the box and a test's clock reaches it.
-  const [idle] = useState(() => rendererRuntime.atom(Effect.asVoid(Effect.never)));
-  const [deadline, setDeadline] = useState(idle);
-  const deadlinePassed = AsyncResult.isSuccess(useAtomValue(deadline));
+  // The deadline stands from the moment the microphone opens: a wait the box
+  // holds, so it is let go with the box and a test's clock reaches it.
+  const deadline = useWait();
+  const passed = useCreateStore(false);
+  const deadlinePassed = useSelector(passed);
+  /** Calls off the deadline standing, none passed. */
+  const clearDeadline = () => {
+    deadline.stop();
+    passed.setState(() => false);
+  };
 
   /** Lets the standing dictation go unsent: a later stop, open, or answer finds its generation passed. */
   const drop = () => {
@@ -174,7 +178,7 @@ export function useDictation(input: {
     recording.current = undefined;
     marked.current?.release();
     marked.current = undefined;
-    setDeadline(idle);
+    clearDeadline();
     setAnalyzer(undefined);
     setStartedAt(undefined);
     setPhase(DICTATION_PHASE.IDLE);
@@ -296,7 +300,13 @@ export function useDictation(input: {
       };
       recorder.start(RECORDER_SLICE_MS);
       recording.current = standing;
-      setDeadline(rendererRuntime.atom(Effect.sleep(DICTATION_AUTO_STOP)));
+      clearDeadline();
+      deadline.start(
+        Effect.andThen(
+          Effect.sleep(DICTATION_AUTO_STOP),
+          Effect.sync(() => passed.setState(() => true)),
+        ),
+      );
       setAnalyzer(measured);
       setStartedAt(standing.startedAt);
     } catch {

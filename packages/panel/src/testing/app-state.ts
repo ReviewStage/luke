@@ -55,6 +55,7 @@ import {
   type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
+  type AppWorkspaceTools,
   EVERY_WORKSPACE,
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
@@ -425,7 +426,7 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
  * Lays the host's reads as given, the account's feed of every item, the
  * holders' own inboxes, the pull requests' chapters, the servers' tools, the
  * signed-in account's keys, preferences, and models, the workspaces' people and token
- * repositories, and the agents' transcripts, over whatever document the window was handed, its
+ * repositories, the agents' transcripts and where their `run_on_mac` stands, over whatever document the window was handed, its
  * experiments and the reads handed before among it, and answers with how
  * each is delivered again as it moves, as the host tells it; what the bridge
  * delivered before still reaches the window. The account is given an id
@@ -442,6 +443,7 @@ export function handHostReads(first: {
   readonly members?: AppWorkspaceMembers;
   readonly tokenRepositories?: AppTokenRepositories;
   readonly transcripts?: AppTranscripts;
+  readonly workspaceTools?: AppWorkspaceTools;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const earlier = fakeAppBridgeCalls().onAppState;
@@ -486,6 +488,9 @@ export function handHostReads(first: {
         ...(first.transcripts === undefined
           ? undefined
           : { [LIVE_READ.TRANSCRIPT]: first.transcripts }),
+        ...(first.workspaceTools === undefined
+          ? undefined
+          : { [LIVE_READ.WORKSPACE_TOOLS]: first.workspaceTools }),
       };
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
