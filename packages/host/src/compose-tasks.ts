@@ -44,7 +44,7 @@ import type {
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
 import { revisionsOfLiveRows, TASK_HISTORY_READ } from "@repo/features/task-history-live";
-import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { AGENT_PAGES_READ, pagesOfLiveRows, TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
@@ -474,7 +474,7 @@ function startMayWait(start: Start): boolean {
 const startKeptSchema = Schema.Struct({
   request: Schema.Struct({ ...taskCreateRequestSchema.fields, id: Schema.String }),
   quiet: Schema.Boolean,
-  row: Schema.UndefinedOr(taskListLiveRowsSchema.fields.plans.value),
+  row: Schema.UndefinedOr(TASK_LIST_READ.parts.plans.row),
 }).check(Schema.makeFilter(startMayWait));
 
 /** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its description laid as held. */
@@ -494,7 +494,6 @@ function unsealed(sealed: unknown): sealed is { readonly failure: string } {
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
-  | "listLive"
   | "open"
   | "create"
   | "delete"
@@ -1301,10 +1300,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       live: (sync) =>
         userId === undefined
           ? Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true })
-          : Effect.map(served(client.listLive(userId, sync)), (sealed) =>
-              sealed.ok
-                ? sealed.answer
-                : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
+          : Effect.map(
+              // Note that the list is always read polled, its rows inline, and past a sync id the service holds the read until something moves.
+              served(
+                client.liveRead(
+                  TASK_LIST_READ,
+                  { userId, ...(sync === undefined ? undefined : { sync }) },
+                  {},
+                ),
+              ),
+              (sealed) =>
+                "failure" in sealed
+                  ? { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure }
+                  : sealed,
             ),
       // Note that an answer's read standing rides the list it draws, so a window is told both at once.
       take: (rows, standing) =>

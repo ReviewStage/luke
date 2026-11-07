@@ -1,62 +1,15 @@
 /**
  * live-queries.ts -- every live read Sync wakes, by its name, as one registry the registry test reads.
  *
- * A read is moved onto Sync by defining it (`defineLiveQuery`), adding
- * it here, and answering its procedure from the definition
- * (`liveQueryParts`). A read declared once (`@repo/features/live-read`) is
- * bound instead (`../live/live-read-binding.ts`, one file under
- * `../live/reads/` each), and its binding stands here beside the
- * definitions. Each view's own change defines its read, and a read with no
- * definition is looked at on its clock.
+ * Each read is declared once (`@repo/features/live-read`) and bound once
+ * (`../live/live-read-binding.ts`, one file under `../live/reads/` each),
+ * and its binding stands here.
  */
-import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { messageStandingNow } from "@repo/database/models/message-reads";
-import { agentTable } from "@repo/database/schemas/agent";
-import { inboxItem } from "@repo/database/schemas/inbox";
-import { task } from "@repo/database/schemas/task";
-import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
-import {
-  agentDelegationSync,
-  agentPinSync,
-  agentQueueSync,
-  agentReadSync,
-  agentSync,
-  attachmentSync,
-  automationRunSync,
-  automationSync,
-  conversationsSync,
-  deviceAgentLineSync,
-  deviceSync,
-  githubPersonalTokenSync,
-  githubRepositoryReadSync,
-  inboxItemReadSync,
-  inboxItemSync,
-  inboxMessageSync,
-  memberSync,
-  messagesSync,
-  taskBlockSync,
-  taskPinSync,
-  taskReadSync,
-  taskSync,
-  turnsSync,
-  userSync,
-} from "@repo/database/sync/tables";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
-import { LIVE_MODE } from "@repo/features/live-read";
-import { LIVE_READ } from "@repo/features/live-wire";
-import { Effect, Option } from "effect";
-import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
-import {
-  accountInboxLiveStatements,
-  accountItemsDeltaStatements,
-  accountItemsLiveStatements,
-  memberAgentInboxLiveStatements,
-  taskInboxLiveStatements,
-} from "../inbox/inbox-store.js";
-import type { AnyBoundRead } from "../live/live-read-binding.js";
+import { type AnyBoundRead, liveReadRegistry } from "../live/live-read-binding.js";
+import { accountInboxRead } from "../live/reads/account-inbox.js";
 import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { agentOriginRead } from "../live/reads/agent-origin.js";
+import { agentTranscriptRead } from "../live/reads/agent-transcript.js";
 import {
   automationRunsRead,
   automationsRead,
@@ -64,280 +17,32 @@ import {
 } from "../live/reads/automations.js";
 import { agentBrowserTabsRead, taskBrowserTabsRead } from "../live/reads/browser-tabs.js";
 import { hostsRead } from "../live/reads/hosts.js";
+import { inboxItemsRead } from "../live/reads/inbox-items.js";
 import { installedSkillsRead } from "../live/reads/installed-skills.js";
 import { integrationStatusesRead } from "../live/reads/integration-statuses.js";
 import { macCommandsRead } from "../live/reads/mac-commands.js";
 import { agentPagesRead, taskPagesRead } from "../live/reads/pages.js";
 import { pullRequestChaptersRead } from "../live/reads/pull-request-chapters.js";
+import { agentInboxRead, taskInboxRead } from "../live/reads/scope-inbox.js";
 import { sidebarRead } from "../live/reads/sidebar.js";
 import { taskCommentsRead } from "../live/reads/task-comments.js";
 import { taskHistoryRead } from "../live/reads/task-history.js";
 import { taskRecordRead } from "../live/reads/task-record.js";
+import { tasksRead } from "../live/reads/tasks.js";
 import { workspaceIntegrationsRead } from "../live/reads/workspace-integrations.js";
 import { workspaceInvitationsRead } from "../live/reads/workspace-invitations.js";
 import { workspaceMembersRead } from "../live/reads/workspace-members.js";
 import { workspaceMemoriesRead } from "../live/reads/workspace-memories.js";
 import { workspacesRead } from "../live/reads/workspaces.js";
-import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
-import { instantParam } from "./live-param.js";
-import { defineLiveQuery, liveQueryRegistry } from "./live-query.js";
-import { readerAndWorkspaceTopics } from "./reader-topics.js";
 
-/**
- * The account's task list: the tasks it reaches and every agent of them and
- * with no task, each with the account's pin, the names it shows, and what
- * its status is read from, woken on the account's topic and on each of its
- * workspaces'. A task, a block between two tasks, an agent, a member's name, a Mac's name, or a turn
- * starting or settling names the workspace; the account's pins and read
- * marks, its memberships, and what admits it to a repository name the account. Note
- * that a message wakes no task list, because a streamed step rewrites one
- * every moment and names only its conversation: an awaiting line that moves
- * with no turn starting or settling shows
- * at the hold's end, as do the rename of someone the list names who has left
- * every workspace and a Mac's last beat, which wakes nothing.
- *
- * A reader past a sync id is answered what moved alone
- * (`taskListDeltaStatements`); a message or a conversation names only its
- * conversation, so its rows are taken whatever they name, and narrow the
- * agents to the one of that conversation the reader reaches. Its plans and
- * its agents are each part's own rows, and a write to its account's
- * membership or GitHub access answers it whole.
- */
-export const tasksLive = defineLiveQuery({
-  name: "tasks",
-  params: ["userId"],
-  reads: [
-    taskSync,
-    taskBlockSync,
-    taskPinSync,
-    taskReadSync,
-    agentSync,
-    agentPinSync,
-    agentReadSync,
-    automationSync,
-    automationRunSync,
-    userSync,
-    turnsSync,
-    messagesSync,
-    conversationsSync,
-    deviceSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-  ],
-  topics: ({ userId }) => readerAndWorkspaceTopics(userId),
-  statements: ({ userId }) => taskListLiveStatements(userId),
-  mode: LIVE_MODE.SNAPSHOT,
-  delta: {
-    whole: [memberSync, githubPersonalTokenSync, githubRepositoryReadSync],
-    anyTopic: [messagesSync, conversationsSync],
-    own: {
-      plans: { table: taskSync, key: task.id },
-      agents: { table: agentSync, key: agentTable.id },
-    },
-    statements: ({ userId }, moved) => taskListDeltaStatements(userId, moved),
-  },
-});
-
-/** What reaches an inbox item: its workspace's membership and, for one of an agent on a member's own token, that member's GitHub access. */
-const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSync] as const;
-
-/**
- * What waits on the account across its workspaces, its tasks and
- * automations holding items, and its own automations' failed runs, woken
- * by an item written in any of its workspaces, which names every member
- * (`inboxItemSync`), by its own read marks, by its own automations and
- * their runs, and by what admits it to a workspace or a repository, all of
- * which name the account. Note that a task or an agent written itself
- * wakes no account's inbox, because a description's save rewrites its task every
- * few seconds and every member would read again for nothing: the rare
- * change the inbox shows of either, a task's assignee or an agent's title,
- * shows at the hold's end.
- */
-export const inboxLive = defineLiveQuery({
-  name: "inbox",
-  params: ["userId", "repositoryless"],
-  reads: [
-    inboxItemSync,
-    inboxItemReadSync,
-    taskSync,
-    agentSync,
-    automationSync,
-    automationRunSync,
-    ...ITEM_GATES,
-  ],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  // Note that an agent with no repository is carried only to a reader that asks (`ACCOUNT_INBOX_REPOSITORYLESS`), since a build before it fails its whole read on one null.
-  statements: ({ userId, repositoryless }) =>
-    Option.zipWith(
-      accountInboxLiveStatements(userId, repositoryless === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
-      ownFailedRunsLiveStatement(userId),
-      (parts, failedRuns) => ({ ...parts, failedRuns }),
-    ),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/** What a task's or an agent's inbox reads: its items, their threads and files, the reader's marks, and who each names. */
-const SCOPE_INBOX_READS = [
-  inboxItemSync,
-  inboxMessageSync,
-  inboxItemReadSync,
-  attachmentSync,
-  taskSync,
-  agentSync,
-  userSync,
-  ...ITEM_GATES,
-] as const;
-
-/**
- * One task's inbox, woken by a write to its items, their threads, files,
- * and read marks, or to the task and its agents, all of which name the
- * task. Note that it takes no account's topic, because an item written
- * anywhere in the account's workspaces names the account, and a window
- * follows one of these for every task its Inbox lists: what moves the
- * reader's reach, or a name it shows, shows at the hold's end, and the
- * procedure checks the reader's reach again on every request.
- */
-export const taskInboxLive = defineLiveQuery({
-  name: "taskInbox",
-  params: ["userId", "taskId"],
-  reads: SCOPE_INBOX_READS,
-  topics: ({ taskId }) => [[TOPIC.TASK, taskId]],
-  statements: ({ userId, taskId }) => taskInboxLiveStatements(userId, taskId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * Every inbox item the account reaches, where each stands and those
- * changed since the reader's instant whole, woken on the account's topic,
- * which an item written in any of its workspaces names for every member
- * (`inboxItemSync`), as do its own read marks and what admits it to a
- * workspace or a repository. Note that a message withdrawn names only its
- * item's task and agent, and a task or an agent written itself no account,
- * as for the account's inbox: either shows at the hold's end. The settled
- * items it carries are those changed since `settledSince`, which its
- * procedure binds from the clock, since a live statement reads none, and
- * those the reader set a reminder on and has not read since.
- *
- * A reader past a sync id is answered the items that moved alone, each
- * whole (`accountItemsDeltaStatements`), taking the moved rows its
- * workspaces' topics reach, since a task, an agent, or a member names
- * those rather than the account; a message or a file names only its item's
- * task and agent, so its rows are taken whatever they name. An item that
- * leaves by the clock, past thirty days settled, logs nothing, and the
- * reader drops it itself.
- */
-export const inboxItemsLive = defineLiveQuery({
-  name: LIVE_READ.INBOX_ITEMS,
-  params: ["userId", "since", "settledSince"],
-  reads: SCOPE_INBOX_READS,
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId, since, settledSince }) =>
-    accountItemsLiveStatements(userId, instantParam(since), instantParam(settledSince)),
-  mode: LIVE_MODE.SNAPSHOT,
-  delta: {
-    whole: ITEM_GATES,
-    anyTopic: [inboxMessageSync, attachmentSync],
-    reach: ({ userId }) => readerAndWorkspaceTopics(userId),
-    own: {
-      stamps: { table: inboxItemSync, key: inboxItem.id },
-      items: { table: inboxItemSync, key: inboxItem.id },
-    },
-    statements: ({ userId, settledSince }, moved) =>
-      accountItemsDeltaStatements(userId, instantParam(settledSince), moved),
-  },
-});
-
-/** One agent's inbox, as any member of its workspace reads it, woken as a task's is, on the agent's topic. */
-export const agentInboxLive = defineLiveQuery({
-  name: "agentInbox",
-  params: ["userId", "agentId"],
-  reads: SCOPE_INBOX_READS,
-  topics: ({ agentId }) => [[TOPIC.AGENT, agentId]],
-  statements: ({ userId, agentId }) => memberAgentInboxLiveStatements(userId, agentId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * A coding agent's transcript, or one of its workers' (`conversationId`,
- * under the agent's own `parentConversationId`), started by `ownerId` and
- * read by `readerId` while it is a member of the agent's workspace
- * (`transcript-live.ts`). It is woken by a write to the transcript's
- * messages, turns, or conversation, to a worker's conversation or
- * delegation under the agent's, to the agent itself, its queue, or a line
- * queued for its device, and to what admits the
- * reader to its workspace or repository; the agent's task is read for the
- * reader's reach of it (`agentVisibleTo`) and wakes nothing, as a task's
- * reach moves with what admits the reader.
- *
- * Its newest messages (`window`, `windowParts`) are followed by cursor:
- * where the reader holds them, the highest sequence it has and the journal
- * revision it read at, as a page past a cursor reads them
- * (`listMessagesPast`). Every write to a message locks its conversation and
- * takes its sequence or revision from the conversation's counters, so they
- * move in commit order, and a reader past a cursor read before its rows
- * misses none. A rewind moves the conversation's rewound revision, and a
- * reader whose cursor is older is answered the window whole.
- *
- * Note that a line's sender's name, and a sending agent's task, are read
- * beside the line rather than written on it, so a change to either wakes no
- * transcript and moves no line past the cursor: a cursor reader sees it the
- * next time it reads the window whole, and a reader that names no cursor at
- * the hold's end, within 25 s. A turn settling moves its journal's revision
- * (`writer.ts`'s `reviseJournal`), so what the settled turn says of it is
- * answered past the cursor.
- */
-export const agentTranscriptLive = defineLiveQuery({
-  name: "agentTranscript",
-  params: ["ownerId", "conversationId", "parentConversationId", "agentId", "readerId"],
-  reads: [
-    messagesSync,
-    conversationsSync,
-    turnsSync,
-    agentDelegationSync,
-    userSync,
-    agentSync,
-    taskSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-    agentQueueSync,
-    deviceAgentLineSync,
-  ],
-  topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
-    const parent: readonly SyncTopic[] =
-      parentConversationId === conversationId ? [] : [[TOPIC.CONVERSATION, parentConversationId]];
-    return [
-      [TOPIC.CONVERSATION, conversationId],
-      ...parent,
-      [TOPIC.AGENT, agentId],
-      [TOPIC.ACCOUNT, readerId],
-    ];
-  },
-  statements: ({ ownerId, conversationId, parentConversationId, readerId }, past) =>
-    transcriptLiveStatements(
-      { userId: ownerId, conversationId },
-      parentConversationId,
-      agentFollowedBy(ownerId, parentConversationId, readerId),
-      past === undefined ? undefined : cursorOfWire(past),
-    ),
-  mode: LIVE_MODE.CURSOR,
-  cursor: {
-    parts: ["window", "windowParts"],
-    standing: ({ ownerId, conversationId }) =>
-      Effect.map(messageStandingNow(ownerId, conversationId), ({ cursor, rewound }) => ({
-        next: cursorToWire(cursor),
-        stands: (asked) =>
-          Option.match(rewound, {
-            onNone: () => true,
-            onSome: (at) => cursorOfWire(asked).revision >= at,
-          }),
-      })),
-  },
-});
-
-/** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
+/** Every live read, declared once and bound (`../live/live-read-binding.ts`). */
 export const BOUND_READS: readonly AnyBoundRead[] = [
+  tasksRead,
+  accountInboxRead,
+  inboxItemsRead,
+  taskInboxRead,
+  agentInboxRead,
+  agentTranscriptRead,
   hostsRead,
   agentOriginRead,
   taskPagesRead,
@@ -363,12 +68,4 @@ export const BOUND_READS: readonly AnyBoundRead[] = [
   pullRequestChaptersRead,
 ];
 
-export const LIVE_QUERIES = liveQueryRegistry([
-  tasksLive,
-  inboxLive,
-  inboxItemsLive,
-  taskInboxLive,
-  agentInboxLive,
-  agentTranscriptLive,
-  ...BOUND_READS,
-]);
+export const LIVE_QUERIES = liveReadRegistry(BOUND_READS);

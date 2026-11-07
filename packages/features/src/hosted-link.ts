@@ -556,28 +556,6 @@ export function askHosted<Input, Output>(
   });
 }
 
-/**
- * A live read asked: sealed, or with `poll` its rows inline (`live-wire.ts`).
- * A poll past `after`, or one `held` otherwise, as one past a sync id, is
- * held by the service until the rows move, so it travels under the held
- * deadline.
- */
-export function askLive<Input extends LivePollInput, Output>(
-  procedure: HostedProcedure<Input, Output>,
-  input: Input,
-  poll: boolean,
-  after: string | undefined,
-  held = after !== undefined,
-): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
-  if (!poll) return askHosted(procedure, input);
-  const polled: Input = {
-    ...input,
-    [LIVE_POLL.QUERY]: LIVE_POLL.ON,
-    ...(after === undefined ? undefined : { [LIVE_POLL.AFTER]: after }),
-  };
-  return askHosted(procedure, polled, held ? HOSTED_DEADLINE.HELD : HOSTED_DEADLINE.USUAL);
-}
-
 /** What a live read's input may name of a poll. */
 export interface LivePollInput {
   readonly [LIVE_POLL.QUERY]?: typeof LIVE_POLL.ON;

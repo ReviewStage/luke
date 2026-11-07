@@ -42,6 +42,7 @@ import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { AGENT_PAGES_READ, TASK_PAGES_READ } from "@repo/features/task-pages-live";
 import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
@@ -177,6 +178,8 @@ const MARKED_AT = 5_000;
 
 /** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
+  /** The task list's live read, by the sync id the follow asks past: its answer, or why not. */
+  listLive: (userId: string | undefined, sync: string | undefined) => Effect.Effect<unknown>;
   tasks: Task[];
   /** Each task's comment threads, by task id, and every comment write asked, in order. */
   threads: Record<string, DescriptionCommentThread[]>;
@@ -544,15 +547,6 @@ function fakeService(tasks: Task[]): FakeService {
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
     >(["plans", "agents", "issues"]),
   };
-  /** A live read's answer as the service's call answers it: the read, or why it answered none. */
-  const called = <Answer, Failure extends string>(
-    read: Effect.Effect<Answer | { readonly failure: Failure }>,
-  ): Effect.Effect<TaskCallResult<Answer, Failure>> =>
-    Effect.map(read, (answer) =>
-      typeof answer === "object" && answer !== null && "failure" in answer
-        ? { ok: false as const, failure: answer.failure }
-        : { ok: true as const, answer: answer as Answer },
-    );
   /** A live read first asked, or polled past `after`. */
   const asked = <Part extends string, Refused extends { readonly failure: string }>(
     read: PolledLive<Part, Refused>,
@@ -1106,10 +1100,16 @@ function fakeService(tasks: Task[]): FakeService {
     // A declared live read answers as its follow asks it: first, or polled past `after`; the sidebar as the service holds it, a poll not counted among the reads; the record of a task with none is not found, every other read unanswered.
     liveRead: ((
       read: { readonly name: string },
-      params: { readonly id: string; readonly page?: string },
+      params: {
+        readonly id: string;
+        readonly page?: string;
+        readonly userId?: string;
+        readonly sync?: string;
+      },
       poll?: { readonly after?: string | undefined },
     ) =>
       Effect.suspend((): Effect.Effect<unknown> => {
+        if (read.name === TASK_LIST_READ.name) return service.listLive(params.userId, params.sync);
         if (read.name === SIDEBAR_READ.name) {
           if (poll === undefined) service.reads.push("sidebar-live");
           return asked(live.sidebar, poll !== undefined, poll?.after);
@@ -1122,19 +1122,17 @@ function fakeService(tasks: Task[]): FakeService {
       })) as TasksClient["liveRead"],
     // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
     listLive: (_userId, sync) =>
-      Effect.suspend(() => {
-        if (sync === undefined) return called(Effect.succeed(live.list.first()));
+      Effect.suspend((): Effect.Effect<unknown> => {
+        if (sync === undefined) return Effect.succeed(live.list.first());
         if (sync === "") {
           service.liveListReads += 1;
           const whole = live.list.first();
-          return called(
-            Effect.succeed("failure" in whole ? whole : listBySyncId(whole, undefined, listAt)),
+          return Effect.succeed(
+            "failure" in whole ? whole : listBySyncId(whole, undefined, listAt),
           );
         }
-        return called(
-          Effect.map(live.list.poll(sync), (answer) =>
-            "failure" in answer ? answer : listBySyncId(answer, sync, listAt),
-          ),
+        return Effect.map(live.list.poll(sync), (answer) =>
+          "failure" in answer ? answer : listBySyncId(answer, sync, listAt),
         );
       }),
     open: (taskId) =>
@@ -1667,8 +1665,12 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
       service.workspacesFail = true;
-      service.liveRead = (() =>
-        Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED })) as TasksClient["liveRead"];
+      // Note that the list is read through the same client call as every other live read, which answers nothing here but the list.
+      const { liveRead } = service;
+      service.liveRead = ((read, params, poll) =>
+        read.name === TASK_LIST_READ.name
+          ? liveRead(read, params, poll)
+          : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED })) as TasksClient["liveRead"];
       const asked: (string | undefined)[] = [];
       const { listLive } = service;
       service.listLive = (userId, sync) => {

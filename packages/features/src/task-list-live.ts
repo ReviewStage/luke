@@ -26,8 +26,17 @@ import {
   type TasklessAgent,
 } from "./agent-wire.js";
 import { integrationConnectionOf } from "./integration-wire.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  liveRead,
+  liveRows,
+  ORDER,
+} from "./live-read.js";
+import { LIVE_USER_QUERY } from "./live-wire.js";
 import { readMarkOf } from "./read-mark.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { countedNumber } from "./service-wire.js";
 import { standingFailures } from "./task-agents-model.js";
 import {
@@ -64,24 +73,13 @@ import {
  * the list is ordered here as the held read orders it.
  */
 
-/** The plan list sealed for following: the address, and its statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
-export const taskListLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    plans: sealedLiveQuerySchema,
-    agents: sealedLiveQuerySchema,
-    /** The issues plans linked: no rows, for a released desktop that follows it. */
-    issues: sealedLiveQuerySchema,
-  }),
-});
-
-export type TaskListLiveAnswer = typeof taskListLiveAnswerSchema.Type;
-
 const plan = taskSummarySchema.fields;
 
 /** One plan as its row delivers it: the reader's own pin and the owner's name beside it, null where none stands. */
 const taskLiveRowSchema = EffectSchema.Struct({
   id: plan.id,
+  /** Always null, since no plan is archived any more; carried for a desktop from before #4541, which decodes a row without it as no row. */
+  archivedAt: EffectSchema.optionalKey(EffectSchema.Null),
   workspaceId: plan.workspaceId,
   name: plan.name,
   repository: plan.repository,
@@ -198,13 +196,50 @@ const agentLiveRowSchema = EffectSchema.Struct({
   sandboxOpen: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
-/** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const taskListLiveRowsSchema = EffectSchema.Struct({
-  plans: EffectSchema.Array(taskLiveRowSchema),
-  agents: EffectSchema.Array(agentLiveRowSchema),
+/**
+ * The plan list as one live read declares it, by the account (`tasks`): its
+ * plans and its agents, each by id, newest started first as the held read
+ * orders them, and the issues plans linked, which answer no rows and stand
+ * for a released desktop that follows them, and which this build keeps
+ * none of. Past a sync id it answers what moved alone (`LIVE_MODE.DELTA`).
+ * The service answers `unavailable` where its deployment's Realtime is
+ * misconfigured.
+ */
+export const TASK_LIST_READ = liveRead({
+  name: "tasks",
+  path: HOSTED_SERVICE_PATH.LIVE_TASKS,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.DELTA,
+  parts: {
+    plans: liveRows({
+      row: taskLiveRowSchema,
+      key: "id",
+      order: [
+        ["createdAt", ORDER.DESC],
+        ["id", ORDER.DESC],
+      ],
+    }),
+    agents: liveRows({
+      row: agentLiveRowSchema,
+      key: "id",
+      order: [
+        ["createdAt", ORDER.DESC],
+        ["id", ORDER.DESC],
+      ],
+    }),
+    issues: liveRows({
+      row: EffectSchema.Struct({ id: EffectSchema.String }),
+      key: "id",
+      order: [["id", ORDER.ASC]],
+      optional: true,
+    }),
+  },
 });
 
-export type TaskListLiveRows = typeof taskListLiveRowsSchema.Type;
+export type TaskListLiveAnswer = LiveReadAnswer<typeof TASK_LIST_READ>;
+
+/** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
+export type TaskListLiveRows = typeof TASK_LIST_READ.rows.Type;
 
 type TaskLiveRow = typeof taskLiveRowSchema.Type;
 type AgentLiveRow = typeof agentLiveRowSchema.Type;

@@ -4,6 +4,7 @@ import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { ACCOUNT_PREFERENCES_READ, agentDefaultOf } from "@repo/features/account-preferences-live";
 import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
+import { AGENT_TRANSCRIPT_READ } from "@repo/features/agent-transcript-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
@@ -34,6 +35,13 @@ import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
 import { GITHUB_TOKEN_STATUS, type GitHubTokenSummary } from "@repo/features/github-token-wire";
 import { HOSTS_READ } from "@repo/features/host-live";
 import {
+  ACCOUNT_INBOX_READ,
+  AGENT_INBOX_READ,
+  FAILED_RUN_WINDOW_MILLIS,
+  INBOX_ITEMS_READ,
+  TASK_INBOX_READ,
+} from "@repo/features/inbox-live";
+import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
@@ -45,7 +53,6 @@ import {
 } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
-  FAILED_RUN_WINDOW_MILLIS,
   LIVE_SIGNED_OUT,
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
@@ -348,10 +355,58 @@ function fakeService() {
   });
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
-    Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
+    Effect.suspend((): Effect.Effect<unknown> => {
       if (scope === undefined) return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       if (typeof scope === "object") return Effect.succeed(scope);
       return poll === true ? live.scope.poll(after) : Effect.succeed(live.scope.first());
+    });
+  // Note that a poll is counted apart from the first ask (`live.transcript.polls`), as each is held until the rows move.
+  const transcriptLive = (
+    agentId: string | undefined,
+    callId: string | undefined,
+    poll: boolean,
+    after: string | undefined,
+  ) =>
+    Effect.suspend((): Effect.Effect<unknown> => {
+      if (poll !== true) {
+        asked.push(`transcript-live:${agentId}${callId === undefined ? "" : `:${callId}`}`);
+      }
+      if (transcript === undefined) {
+        return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+      }
+      if (typeof transcript === "object") return Effect.succeed(transcript);
+      return poll === true ? live.transcript.poll(after) : Effect.succeed(live.transcript.first());
+    });
+  /** The account's inbox as its live read answers it: polled from the one script, or the refusal standing. */
+  const accountInboxLive = (userId: string | undefined, poll: boolean, after: string | undefined) =>
+    Effect.suspend((): Effect.Effect<unknown> => {
+      if (poll !== true) asked.push(`account-inbox-live:${userId}`);
+      if (accountLive === undefined) {
+        return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+      }
+      if (typeof accountLive === "object") return Effect.succeed(accountLive);
+      return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
+    });
+  /** The account's items as their live read answers them, by the sync id the follow asks past. */
+  const accountItemsLive = (userId: string | undefined, sync: string | undefined) =>
+    Effect.suspend((): Effect.Effect<unknown> => {
+      if (sync === "") asked.push(`account-items-live:${userId}`);
+      if (sync === undefined) asked.push(`account-items-whole:${userId}`);
+      if (itemsLive === undefined) {
+        return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+      }
+      if (sync === undefined) return Effect.succeed(live.items.first());
+      const settled = (answer: ItemsAnswer) =>
+        itemsStalledAt ?? answer.queries.stamps.digest ?? "0";
+      if (sync === "") {
+        const whole = live.items.first();
+        return Effect.succeed(
+          "failure" in whole ? whole : bySyncId(whole, undefined, settled(whole), itemsBySync),
+        );
+      }
+      return Effect.map(live.items.poll(sync), (answer) =>
+        "failure" in answer ? answer : bySyncId(answer, sync, settled(answer), itemsBySync),
+      );
     });
   const client: AgentClient = {
     models: () =>
@@ -372,7 +427,13 @@ function fakeService() {
     // SAFETY: each declared read the client is asked for answers its own script's rows, as its declaration's answer.
     liveRead: ((
       read: { readonly name: string },
-      params: { readonly workspaceId?: string; readonly id?: string },
+      params: {
+        readonly workspaceId?: string;
+        readonly id?: string;
+        readonly call?: string;
+        readonly userId?: string;
+        readonly sync?: string;
+      },
       poll?: { readonly after?: string | undefined },
     ) =>
       Effect.suspend((): Effect.Effect<unknown> => {
@@ -395,6 +456,18 @@ function fakeService() {
             return answered(live.memories);
           case PULL_REQUEST_CHAPTERS_READ.name:
             return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+          case AGENT_TRANSCRIPT_READ.name:
+            return transcriptLive(params.id, params.call, poll !== undefined, poll?.after);
+          case TASK_INBOX_READ.name:
+            if (poll === undefined) asked.push(`description-inbox-live:${params.id}`);
+            return scopeLive(poll !== undefined, poll?.after);
+          case AGENT_INBOX_READ.name:
+            if (poll === undefined) asked.push(`agent-inbox-live:${params.id}`);
+            return scopeLive(poll !== undefined, poll?.after);
+          case ACCOUNT_INBOX_READ.name:
+            return accountInboxLive(params.userId, poll !== undefined, poll?.after);
+          case INBOX_ITEMS_READ.name:
+            return accountItemsLive(params.userId, params.sync);
           default:
             return assert.fail(`no script answers the live read ${read.name}`);
         }
@@ -478,20 +551,6 @@ function fakeService() {
             : `worker-before:${agentId}:${callId}:${before}`) + (cut === true ? ":cut" : ""),
         );
         return { messages: SAID.messages, before: "3" };
-      }),
-    // Note that a poll is counted apart from the first ask (`live.transcript.polls`), as each is held until the rows move.
-    agentTranscriptLive: (agentId, _userId, callId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["agentTranscriptLive"]> => {
-        if (poll !== true) {
-          asked.push(`transcript-live:${agentId}${callId === undefined ? "" : `:${callId}`}`);
-        }
-        if (transcript === undefined) {
-          return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-        }
-        if (typeof transcript === "object") return Effect.succeed(transcript);
-        return poll === true
-          ? live.transcript.poll(after)
-          : Effect.succeed(live.transcript.first());
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
@@ -671,14 +730,6 @@ function fakeService() {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
       }),
-    taskInboxLive: (taskId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`description-inbox-live:${taskId}`);
-      return scopeLive(poll, after);
-    },
-    agentInboxLive: (agentId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`agent-inbox-live:${agentId}`);
-      return scopeLive(poll, after);
-    },
     inboxAttachment: (itemId, attachmentId) =>
       Effect.sync(() => {
         asked.push(`attachment:${itemId}:${attachmentId}`);
@@ -796,35 +847,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`answer:${itemId}:${request.revision}:${request.reply}:${request.clientKey}`);
         return { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true };
-      }),
-    accountInboxLive: (userId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["accountInboxLive"]> => {
-        if (poll !== true) asked.push(`account-inbox-live:${userId}`);
-        if (accountLive === undefined) {
-          return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-        }
-        if (typeof accountLive === "object") return Effect.succeed(accountLive);
-        return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
-      }),
-    accountInboxItemsLive: (userId, sync) =>
-      Effect.suspend((): ReturnType<AgentClient["accountInboxItemsLive"]> => {
-        if (sync === "") asked.push(`account-items-live:${userId}`);
-        if (sync === undefined) asked.push(`account-items-whole:${userId}`);
-        if (itemsLive === undefined) {
-          return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-        }
-        if (sync === undefined) return Effect.succeed(live.items.first());
-        const settled = (answer: ItemsAnswer) =>
-          itemsStalledAt ?? answer.queries.stamps.digest ?? "0";
-        if (sync === "") {
-          const whole = live.items.first();
-          return Effect.succeed(
-            "failure" in whole ? whole : bySyncId(whole, undefined, settled(whole), itemsBySync),
-          );
-        }
-        return Effect.map(live.items.poll(sync), (answer) =>
-          "failure" in answer ? answer : bySyncId(answer, sync, settled(answer), itemsBySync),
-        );
       }),
   };
   return {

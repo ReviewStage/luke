@@ -38,7 +38,6 @@ import type {
 import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
-  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
@@ -48,7 +47,6 @@ import {
 import { imageBodyOf } from "./image-body.js";
 import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
 import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
-import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import type { PagePlace, PageVersion } from "./page-wire.js";
 import {
   descriptionAttachmentPath,
@@ -61,7 +59,6 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
-import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
   type TaskSectionWrite,
@@ -202,12 +199,6 @@ const START_NAMED = [
 /** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
 const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-} as const;
-
-/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
-const LIVE_REFUSALS = {
-  ...NOT_FOUND_REFUSAL,
-  [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
 } as const;
 
 /** A plan's write as the client answers it: the task as it then stands, and the transaction it was written in where it changed a row. */
@@ -427,34 +418,6 @@ export class HostedTaskClient {
     return Effect.map(
       hostedCall(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
       (listed) => ("failure" in listed ? failedAs(listed, []) : succeeded(listed)),
-    );
-  }
-
-  /**
-   * The task list, its rows inline, read by the sync id the reader holds
-   * them at (`LIVE_POLL.SYNC`): whole, with the id to read past next, where
-   * `sync` is empty or the reader is too far behind; past an id, only the
-   * plans and agents that moved since, with the ids of those that stand no
-   * longer for it, held by the service until something moves. Without
-   * `sync`, every row whole as it stands, answered at once. Unanswered for
-   * anything that went wrong, which the caller answers by asking again.
-   */
-  listLive(
-    userId: string,
-    sync: string | undefined,
-  ): Effect.Effect<
-    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = {
-      [LIVE_USER_QUERY]: userId,
-      ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
-    };
-    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
-    return hostedResult(
-      askLive(this.#hosted.live.tasks, read, true, undefined, sync !== undefined && sync !== ""),
-      LIVE_REFUSALS,
     );
   }
 

@@ -2,8 +2,8 @@ import { ownFailedAutomationRuns } from "@repo/database/models/automation-store"
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import type { AccountFailedRun, AccountInboxAnswer } from "@repo/features/account-inbox-wire";
 import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
+import { FAILED_RUN_WINDOW_MILLIS } from "@repo/features/inbox-live";
 import type { InboxAnswer } from "@repo/features/inbox-wire";
-import { FAILED_RUN_WINDOW_MILLIS } from "@repo/features/live-wire";
 import { Clock, Duration, Effect } from "effect";
 import { cursorOf, heldUntilMoved as heldOpen } from "../../http/held-read.js";
 import {

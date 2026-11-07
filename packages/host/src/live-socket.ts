@@ -123,7 +123,7 @@ function isLiveRead(
   );
 }
 
-/** Whether a live read is one the service holds until its rows move: one past a digest, or past a sync id (`@repo/features/hosted-link`'s `askLive`). */
+/** Whether a live read is one the service holds until its rows move: one past a digest, or past a sync id (`@repo/features/hosted-call`'s `askLiveRead`). */
 function isHeldRead(url: URL): boolean {
   return (
     url.searchParams.has(LIVE_POLL.AFTER) || (url.searchParams.get(LIVE_POLL.SYNC) ?? "") !== ""

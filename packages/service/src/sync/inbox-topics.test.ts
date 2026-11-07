@@ -35,8 +35,10 @@ import {
   postInboxThread,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
-import { agentInboxLive, inboxItemsLive, inboxLive, taskInboxLive } from "./live-queries.js";
-import type { LiveParams, LiveQuery } from "./live-query.js";
+import { accountInboxRead } from "../live/reads/account-inbox.js";
+import { inboxItemsRead } from "../live/reads/inbox-items.js";
+import { agentInboxRead, taskInboxRead } from "../live/reads/scope-inbox.js";
+import type { LiveParams } from "./live-query.js";
 
 /**
  * The inbox's live reads on the migrated capture: each write that moves
@@ -83,7 +85,10 @@ const itemTopics = (world: InboxWorld): readonly SyncTopic[] => [
 ];
 
 /** A read as one reader follows it: its definition, and the params its procedure binds. */
-type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveParams<string>];
+type Followed = readonly [
+  { readonly name: string; topics(params: LiveParams<string>): readonly SyncTopic[] },
+  LiveParams<string>,
+];
 
 const wokenBy = (topics: readonly SyncTopic[], [query, params]: Followed) =>
   query
@@ -106,10 +111,10 @@ const wakes = <A, E, R>(
 
 /** The four reads of the world's inbox, as the member follows them. */
 const inboxReadsOf = (world: InboxWorld, userId: string) => ({
-  account: [inboxLive, { userId }] as const,
-  items: [inboxItemsLive, { userId, since: "0", settledSince: "0" }] as const,
-  task: [taskInboxLive, { userId, taskId: world.taskId }] as const,
-  agent: [agentInboxLive, { userId, agentId: world.agentId }] as const,
+  account: [accountInboxRead, { userId, repositoryless: "" }] as const,
+  items: [inboxItemsRead, { userId, since: "0", settledSince: "0" }] as const,
+  task: [taskInboxRead, { userId, id: world.taskId }] as const,
+  agent: [agentInboxRead, { userId, id: world.agentId }] as const,
 });
 
 /** The agent's question on the world's task, posted as its tool posts one; the item's id. */

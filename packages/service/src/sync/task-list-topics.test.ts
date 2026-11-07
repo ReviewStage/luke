@@ -23,10 +23,10 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { TURN_ORIGIN } from "../core.js";
-import { tasksLive } from "./live-queries.js";
+import { tasksRead } from "../live/reads/tasks.js";
 
 /**
- * The task list's live read (`tasksLive`) on the migrated capture: each
+ * The task list's live read (`tasksRead`) on the migrated capture: each
  * write that moves an account's task list, through its real writer,
  * notifies a topic the read is woken on, as the read looks its topics up
  * when it is asked for, so a window holding the list hears it within a
@@ -64,7 +64,7 @@ const wakesTheTaskList = <A, E, R>(
   userId: string,
 ) =>
   Effect.gen(function* () {
-    const woken = yield* tasksLive.topics({ userId });
+    const woken = yield* tasksRead.topics({ userId });
     const fired = yield* expectTopicsFire(write, topics);
     assert.ok(
       wokenBy(topics, woken),
@@ -195,10 +195,10 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
         const notified: readonly SyncTopic[] = [team, [TOPIC.ACCOUNT, userId]];
 
         yield* wakesTheTaskList(joinWorkspace(teamId, userId), notified, userId);
-        assert.ok(wokenBy([team], yield* tasksLive.topics({ userId })), "the joined team wakes it");
+        assert.ok(wokenBy([team], yield* tasksRead.topics({ userId })), "the joined team wakes it");
         yield* wakesTheTaskList(leaveWorkspace(teamId, userId), notified, userId);
         assert.ok(
-          !wokenBy([team], yield* tasksLive.topics({ userId })),
+          !wokenBy([team], yield* tasksRead.topics({ userId })),
           "the team left wakes none",
         );
       }),

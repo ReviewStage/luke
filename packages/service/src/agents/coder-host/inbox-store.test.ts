@@ -6,7 +6,6 @@ import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
   createAutomation,
-  ownFailedRunsLiveStatement,
   recordAutomationRun,
   settleAutomationRun,
 } from "@repo/database/models/automation-store";
@@ -19,7 +18,10 @@ import { inboxItemRead } from "@repo/database/schemas/inbox-item-read";
 import { task as taskTable } from "@repo/database/schemas/task";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
-import type { AccountInboxTask } from "@repo/features/account-inbox-wire";
+import {
+  ACCOUNT_INBOX_REPOSITORYLESS,
+  type AccountInboxTask,
+} from "@repo/features/account-inbox-wire";
 import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
@@ -32,6 +34,14 @@ import {
 } from "@repo/features/automation-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
+  ACCOUNT_INBOX_READ,
+  accountInboxOfLiveRows,
+  FAILED_RUN_WINDOW_MILLIS,
+  INBOX_ITEMS_READ,
+  inboxOfLiveRows,
+  TASK_INBOX_READ,
+} from "@repo/features/inbox-live";
+import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
@@ -42,23 +52,13 @@ import {
   type InboxItem,
   type InboxMessage,
 } from "@repo/features/inbox-wire";
-import {
-  accountInboxItemsLiveRowsSchema,
-  accountInboxLiveRowSchemas,
-  accountInboxOfLiveRows,
-  FAILED_RUN_WINDOW_MILLIS,
-  inboxOfLiveRows,
-  scopeInboxLiveRowsSchema,
-} from "@repo/features/live-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
-  accountInboxLiveStatements,
   accountInboxTasks,
-  accountItemsLiveStatements,
   accountWaitingItems,
   accountWaitingStamps,
   acknowledgeInboxItem,
@@ -76,7 +76,6 @@ import {
   markInboxItemUnread,
   markInboxRead,
   memberAgentInboxItems,
-  memberAgentInboxLiveStatements,
   postInboxMessage,
   postInboxThread,
   readInboxAttachment,
@@ -84,11 +83,13 @@ import {
   remindInboxItem,
   replyInboxItem,
   taskInboxItems,
-  taskInboxLiveStatements,
   withdrawInboxAnswer,
   withdrawInboxClose,
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
+import { accountInboxRead } from "../../live/reads/account-inbox.js";
+import { inboxItemsRead } from "../../live/reads/inbox-items.js";
+import { agentInboxRead, taskInboxRead } from "../../live/reads/scope-inbox.js";
 import { wokenOnHub } from "../../testing/sync-woken.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js";
 
@@ -266,16 +267,18 @@ const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Ro
 /** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
 const liveAnswerOf = (userId: string, readAt: number) =>
   Effect.gen(function* () {
-    const parts = Option.getOrThrow(accountInboxLiveStatements(userId, true));
-    const failedRuns = Option.getOrThrow(ownFailedRunsLiveStatement(userId));
+    const parts = Option.getOrThrow(
+      accountInboxRead.statements({ userId, repositoryless: ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE }),
+    );
+    const { parts: declared } = ACCOUNT_INBOX_READ;
     return accountInboxOfLiveRows(
       {
-        items: yield* runLive(parts.items, accountInboxLiveRowSchemas.items),
-        planless: yield* runLive(parts.planless, accountInboxLiveRowSchemas.planless),
-        plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
-        automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
-        agents: yield* runLive(parts.agents, accountInboxLiveRowSchemas.agents),
-        failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
+        items: yield* runLive(parts.items, declared.items.row),
+        planless: yield* runLive(parts.planless, declared.planless.row),
+        plans: yield* runLive(parts.plans, declared.plans.row),
+        automations: yield* runLive(parts.automations, declared.automations.row),
+        agents: yield* runLive(parts.agents, declared.agents.row),
+        failedRuns: yield* runLive(parts.failedRuns, declared.failedRuns.row),
       },
       readAt,
     );
@@ -285,11 +288,15 @@ const liveAnswerOf = (userId: string, readAt: number) =>
 const accountItemIdsOf = (userId: string, since: number, settledSince: number) =>
   Effect.gen(function* () {
     const parts = Option.getOrThrow(
-      accountItemsLiveStatements(userId, new Date(since), new Date(settledSince)),
+      inboxItemsRead.statements({
+        userId,
+        since: String(since),
+        settledSince: String(settledSince),
+      }),
     );
     const sql = yield* SqlClient.SqlClient;
     const rowsOf = (statement: LiveStatement) => sql.unsafe(statement.sql, [...statement.params]);
-    const rows = yield* Schema.decodeUnknownEffect(accountInboxItemsLiveRowsSchema)(
+    const rows = yield* Schema.decodeUnknownEffect(INBOX_ITEMS_READ.rows)(
       yield* Effect.all({
         stamps: rowsOf(parts.stamps),
         items: rowsOf(parts.items),
@@ -397,8 +404,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
 
         for (const reader of [agent.userId, teammate, outsider]) {
-          const plan = Option.getOrThrow(taskInboxLiveStatements(reader, agent.taskId ?? ""));
-          const ofAgent = Option.getOrThrow(memberAgentInboxLiveStatements(reader, agent.agentId));
+          const plan = Option.getOrThrow(
+            taskInboxRead.statements({ userId: reader, id: agent.taskId ?? "" }),
+          );
+          const ofAgent = Option.getOrThrow(
+            agentInboxRead.statements({ userId: reader, id: agent.agentId }),
+          );
           const liveOf = (statements: typeof plan) =>
             Effect.gen(function* () {
               const sql = yield* SqlClient.SqlClient;
@@ -407,9 +418,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
                 messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
                 files: sql.unsafe(statements.files.sql, [...statements.files.params]),
               });
-              return inboxOfLiveRows(
-                yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows),
-              );
+              return inboxOfLiveRows(yield* Schema.decodeUnknownEffect(TASK_INBOX_READ.rows)(rows));
             });
           assert.deepEqual(yield* liveOf(plan), yield* taskInboxItems(reader, agent.taskId ?? ""));
           assert.deepEqual(
@@ -1913,14 +1922,16 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
   /** A plan's inbox as the desktop builds it from the live rows. */
   const liveTaskInbox = (readerId: string, taskId: string) =>
     Effect.gen(function* () {
-      const statements = Option.getOrThrow(taskInboxLiveStatements(readerId, taskId));
+      const statements = Option.getOrThrow(
+        taskInboxRead.statements({ userId: readerId, id: taskId }),
+      );
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* Effect.all({
         items: sql.unsafe(statements.items.sql, [...statements.items.params]),
         messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
         files: sql.unsafe(statements.files.sql, [...statements.files.params]),
       });
-      return inboxOfLiveRows(yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows));
+      return inboxOfLiveRows(yield* Schema.decodeUnknownEffect(TASK_INBOX_READ.rows)(rows));
     });
 
   it.effect(
