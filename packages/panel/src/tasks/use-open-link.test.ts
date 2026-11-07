@@ -3,18 +3,22 @@
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
+import { APP_HOME_LINK, LINK_ORIGIN } from "@repo/features/link-home";
 import type { TaskPullRequests } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { useQuery } from "@tanstack/react-query";
+import { createMemoryHistory } from "@tanstack/react-router";
 import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
+import { createPanelRouter } from "../panel-router.js";
+import { LINK_ROUTED_PLACE, routedLinkOf } from "../places/link-places.js";
 import { ADDRESS } from "../route.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   ListedPullRequests,
@@ -30,8 +34,9 @@ import {
  * draws no part opening links again, which reads the list as the link
  * opens, and a link naming a listed task by its number reaches the place
  * pressed on by the task's id; where every other link opens is the route table's
- * (`../route.test.ts`). Synthetic ids, a task card's pull request row
- * standing for every press.
+ * (`../route.test.ts`). What the window is handed is read as the window
+ * reads it, matched on its route tree (`../places/link-places.ts`).
+ * Synthetic ids, a task card's pull request row standing for every press.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -52,6 +57,43 @@ const LINE = {
 const LISTED: readonly TaskPullRequests[] = [
   { taskId: TASK, pullRequests: [{ ...LINE, agentId: AGENT }] },
 ];
+
+/** The window's router, as its root makes one, which a link the window is handed is matched on. */
+const router = createPanelRouter(
+  createMemoryHistory({ initialEntries: ["/app"] }),
+  testQueryClientNow(),
+);
+
+/** The link place the window's router matches a link at, by its declaration and the place it reads there. */
+function matched(link: ReadLink) {
+  const routed = routedLinkOf(router, link, "acme");
+  return routed === undefined ? undefined : { declared: routed.declared, place: routed.link.place };
+}
+
+/** Opens `href` written in a part under the window's opener, answering the links the window was handed. */
+function handed(href: string): readonly ReadLink[] {
+  const links: ReadLink[] = [];
+  let open: ((href: string) => void) | undefined;
+  function Opener(): null {
+    open = useOpenLink();
+    return null;
+  }
+  fakeAppPlatform({ openGitHub: () => undefined, openWeb: () => undefined });
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() =>
+    root?.render(
+      withQueryClient(
+        createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => links.push(link) },
+          createElement(Opener),
+        ),
+      ),
+    ),
+  );
+  act(() => open?.(href));
+  return links;
+}
 
 let root: Root | undefined;
 
@@ -123,11 +165,126 @@ test("a new list of tasks draws no part opening links again, and a link opened a
   act(() => root?.render(draw(LISTED)));
   act(() => open?.(URL));
 
-  assert.deepEqual(
-    links.map((link) => link.place),
-    [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],
-  );
+  assert.deepEqual(links.map(matched), [
+    {
+      declared: LINK_ROUTED_PLACE.CHANGES,
+      place: { kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT },
+    },
+  ]);
 });
+
+const AT_AGENT = `${LINK_ORIGIN}/acme/agent/${AGENT}`;
+const ON_TASK = `${LINK_ORIGIN}/acme/task/${TASK}/agent/${AGENT}`;
+const ON_PLAN = `${LINK_ORIGIN}/acme/plan/${TASK}/agent/${AGENT}`;
+
+test.each([
+  [
+    "an agent's link",
+    AT_AGENT,
+    LINK_ROUTED_PLACE.AGENT,
+    { kind: LINK_PLACE.AGENT, agentId: AGENT },
+  ],
+  [
+    "an agent's link in the app's own scheme",
+    `${APP_HOME_LINK}acme/agent/${AGENT}`,
+    LINK_ROUTED_PLACE.AGENT,
+    { kind: LINK_PLACE.AGENT, agentId: AGENT },
+  ],
+  [
+    "an agent's link under its task",
+    ON_TASK,
+    LINK_ROUTED_PLACE.AGENT,
+    { kind: LINK_PLACE.AGENT, planId: TASK, agentId: AGENT },
+  ],
+  [
+    "an agent's link under /plan/",
+    ON_PLAN,
+    LINK_ROUTED_PLACE.AGENT,
+    { kind: LINK_PLACE.AGENT, planId: TASK, agentId: AGENT },
+  ],
+  [
+    "a message's link",
+    `${AT_AGENT}/message/msg-7`,
+    LINK_ROUTED_PLACE.MESSAGE,
+    { kind: LINK_PLACE.MESSAGE, agentId: AGENT, messageId: "msg-7" },
+  ],
+  [
+    "a message's link under /plan/",
+    `${ON_PLAN}/message/msg-7`,
+    LINK_ROUTED_PLACE.MESSAGE,
+    { kind: LINK_PLACE.MESSAGE, planId: TASK, agentId: AGENT, messageId: "msg-7" },
+  ],
+  [
+    "a worker's link",
+    `${AT_AGENT}/worker/toolu_1`,
+    LINK_ROUTED_PLACE.WORKER,
+    { kind: LINK_PLACE.WORKER, agentId: AGENT, callId: "toolu_1" },
+  ],
+  [
+    "a worker's link under its task",
+    `${ON_TASK}/worker/toolu_1`,
+    LINK_ROUTED_PLACE.WORKER,
+    { kind: LINK_PLACE.WORKER, planId: TASK, agentId: AGENT, callId: "toolu_1" },
+  ],
+  [
+    "a Changes link",
+    `${AT_AGENT}/changes`,
+    LINK_ROUTED_PLACE.CHANGES,
+    { kind: LINK_PLACE.CHANGES, agentId: AGENT },
+  ],
+  [
+    "a Changes link under /plan/",
+    `${ON_PLAN}/changes`,
+    LINK_ROUTED_PLACE.CHANGES,
+    { kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT },
+  ],
+  [
+    "a review thread's link",
+    `${AT_AGENT}/changes/files/thread/PRRT_1`,
+    LINK_ROUTED_PLACE.PULL_REQUEST_THREAD,
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      agentId: AGENT,
+      threadId: "PRRT_1",
+      view: "files",
+    },
+  ],
+  [
+    "a review thread's link under its task",
+    `${ON_TASK}/changes/conversation/thread/PRRT_1`,
+    LINK_ROUTED_PLACE.PULL_REQUEST_THREAD,
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      planId: TASK,
+      agentId: AGENT,
+      threadId: "PRRT_1",
+      view: "conversation",
+    },
+  ],
+] as const)(
+  "%s written in a part is handed to the window, which matches it on its route tree as that place",
+  (_spelling, href, declared, place) => {
+    assert.deepEqual(handed(href).map(matched), [{ declared, place }]);
+  },
+);
+
+test.each([
+  [
+    "a worker of our own under /plan/",
+    `${LINK_ORIGIN}/acme/plan/${TASK}/worker/toolu_1`,
+    LINK_PLACE.TASK,
+  ],
+  ["a channel's link", `${LINK_ORIGIN}/acme/channel/c-1`, LINK_PLACE.INBOX],
+] as const)(
+  "%s is handed to the window as the place it reads as, which no link place's route matches",
+  (_spelling, href, kind) => {
+    const links = handed(href);
+    assert.deepEqual(
+      links.map((link) => [link.place.kind, matched(link)]),
+      [[kind, undefined]],
+    );
+  },
+);
 
 test("a link naming a listed task by its number is asked of the place it is pressed on by the task's id", async () => {
   const page = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";

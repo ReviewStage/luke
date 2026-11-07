@@ -435,8 +435,7 @@ function mount(
       arrivals: usePlaceArrivals(),
       linkReads: useLinkReads(),
       // A link's step is written by the window's history beside the tab, where one stands, else the task's place opens by its own door.
-      visitTask: (at, step) =>
-        windowHistory === undefined ? taskView.onOpen(at) : windowHistory.onVisitTask(at, step),
+      visitTask: (at, step) => windowHistory?.onVisitTask(at, step) ?? false,
     });
     // A link place the router lands on is read by its route and opened as its link is, as the window's root has it.
     useLinkPlaceLandings(openLanded);
@@ -1181,10 +1180,9 @@ test("in a narrow room a Vespin link to another task's panel item opens that ite
     },
   );
   act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId: AGENT_ID },
-    }),
+    tab
+      .control()
+      .onOpenLink(linkAt(`${LINK_ORIGIN}/acme/task/${TASK.id}/agent/${AGENT_ID}/changes`)),
   );
   tab.stand({ tasks: OPEN });
   await settle();
@@ -1526,14 +1524,14 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
     },
   );
   await settle();
-  const open = (place: LinkPlace) =>
-    act(() => tab.control().onOpenLink({ workspace: "acme", place }));
+  const open = (path: string) =>
+    act(() => tab.control().onOpenLink(linkAt(`${LINK_ORIGIN}/acme${path}`)));
 
-  open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
+  open(`/agent/${AGENT_ID}`);
   assert.equal(tab.control().agentView.agentId, undefined, "the open task's agent opens on it");
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
 
-  open({ kind: LINK_PLACE.CHANGES, agentId: UNREAD });
+  open(`/agent/${UNREAD}/changes`);
   await settle();
   assert.equal(tab.control().agentView.agentId, UNREAD, "an agent not read stands on its page");
   assert.notDeepEqual(
@@ -1542,18 +1540,18 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
     "and opens no tab of a panel it may not hold",
   );
 
-  open({ kind: LINK_PLACE.CHANGES, agentId: TASKLESS });
+  open(`/agent/${TASKLESS}/changes`);
   await settle();
   assert.equal(tab.control().agentView.agentId, TASKLESS, "an agent on no task opens on its page");
   assert.deepEqual(panelOf(tab), { open: true, tab: changesTab(TASKLESS) });
 
-  open({ kind: LINK_PLACE.AGENT, agentId: ELSEWHERE });
+  open(`/agent/${ELSEWHERE}`);
   await settle();
   assert.equal(tab.control().agentView.agentId, undefined);
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT, "an agent on another task opens that task");
 
   const beforeListed = tab.told.length;
-  open({ kind: LINK_PLACE.AGENT, agentId: LISTED });
+  open(`/agent/${LISTED}`);
   await settle();
   assert.equal(
     tab.told.slice(beforeListed).at(-1),
@@ -1562,8 +1560,8 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   );
 
   // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
-  open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
-  open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
+  open(`/agent/${SLOW}`);
+  open(`/agent/${AGENT_ID}`);
   // Note that the open task's own place, arrived on while another task is still asked for, asks for the open task.
   await settle();
   const told = tab.told.length;
@@ -1577,20 +1575,12 @@ test("a Vespin link to an agent's worker opens the worker's own tab in the task'
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.WORKER, planId: TASK.id, agentId: AGENT_ID, callId: "toolu_1" },
-    }),
-  );
+  const agent = `${LINK_ORIGIN}/acme/task/${TASK.id}/agent/${AGENT_ID}`;
+
+  act(() => tab.control().onOpenLink(linkAt(`${agent}/worker/toolu_1`)));
   const worker = panelOf(tab);
   const column = tab.control().mainTabs.tab;
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId: AGENT_ID },
-    }),
-  );
+  act(() => tab.control().onOpenLink(linkAt(`${agent}/changes`)));
 
   assert.deepEqual(worker, {
     open: true,
@@ -1633,10 +1623,9 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   await settle();
   const open = (agentId: string) =>
     act(() =>
-      tab.control().onOpenLink({
-        workspace: "acme",
-        place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId },
-      }),
+      tab
+        .control()
+        .onOpenLink(linkAt(`${LINK_ORIGIN}/acme/task/${TASK.id}/agent/${agentId}/changes`)),
     );
 
   open(EARLIER.id);
@@ -1656,10 +1645,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
 test("a Vespin link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
-  const link = {
-    workspace: "acme",
-    place: { kind: LINK_PLACE.MESSAGE, planId: TASK.id, agentId: AGENT_ID, messageId: "msg-7" },
-  } as const;
+  const link = linkAt(`${LINK_ORIGIN}/acme/task/${TASK.id}/agent/${AGENT_ID}/message/msg-7`);
 
   act(() => tab.control().onOpenLink(link));
   const first = tab.control().messageReveal;
@@ -1675,16 +1661,7 @@ test("a Vespin link to a review thread opens its agent's Pull request tab on the
   const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = (view: PullRequestThreadView) =>
-    ({
-      workspace: "acme",
-      place: {
-        kind: LINK_PLACE.PULL_REQUEST_THREAD,
-        planId: TASK.id,
-        agentId: AGENT_ID,
-        threadId: "PRRT_1",
-        view,
-      },
-    }) as const;
+    linkAt(`${LINK_ORIGIN}/acme/task/${TASK.id}/agent/${AGENT_ID}/changes/${view}/thread/PRRT_1`);
 
   act(() => tab.control().onOpenLink(link(PULL_REQUEST_THREAD_VIEW.FILES)));
   const first = tab.control().threadReveal;
@@ -1711,6 +1688,110 @@ test("a Vespin link to a review thread opens its agent's Pull request tab on the
   assert.equal(conversation, PULL_REQUEST_VIEW.CONVERSATION);
   assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
   assert.equal(tab.control().threadReveal, undefined);
+});
+
+/** What an agent's link place opened on the open task: the column's tab, the side panel, and the message and review thread its tabs are asked for; and whether the Inbox stands. */
+async function agentOpenedBy(href: string) {
+  const numbered = { ...TASK, number: 7 };
+  const tab = mount({
+    shown: true,
+    tasks: { ...withAgents([RUNNING_AGENT]), tasks: [numbered], workspaces: LISTING.workspaces },
+    descriptions: { [TASK.id]: { rows: { task: numbered } } },
+  });
+  await settle();
+  act(() => tab.control().onOpenLink(linkAt(href)));
+  await settle();
+  const control = tab.control();
+  return {
+    column: control.mainTabs.tab,
+    panel: panelOf(tab),
+    message: control.messageReveal?.messageId,
+    thread: control.threadReveal?.threadId,
+    inbox: control.inboxView.open,
+  };
+}
+
+const AGENT_AT = `${LINK_ORIGIN}/${LISTED_STEP}/agent/${AGENT_ID}`;
+const ON_TASK = `${LINK_ORIGIN}/${LISTED_STEP}/task/${TASK.id}/agent/${AGENT_ID}`;
+const ON_PLAN = `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}/agent/${AGENT_ID}`;
+const BY_KEY = `${LINK_ORIGIN}/${LISTED_STEP}/task/VSP-7/agent/${AGENT_ID}`;
+const AGENT_COLUMN = { column: agentTab(AGENT_ID), message: undefined, inbox: false };
+const WORKER_PANEL = {
+  column: agentTab(AGENT_ID),
+  panel: { open: true, tab: subagentTab("toolu_1", { agent: AGENT_ID, task: "" }) },
+};
+const CHANGES_PANEL = { panel: { open: true, tab: changesTab(AGENT_ID) }, thread: undefined };
+const THREAD_PANEL = { panel: { open: true, tab: changesTab(AGENT_ID) }, thread: "PRRT_1" };
+
+test.each([
+  ["an agent's link", AGENT_AT, AGENT_COLUMN],
+  ["an agent's link under its task", ON_TASK, AGENT_COLUMN],
+  ["an agent's link under /plan/", ON_PLAN, AGENT_COLUMN],
+  ["an agent's link by its task's key", BY_KEY, AGENT_COLUMN],
+  [
+    "an agent's link in the app's own scheme",
+    `${APP_HOME_LINK}${LISTED_STEP}/agent/${AGENT_ID}`,
+    AGENT_COLUMN,
+  ],
+  ["a message's link", `${AGENT_AT}/message/msg-7`, { ...AGENT_COLUMN, message: "msg-7" }],
+  [
+    "a message's link under its task",
+    `${ON_TASK}/message/msg-7`,
+    { ...AGENT_COLUMN, message: "msg-7" },
+  ],
+  [
+    "a message's link under /plan/",
+    `${ON_PLAN}/message/msg-7`,
+    { ...AGENT_COLUMN, message: "msg-7" },
+  ],
+  ["a worker's link", `${AGENT_AT}/worker/toolu_1`, WORKER_PANEL],
+  ["a worker's link under its task", `${ON_TASK}/worker/toolu_1`, WORKER_PANEL],
+  ["a worker's link by its task's key", `${BY_KEY}/worker/toolu_1`, WORKER_PANEL],
+  ["a Changes link", `${AGENT_AT}/changes`, CHANGES_PANEL],
+  ["a Changes link under its task", `${ON_TASK}/changes`, CHANGES_PANEL],
+  ["a Changes link under /plan/ with a trailing slash", `${ON_PLAN}/changes/`, CHANGES_PANEL],
+  ["a review thread's link", `${AGENT_AT}/changes/files/thread/PRRT_1`, THREAD_PANEL],
+  [
+    "a review thread's link under its task",
+    `${ON_TASK}/changes/conversation/thread/PRRT_1`,
+    THREAD_PANEL,
+  ],
+  ["a review thread's link under /plan/", `${ON_PLAN}/changes/files/thread/PRRT_1`, THREAD_PANEL],
+  [
+    "a worker of our own under /plan/, read as its task",
+    `${LINK_ORIGIN}/${LISTED_STEP}/plan/${TASK.id}/worker/toolu_1`,
+    { ...AGENT_COLUMN, panel: { open: false, tab: undefined } },
+  ],
+  [
+    "a channel's link, read as the Inbox",
+    `${LINK_ORIGIN}/${LISTED_STEP}/channel/c-1`,
+    { inbox: true },
+  ],
+] as const)(
+  "%s opens what it names, matched on the route tree",
+  async (_spelling, href, expected) => {
+    const opened = await agentOpenedBy(href);
+    const read = Object.fromEntries(
+      Object.keys(expected).map((key) => [key, opened[key as keyof typeof opened]]),
+    );
+    assert.deepEqual(read, expected);
+  },
+);
+
+test("a page loaded at an agent's Changes under its task lands on its route, which opens their tab, and its step then takes the task's address in place", async () => {
+  const task = `/${LISTED_STEP}/task/${TASK.id}`;
+  const tab = mount({
+    shown: true,
+    tasks: withAgents([RUNNING_AGENT]),
+    history: true,
+    loadedAt: `${task}/agent/${AGENT_ID}/changes`,
+  });
+  const entries = tab.entries();
+  await settle();
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: changesTab(AGENT_ID) });
+  assert.equal(tab.at(), task);
+  assert.equal(tab.entries(), entries, "the step takes the loaded entry in place");
 });
 
 test("a Vespin link to an Inbox item opens it in the window's Inbox as it stands, never narrowed to its task, leaving another task it was narrowed to, in the task's workspace, under the task or under its agent, whose task is read, never in the side panel, and one to an automation in the workspace its slug names", async () => {
@@ -1897,37 +1978,54 @@ test.each([
   },
 );
 
-test("a link to an Inbox item by its id alone whose read lands after the window replaced its step with another page leaves that page standing", async () => {
-  const answers: Array<() => void> = [];
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
+test.each([
+  [
+    "an Inbox item by its id alone",
+    ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+    { agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id },
+    `${LINK_ORIGIN}/acme/inbox/5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6`,
+  ],
+  [
+    "an agent's Changes named by the agent alone",
+    ACT_KIND.AGENTS_PAGE,
     {
-      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () =>
-        new Promise((resolve) =>
-          answers.push(() =>
-            resolve({ agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id }),
-          ),
-        ),
+      agent: {
+        ...RUNNING_AGENT,
+        id: OTHER_TASK_ID,
+        planId: "alerts",
+        automationId: null,
+        workspaceId: ACME.id,
+        repository: null,
+      },
     },
-  );
-  await settle();
-  act(() => tab.control().inboxView.onOpen());
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6" },
-    }),
-  );
-  tab.replace("/personal/tasks");
-  await act(async () => {
-    await vi.waitFor(() => assert.ok(answers.length > 0));
-    answers[0]?.();
-  });
-  await settle();
+    `${LINK_ORIGIN}/acme/agent/${OTHER_TASK_ID}/changes`,
+  ],
+] as const)(
+  "a link to %s whose read lands after the window replaced its step with another page leaves that page standing",
+  async (_read, kind, answer, href) => {
+    const answers: Array<() => void> = [];
+    const tab = mount(
+      { shown: true, tasks: TWO_WORKSPACES },
+      {
+        [kind]: () => new Promise((resolve) => answers.push(() => resolve(answer))),
+        [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      },
+    );
+    await settle();
+    act(() => tab.control().inboxView.onOpen());
+    act(() => tab.control().onOpenLink(linkAt(href)));
+    tab.replace("/personal/tasks");
+    await act(async () => {
+      await vi.waitFor(() => assert.ok(answers.length > 0));
+      answers[0]?.();
+    });
+    await settle();
 
-  assert.equal(tab.at(), "/personal/tasks");
-  assert.equal(tab.control().inboxView.open, false);
-});
+    assert.equal(tab.at(), "/personal/tasks");
+    assert.equal(tab.control().inboxView.open, false);
+    assert.equal(tab.control().agentView.agentId, undefined);
+  },
+);
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {});

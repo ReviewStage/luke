@@ -213,6 +213,7 @@ import {
   stripTabClosesIdle,
   stripTabDrawsAgain,
   stripTabEndsSession,
+  stripTabLink,
   stripTabPin,
   stripTabReopens,
   TAB_PIN,
@@ -392,6 +393,19 @@ type AgentPlaceKind =
 type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
 type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
+
+const AGENT_PLACE_KINDS: ReadonlySet<LinkPlace["kind"]> = new Set<AgentPlaceKind>([
+  LINK_PLACE.AGENT,
+  LINK_PLACE.MESSAGE,
+  LINK_PLACE.WORKER,
+  LINK_PLACE.CHANGES,
+  LINK_PLACE.PULL_REQUEST_THREAD,
+]);
+
+/** Whether a place is an agent's own. */
+function isAgentPlace(place: LinkPlace): place is AgentPlace {
+  return AGENT_PLACE_KINDS.has(place.kind);
+}
 
 /** A place of a task's own that its side panel draws as a tab, named under the task. */
 type TaskTabPlace =
@@ -1443,7 +1457,7 @@ export function useTasksTab(input: {
   /** Begins a link's read of the service, answering whether it is still the window's to act on (`places/link-reads.ts`). */
   linkReads: LinkRead;
   /** Writes the step a link opens on a task's own place before the window stands there, as one move (`navigation-history.ts`'s `onVisitTask`). */
-  visitTask: (at: TaskAt, step: LinkStep) => void;
+  visitTask: (at: TaskAt, step: LinkStep) => boolean;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -2322,8 +2336,8 @@ export function useTasksTab(input: {
     if (standing) return false;
     // Note that a link's door names what it opens there, so its step is written at once, at its address, with it.
     const step = linking.current;
-    if (step !== undefined && step.taskId === toward) input.visitTask(at, step);
-    else input.taskView.onOpen(at);
+    const visited = step !== undefined && step.taskId === toward && input.visitTask(at, step);
+    if (!visited) input.taskView.onOpen(at);
     return true;
   };
   const standTask = useRef(standTaskPlace);
@@ -3577,30 +3591,41 @@ export function useTasksTab(input: {
    * words, since a link carries none; its own rows name its task once they land.
    */
   const openOnTask = (planId: string, place: AgentPlace) => {
+    const column = agentTab(place.agentId);
+    // A tab of the side panel a link opens, and the link a narrow room's step on it stands at (`places/task-step.ts`).
+    const sideOf = (tab: SidePanelTab) => ({ tab, link: stripTabLink(tab, { taskId: planId }) });
     switch (place.kind) {
-      case LINK_PLACE.WORKER:
-        showColumnTab(planId, agentTab(place.agentId));
-        linkPanelTab(
-          { ...place, planId },
-          subagentTab(place.callId, { agent: place.agentId, task: "" }),
+      case LINK_PLACE.WORKER: {
+        const tab = subagentTab(place.callId, { agent: place.agentId, task: "" });
+        linkingTo({ taskId: planId, column, side: sideOf(tab) }, () => {
+          showColumnTab(planId, column);
+          linkPanelTab({ ...place, planId }, tab);
+        });
+        return;
+      }
+      case LINK_PLACE.CHANGES: {
+        const tab = changesTab(sharedChangesAgent(planId, place.agentId));
+        linkingTo({ taskId: planId, side: sideOf(tab) }, () =>
+          linkPanelTab({ ...place, planId }, tab),
         );
         return;
-      case LINK_PLACE.CHANGES:
-        linkPanelTab({ ...place, planId }, changesTab(sharedChangesAgent(planId, place.agentId)));
-        return;
+      }
       // A review thread opens its agent's Pull request tab on the view the link names.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(planId, place.agentId);
-        sidePanel.onPullRequestView(changesTab(changes), place.view);
-        linkPanelTab({ ...place, planId }, changesTab(changes));
+        const tab = changesTab(changes);
+        sidePanel.onPullRequestView(tab, place.view);
+        linkingTo({ taskId: planId, side: sideOf(tab) }, () =>
+          linkPanelTab({ ...place, planId }, tab),
+        );
         revealThread(changes, place);
         return;
       }
       case LINK_PLACE.AGENT:
-        showColumnTab(planId, agentTab(place.agentId));
+        linkingTo({ taskId: planId, column }, () => showColumnTab(planId, column));
         return;
       case LINK_PLACE.MESSAGE:
-        showColumnTab(planId, agentTab(place.agentId));
+        linkingTo({ taskId: planId, column }, () => showColumnTab(planId, column));
         revealMessage(place);
         return;
     }
@@ -3877,6 +3902,14 @@ export function useTasksTab(input: {
         linkingTo(step, () => linkPanelTab(place, tab));
         return;
       }
+      // An agent's place opens on its task, found by the agent where the link names none, else on its page.
+      case LINK_ROUTED_PLACE.AGENT:
+      case LINK_ROUTED_PLACE.MESSAGE:
+      case LINK_ROUTED_PLACE.WORKER:
+      case LINK_ROUTED_PLACE.CHANGES:
+      case LINK_ROUTED_PLACE.PULL_REQUEST_THREAD:
+        if (isAgentPlace(place)) openAgentPlace(place, workspace);
+        return;
     }
   };
 
@@ -3924,13 +3957,6 @@ export function useTasksTab(input: {
           spot: { revision: place.revision, opened: undefined, listed: false },
           workspace,
         });
-        return;
-      case LINK_PLACE.WORKER:
-      case LINK_PLACE.CHANGES:
-      case LINK_PLACE.PULL_REQUEST_THREAD:
-      case LINK_PLACE.AGENT:
-      case LINK_PLACE.MESSAGE:
-        openAgentPlace(place, workspace);
         return;
       case LINK_PLACE.PERSON: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
