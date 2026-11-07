@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { DESCRIPTION_REVISION } from "@repo/database/models/description-revisions";
 import { writePage } from "@repo/database/models/task-pages";
 import { createTask, readTask } from "@repo/database/models/task-store";
@@ -10,6 +9,7 @@ import { personalWorkspaceOf } from "@repo/database/models/workspace-store";
 import { user } from "@repo/database/schemas/auth";
 import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import {
+  experimentInTestWorkspace,
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
@@ -475,7 +475,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a pilot task is refused to an account without the Pilot experiment, and kept as one with it",
+    "a pilot task is refused in a workspace without the Pilot experiment, and kept as one in a workspace with it",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -483,7 +483,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ask(request(TASKS, owner, { method: "POST", body: { ...RELAY, mode: TASK_MODE.PILOT } }));
 
         const refused = yield* startPilot();
-        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.PILOT]: true } });
+        yield* experimentInTestWorkspace(owner, EXPERIMENT.PILOT);
         const started = yield* startPilot();
 
         assert.deepEqual(

@@ -21,17 +21,19 @@
  */
 
 import { createMcpHandler, originValidationResponse } from "@modelcontextprotocol/server";
+import type { WorkspaceExperiment } from "@repo/settings";
 import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { CREATE_TASK_REFUSAL } from "../agents/task-tools.js";
 import { AUTH_BASE_PATH } from "../auth/auth-policy.js";
 import { HOSTED_REFUSAL, hostedNotFoundRoute, hostedRefusing } from "../http/http-effect.js";
+import { logStoreFailure } from "../http/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { admitMember, type MemberMcpResourceClient } from "./admission.js";
 import { MEMBER_MCP_PATH, MEMBER_MCP_SCOPE, memberMcpResourceUrl } from "./resource.js";
 import { type MemberMcpRequestServices, memberMcpServer } from "./server.js";
-import { MEMBER_MCP_TOOL, RENAMED_MEMBER_MCP_TOOL } from "./tools.js";
+import { MEMBER_MCP_TOOL, memberExperimentsOn, RENAMED_MEMBER_MCP_TOOL } from "./tools.js";
 
 /** The route the metadata's public paths are rewritten onto, and answered at. */
 export const MEMBER_MCP_METADATA_ROUTE = "/api/mcp/resource-metadata";
@@ -170,8 +172,15 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/memberMcpEndpoint")(function*
   // handed nothing of; a handler holds nothing between requests besides.
   const renamed = yield* renamedToolAnswer(request);
   if (Option.isSome(renamed)) return HttpServerResponse.raw(renamed.value);
+  // Note that a member whose workspaces' experiments cannot be read is listed none of their tools, as a workspace with them off would be.
+  const experimentsOn = yield* memberExperimentsOn(admitted.success.userId).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.orElseSucceed(() => new Set<WorkspaceExperiment>()),
+  );
   const services = yield* Effect.context<MemberMcpRequestServices>();
-  const handler = createMcpHandler(() => memberMcpServer(services, admitted.success));
+  const handler = createMcpHandler(() =>
+    memberMcpServer(services, admitted.success, experimentsOn),
+  );
   const answer = yield* Effect.promise(() => handler.fetch(request));
   return HttpServerResponse.raw(answer);
 });

@@ -346,9 +346,10 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
-test("the Settings filter lists Memory after Environment only while the account has the Memory experiment on", async () => {
+test("the Settings filter lists Memory after Environment only while the listed workspace has the Memory experiment on", async () => {
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
   handState(experimentsOn(EXPERIMENT.MEMORY));
-  await paletteUnderState(tasksControl());
+  await paletteUnderState(tasksControl({ workspaces: [acme], workspace: acme }));
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, 4), ["Account", "Workspace", "Environment", "Memory"]);
@@ -356,7 +357,7 @@ test("the Settings filter lists Memory after Environment only while the account 
   document.body.innerHTML = "";
 
   handState({});
-  await paletteUnderState(tasksControl());
+  await paletteUnderState(tasksControl({ workspaces: [acme], workspace: acme }));
   chooseFilter("Settings");
   assert.ok(!rows().includes("Memory"), "Memory off lists no Memory page");
 });
@@ -1713,7 +1714,16 @@ function itemChord(label: string): string | null {
 }
 
 test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", async () => {
+  // The task's own workspace is the one listed, whose Descriptions names ⌥⌘C's row.
+  const listed = {
+    id: DOCUMENT_TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
   const tasks = tasksControl({
+    workspaces: [listed],
+    workspace: listed,
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
@@ -3024,7 +3034,7 @@ function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
     tasks: [ROTATION],
     inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: changed }],
   });
-  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments({});
   openPalette(
     { ...tasks, inboxView: { ...tasks.inboxView, onOpenItem: (choice) => opened.push(choice) } },
     undefined,

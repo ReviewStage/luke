@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@repo/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { AgentRepositoryEntry } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
@@ -25,6 +25,7 @@ import {
   type Replay,
   type ReplayStep,
   type ReplaySummary,
+  replayText,
   START_NOTE_HEADING,
   type StartNoteHeading,
   toolStep,
@@ -62,6 +63,13 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import {
+  type FittedSteps,
+  fitReplay,
+  replayBudgetBytes,
+  replayTokens,
+  withinWindow,
+} from "./replay-summary.js";
 import type { SnapshotOutcome } from "./snapshot.js";
 import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -1165,3 +1173,95 @@ export const sourceTranscriptOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     edited,
   };
 });
+
+/**
+ * What the preamble of a session opened afresh on the agent's own
+ * conversation says: it goes on in its own checkout as it left it, on the
+ * instructions and tools it has now, its steps so far following as
+ * history. It names nothing that changed, which an agent is told nothing of
+ * where it is off.
+ */
+function restartPreamble(kept: number, total: number): string {
+  const left = total - kept;
+  const leftOut =
+    left === 0
+      ? ""
+      : ` The oldest ${left} of them ${left === 1 ? "is" : "are"} left out, since they no longer fit.`;
+  return (
+    "Your session was opened afresh on this same conversation, in your own checkout as you left " +
+    "it, under your instructions and tools as they stand now. Your steps so far follow as " +
+    `history.${leftOut} Where they rely on a tool or an instruction you no longer have, it no ` +
+    "longer holds: go on with what you have now."
+  );
+}
+
+/** What a replay of an agent's own steps is fitted to: its model's window, the instructions told beside it, and the bytes the rest of the first message it rides in comes to. */
+export interface RestartFit {
+  readonly windowTokens: number;
+  readonly instructionsTokens: number;
+  readonly besideBytes: number;
+}
+
+/**
+ * What an agent is handed where its harness's session is opened afresh on
+ * its own conversation, its checkout as it left it, as the replay's block
+ * ahead of its next turn's words: its own steps, those its own replay carried
+ * ahead of them, and its note, the newest that fit, summarized nowhere, since
+ * no summary model is at hand where its runner launches. They are fitted to
+ * the window less the instructions and the rest of the first message (the
+ * turn's words, the developer's, and their files), then told again against
+ * the window once the replay is written, as a Start's replay is
+ * (`withinWindow`).
+ * Nothing where it took no step of its own yet, or where its rows cannot be
+ * read, which then opens the session on its next turn's words alone. Note
+ * that a line in no turn yet, as the one being sent and any waiting for the
+ * launch, is left out, since each is handed on its own; and that an agent
+ * handed its description is handed none of it again here, since the next
+ * turn hands its task as it stands now.
+ */
+export const restartReplayOf = (
+  agent: Agent,
+  fit: RestartFit,
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
+  Effect.gen(function* () {
+    const read = yield* recordsOf(agent, undefined);
+    if (read === undefined) return undefined;
+    const records = read.records.filter(
+      (record, index) =>
+        index === 0 || record.message.role !== MESSAGE_ROLE.USER || record.turnId !== undefined,
+    );
+    const senders = yield* lineSendersOf(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      records.filter((record) => record.message.role === MESSAGE_ROLE.USER).map(({ id }) => id),
+    );
+    const own = transcriptSteps(records, senders, undefined) ?? [];
+    if (own.length === 0) return undefined;
+    const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
+    const handed = agent.prompt === null ? undefined : briefOf(agent.prompt, opened);
+    const mine = handed?.note === undefined ? own : [handed.note, ...own];
+    const steps = [...(handed?.carried?.steps ?? []), ...mine];
+    const totalSteps = (handed?.carried?.totalSteps ?? 0) + mine.length;
+    const { windowTokens, instructionsTokens, besideBytes } = fit;
+    const fitted = yield* fitReplay(
+      steps,
+      handed?.carried?.summary,
+      replayBudgetBytes(windowTokens, instructionsTokens, besideBytes),
+      () => Effect.succeed(Option.none()),
+    );
+    const textOf = (held: FittedSteps) =>
+      replayText({
+        agentId: agent.id,
+        preamble: restartPreamble(held.kept.length, totalSteps),
+        ...(held.summary === undefined ? undefined : { summary: held.summary }),
+        steps: held.kept,
+        totalSteps,
+      });
+    const held = withinWindow(
+      fitted,
+      (each) =>
+        instructionsTokens +
+        replayTokens(new TextEncoder().encode(textOf(each)).byteLength + besideBytes),
+      windowTokens,
+    );
+    return textOf(held);
+  });

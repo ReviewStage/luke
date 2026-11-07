@@ -302,6 +302,8 @@ interface FakeService extends TasksClient {
   renamedAgain: string | undefined;
   /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
   renameAnswered: Effect.Effect<void>;
+  /** Waited on before an experiment's write answers, which a test holds open to see it drawn while it is out. */
+  experimentAnswered: Effect.Effect<void>;
   /** What a role change's answer waits on once the store has answered, so a test can see what is drawn before it. */
   roleAnswered: Effect.Effect<void>;
   /** A slug another workspace holds, which the service refuses as taken; none where every slug is free. */
@@ -318,7 +320,7 @@ interface FakeService extends TasksClient {
    * their rows.
    */
   readonly live: {
-    readonly workspaces: PolledLive<"workspaces" | "installations">;
+    readonly workspaces: PolledLive<"workspaces" | "installations" | "experiments">;
     readonly sidebar: PolledLive<"sections" | "entries" | "agentEntries" | "pins">;
     readonly people: PolledLive<
       "members" | "former",
@@ -441,6 +443,14 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
         linkedAt,
       })),
     ),
+    experiments: workspaces.flatMap((each) =>
+      (each.experiments ?? []).map(({ changedBy, ...choice }) => ({
+        workspaceId: each.id,
+        ...choice,
+        changedById: changedBy?.id ?? null,
+        changedByName: changedBy?.name ?? null,
+      })),
+    ),
   };
 }
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
@@ -524,8 +534,9 @@ function fakeService(tasks: Task[]): FakeService {
   const listAt: ListAt = new Map();
   let followMisses = false;
   const live: FakeService["live"] = {
-    workspaces: polledLive<"workspaces" | "installations">(["workspaces", "installations"], () =>
-      workspacesLiveRows(memberships),
+    workspaces: polledLive<"workspaces" | "installations" | "experiments">(
+      ["workspaces", "installations", "experiments"],
+      () => workspacesLiveRows(memberships),
     ),
     sidebar: polledLive<"sections" | "entries" | "agentEntries" | "pins">(
       ["sections", "entries", "agentEntries", "pins"],
@@ -741,6 +752,7 @@ function fakeService(tasks: Task[]): FakeService {
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
+    experimentAnswered: Effect.void,
     roleAnswered: Effect.void,
     slugTaken: undefined,
     slugAnswered: Effect.void,
@@ -875,6 +887,24 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }).pipe(Effect.tap(() => service.renameAnswered)),
+      setExperiment: (workspaceId, experiment, on) =>
+        Effect.sync(() => {
+          service.reads.push(`experimentSet:${workspaceId}:${experiment}:${on}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const chosen = {
+            experiment,
+            on,
+            changedBy: { id: "user-dana", name: "Dana" },
+            changedAt: 5,
+          };
+          const now = { ...found, experiments: [chosen] };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }).pipe(Effect.tap(() => service.experimentAnswered)),
       setSlug: (workspaceId, slug) =>
         Effect.sync(() => {
           service.reads.push(`slugSet:${workspaceId}:${slug}`);
@@ -1373,6 +1403,7 @@ function subject(
       entities: () => options.entities,
       offlineRefused: { clear: () => undefined },
       githubMoved: Effect.void,
+      recordProductEvent: () => undefined,
     }).pipe(Effect.provide(noNetwork));
     /** A declared act answered by the composer's own handler, or a Gateway method it still answers. */
     function call<Name extends TasksActName>(
@@ -3202,6 +3233,41 @@ it.effect(
       yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+    }),
+);
+
+it.effect(
+  "an experiment turned on for a workspace is drawn at once as the member's own change, and the service's choice stands once it is answered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.experimentAnswered = Deferred.await(answered);
+
+      const turning = yield* Effect.forkChild(
+        act("WORKSPACE_EXPERIMENT_SET", { workspaceId: ACME.id, experiment: "pilot", on: true }),
+      );
+      yield* settled;
+      const drawn = { experiment: "pilot", on: true, changedAt: 0 };
+      assert.deepEqual(last()?.workspaces, [
+        PERSONAL,
+        { ...ACME, experiments: [{ ...drawn, changedBy: { id: "user-dana", name: "Dana" } }] },
+      ]);
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(turning);
+      yield* settled;
+
+      assert.deepEqual(last()?.workspaces, [
+        PERSONAL,
+        {
+          ...ACME,
+          experiments: [{ ...drawn, changedAt: 5, changedBy: { id: "user-dana", name: "Dana" } }],
+        },
+      ]);
     }),
 );
 

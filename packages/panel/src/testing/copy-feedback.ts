@@ -62,7 +62,7 @@ let heldForFile: AppStateSnapshot | undefined;
 
 let testQueryClient = freshQueryClient();
 
-/** No one signed in to the window, whose drafts it reads and writes. */
+/** No one signed in to the window, whose drafts it reads and writes. Note that it signs out any owner a test mounted before its first `withQueryClient`. */
 function NoOneSignedIn(): null {
   useDraftsOwner(undefined);
   return null;

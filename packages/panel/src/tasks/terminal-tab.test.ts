@@ -561,6 +561,31 @@ test("the first account signing in again finds its terminal, which attaches to t
   ]);
 });
 
+test("a switch away and back before the first attach's port arrives keeps the screen on the latest port, the earlier one closed and no shell ended", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  await tab.signIn("grace", false);
+  await tab.signIn("ada", true);
+
+  const first = main.post(MADE);
+  const second = main.post(MADE);
+  second.say({ type: "state", state: "attached" });
+  await tab.type("a", 65);
+
+  assert.deepEqual(
+    tab.kinds().filter((kind) => kind === ACT_KIND.TERMINAL_ATTACH),
+    ["terminal.attach", "terminal.attach"],
+  );
+  assert.equal(first.closed(), true);
+  assert.equal(second.closed(), false);
+  assert.equal(tab.standing(), "· connected");
+  assert.deepEqual(
+    second.posted.filter((message) => message.type === "input"),
+    [{ type: "input", data: "a" }],
+  );
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
+});
+
 test("a tab shown over a stopped sandbox resumes it, saying it is connecting, and one that stops while the tab is hidden waits until it is shown", async () => {
   main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
   const tab = await mount();

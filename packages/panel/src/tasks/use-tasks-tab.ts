@@ -67,7 +67,7 @@ import type {
   AppInboxTasklessItem,
   AppStateSnapshot,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@repo/settings";
+import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
@@ -162,9 +162,10 @@ import {
   appStateIn,
   appStateQuery,
   selectAppSettingsView,
-  selectExperimentChoices,
+  selectWorkspaces,
 } from "../use-app-state.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
+import { workspaceExperimentChoices } from "../workspace-experiments.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -1102,6 +1103,9 @@ const NO_PENDING_TASKS: readonly string[] = [];
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: readonly PageLine[] = [];
 
+/** The account's workspaces before their first read lands, whose experiments are all off. */
+const NO_CHOOSING: readonly Workspace[] = [];
+
 /** What the Inbox's bare panel, and an agent's own page, hold of the plan's panel kinds: nothing, the task's page drawing what they show. */
 const NO_HOLDS: TaskHolds = {};
 
@@ -1868,9 +1872,6 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
-  // The account's experiments, which hold where a link to the description's parts lands.
-  const experiments =
-    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const stagedPanel = tasksFixture?.fixtureSidePanel(input.run);
   // A fixture run's staged Terminal tab is held under the account signed in, as a real open holds it, so it stands.
   useHeldTerminalTabs(stagedPanel?.terminals);
@@ -2056,7 +2057,22 @@ export function useTasksTab(input: {
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
-  const descriptionsOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
+  // Descriptions is each workspace's choice, so a task's description, its sections, comments, and history stand by its own
+  // workspace's: a task the window holds none of by the workspace its link names, else by the open task's, whose words
+  // mention it, else by the listed one. Its choices are read off main's document, as the description's own page reads
+  // them (`useWorkspaceExperiment`), so the two agree.
+  const choosing = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_CHOOSING;
+  const openWorkspace = region.kind === DOCUMENT_REGION.READY ? region.task.workspaceId : undefined;
+  const workspaceOfTask = (taskId: string, step?: string): string | undefined =>
+    tasks.tasks.find((each) => each.id === taskId)?.workspaceId ??
+    (step === undefined ? undefined : workspaceOfSlug(choosing, step)?.id) ??
+    openWorkspace ??
+    workspace.chosen?.id;
+  const descriptionsOnFor = (taskId: string, step?: string): boolean =>
+    experimentOn(
+      workspaceExperimentChoices(choosing, workspaceOfTask(taskId, step)),
+      EXPERIMENT.DESCRIPTIONS,
+    );
   // The version history is the router's (`version-history-route.ts`), of the task its address names by its number in the
   // workspace it names, or by its id, found among the tasks the window holds, else asked of the service as a link's is.
   const routedStep = historyRoute.task;
@@ -2115,7 +2131,7 @@ export function useTasksTab(input: {
   const historyOpen =
     routedHistoryTask !== undefined &&
     routedHistoryTask === boundFor &&
-    descriptionsOn &&
+    descriptionsOnFor(routedHistoryTask, historyRoute.workspace) &&
     region.kind !== DOCUMENT_REGION.MISSING;
   // A plan the service would not hand the reader has no history to show, so its step gives way to the task, whose Not found stands, as a version's link may ask for one.
   const historyMissing =
@@ -3255,7 +3271,7 @@ export function useTasksTab(input: {
       readonly workspace?: string;
     },
   ) => {
-    if (!descriptionsOn) {
+    if (!descriptionsOnFor(taskId, opening.workspace)) {
       showOverview({ kind: LINK_PLACE.TASK, planId: taskId });
       return;
     }
@@ -3366,7 +3382,9 @@ export function useTasksTab(input: {
   // Note that a section is the description's, so while descriptions are off a mention of one opens its task's agents.
   const showMention = (mention: DescriptionMention) => {
     const anchor =
-      mention.kind === MENTION_KIND.SECTION && descriptionsOn ? mention.anchor : undefined;
+      mention.kind === MENTION_KIND.SECTION && descriptionsOnFor(mention.taskId)
+        ? mention.anchor
+        : undefined;
     if (anchor === undefined) {
       showTaskAgents(mention.taskId);
       return;
@@ -3725,7 +3743,7 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.COMMENT:
         // A comment is the description's, so while descriptions are off its link opens the task's agents.
-        if (!descriptionsOn) {
+        if (!descriptionsOnFor(place.planId, workspace)) {
           showTaskAgents(place.planId);
           return;
         }

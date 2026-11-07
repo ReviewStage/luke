@@ -4,14 +4,15 @@ import {
   withPictureLine,
 } from "@repo/features/agent-pictures-model";
 import type { FileChip } from "@repo/features/attachment-model";
-import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
+import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   PICTURE_KEEP_FAILURE,
   TASK_CALL_FAILURE,
   type TasksEditAnswer,
 } from "@repo/features/tasks-view";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
@@ -23,7 +24,8 @@ import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
 import { keepPictureRead } from "../picture-query.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -122,15 +124,23 @@ async function edited(
   return { refused: FAILURE_CONDITION.CONFLICT };
 }
 
+/** The account's workspaces before their first read lands. */
+const NO_WORKSPACES: readonly Workspace[] = [];
+
 /**
  * The viewer's Add to description, for a transcript drawn on a plan's page; none
  * where it is drawn off one, as an agent with no plan's is, nor while the
- * account has Descriptions off.
+ * task's workspace has Descriptions off.
  */
 export function useAddToDescription(): ViewerAction | undefined {
-  const descriptionsOn =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const page = useTaskMentions();
+  // The task's workspace, which its page names by its slug.
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_WORKSPACES;
+  const descriptionsOn = useWorkspaceExperiment(
+    page?.workspaceId ??
+      (page === undefined ? undefined : workspaceOfSlug(workspaces, page.workspace)?.id),
+    EXPERIMENT.DESCRIPTIONS,
+  );
   const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
   const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
   const queryClient = useQueryClient();

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { DESCRIPTION_ACTOR, type DescriptionLastEdit, type Task } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -22,7 +23,6 @@ import {
   handState,
   readExperiments,
   signedInAs,
-  withExperiments,
   writeExperiments,
 } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
@@ -124,6 +124,8 @@ interface Drawn {
   readonly sectionLinks?: NonNullable<React.ComponentProps<typeof DescriptionBody>["sectionLinks"]>;
   /** The account's experiments, Descriptions alone on where none are named. */
   readonly experiments?: ExperimentChoices;
+  /** When the task's workspace last turned Task descriptions on; at the epoch where none is named. */
+  readonly descriptionsOnSince?: number;
 }
 
 /** The description drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
@@ -131,23 +133,54 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
   const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.DESCRIPTIONS);
-  handState(
-    experiments,
-    drawn.account === undefined ? {} : { account: signedInAs(drawn.account).account },
-  );
+  const since = drawn.descriptionsOnSince;
+  const listed =
+    since === undefined
+      ? {}
+      : {
+          tasks: {
+            ...IDLE_TASKS_VIEW,
+            workspaces: [
+              {
+                id: TASK.workspaceId,
+                name: "Personal",
+                role: WORKSPACE_ROLE.OWNER,
+                github: null,
+                experiments: [
+                  {
+                    experiment: EXPERIMENT.DESCRIPTIONS,
+                    on: true,
+                    changedBy: null,
+                    changedAt: since,
+                  },
+                ],
+              },
+            ],
+          },
+        };
+  handState(experiments, {
+    ...listed,
+    ...(drawn.account === undefined ? {} : { account: signedInAs(drawn.account).account }),
+  });
   handMembers(() => ({ rows: { members: MEMBERS, former: FORMER } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const { readerId, account: _account, experiments: _experiments, ...rest } = drawn;
+  const {
+    readerId,
+    account: _account,
+    experiments: _experiments,
+    descriptionsOnSince: _since,
+    ...rest
+  } = drawn;
   const body = createElement(DescriptionBody, {
     task,
     reader: { readerId },
     ...rest,
   });
+  writeExperiments(experiments, listed);
   act(() =>
     root.render(
-      withExperiments(
-        experiments,
+      withQueryClient(
         createElement(MemberDirectory, { workspace: ACME, readerId, children: body }),
       ),
     ),
@@ -259,6 +292,21 @@ test("while Descriptions is off the task's title stands with who created it and 
   ]);
   assert.ok(!view.textContent?.includes("Invite a teammate by email."), "no section is drawn");
   assert.ok(!view.textContent?.includes("Changed since you last looked"), "no changed line");
+});
+
+test("a description last edited before its workspace turned Task descriptions back on says it has not been updated since, and one edited after says when", async () => {
+  // Note that the instant is the local noon, so the day the byline names is Oct 3 in every time zone.
+  const before = new Date(2026, 9, 3, 12).getTime();
+  const edit = { actor: DESCRIPTION_ACTOR.DEVELOPER, duringCall: false, by: DEAN };
+
+  const stale = await draw(editedAs(edit, before), { descriptionsOnSince: before + 1 });
+  assert.match(
+    lineWords(stale.querySelector(".description-byline-edited")) ?? "",
+    /^Not updated since Oct 3/u,
+  );
+
+  const fresh = await draw(editedAs(edit, Date.now()), { descriptionsOnSince: before + 1 });
+  assert.equal(lineWords(fresh.querySelector(".description-byline-edited")), "Edited now");
 });
 
 test("two members each see the other's edits under the other's name on their face, and only their own as you", async () => {

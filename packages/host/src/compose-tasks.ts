@@ -19,6 +19,11 @@ import {
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import {
+  PRODUCT_EVENT,
+  PRODUCT_SETTING_VALUE,
+  type RecordProductEvent,
+} from "@repo/features/analytics";
+import {
   AGENT_BROWSER_TABS_READ,
   browserTabsOfLiveRows,
   nextBrowserTabLapse,
@@ -91,6 +96,7 @@ import {
   type TasksStartRequest,
   type TasksView,
   type TasksWorkspaceAnswer,
+  type TasksWorkspaceExperimentSetParams,
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMemberRemoveParams,
   type TasksWorkspaceMemberRoleParams,
@@ -129,6 +135,12 @@ import {
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import {
+  EXPERIMENT_COUNTED_AS,
+  EXPERIMENT_SCOPE_COUNTED_AS,
+  experimentScope,
+  isExperiment,
+} from "@repo/settings";
 import {
   type AnyWrite,
   anyWrite,
@@ -538,6 +550,7 @@ export type TasksClient = Pick<
     | "create"
     | "rename"
     | "setSlug"
+    | "setExperiment"
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
@@ -590,6 +603,8 @@ export interface TasksDependencies {
   member: () => { readonly userId: string; readonly name: string } | undefined;
   /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
   githubMoved: Effect.Effect<void>;
+  /** Counts a product event, as a workspace experiment an admin turned on or off is counted once the service takes it. */
+  recordProductEvent: RecordProductEvent;
 }
 
 export interface TasksComposer extends Composer {
@@ -2313,6 +2328,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     unsent: WORKSPACE_UNANSWERED,
   });
 
+  /**
+   * One experiment turned on or off for everyone in a workspace, drawn at once
+   * as the member's own change, now, and kept until the follow moves the
+   * workspace; one the service refuses, as it refuses a member who is no
+   * admin, is taken back. Note that the drawn choices stay in the order the
+   * live row lists them, by key, so the row the follow carries reads the same.
+   */
+  const workspaceExperimentSet = workspaceWrite<
+    TasksWorkspaceExperimentSetParams & AskedOver,
+    TasksWorkspaceAnswer
+  >({
+    workspaceId: ({ workspaceId }) => workspaceId,
+    change:
+      ({ experiment, on }) =>
+      (row) => {
+        const member = dependencies.member();
+        const changedBy = member === undefined ? null : { id: member.userId, name: member.name };
+        const chosen = { experiment, on, changedBy, changedAt: kernel.now() };
+        const others = (row.experiments ?? []).filter((each) => each.experiment !== experiment);
+        return {
+          ...row,
+          experiments: [...others, chosen].toSorted((a, b) =>
+            a.experiment < b.experiment ? -1 : a.experiment > b.experiment ? 1 : 0,
+          ),
+        };
+      },
+    send: ({ workspaceId, experiment, on }) =>
+      Effect.tap(
+        workspaceWritten(client.workspaces.setExperiment(workspaceId, experiment, on)),
+        (written) =>
+          Effect.sync(() => {
+            if (!("workspace" in written) || !isExperiment(experiment)) return;
+            dependencies.recordProductEvent(PRODUCT_EVENT.EXPERIMENT_TOGGLE, {
+              experiment: EXPERIMENT_COUNTED_AS[experiment],
+              setting_value: on ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+              experiment_scope: EXPERIMENT_SCOPE_COUNTED_AS[experimentScope(experiment)],
+            });
+          }),
+      ),
+    unsent: WORKSPACE_UNANSWERED,
+  });
+
   /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
   const workspaceSlugSet = workspaceWrite<
     TasksWorkspaceSlugSetParams & AskedOver,
@@ -2791,6 +2848,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     WORKSPACE_RENAME: declaredWrite(dependencies.pool, workspaceRenamed, {
       read: (rename: TasksWorkspaceRenameParams) =>
         Effect.succeed({ ...rename, rows: workspaceList.rows }),
+      answered: workspaceAnswered("workspace"),
+    }),
+    // An experiment moves no task: the choice is drawn on its workspace at
+    // once, and the follow carries the same choice a moment later.
+    WORKSPACE_EXPERIMENT_SET: declaredWrite(dependencies.pool, workspaceExperimentSet, {
+      read: (set: TasksWorkspaceExperimentSetParams) =>
+        Effect.succeed({ ...set, rows: workspaceList.rows }),
       answered: workspaceAnswered("workspace"),
     }),
     // A slug moves no task either: links resolve by id, or by a former

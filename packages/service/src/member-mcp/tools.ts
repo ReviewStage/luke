@@ -97,6 +97,12 @@ import {
 } from "@repo/features/pull-request-write-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_BOUNDS, workspaceOfSlug } from "@repo/features/workspace-wire";
+import {
+  EXPERIMENT,
+  isExperiment,
+  isWorkspaceExperiment,
+  type WorkspaceExperiment,
+} from "@repo/settings";
 import { describeWire, type StandardSchemaWithJson, standardSchemaOf } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -117,6 +123,7 @@ import {
   agentToolRejected,
   CODER_READ_AGENT_TOOL,
   callerUserId,
+  callerWorkspaceId,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   orStoreRefusal,
@@ -134,10 +141,12 @@ import {
   runUpdateTask,
   START_AGENT_REFUSAL,
   START_AGENT_TOOL,
+  startAgentToolOf,
   TASKS_LIST_LIMIT,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_REFUSAL,
   UPDATE_TASK_TOOL,
+  updateTaskToolOf,
   workspaceAgentOf,
 } from "../agents/agent-tools.js";
 import {
@@ -162,10 +171,8 @@ import { productionSummaryModel } from "../agents/coder-host/replay-summary.js";
 import { sessionsRouter } from "../agents/coder-host/runtime-sessions.js";
 import { steerMemberWords } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import {
   type MemoryCall,
-  memoryOnFor,
   runRecall,
   runRemember,
   SAVE_MEMORY_TOOL,
@@ -187,6 +194,12 @@ import {
   runReadTask,
 } from "../agents/task-tools.js";
 import { WORKSPACE_AGENTS_LIST_LIMIT } from "../agents/workspace-agents.js";
+import {
+  EXPERIMENT_OFF_REFUSAL,
+  type ExperimentsOn,
+  experimentOnIn,
+  NO_EXPERIMENT_ON,
+} from "../agents/workspace-experiment-on.js";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -252,6 +265,16 @@ export interface MemberMcpTool<Input extends MemberMcpToolInput = MemberMcpToolI
   readonly inputSchema: StandardSchemaWithJson<Input>;
   /** The tool's work, on the arguments the SDK checked against `input`. */
   run(input: Input["Type"]): Effect.Effect<MemberMcpToolResult, StoreFailure, MemberMcpServices>;
+  /** The workspace experiment the tool is of, which lists it only to a member with that experiment on in one of their workspaces at least; none for a tool every member is listed. */
+  readonly experiment?: WorkspaceExperiment;
+  /** The tool's words and input where none of the member's workspaces has Task descriptions on, which name no description; none for a tool whose words name none. */
+  readonly descriptionsOff?: MemberMcpToolWords;
+}
+
+/** A tool's words and input, as a variant of them is listed. */
+interface MemberMcpToolWords {
+  readonly description: string;
+  readonly input: MemberMcpToolInput;
 }
 
 /** The tools by name, each the name a model calls it by. */
@@ -316,6 +339,21 @@ const MEMBER_WORKSPACE_REFUSAL = {
   SEVERAL: (choices: string) =>
     `Not run: the member belongs to several workspaces; name the one to read with workspace: ${choices}.`,
 } as const;
+
+/**
+ * The words and SDK input a tool is listed with to a member whose
+ * workspaces have the experiments given on, one of them at least: its own,
+ * or, where none has Task descriptions on, the ones that name no
+ * description.
+ */
+export function listedMemberMcpTool(
+  tool: MemberMcpTool,
+  experimentsOn: ReadonlySet<WorkspaceExperiment>,
+): Pick<MemberMcpTool, "description" | "inputSchema"> {
+  const off = tool.descriptionsOff;
+  if (off === undefined || experimentsOn.has(EXPERIMENT.DESCRIPTIONS)) return tool;
+  return { description: off.description, inputSchema: standardSchemaOf(off.input) };
+}
 
 /** A tool's declaration, its SDK input built beside it. */
 function memberMcpTool<Input extends MemberMcpToolInput>(
@@ -464,6 +502,16 @@ const MEMBER_READ_TASK_TOOL = memberMcpTool({
     `line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were left out. ` +
     `${MEMBER_MCP_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   input: READ_TASK_TOOL.inputSchema,
+  descriptionsOff: {
+    description:
+      "Read one task the member can open, by its id, a teammate's included, in whichever of the " +
+      "member's workspaces it stands: its key (such as ACME-42), name, where it stands (its " +
+      "status) and how much it matters (its priority), repository, who started it, its mention, " +
+      "the brief it was started with (null for none), and the tasks it is blocked by and the " +
+      "tasks it blocks (each with its id, name, status, and mention). " +
+      `${MEMBER_MCP_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
+    input: READ_TASK_TOOL.inputSchema,
+  },
   annotations: READ_ONLY,
   run: (asked) =>
     readAsMember(
@@ -701,12 +749,15 @@ const CreateTaskInputSchema = Schema.Struct({
   relation: CREATE_TASK_TOOL.inputSchema.fields.relation,
 });
 
-const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
-  name: MEMBER_MCP_TOOL.CREATE_TASK,
-  description:
+/** A task the member makes where none of their workspaces has Task descriptions on: the same, bar its description. */
+const { description: _description, ...createTaskFieldsOff } = CreateTaskInputSchema.fields;
+const CreateTaskInputSchemaOff = Schema.Struct(createTaskFieldsOff);
+
+/** The words of a member's create, what a task starts with as their workspaces' Task descriptions words it. */
+function memberCreateTaskWords(startsWith: string): string {
+  return (
     "Make a task in a workspace the member belongs to, as the member's own sidebar New task " +
-    "would: owned by them, on the repository named or none, with their brief and a description to " +
-    "start from where given, and no agent on it; the desktop shows it as one they made. Give " +
+    `would: owned by them, on the repository named or none, ${startsWith}, and no agent on it; the desktop shows it as one they made. Give ` +
     "it a status, a priority, and an assignee where the member said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
     "its parent's repository, so leave repository out for one. Give it a " +
@@ -714,53 +765,86 @@ const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
     `task of the workspace in the same call. ${WORKSPACE_WORDS} Then start an agent on it ` +
     `with ${MEMBER_MCP_TOOL.START_AGENT}'s taskId. Each call makes a task of its own, so call ` +
     "it once for each. Answers `accepted` with the task's id, key, name, status, priority, " +
-    "assignee, repository, and mention, or `rejected` and why.",
+    "assignee, repository, and mention, or `rejected` and why."
+  );
+}
+
+const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.CREATE_TASK,
+  description: memberCreateTaskWords(
+    "with their brief and a description to start from where given",
+  ),
   input: CreateTaskInputSchema,
+  descriptionsOff: {
+    description: memberCreateTaskWords("with their brief where given"),
+    input: CreateTaskInputSchemaOff,
+  },
   annotations: ADDITIVE,
   run: ({ workspace, ...asked }) =>
     listWriteAsMember(workspace, (call) => runCreateTask(call, asked)),
 });
 
+/** A task's pin, in the member's own words. */
+const MEMBER_UPDATE_PINNED = Schema.optionalKey(
+  describeWire(
+    Schema.Boolean,
+    "true to pin it in the member's sidebar, false to unpin it; their pin alone, no other " +
+      "member's.",
+  ),
+);
+
+/** A task's sidebar section, in the member's own words. */
+const MEMBER_UPDATE_SECTION = Schema.optionalKey(
+  describeWire(
+    Schema.NullOr(wireUuidSchema),
+    "The sidebar section the member keeps it in, by the id " +
+      `${MEMBER_MCP_TOOL.LIST_TASKS} or ${MEMBER_MCP_TOOL.CREATE_SECTION} answered; it leaves ` +
+      "the section it stood in and lands at the top of this one. null takes it out of its " +
+      "section, back under Tasks.",
+  ),
+);
+
+/** A task's change names what the agents' own does, in the words of the experiments given, the sidebar's words the member's own. */
+const updateTaskInputOf = (on: Pick<ExperimentsOn, "descriptionsOn">) =>
+  Schema.Struct({
+    ...updateTaskToolOf(on).inputSchema.fields,
+    pinned: MEMBER_UPDATE_PINNED,
+    sectionId: MEMBER_UPDATE_SECTION,
+  });
+
 /** A task's change names what the agents' own does, the sidebar's words the member's own. */
 const UpdateTaskInputSchema = Schema.Struct({
   ...UPDATE_TASK_TOOL.inputSchema.fields,
-  pinned: Schema.optionalKey(
-    describeWire(
-      Schema.Boolean,
-      "true to pin it in the member's sidebar, false to unpin it; their pin alone, no other " +
-        "member's.",
-    ),
-  ),
-  sectionId: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(wireUuidSchema),
-      "The sidebar section the member keeps it in, by the id " +
-        `${MEMBER_MCP_TOOL.LIST_TASKS} or ${MEMBER_MCP_TOOL.CREATE_SECTION} answered; it leaves ` +
-        "the section it stood in and lands at the top of this one. null takes it out of its " +
-        "section, back under Tasks.",
-    ),
-  ),
+  pinned: MEMBER_UPDATE_PINNED,
+  sectionId: MEMBER_UPDATE_SECTION,
 });
+
+/** What a member's change of a task is told, which names no description. */
+const MEMBER_UPDATE_TASK_WORDS =
+  "Change a task the member can open, by its id, a teammate's included, as the member's own " +
+  "task menu would: rename it, set or clear its repository, set where it stands (its status) " +
+  "or how much it matters (its priority), assign it to a member of its workspace or to no " +
+  "one, pin or unpin it in the member's sidebar, move it into one of their sidebar sections " +
+  "or back out of it (sectionId), put it under a parent task or take it out from under one, " +
+  "or add and take away the tasks it is blocked by and the tasks it blocks; name at least " +
+  "one change, and several go in one call. Mark a task whose work is done Done, with status " +
+  "done, as the menu's Mark done does; that withdraws every ask still open on its threads. " +
+  "A block is Linear's: the blocker's work comes first and the task it blocks waits on it. " +
+  "Both tasks must be in one workspace, a task never blocks itself, and a block that would " +
+  "close a cycle is refused. A child task works in its parent's repository, so a parent " +
+  "working in another is refused, as is one under which the task would descend from " +
+  "itself. Answers `accepted` with the task as it now stands, its parentTaskId, blockedBy, " +
+  "and blocks among it where the call changed them, `already` true where every change " +
+  "named already stood, or `rejected` and why.";
 
 const MEMBER_UPDATE_TASK_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.UPDATE_TASK,
-  description:
-    "Change a task the member can open, by its id, a teammate's included, as the member's own " +
-    "task menu would: rename it, set or clear its repository, set where it stands (its status) " +
-    "or how much it matters (its priority), assign it to a member of its workspace or to no " +
-    "one, pin or unpin it in the member's sidebar, move it into one of their sidebar sections " +
-    "or back out of it (sectionId), put it under a parent task or take it out from under one, " +
-    "or add and take away the tasks it is blocked by and the tasks it blocks; name at least " +
-    "one change, and several go in one call. Mark a task whose work is done Done, with status " +
-    "done, as the menu's Mark done does; that withdraws every ask still open on its threads. " +
-    "A block is Linear's: the blocker's work comes first and the task it blocks waits on it. " +
-    "Both tasks must be in one workspace, a task never blocks itself, and a block that would " +
-    "close a cycle is refused. A child task works in its parent's repository, so a parent " +
-    "working in another is refused, as is one under which the task would descend from " +
-    "itself. Answers `accepted` with the task as it now stands, its parentTaskId, blockedBy, " +
-    "and blocks among it where the call changed them, `already` true where every change " +
-    "named already stood, or `rejected` and why.",
+  description: MEMBER_UPDATE_TASK_WORDS,
   input: UpdateTaskInputSchema,
+  descriptionsOff: {
+    description: MEMBER_UPDATE_TASK_WORDS,
+    input: updateTaskInputOf(NO_EXPERIMENT_ON),
+  },
   annotations: IDEMPOTENT_CHANGE,
   run: (asked) =>
     writeAsMember(
@@ -800,15 +884,19 @@ const MEMBER_EDIT_DESCRIPTION_TOOL = memberMcpTool({
     readAsMember(
       (userId) => readTaskWorkspace(userId, asked.taskId),
       DESCRIPTION_EDIT_REFUSAL.NO_TASK,
-      ({ caller }) => {
-        const userId = callerUserId(caller);
-        return Effect.flatMap(descriptionsOnFor(userId), (descriptionsOn) =>
-          descriptionsOn
-            ? recordMemberDescriptionNotes({ userId, taskId: asked.taskId }, asked)
-            : Effect.succeed(agentToolRejected(MEMBER_NOTE_REFUSAL.DESCRIPTIONS_OFF)),
-        );
-      },
+      ({ caller }) =>
+        Effect.flatMap(
+          experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS),
+          (descriptionsOn) =>
+            descriptionsOn
+              ? recordMemberDescriptionNotes(
+                  { userId: callerUserId(caller), taskId: asked.taskId },
+                  asked,
+                )
+              : Effect.succeed(agentToolRejected(EXPERIMENT_OFF_REFUSAL)),
+        ),
     ),
+  experiment: EXPERIMENT.DESCRIPTIONS,
 });
 
 /** A section the member makes names the workspace it is made in, its title, and its emoji. */
@@ -884,6 +972,13 @@ const StartAgentInputSchema = Schema.Struct({
   from: START_AGENT_TOOL.inputSchema.fields.from,
 });
 
+/** A start where none of the member's workspaces has Task descriptions on: the same, its prompt and note in words that name no description. */
+const StartAgentInputSchemaOff = Schema.Struct({
+  ...StartAgentInputSchema.fields,
+  prompt: startAgentToolOf(NO_EXPERIMENT_ON).inputSchema.fields.prompt,
+  note: startAgentToolOf(NO_EXPERIMENT_ON).inputSchema.fields.note,
+});
+
 type StartAgentInput = typeof StartAgentInputSchema.Type;
 
 /** The workspace a start is about: its task's, the agent's it starts from, or else the one its slug names or the member's only one. */
@@ -910,13 +1005,28 @@ const startedAsMember = ({ workspace, ...asked }: StartAgentInput) => {
 
 const MEMBER_START_AGENT_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.START_AGENT,
-  description:
+  description: memberStartAgentWords(
+    "on the task's description itself with no prompt, or on the prompt " +
+      "given in the description's place, with the note after either",
+    ", where it needs a prompt, since that task has no description to hand it",
+  ),
+  input: StartAgentInputSchema,
+  descriptionsOff: {
+    description: memberStartAgentWords("on the prompt given, with the note after it", ""),
+    input: StartAgentInputSchemaOff,
+  },
+  annotations: ADDITIVE,
+  run: startedAsMember,
+});
+
+/** The words of a member's start, how it is handed what it is told and why a start on no task needs a prompt as their workspaces' Task descriptions words them. */
+function memberStartAgentWords(handed: string, newTaskPrompt: string): string {
+  return (
     "Start a new coding agent as the member, exactly as their own Start would: on a task " +
-    "they can open by its taskId, on the task's description itself with no prompt, or on the prompt " +
-    "given in the description's place, with the note after either; or on a new task made for it in " +
+    `they can open by its taskId, ${handed}; or on a new task made for it in ` +
     "the workspace named, named as its agent is, assigned to the member, in the repository " +
-    "named or none, and done by itself once its agents finish well, where it needs a prompt, " +
-    "since that task has no description to hand it. This one call carries everything the agent is told as it starts, and the " +
+    `named or none, and done by itself once its agents finish well${newTaskPrompt}. ` +
+    "This one call carries everything the agent is told as it starts, and the " +
     "agent sets to work on it at once. Its checkout is the repository's default branch, or " +
     "the branch named, which must already be on GitHub. It runs on the model and effort " +
     "named, as the member is offered them, or on the member's default with neither; " +
@@ -926,11 +1036,9 @@ const MEMBER_START_AGENT_TOOL = memberMcpTool({
     "Each call starts an agent of its own, so call it once for each. Answers `accepted` with " +
     "the agent's id, model, the model's name to say it by, effort, status, and mention once " +
     "its session is open, which may take a minute or two, or `rejected` and why nothing was " +
-    `started; a rejected model or effort lists the choices. ${FOLLOW_WORDS}`,
-  input: StartAgentInputSchema,
-  annotations: ADDITIVE,
-  run: startedAsMember,
-});
+    `started; a rejected model or effort lists the choices. ${FOLLOW_WORDS}`
+  );
+}
 
 /** A stop names the agent alone. */
 const AgentIdInputSchema = Schema.Struct({ agentId: ReadAgentInputSchema.fields.agentId });
@@ -1385,8 +1493,8 @@ const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
  * (`memberCommentAnswer`), so it hands its thread to the agents in it, and to
  * each one its words mention, as one typed in the window does. The
  * workspace's shared memory is searched, kept, and forgotten as the member,
- * in the workspace a slug names or their only one, only while they have
- * Memory on (`memoryOnFor`), as Settings › Memory stands only then, and is
+ * in the workspace a slug names or their only one, only while that workspace
+ * has Memory on (`experimentOnIn`), as Settings › Memory stands only then, and is
  * held to what the desktop holds the member to: the workspace's bound of
  * memories, and a forget of another member's words only for one who owns or
  * administers the workspace.
@@ -1397,12 +1505,6 @@ const MEMBER_NOTE_REFUSAL = {
   NO_WORDS:
     "Not posted: the description does not hold those words exactly once; copy them, or more of them, " +
     `from the description as ${MEMBER_MCP_TOOL.READ_TASK} reads it.`,
-  MEMORY_OFF:
-    "Not run: the member you act for has Memory off; they turn it on in Settings › " +
-    "Experimental. Carry on without it.",
-  DESCRIPTIONS_OFF:
-    "Not run: the member you act for has Task descriptions off, so tasks have no description to write or comment " +
-    "on; they turn it on in Settings › Experimental.",
   NOT_MEMBER: "Not forgotten: the member no longer belongs to that workspace.",
   NOT_FORGETTABLE:
     "Not forgotten: the member may forget a memory in their own words alone, unless they own " +
@@ -1415,7 +1517,7 @@ type MemberCommentWriter = Extract<
   { readonly actor: typeof DESCRIPTION_COMMENT_ACTOR.MEMBER }
 >;
 
-/** A comment call run as the member, on the task it names as the member reaches it, told whether they have Task descriptions on, which the description's own threads stand on and a page's do not; refused where they reach no task. */
+/** A comment call run as the member, on the task it names as the member reaches it, told whether its workspace has Task descriptions on, which the description's own threads stand on and a page's do not; refused where they reach no task. */
 const commentAsMember = <R>(
   taskId: string,
   act: (
@@ -1426,12 +1528,15 @@ const commentAsMember = <R>(
   readAsMember(
     (userId) => readTaskWorkspace(userId, taskId),
     COMMENT_TOOL_REFUSAL.NO_TASK,
-    ({ caller }) => {
-      const userId = callerUserId(caller);
-      return Effect.flatMap(descriptionsOnFor(userId), (descriptionsOn) =>
-        act({ actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId }, descriptionsOn),
-      );
-    },
+    ({ caller }) =>
+      Effect.flatMap(
+        experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS),
+        (descriptionsOn) =>
+          act(
+            { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: callerUserId(caller) },
+            descriptionsOn,
+          ),
+      ),
   );
 
 /** A member's comment as the store came to it, answered as the window's own is, its thread handed to the agents it reaches; a task or thread not reached refused. */
@@ -1474,6 +1579,23 @@ const ReadCommentsInputSchema = Schema.Struct({
   status: READ_COMMENTS_TOOL.inputSchema.fields.status,
 });
 
+/** The task a comment call names where none of the member's workspaces has Task descriptions on, whose pages' comments it acts on. */
+const PAGES_COMMENTED_TASK_INPUT = describeWire(
+  wireUuidSchema,
+  `The task whose pages' comments to act on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
+);
+
+/** A read of a page's comments, where none of the member's workspaces has Task descriptions on: the task, the page, and which threads. */
+const ReadCommentsInputSchemaOff = Schema.Struct({
+  taskId: PAGES_COMMENTED_TASK_INPUT,
+  page: describeWire(
+    wireUuidSchema,
+    "One of the task's pages, by the id a mention of it or a link to it names, whose threads " +
+      "to read.",
+  ),
+  status: ReadCommentsInputSchema.fields.status,
+});
+
 const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.READ_COMMENTS,
   description:
@@ -1486,6 +1608,16 @@ const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
     "none for the whole page. Open threads unless you ask for resolved ones. It only reads: " +
     "nobody is told.",
   input: ReadCommentsInputSchema,
+  descriptionsOff: {
+    description:
+      "Read the comment threads on one of the pages of a task the member can open, by its taskId " +
+      "and the page's id, a teammate's included, in whichever of the member's workspaces it " +
+      "stands: each thread's id, the version it was left on and the element it is on, by its " +
+      "words and its path, or none for the whole page, every comment with who wrote it, when, " +
+      "and the names of the files it carries, and the agents it was sent to. Open threads " +
+      "unless you ask for resolved ones. It only reads: nobody is told.",
+    input: ReadCommentsInputSchemaOff,
+  },
   annotations: READ_ONLY,
   run: (asked) =>
     commentAsMember(asked.taskId, (writer, descriptionsOn) =>
@@ -1566,8 +1698,9 @@ const MEMBER_COMMENT_ON_DESCRIPTION_TOOL = memberMcpTool({
     commentAsMember(asked.taskId, (writer, descriptionsOn) =>
       descriptionsOn
         ? memberDescriptionComment(writer, asked)
-        : Effect.succeed(commentToolRejected(MEMBER_NOTE_REFUSAL.DESCRIPTIONS_OFF)),
+        : Effect.succeed(commentToolRejected(EXPERIMENT_OFF_REFUSAL)),
     ),
+  experiment: EXPERIMENT.DESCRIPTIONS,
 });
 
 /** A reply names the task, the thread, and the member's words. */
@@ -1595,7 +1728,7 @@ const memberReply = (
         yield* readDescriptionCommentThread(writer.userId, asked.taskId, asked.thread),
       );
       if (descriptionThreadOff(standing, descriptionsOn)) {
-        return commentToolRejected(COMMENT_TOOL_REFUSAL.DESCRIPTIONS_OFF);
+        return commentToolRejected(EXPERIMENT_OFF_REFUSAL);
       }
       if (standing?.status === DESCRIPTION_COMMENT_STATUS.RESOLVED) {
         return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
@@ -1629,6 +1762,22 @@ const MEMBER_REPLY_TO_COMMENT_TOOL = memberMcpTool({
     "now stands and, in unsent, the agents in it it could not reach, an archived one say, the " +
     "reply posted all the same; or `rejected` and why nothing was posted.",
   input: ReplyToCommentInputSchema,
+  descriptionsOff: {
+    description:
+      "Reply in one comment thread on one of the pages of a task the member can open, by the " +
+      "thread's id, as the member's own reply in the window would: every member of the " +
+      "workspace sees it, and the thread is sent to every agent in it, each one sent it before " +
+      "or that answered in it, and the agent that showed the page; each reads it as a message " +
+      `from the member and answers in the thread. ${MENTION_WORDS} A resolved thread takes no ` +
+      `reply until ${MEMBER_MCP_TOOL.UPDATE_COMMENT} reopens it. Each call posts a reply of its ` +
+      "own, so call it once for each. Answers `accepted` with the thread as it now stands and, " +
+      "in unsent, the agents in it it could not reach, an archived one say, the reply posted " +
+      "all the same; or `rejected` and why nothing was posted.",
+    input: Schema.Struct({
+      ...ReplyToCommentInputSchema.fields,
+      taskId: PAGES_COMMENTED_TASK_INPUT,
+    }),
+  },
   annotations: ADDITIVE,
   run: (asked) =>
     commentAsMember(asked.taskId, (writer, descriptionsOn) =>
@@ -1651,6 +1800,17 @@ const MEMBER_UPDATE_COMMENT_TOOL = memberMcpTool({
     "thread leaves the description's margin and stays in its history, under the member's name. " +
     "Answers `accepted` with the thread as it now stands, or `rejected` and why.",
   input: UpdateCommentInputSchema,
+  descriptionsOff: {
+    description:
+      "Resolve or reopen one comment thread on one of the pages of a task the member can open, " +
+      "by the thread's id, as the member's own Resolve or Reopen would: a resolved thread " +
+      "leaves the open ones and stays in its history, under the member's name. Answers " +
+      "`accepted` with the thread as it now stands, or `rejected` and why.",
+    input: Schema.Struct({
+      ...UpdateCommentInputSchema.fields,
+      taskId: PAGES_COMMENTED_TASK_INPUT,
+    }),
+  },
   annotations: IDEMPOTENT_CHANGE,
   run: (asked) =>
     commentAsMember(asked.taskId, (writer, descriptionsOn) =>
@@ -1671,18 +1831,18 @@ const MEMORY_WORKSPACE_INPUT = Schema.optionalKey(
   ),
 );
 
-/** A memory call run as the member, in the workspace its slug names or their only one, while they have Memory on; refused otherwise. */
+/** A memory call run as the member, in the workspace its slug names or their only one, while that workspace has Memory on; refused otherwise. */
 const memoryAsMember = <R>(
   slug: string | undefined,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, StoreFailure, R>,
 ) =>
   Effect.gen(function* () {
     const member = yield* AdmittedMember;
-    if (!(yield* memoryOnFor(member.userId))) {
-      return agentToolRejected(MEMBER_NOTE_REFUSAL.MEMORY_OFF);
-    }
     const workspace = yield* listedWorkspace(member.userId, slug);
     if (Result.isFailure(workspace)) return agentToolRejected(workspace.failure);
+    if (!(yield* experimentOnIn(workspace.success, EXPERIMENT.MEMORY))) {
+      return agentToolRejected(EXPERIMENT_OFF_REFUSAL);
+    }
     return yield* run({ workspaceId: workspace.success, userId: member.userId });
   });
 
@@ -1706,6 +1866,7 @@ const MEMBER_SEARCH_MEMORY_TOOL = memberMcpTool({
   input: SearchMemoryInputSchema,
   annotations: READ_ONLY,
   run: ({ workspace, ...asked }) => memoryAsMember(workspace, (memory) => runRecall(memory, asked)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /** A memory kept names the workspace, its words, and, at most, the memory it corrects. */
@@ -1732,6 +1893,7 @@ const MEMBER_SAVE_MEMORY_TOOL = memberMcpTool({
   annotations: IDEMPOTENT_CHANGE,
   run: ({ workspace, ...asked }) =>
     memoryAsMember(workspace, (memory) => runRemember(memory, asked)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /** A forget names the workspace and the memory. */
@@ -1780,6 +1942,7 @@ const MEMBER_FORGET_MEMORY_TOOL = memberMcpTool({
   annotations: DESTRUCTIVE,
   run: ({ workspace, memoryId }) =>
     memoryAsMember(workspace, (memory) => memberForget(memory, memoryId)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /*
@@ -1966,6 +2129,28 @@ const MEMBER_DELETE_AUTOMATION_TOOL = memberMcpTool({
 });
 
 /** Every tool the server offers, listed in the order an agent reads them. */
+/**
+ * The workspace experiments on in one of the member's workspaces at least,
+ * whose tools the member is listed (`MemberMcpTool.experiment`): this server
+ * spans the member's workspaces, so a tool of one stands while any of them
+ * has it on, and each call into a workspace with it off is refused at the
+ * tool's door.
+ */
+export const memberExperimentsOn = (
+  userId: string,
+): Effect.Effect<ReadonlySet<WorkspaceExperiment>, StoreFailure, DatabaseServices> =>
+  Effect.map(
+    listWorkspaces(userId),
+    (workspaces) =>
+      new Set(
+        workspaces.flatMap((workspace) =>
+          (workspace.experiments ?? []).flatMap(({ experiment, on }) =>
+            on && isExperiment(experiment) && isWorkspaceExperiment(experiment) ? [experiment] : [],
+          ),
+        ),
+      ),
+  );
+
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
   MEMBER_LIST_TASKS_TOOL,

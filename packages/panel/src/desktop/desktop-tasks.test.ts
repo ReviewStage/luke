@@ -190,11 +190,24 @@ test("a task's comments are held from its open, so its first ready frame marks t
       return quietHold();
     },
   });
+  const listed = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
   const opened = (region: TasksControl["region"]) =>
     withQueryClient(
       createElement(DesktopTasks, {
         looks: NO_LOOKS,
-        tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region,
+          // The task's own workspace is listed, whose Descriptions holds its comments while it is read.
+          workspaces: [listed],
+          workspace: listed,
+        }),
       }),
     );
   writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
