@@ -44,7 +44,7 @@ import { WORKSPACE_ACT_KIND } from "./kinds.js";
  * plain act answers the value the panel reads, or is refused: a write the
  * account's role does not allow, an address already invited, or a slug
  * refused, each in words that say so, and anything else, the closed gate
- * among it, in the act's own sentence (`compose-tasks.ts`'s
+ * among it, in the act's own sentence (`compose-workspaces.ts`'s
  * `workspaceAnswered`). A write that answers nothing the panel reads answers
  * `void`. A connection's handler answers the install address the service
  * named, which its procedure, written by hand, opens (`act-port/workspace-procedures.ts`),
