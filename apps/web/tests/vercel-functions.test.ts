@@ -14,6 +14,7 @@ import {
   functionBundlePlan,
   INLINE_EXCEPTION,
   localOnlyReach,
+  PROFILER_BINARY,
   undeclaredImports,
 } from "../server/function-bundles";
 
@@ -48,11 +49,12 @@ test("every function bundle loads exactly the externals the record expects", {
   const actual = externalsByBundle(metafile, WEB);
   assert.deepEqual(Object.keys(actual).sort(), task.functions.map((f) => `${f.file}.js`).sort());
   assert.deepEqual(externalsDrift(await expectedExternals(WEB), actual), []);
-  // Inline-first leaves outside a bundle only Node's own modules and the named exceptions; a fourth external is a dependency that stopped inlining.
+  // Inline-first leaves outside a bundle only Node's own modules, the named exceptions, and the profiler's binary; anything else is a dependency that stopped inlining.
   const permitted = new Set<string>([
     ...builtinModules,
     ...builtinModules.map((name) => `node:${name}`),
     ...Object.values(INLINE_EXCEPTION),
+    PROFILER_BINARY,
   ]);
   for (const externals of Object.values(actual)) {
     assert.deepEqual(

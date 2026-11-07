@@ -46,6 +46,7 @@ import {
   type EventHint,
   SentryEffectExternalSpanLayer,
 } from "@sentry/effect/server";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import {
   Effect,
   ErrorReporter,
@@ -548,15 +549,23 @@ const sentryReporting = ErrorReporter.layer([sentryErrorReporter], { mergeWithEx
  * context-lines and linked-errors integrations, while a process that starts
  * `@sentry/node`'s full defaults from those same options already holds
  * both handlers.
+ *
+ * Note that a kept trace comes with a CPU profile of the instance while its
+ * spans ran, because the profiler runs on the trace lifecycle in every session:
+ * which traces are profiled is which traces `tracesSampler` keeps, with no
+ * rate of its own. A profile holds stack frames and timings, never a value.
  */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
   const started = Layer.effectDiscard(
     Effect.sync(() =>
       Sentry.init({
         ...options,
+        profileSessionSampleRate: 1,
+        profileLifecycle: "trace",
         integrations: [
           Sentry.onUncaughtExceptionIntegration(),
           Sentry.onUnhandledRejectionIntegration(),
+          nodeProfilingIntegration(),
         ],
       }),
     ),
