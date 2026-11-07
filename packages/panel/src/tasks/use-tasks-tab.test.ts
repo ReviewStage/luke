@@ -107,7 +107,7 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
 import { useVersionHistoryRoute, type VersionHistoryRoute } from "../version-history-route.js";
-import { useBoardRoute, usePersonRoute } from "../workspace-routes.js";
+import { useBoardRoute, usePersonRoute, useUnknownWorkspaceRoute } from "../workspace-routes.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
@@ -386,6 +386,10 @@ function mount(
       automationsView,
       versionHistoryView,
       inboxView,
+      unknownWorkspaceView: useUnknownWorkspaceRoute({
+        onClose: leaveRouted,
+        onStay: () => undefined,
+      }),
     });
     return held.history
       ? createElement(WindowHistoryProbe, {
@@ -2065,40 +2069,11 @@ test("the Inbox opens on nothing chosen, from its row and from a link, whatever 
   assert.equal(fromLink, undefined);
 });
 
-test("a workspace's Board link opens in the workspace its step names, and one naming none of the reader's stands as not found rather than in the workspace listed", () => {
+test("a workspace's Board link opens in the workspace its step names", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const open = (workspace: string) =>
-    act(() => tab.control().onOpenLink({ workspace, place: { kind: LINK_PLACE.BOARD } }));
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.BOARD } }));
 
-  open("acme");
-  const named = [tab.control().workspace?.id, tab.control().boardView.open];
-  open("xyz");
-
-  assert.deepEqual(named, [ACME.id, true]);
-  assert.deepEqual(
-    [tab.control().workspace?.id, tab.control().unknownWorkspace.open],
-    [ACME.id, true],
-  );
-});
-
-test("an agent's page opened over a workspace not there for the reader takes its place", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
-  assert.equal(tab.control().unknownWorkspace.open, true);
-
-  act(() => tab.control().agentView.onOpen("agent-9"));
-  assert.equal(tab.control().unknownWorkspace.open, false);
-  assert.equal(tab.control().agentView.agentId, "agent-9");
-});
-
-test("the Inbox opened over a workspace not there for the reader takes its place", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
-  assert.equal(tab.control().unknownWorkspace.open, true);
-
-  act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().unknownWorkspace.open, false);
-  assert.equal(tab.control().inboxView.open, true);
+  assert.deepEqual([tab.control().workspace?.id, tab.control().boardView.open], [ACME.id, true]);
 });
 
 test("a start refused after another agent's page was opened leaves that page standing rather than the one the start was pressed on", async () => {

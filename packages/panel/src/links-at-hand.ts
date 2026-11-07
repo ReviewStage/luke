@@ -267,8 +267,6 @@ function stateLinks(tasks: TasksControl, at: WindowAt, listed: string): readonly
     thing,
     step: true,
   });
-  // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
-  if (tasks.unknownWorkspace.open) return [];
   // With no task bound for, the window stands on the home page.
   if (tasks.boundFor === undefined) {
     return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];

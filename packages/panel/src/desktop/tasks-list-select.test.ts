@@ -33,6 +33,7 @@ import {
   BOARD_AWAY,
   INBOX_AWAY,
   PERSON_AWAY,
+  UNKNOWN_WORKSPACE_AWAY,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -230,6 +231,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       automationsView: AUTOMATIONS_AWAY,
       versionHistoryView: VERSION_HISTORY_AWAY,
       inboxView: INBOX_AWAY,
+      unknownWorkspaceView: UNKNOWN_WORKSPACE_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }

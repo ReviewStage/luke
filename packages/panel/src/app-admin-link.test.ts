@@ -355,3 +355,71 @@ test("a tab landing on an agent's address, its link opened as it lands, stands t
   assert.equal(router.history.location.pathname, "/acme/agent/agent-9");
   assert.equal(router.addresses().length, steps + 1, router.addresses().join(" → "));
 });
+
+/** Whether the page saying a workspace is not there for the reader stands. */
+function unknownWorkspaceShown(): boolean {
+  return document.body.textContent?.includes("This workspace doesn't exist") === true;
+}
+
+/** The not-found page's way out, Go home. */
+function goHomeButton(): HTMLButtonElement {
+  const found = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Go home",
+  );
+  return found ?? assert.fail("Go home stands");
+}
+
+test("a Home link to a workspace the reader is not in stands the not-found place at its own address, in the step's place, and Go home leaves it for Home", async () => {
+  const router = await drawWindow("/acme");
+  const steps = router.addresses().length;
+
+  act(() => showLink?.({ workspace: "ghost", place: { kind: LINK_PLACE.HOME } }));
+  await settle();
+  const standing = [router.history.location.pathname, unknownWorkspaceShown()];
+  const written = router.addresses().length;
+  act(() => goHomeButton().click());
+  await settle();
+
+  assert.deepEqual(standing, ["/ghost", true]);
+  assert.equal(written, steps, "and writes no step");
+  assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/acme", false]);
+});
+
+test("Back from a link to a workspace the reader is not in, pressed over a place, goes to the step before that place, as the link wrote no step", async () => {
+  const router = await drawWindow("/acme");
+  act(() => showLink?.({ workspace: "acme", place: { kind: LINK_PLACE.BOARD } }));
+  await settle();
+  assert.equal(router.history.location.pathname, "/acme/tasks");
+
+  act(() => showLink?.({ workspace: "ghost", place: { kind: LINK_PLACE.BOARD } }));
+  await settle();
+  act(() => router.history.back());
+  await settle();
+
+  assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/acme", false]);
+});
+
+test.each([
+  ["an agent's page", { kind: LINK_PLACE.AGENT, agentId: "agent-9" }, "/acme/agent/agent-9"],
+  ["the Inbox", { kind: LINK_PLACE.INBOX }, "/acme/inbox"],
+] as const)(
+  "%s opened over a workspace's address the reader is not in takes its place",
+  async (_place, place, address) => {
+    const router = await drawWindow("/ghost/tasks");
+    assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/ghost", true]);
+
+    act(() => showLink?.({ workspace: "acme", place }));
+    await settle();
+
+    assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], [address, false]);
+  },
+);
+
+test("a Home link to a workspace the reader is not in, pressed over an agent's page, stands the not-found place in its place", async () => {
+  const router = await drawWindow("/acme/agent/agent-9");
+
+  act(() => showLink?.({ workspace: "ghost", place: { kind: LINK_PLACE.HOME } }));
+  await settle();
+
+  assert.deepEqual([router.history.location.pathname, unknownWorkspaceShown()], ["/ghost", true]);
+});

@@ -15,6 +15,7 @@
 
 import { type RegisteredRouter, useNavigate, useRouter } from "@tanstack/react-router";
 import { ROUTED_PLACE, routedPlaceOf, useWindowPlace } from "./places/routed-places.js";
+import { useRouteAccess } from "./route-gates.js";
 import type { HistorySpot } from "./tasks/use-description-history.js";
 
 /** Which page of the history an address stands. */
@@ -144,12 +145,13 @@ export function useVersionHistoryRoute(input: {
   const router = useRouter();
   const navigate = useNavigate();
   const here = useWindowPlace();
+  const access = useRouteAccess();
   const standing =
     here.place === ROUTED_PLACE.VERSION_HISTORY ? standingOf(here.leaf, here.params) : undefined;
   // Note that the doors read where the history stands as they are pressed, since a door held from an earlier draw may be pressed after it moved.
   const standingNow = () => {
     const matches = router.matchRoutes(router.history.location.pathname);
-    if (routedPlaceOf(matches) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
+    if (routedPlaceOf(matches, access) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
     const last = matches.at(-1);
     return standingOf(last?.routeId, last?.params ?? {});
   };
