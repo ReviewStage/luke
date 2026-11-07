@@ -1731,7 +1731,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         first.exitCode = 0;
         sequence.next = 9;
 
-        yield* sessions.warm(opened.sessionId, agent.conversationId);
+        const kept = keptAfterResponse();
+        yield* sessions
+          .warm(opened.sessionId, agent.conversationId)
+          .pipe(Effect.provide(kept.layer));
+        assert.equal(api.commands.length, 1, "the warm call answered before it launched");
+        yield* kept.run;
 
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.equal(api.commands.length, 2);
