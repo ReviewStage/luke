@@ -118,6 +118,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { absurd } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -152,10 +153,11 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import { LINK_ROUTED_PLACE, type RoutedLink, routedLinkOf } from "../places/link-places.js";
 import type { LinkRead } from "../places/link-reads.js";
 import { PLACE_BINDING, useTaskAsk } from "../places/place-binding.js";
 import type { RoutedPlace } from "../places/routed-places.js";
-import { taskAtOf, taskOfAt } from "../places/task-step.js";
+import { type LinkStep, type TaskAt, taskAtOf, taskOfAt } from "../places/task-step.js";
 import type { RenameShape } from "../rename-write.js";
 import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -1440,6 +1442,8 @@ export function useTasksTab(input: {
   arrivals: () => number;
   /** Begins a link's read of the service, answering whether it is still the window's to act on (`places/link-reads.ts`). */
   linkReads: LinkRead;
+  /** Writes the step a link opens on a task's own place before the window stands there, as one move (`navigation-history.ts`'s `onVisitTask`). */
+  visitTask: (at: TaskAt, step: LinkStep) => void;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1511,6 +1515,8 @@ export function useTasksTab(input: {
   // Every select, start, and workspace switch asked for, counted, so an answer that lands after a newer one was asked for
   // changes nothing the newer one decided.
   const navigations = useRef(0);
+  // The window's router, which a link is matched on (`places/link-places.ts`).
+  const router = useRouter();
   // How many times the developer arrived on another page of the window, as the binding counts them (`places/place-binding.ts`).
   const { arrivals } = input;
   // A link's read of the service stands until any later navigation: a select, start, or switch counted here, or any move of the window to another page.
@@ -2287,6 +2293,8 @@ export function useTasksTab(input: {
   // Stands the own place of `taskId`, where a door opening it does, answering whether the window moved: not where it
   // stands already, read as the router stands at the call. Note that a fixture run binds its task for good, so its task's
   // place stands for any, and Home where it binds none.
+  // What the link opening now opens on its task's own place, which the window's move there holds (`places/link-places.ts`).
+  const linking = useRef<LinkStep | undefined>(undefined);
   const standTaskPlace = (taskId: string | undefined): boolean => {
     if (!opensTaskPlace) return false;
     const toward = fixture === undefined ? taskId : openTaskId;
@@ -2312,7 +2320,10 @@ export function useTasksTab(input: {
         ((now.workspace === at.workspace && now.task === at.task) ||
           taskOfAt(now, addressed, workspacesNow) === toward));
     if (standing) return false;
-    input.taskView.onOpen(at);
+    // Note that a link's door names what it opens there, so its step is written at once, at its address, with it.
+    const step = linking.current;
+    if (step !== undefined && step.taskId === toward) input.visitTask(at, step);
+    else input.taskView.onOpen(at);
     return true;
   };
   const standTask = useRef(standTaskPlace);
@@ -3629,7 +3640,7 @@ export function useTasksTab(input: {
   const openLink = (link: ReadLink) => {
     const number = taskNumberOf(link.place);
     if (number === undefined) {
-      openPlace(link);
+      openLinked(link);
       return;
     }
     // Note that a number the account's list holds under the workspace named opens at once, so a link to the place
@@ -3639,14 +3650,14 @@ export function useTasksTab(input: {
       (task) => task.workspaceId === home?.id && taskLinkStep(task) === String(number),
     );
     if (listed !== undefined) {
-      openPlace({ ...link, place: withTaskId(link.place, listed.id) });
+      openLinked({ ...link, place: withTaskId(link.place, listed.id) });
       return;
     }
     navigations.current += 1;
     const current = linkRead();
     const opened = (taskId: string | undefined) => {
       if (!current()) return;
-      openPlace(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
+      openLinked(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
     };
     queryClient.fetchQuery(taskByNumberQueryOptions(link.workspace, number)).then(
       (found) => opened("taskId" in found ? found.taskId : undefined),
@@ -3809,6 +3820,74 @@ export function useTasksTab(input: {
 
   const goHome = () => leaveTask();
 
+  // Opens `open` as the door of a link naming `step` on its task's own place, which the window's move there holds.
+  const linkingTo = (step: LinkStep, open: () => void) => {
+    linking.current = step;
+    try {
+      open();
+    } finally {
+      linking.current = undefined;
+    }
+  };
+
+  /**
+   * A link place opened as its route reads it (`places/link-places.ts`): a
+   * comment thread or a section opens its task's Overview, asking its page
+   * to bring the thread or the section into view, and a page opens the side
+   * panel on its tab, on its task or on the page of its agent on no task.
+   * Each is the description's but a page, so while descriptions are off a
+   * link to one opens the task's agents.
+   */
+  const openRouted = ({ declared, link }: RoutedLink) => {
+    const { workspace, place } = link;
+    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
+    navigations.current += 1;
+    switch (declared) {
+      case LINK_ROUTED_PLACE.COMMENT: {
+        if (place.kind !== LINK_PLACE.COMMENT) return;
+        const { planId } = place;
+        if (!descriptionsOnFor(planId, workspace)) {
+          linkingTo({ taskId: planId }, () => showTaskAgents(planId));
+          return;
+        }
+        linkingTo({ taskId: planId, column: MAIN_TAB.OVERVIEW }, () => showOverview(place));
+        commentAsks.current += 1;
+        setCommentReveal({ planId, thread: place.threadId, ask: commentAsks.current });
+        return;
+      }
+      case LINK_ROUTED_PLACE.SECTION: {
+        if (place.kind !== LINK_PLACE.SECTION) return;
+        const { planId, anchor } = place;
+        const column = descriptionsOnFor(planId) ? MAIN_TAB.OVERVIEW : undefined;
+        linkingTo({ taskId: planId, column }, () =>
+          showMention({ kind: MENTION_KIND.SECTION, taskId: planId, anchor }),
+        );
+        return;
+      }
+      case LINK_ROUTED_PLACE.PAGE: {
+        if (place.kind !== LINK_PLACE.PAGE) return;
+        const tab = pageTab(place.pageId);
+        // A page of an agent on no task opens on that agent's page, in its panel.
+        if ("agentId" in place) {
+          openAgentPage(place.agentId, workspace);
+          sidePanel.onShow(place.agentId, tab);
+          return;
+        }
+        const step = { taskId: place.planId, side: { tab, link: place } };
+        linkingTo(step, () => linkPanelTab(place, tab));
+        return;
+      }
+    }
+  };
+
+  // A link opened by matching it on the route tree, as its link place's route reads it, else through the door its kind has.
+  const openLinked = (link: ReadLink) => {
+    const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
+    const routed = routedLinkOf(router, link, input.taskView.workspaceNow() ?? listedStep);
+    if (routed !== undefined) openRouted(routed);
+    else openPlace(link);
+  };
+
   /**
    * An app link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
@@ -3840,37 +3919,11 @@ export function useTasksTab(input: {
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
         return;
-      case LINK_PLACE.SECTION:
-        showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
-        return;
-      case LINK_PLACE.COMMENT:
-        // A comment is the description's, so while descriptions are off its link opens the task's agents.
-        if (!descriptionsOnFor(place.planId, workspace)) {
-          showTaskAgents(place.planId);
-          return;
-        }
-        showOverview(place);
-        commentAsks.current += 1;
-        setCommentReveal({
-          planId: place.planId,
-          thread: place.threadId,
-          ask: commentAsks.current,
-        });
-        return;
       case LINK_PLACE.VERSION:
         openHistory(place.planId, {
           spot: { revision: place.revision, opened: undefined, listed: false },
           workspace,
         });
-        return;
-      case LINK_PLACE.PAGE:
-        // A page of an agent on no task opens on that agent's page, in its panel.
-        if ("agentId" in place) {
-          openAgentPage(place.agentId, workspace);
-          sidePanel.onShow(place.agentId, pageTab(place.pageId));
-          return;
-        }
-        linkPanelTab(place, pageTab(place.pageId));
         return;
       case LINK_PLACE.WORKER:
       case LINK_PLACE.CHANGES:

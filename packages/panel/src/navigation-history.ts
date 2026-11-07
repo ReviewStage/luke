@@ -109,7 +109,13 @@
  * in place, so a phone opens on the Inbox and Back never lands on Home.
  */
 
-import { LINK_PLACE, linkOf, type ReadLink, taskLinkStep } from "@repo/features/link-grammar";
+import {
+  LINK_PLACE,
+  linkOf,
+  type ReadLink,
+  taskLinkStep,
+  withTaskId,
+} from "@repo/features/link-grammar";
 import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import { type StripTab, sameTab, tabKey, taggedStripTab } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -142,6 +148,7 @@ import {
   useWindowPlace,
 } from "./places/routed-places.js";
 import {
+  type LinkStep,
   type PanelStep,
   type SideStep,
   STEP_WITHIN,
@@ -150,6 +157,7 @@ import {
   sameSubStep,
   stepWithin,
   stoodAlike,
+  type TaskAt,
   type TaskStep,
 } from "./places/task-step.js";
 import { useRouteAccess } from "./route-gates.js";
@@ -707,6 +715,17 @@ export interface WindowHistory extends NavigationHistory {
   onLeave: () => void;
 }
 
+/** The window's door for a link's step on a task's own place, which the root hands the Tasks tab. */
+export interface TaskVisits {
+  /**
+   * Writes the step a link opens on the own place of a task not standing, at
+   * `at`, before the window stands there, as one move: at the task's address,
+   * or, in a narrow room, at the link of the side panel's tab it opens, with
+   * what it opens in its typed history state.
+   */
+  onVisitTask: (at: TaskAt, step: LinkStep) => void;
+}
+
 /** The window's history with the narrow screens' ways back to their lists, which the root hands the screens. */
 export interface WindowHistoryLists extends WindowHistory {
   readonly lists: ListBacks;
@@ -1089,6 +1108,8 @@ function useHistory(input: {
   away: AwayStep | undefined;
   /** Goes back to that step, answering whether one stood there to go to. */
   stepAway: () => boolean;
+  /** Writes the window's step on `to` before it stands there, as its watch would write it once it does (`visitWrite`). */
+  visit: (to: Place) => void;
 } {
   const { held, place, address, reachable, named, guard, opened, onTaskRoute } = input;
   // Note that the presses read the trail as they land, because a
@@ -1276,6 +1297,23 @@ function useHistory(input: {
     [held, goTo],
   );
 
+  // Note that a link's step is written as the window would write it on arriving, read from the presses and opens heard
+  // since the last write, so the window arriving there finds it standing and writes nothing more.
+  const visit = (to: Place) => {
+    const pressed = presses.current !== pressesWritten.current;
+    const opens = latest.current.opened !== openedWritten.current;
+    const write = visitWrite(
+      held.trail,
+      to,
+      to.address,
+      undefined,
+      pressed,
+      opens,
+      latest.current.onTaskRoute,
+    );
+    if (write !== undefined) own(() => recordTrail(held, write));
+  };
+
   // A step back to `to`'s step only, answering whether it was the one behind.
   const backTo = (to: Place): boolean => {
     const trail = held.trail;
@@ -1312,6 +1350,7 @@ function useHistory(input: {
     stepBack: () => step(-1),
     away: reading.away,
     stepAway: () => goTo(awayFrom(held.trail, latest.current.reachable)),
+    visit,
   };
 }
 
@@ -1387,7 +1426,7 @@ export function useWindowHistory(input: {
     | "pages"
     | "workspaces"
   >;
-}): WindowHistoryLists {
+}): WindowHistoryLists & TaskVisits {
   const { tasks } = input;
   // The routed place standing over the task's own place, none on the task's own place itself, which the window stands as the task bound for.
   const routed = input.routed?.place === ROUTED_PLACE.TASK ? undefined : input.routed;
@@ -1460,7 +1499,16 @@ export function useWindowHistory(input: {
   }
   // A task whose link is not drawn yet, as one the host is still opening, stands at the address its links name it by, under its
   // workspace, else the one listed; none while no workspace of it is known, since every other address is another place's.
+  // The address a link's step was written at on the task it opens (`onVisitTask`), which that task's step stands at until
+  // its own link is drawn, rather than the link of the task drawn before it opens.
+  const [linked, setLinked] = useState<{ readonly taskId: string; readonly address: string }>();
+  const openNow = tasks.activeTaskId;
+  const linkedStands =
+    linked !== undefined &&
+    linked.taskId === boundFor &&
+    (openNow !== boundFor || input.link === undefined);
   const taskAddress = useMemo(() => {
+    if (linkedStands) return linked?.address;
     if (input.link !== undefined) return addressOf(input.link);
     const task = tasks.tasks.find((each) => each.id === boundFor);
     const home =
@@ -1471,7 +1519,12 @@ export function useWindowHistory(input: {
     if (boundFor === undefined || workspace === undefined) return undefined;
     const planId = task === undefined ? boundFor : taskLinkStep(task);
     return addressOf({ workspace, place: { kind: LINK_PLACE.TASK, planId } });
-  }, [input.link, tasks.tasks, tasks.workspace, tasks.workspaces, boundFor]);
+  }, [linkedStands, linked, input.link, tasks.tasks, tasks.workspace, tasks.workspaces, boundFor]);
+  // Note that a link's address stands only until its task opens with its own link drawn, or another task is bound for.
+  const linkedDone = linked !== undefined && !linkedStands;
+  useEffect(() => {
+    if (linkedDone) setLinked(undefined);
+  }, [linkedDone]);
   const titleLabel = input.title?.label;
   const titleDetail = input.title?.detail;
   const titleColumn = input.title?.panes?.column;
@@ -1495,6 +1548,9 @@ export function useWindowHistory(input: {
         ? routedPlace(routedAddress)
         : { ...routedPlace(routedAddress), side };
     }
+    // Note that a task a link's step was written on ahead of its opening is no step until it opens, since what its panes
+    // show until then is the task before it's (`onVisitTask`).
+    if (linkedStands && openNow !== boundFor) return undefined;
     // Note that with no task bound and no routed place standing the window stands on no place yet: a link's task waiting on
     // its open, or the host's binding of none on its way to Home (`places/place-binding.ts`).
     if (taskAhead || boundFor === undefined || taskAddress === undefined) return undefined;
@@ -1521,6 +1577,8 @@ export function useWindowHistory(input: {
     inboxOpen,
     inboxChosen,
     pageAgent,
+    linkedStands,
+    openNow,
   ]);
   // The task a version history's address names, by the step its links name it by under the workspace named, or by its id.
   const historyTaskOf = (matches: ReturnType<typeof router.matchRoutes>) => {
@@ -1669,7 +1727,7 @@ export function useWindowHistory(input: {
       routedPlaceOf(router.matchRoutes(pathOf(address)), access) === ROUTED_PLACE.TASK,
     [router, access],
   );
-  const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
+  const { backTo, upTo, stepBack, stepAway, visit, ...history } = useHistory({
     held,
     place,
     address: routedAddress ?? taskAddress ?? NO_LINK_ADDRESS,
@@ -1762,6 +1820,23 @@ export function useWindowHistory(input: {
     },
     onLeave: () => {
       if (!stepAway()) tasks.onGoHome();
+    },
+    onVisitTask: (at: TaskAt, step: LinkStep) => {
+      const { side } = step;
+      // A narrow room's side panel is a step of its own, which its tab's link names where it has one (`links-at-hand.ts`).
+      const panelLink =
+        narrow && side?.link !== undefined ? withTaskId(side.link, at.task) : undefined;
+      const place = panelLink ?? { kind: LINK_PLACE.TASK, planId: at.task };
+      const address = addressOf({ workspace: at.workspace, place });
+      setLinked({ taskId: step.taskId, address });
+      visit(
+        taskPlace(address, {
+          taskId: step.taskId,
+          column: step.column,
+          panel: narrow && side !== undefined ? { open: true, tab: side.tab } : undefined,
+          side: narrow ? undefined : side?.tab,
+        }),
+      );
     },
     lists,
   });

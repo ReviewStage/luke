@@ -20,7 +20,7 @@
  * turned takes the standing step in place.
  */
 
-import { taskLinkStep } from "@repo/features/link-grammar";
+import { type LinkPlace, taskLinkStep } from "@repo/features/link-grammar";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import type { MainTab } from "../tasks/use-main-tabs.js";
@@ -48,6 +48,19 @@ export interface StepShown {
 /** What a step on a task's own place holds: the task by its id, so a rename leaves it the same step, and what its panes show. */
 export interface TaskStep extends StepShown {
   readonly taskId: string;
+}
+
+/** A side panel's tab a link opens, and the link that names it, which a narrow room's step stands at; none for a tab no link names. */
+interface LinkSide {
+  readonly tab: SidePanelTab;
+  readonly link: LinkPlace | undefined;
+}
+
+/** What a link opens on a task's own place, which its step holds before the window stands there: the column's tab, and the side panel's, each where it opens one. */
+export interface LinkStep {
+  readonly taskId: string;
+  readonly column?: MainTab | undefined;
+  readonly side?: LinkSide | undefined;
 }
 
 /** How a step showing something else within the page standing is written: as a step of its own, in the standing step's place, or as the standing step itself. */

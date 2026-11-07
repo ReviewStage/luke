@@ -14,13 +14,24 @@
  * `/app`. A tab opened at a link written before the task was a task,
  * `/<workspace>/plan/…`, is moved onto the address written now,
  * `/<workspace>/task/…`, before it is read, so the address bar, a reload, and
- * Copy link name it as every link does now.
+ * Copy link name it as every link does now. A link place, a section, a
+ * comment thread, or a page (`@repo/panel/places/link-places`), is its
+ * route's to open, so a tab opened at one is moved onto the address its link
+ * is written at now, every older spelling read, and lands on that route,
+ * which opens it, rather than being said here.
  */
 
-import { currentTaskPath, readShownLink, type ShownLink } from "@repo/features/link-grammar";
+import {
+  currentTaskPath,
+  linkOf,
+  type ReadLink,
+  readShownLink,
+  type ShownLink,
+} from "@repo/features/link-grammar";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import type { AppBridge } from "@repo/host/bridge";
 import { savesStep } from "@repo/panel/navigation-history";
+import { opensAtItsRoute } from "@repo/panel/places/link-places";
 import type { RouterHistory } from "@tanstack/react-router";
 import { addressHere, PANEL_PATH } from "./web-address";
 
@@ -33,6 +44,28 @@ function linkHere(): ShownLink | undefined {
   return readShownLink(`${LINK_ORIGIN}${addressHere()}`);
 }
 
+/** Whether a link is one a link place's route opens, which the tab lands on rather than saying here. */
+function routedHere(link: ShownLink | undefined): link is ReadLink {
+  return link !== undefined && "workspace" in link && opensAtItsRoute(link);
+}
+
+/** The address a link is written at now, its path, query, and fragment, as `linkOf` writes it, every other key the tab's own query carries kept after its own. */
+function addressOfLink(link: ReadLink): string {
+  const url = new URL(linkOf(link.place, link.workspace));
+  for (const [key, value] of new URLSearchParams(location.search)) {
+    if (!url.searchParams.has(key)) url.searchParams.append(key, value);
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** Moves the tab's entry onto `address` in place, flushed at once, before anything reads it. */
+function standAt(history: RouterHistory, address: string): void {
+  if (address === addressHere()) return;
+  history.replace(address, history.location.state);
+  // Note that the history writes the address bar on its next tick, so the move is flushed now, before anything reads the address.
+  history.flush();
+}
+
 /**
  * The bridge with the tab's address said through its `onShowLink`: as the
  * page loads, to the first subscriber only, where the entry it loaded on
@@ -42,14 +75,11 @@ function linkHere(): ShownLink | undefined {
  * own move along it, never a write.
  */
 export function withLoadLink(bridge: AppBridge, history: RouterHistory): AppBridge {
-  const opened = addressHere();
-  const current = currentTaskPath(opened);
-  if (current !== opened) {
-    history.replace(current, history.location.state);
-    // Note that the history writes the address bar on its next tick, so the move is flushed now, before anything reads the address.
-    history.flush();
-  }
-  let loaded = savesStep(history.location) ? undefined : linkHere();
+  standAt(history, currentTaskPath(addressHere()));
+  const here = savesStep(history.location) ? undefined : linkHere();
+  // A link place lands on its route at the address its link is written at now, which opens it.
+  if (routedHere(here)) standAt(history, addressOfLink(here));
+  let loaded = routedHere(here) ? undefined : here;
   return {
     ...bridge,
     onShowLink: (listener) => {
@@ -57,7 +87,7 @@ export function withLoadLink(bridge: AppBridge, history: RouterHistory): AppBrid
       const stopLanding = history.subscribe(({ location, action }) => {
         if (action.type === "PUSH" || action.type === "REPLACE" || savesStep(location)) return;
         const link = linkHere();
-        if (link !== undefined) listener(link);
+        if (link !== undefined && !routedHere(link)) listener(link);
       });
       const waiting = loaded;
       loaded = undefined;
