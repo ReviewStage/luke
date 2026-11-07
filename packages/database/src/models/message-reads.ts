@@ -59,9 +59,8 @@ import { claimExpiredBefore } from "./dispatch-claim.js";
 /**
  * The conversation reads the brain and the voice make: a turn's journal by
  * its client id, a row by its id, the rows a standing context recalls, and
- * the turn rows an id names. A soft-deleted conversation is read by nothing
- * here: each read joins the conversation row and skips one stamped
- * `deleted_at`, so it is gone from every read from the call after the stamp.
+ * the turn rows an id names. A deleted conversation is read by nothing
+ * here, because its rows go with it (`conversation-delete.ts`).
  *
  * Messages are read back through `readStoredUIMessages`, never the SDK's
  * validator alone, because the SDK turns a terminal tool part naming a tool
@@ -187,8 +186,7 @@ function pageLimit(cursor: { readonly limit?: number }): number {
 
 /**
  * The join every read here makes to its conversation row, one per table
- * reached: the conversation the row belongs to, stamped by no Clear, so a
- * cleared conversation is read by nothing. It is spelled once per table
+ * reached: the conversation the row belongs to. It is spelled once per table
  * rather than once over a column handed in, because the column the join
  * holds to is what makes each one the join it is. A message's join also
  * leaves out a line its hand-over withdrew, which the agent never heard
@@ -196,14 +194,10 @@ function pageLimit(cursor: { readonly limit?: number }): number {
  */
 const MESSAGE_CONVERSATION_STANDS = and(
   eq(conversations.id, messages.conversationId),
-  isNull(conversations.deletedAt),
   standingLine(messages),
 );
 
-const TURN_CONVERSATION_STANDS = and(
-  eq(conversations.id, turns.conversationId),
-  isNull(conversations.deletedAt),
-);
+const TURN_CONVERSATION_STANDS = eq(conversations.id, turns.conversationId);
 
 /** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
 const MESSAGE_FIELDS = {
@@ -515,7 +509,6 @@ const findJournalRevision = SqlSchema.findOneOption({
           and(
             eq(conversations.id, options.conversationId),
             eq(conversations.userId, options.userId),
-            isNull(conversations.deletedAt),
           ),
         ),
     ),
@@ -621,7 +614,6 @@ const findMessageStanding = SqlSchema.findOneOption({
           and(
             eq(conversations.id, options.conversationId),
             eq(conversations.userId, options.userId),
-            isNull(conversations.deletedAt),
           ),
         ),
     ),
@@ -664,7 +656,6 @@ const findRunningChildTurns = SqlSchema.findAll({
           and(
             eq(conversations.parentConversationId, options.parentConversationId),
             eq(conversations.userId, options.userId),
-            isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
         )

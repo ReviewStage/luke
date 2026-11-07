@@ -213,7 +213,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
-          sandboxOpen: sql<boolean>`${conversations.runtimeSessionId} is not null and ${conversations.deletedAt} is null`,
+          sandboxOpen: sql<boolean>`${conversations.runtimeSessionId} is not null`,
           pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
           markedUnread: sql<boolean>`coalesce(${agentRead.markedUnread}, false)`,
         },

@@ -61,13 +61,7 @@ const lockConversation = SqlSchema.findOneOption({
       db
         .select({ id: conversations.id })
         .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
-          ),
-        )
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
         .for("update"),
     ),
 });
@@ -243,18 +237,16 @@ const markRewound = SqlSchema.void({
     ),
 });
 
-const retireWorkersFrom = SqlSchema.void({
+const deleteWorkersFrom = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, from: Schema.Date }),
   execute: ({ conversationId, from }) =>
     Database.use((db) =>
       db
-        .update(conversations)
-        .set({ deletedAt: sql`now()` })
+        .delete(conversations)
         .where(
           and(
             eq(conversations.parentConversationId, conversationId),
             gte(conversations.createdAt, from),
-            isNull(conversations.deletedAt),
           ),
         ),
     ),
@@ -279,13 +271,7 @@ const findRewoundRevision = SqlSchema.findOneOption({
       db
         .select({ rewoundRevision: conversations.rewoundRevision })
         .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
-          ),
-        ),
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
     ),
 });
 
@@ -342,8 +328,8 @@ const cut = (target: ConversationTarget, messageId: string, place: number) =>
     const dropped = keepsFirst ? later : turnIds;
     if (keepsFirst && first !== undefined) yield* settleKeptTurn({ conversationId, turnId: first });
     if (dropped.length > 0) yield* deleteTurns({ conversationId, turnIds: dropped });
-    // Note that a worker a dropped turn delegated is stamped deleted with it, so it is listed no more.
-    yield* retireWorkersFrom({ conversationId, from });
+    // Note that a worker a dropped turn delegated is deleted with it, its own workers by the cascade.
+    yield* deleteWorkersFrom({ conversationId, from });
     yield* markRewound({ conversationId, clientId, heard, turnIds });
     return Result.succeed<ConversationRewound>({ clientId, turnIds });
   });

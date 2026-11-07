@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createAgent } from "../agent-store.js";
@@ -18,7 +16,7 @@ import {
   listSessionEntrySubkeys,
   loadSessionEntries,
 } from "../claude-session-entries.js";
-import { CLEARED_CONVERSATION_RETENTION_MS, purgeClearedConversations } from "../soft-delete.js";
+import { deleteConversations } from "../conversation-delete.js";
 
 /**
  * An agent's CLI transcript as Anthropic's reference Postgres store keeps
@@ -130,21 +128,14 @@ it.layer(getTestDB())("an agent's stored CLI transcript", (it) => {
     }),
   );
 
-  it.effect("a transcript goes with its conversation when the purge removes it", () =>
+  it.effect("a transcript goes with its conversation when a delete removes it", () =>
     Effect.gen(function* () {
       const { userId, conversationId } = yield* openAgent;
       const kept = yield* openAgent;
       yield* appendSessionEntries(userId, conversationId, MAIN, [entry("a")]);
       yield* appendSessionEntries(kept.userId, kept.conversationId, MAIN, [entry("k")]);
-      const now = yield* DateTime.nowAsDate;
-      yield* Database.use((db) =>
-        db
-          .update(conversations)
-          .set({ deletedAt: new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS) })
-          .where(eq(conversations.id, conversationId)),
-      );
 
-      yield* purgeClearedConversations(now);
+      yield* deleteConversations([conversationId]);
 
       assert.deepEqual(yield* loaded(userId, conversationId, MAIN), []);
       assert.deepEqual(yield* loaded(kept.userId, kept.conversationId, MAIN), [entry("k")]);

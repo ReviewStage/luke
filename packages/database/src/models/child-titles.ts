@@ -9,7 +9,7 @@
  * alone, so the routes that read a task's work load nothing past the store.
  */
 
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -36,7 +36,6 @@ const findTitles = SqlSchema.findAll({
             eq(conversations.userId, userId),
             eq(conversations.parentConversationId, parentConversationId),
             isNotNull(conversations.title),
-            isNull(conversations.deletedAt),
           ),
         ),
     ),

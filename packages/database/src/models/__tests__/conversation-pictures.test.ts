@@ -4,24 +4,20 @@ import { it } from "@effect/vitest";
 import { CONVERSATION_PICTURE_BOUNDS } from "@repo/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { inArray } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { attachment } from "../../schemas/attachment.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
+import { deleteConversations } from "../conversation-delete.js";
 import {
   keepConversationPicture,
   type PictureToKeep,
   readConversationPicture,
 } from "../conversation-pictures.js";
 import { childConversationId } from "../ids.js";
-import {
-  CLEARED_CONVERSATION_RETENTION_MS,
-  purgeClearedConversations,
-  stampConversationsDeleted,
-} from "../soft-delete.js";
 import type { ConversationTarget } from "../writer.js";
 
 /**
@@ -115,63 +111,47 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
     }),
   );
 
-  it.effect(
-    "a deleted conversation's pictures, its worker's among them, stand through the retention window and go with its purge",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const agent = yield* openConversation;
-        const worker: ConversationTarget = {
-          userId: agent.userId,
-          conversationId: childConversationId(agent.conversationId, "call-worker"),
-        };
-        yield* db.insert(conversations).values({
-          id: worker.conversationId,
-          userId: agent.userId,
-          kind: CONVERSATION_KIND.AGENT,
-          parentConversationId: agent.conversationId,
-        });
-        const standing = yield* openConversation;
-        const own = yield* keepConversationPicture(agent, picture(1));
-        const workers = yield* keepConversationPicture(worker, picture(2));
-        const kept = yield* keepConversationPicture(standing, picture(3));
-        assert.ok(Option.isSome(own) && Option.isSome(workers) && Option.isSome(kept));
+  it.effect("a deleted conversation's pictures, its worker's among them, go with it at once", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const agent = yield* openConversation;
+      const worker: ConversationTarget = {
+        userId: agent.userId,
+        conversationId: childConversationId(agent.conversationId, "call-worker"),
+      };
+      yield* db.insert(conversations).values({
+        id: worker.conversationId,
+        userId: agent.userId,
+        kind: CONVERSATION_KIND.AGENT,
+        parentConversationId: agent.conversationId,
+      });
+      const standing = yield* openConversation;
+      const own = yield* keepConversationPicture(agent, picture(1));
+      const workers = yield* keepConversationPicture(worker, picture(2));
+      const kept = yield* keepConversationPicture(standing, picture(3));
+      assert.ok(Option.isSome(own) && Option.isSome(workers) && Option.isSome(kept));
 
-        yield* stampConversationsDeleted([agent.conversationId]);
-        const stamped = yield* DateTime.nowAsDate;
-        yield* purgeClearedConversations(
-          new Date(stamped.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1),
-        );
-        const withinWindow = yield* readConversationPicture(agent.conversationId, own.value.id);
-        yield* purgeClearedConversations(
-          new Date(stamped.getTime() + CLEARED_CONVERSATION_RETENTION_MS),
-        );
+      yield* deleteConversations([agent.conversationId]);
 
-        assert.ok(
-          Option.isSome(withinWindow),
-          "a stamped conversation keeps its pictures until the purge",
-        );
-        assert.deepEqual(
-          yield* readConversationPicture(agent.conversationId, own.value.id),
-          Option.none(),
-        );
-        assert.deepEqual(
-          yield* readConversationPicture(worker.conversationId, workers.value.id),
-          Option.none(),
-        );
-        assert.deepEqual(
-          yield* db
-            .select({ id: attachment.id })
-            .from(attachment)
-            .where(
-              inArray(attachment.conversationId, [agent.conversationId, worker.conversationId]),
-            ),
-          [],
-        );
-        assert.ok(
-          Option.isSome(yield* readConversationPicture(standing.conversationId, kept.value.id)),
-          "a conversation no one deleted keeps its pictures",
-        );
-      }),
+      assert.deepEqual(
+        yield* readConversationPicture(agent.conversationId, own.value.id),
+        Option.none(),
+      );
+      assert.deepEqual(
+        yield* readConversationPicture(worker.conversationId, workers.value.id),
+        Option.none(),
+      );
+      assert.deepEqual(
+        yield* db
+          .select({ id: attachment.id })
+          .from(attachment)
+          .where(inArray(attachment.conversationId, [agent.conversationId, worker.conversationId])),
+        [],
+      );
+      assert.ok(
+        Option.isSome(yield* readConversationPicture(standing.conversationId, kept.value.id)),
+        "a conversation no one deleted keeps its pictures",
+      );
+    }),
   );
 });

@@ -24,7 +24,6 @@ function sweepRequest(
 
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
-  purged: number[];
   deviceWarmRunners: number[];
   wakeups: number[];
   syncLog: number[];
@@ -32,7 +31,6 @@ interface Recorded {
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
-    purged: [],
     deviceWarmRunners: [],
     wakeups: [],
     syncLog: [],
@@ -41,11 +39,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
     monitor: { run: (sweep) => sweep },
-    purgeCleared: (now) =>
-      Effect.sync(() => {
-        recorded.purged.push(now);
-        return 2;
-      }),
     sweepDeviceWarmRunners: (now) =>
       Effect.sync(() => {
         recorded.deviceWarmRunners.push(now);
@@ -82,7 +75,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
-      purged: [],
       deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
@@ -101,13 +93,11 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
-      purged: [],
       deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
     });
     assert.deepEqual(missing.recorded, {
-      purged: [],
       deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
@@ -125,10 +115,9 @@ it.effect(
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.equal(answer.body.syncLog, 5);
-      const [instant] = recorded.purged;
+      const [instant] = recorded.deviceWarmRunners;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
-        purged: [instant],
         deviceWarmRunners: [instant],
         wakeups: [instant],
         syncLog: [instant],
@@ -142,7 +131,7 @@ it.effect(
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        purgeCleared: () => Effect.fail(new Error("a conversation's row could not be read")),
+        sweepDeviceWarmRunners: () => Effect.fail(new Error("a runner's row could not be read")),
         sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
@@ -158,7 +147,7 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.purged, SWEEP_FAILED);
+      assert.deepEqual(answer.body.deviceWarmRunners, SWEEP_FAILED);
       assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
       assert.equal(recorded.syncLog.length, 1);
     }),
