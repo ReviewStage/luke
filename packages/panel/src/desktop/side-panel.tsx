@@ -1518,6 +1518,7 @@ function PanelTabs({
         : null}
       <TabStrip
         label="Panel"
+        sheet={holder === SIDE_PANEL_HOLDER.TASK}
         onMove={(from, to) => {
           const entry = strip[from];
           if (entry !== undefined) panel.onMove(entry.tab, to);

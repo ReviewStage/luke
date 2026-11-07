@@ -313,7 +313,7 @@ function menuItem(label: string) {
 /** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
-    ...document.querySelectorAll<HTMLElement>('.desktop-task-main .ui-toolbar [role="tab"]'),
+    ...document.querySelectorAll<HTMLElement>('.task-tabs .ui-toolbar [role="tab"]'),
   ].find((each) => each.textContent?.includes(name) === true);
   assert.ok(tab, `the column has a tab named ${name}`);
   act(() => {

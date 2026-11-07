@@ -61,12 +61,15 @@ const TabTooltip: TabHint = ({ label, card, children }) => (
 export function TabStrip({
   label,
   ground,
+  sheet = false,
   onMove,
   children,
 }: {
   label: string;
   /** The ground the strip stands on in a narrow room, full bleed: the side panel's well, or the column's own. */
   ground?: TabsGround | undefined;
+  /** Whether the strip stands on its sheet rather than the frame, as an agent's own tabs do inside its sheet. */
+  sheet?: boolean;
   onMove?: TabMove | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -90,7 +93,9 @@ export function TabStrip({
     <TabPlaceContext.Provider value={placeOf}>
       <Tabs
         label={label}
-        ground={room === SHELL_ROOM.NARROW ? ground : TABS_GROUND.FRAME}
+        ground={
+          room === SHELL_ROOM.NARROW ? ground : sheet ? TABS_GROUND.GROUND : TABS_GROUND.FRAME
+        }
         fold={finger ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
         onMove={onMove}
         onFocusChange={setFocused}
