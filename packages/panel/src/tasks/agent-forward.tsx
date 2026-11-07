@@ -268,7 +268,9 @@ export function ForwardChip({
       },
     ],
     ...(answer.on ? [portRows(answer)] : []),
-    ...(answer.on && answer.ports.length > 0 ? [shareRows(agent.id, answer, copy)] : []),
+    ...(answer.on && (answer.shared !== undefined || answer.ports.length > 0)
+      ? [shareRows(agent.id, answer, copy)]
+      : []),
   ];
   const chip = (
     <Chip
