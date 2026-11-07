@@ -181,11 +181,16 @@ export const CODER = {
    * duration of five minutes, so a holder killed mid-launch lets go by
    * then, and longer than a launch with its checkout takes. `WAIT` is how
    * long a call waits behind another's lease before it fails as
-   * unavailable, checking every `POLL`.
+   * unavailable, checking every `POLL`. `SEND_WAIT` is that wait for a
+   * message handed on in its request: the send runs inside the store's
+   * thirty-second dispatch deadline (`AWAITING_LINE_DISPATCH_DEADLINE`),
+   * which interrupts it as not taken, so it gives up on a busy lease with
+   * ten seconds left for its write and is answered unavailable as such.
    */
   RUNNER_LEASE: {
     HOLD: Duration.minutes(5),
     WAIT: Duration.minutes(2),
+    SEND_WAIT: Duration.seconds(20),
     POLL: Duration.millis(250),
   },
   /**

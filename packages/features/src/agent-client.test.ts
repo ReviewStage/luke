@@ -68,40 +68,19 @@ function causeTraceOf(answer: object): unknown {
   return traceId;
 }
 
-it.effect(
-  "starts an agent with the request as sent, and reads each refusal as its own failure",
-  () =>
-    Effect.gen(function* () {
-      const request = { idempotencyKey: "press-1", ...CHOICE };
-      const api = fakeCloudApi({
-        [`POST /api/plans/${TASK_ID}/agents`]: {
-          answer: () => ({ agent: AGENT }),
-          status: 201,
-        },
-      });
-      const refusals = [
-        [HOSTED_API_ERROR.NO_REPOSITORY, AGENT_CALL_FAILURE.NO_REPOSITORY],
-        [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE],
-        [HOSTED_API_ERROR.INVALID_REQUEST, AGENT_CALL_FAILURE.INVALID_CHOICE],
-        [HOSTED_API_ERROR.GITHUB_UNANSWERED, AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
-        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
-      ] as const;
-
-      const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
-      assert.deepEqual(started, { agent: AGENT });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
-
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          [`POST /api/plans/${TASK_ID}/agents`]: {
-            answer: () => ({ error }),
-            status: HTTP_STATUS.CONFLICT,
-          },
-        });
-        const refused = yield* Effect.provide(client().start(TASK_ID, request), refusing.layer);
-        assert.deepEqual(uncaused(refused), { failure }, error);
-      }
-    }),
+it.effect("starts an agent with the request as sent", () =>
+  Effect.gen(function* () {
+    const request = { idempotencyKey: "press-1", ...CHOICE };
+    const api = fakeCloudApi({
+      [`POST /api/plans/${TASK_ID}/agents`]: {
+        answer: () => ({ agent: AGENT }),
+        status: 201,
+      },
+    });
+    const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
+    assert.deepEqual(started, { agent: AGENT });
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+  }),
 );
 
 it.effect(

@@ -569,7 +569,7 @@ export const MAC_SHELL_ACT_KIND = {
  * allowed once, allowed always, which also writes Settings › This Mac to
  * Always allow, or denied. Answered by the host, which holds the ask.
  */
-export const MAC_COMMAND_ACT_KIND = {
+const MAC_COMMAND_ACT_KIND = {
   MAC_COMMAND_ANSWER: "macCommands.answer",
 } as const;
 
@@ -577,10 +577,10 @@ export const MAC_COMMAND_ACT_KIND = {
  * A coding agent's cloud ports forwarded to this Mac's localhost
  * (`@repo/features/port-forward-acts`), for one agent at a time: its
  * forwarding turned on or off, how it stands kept in app state
- * (`portForwarding`), answered by the platform shell, whose host listens on the Mac's loopback. What a forwarded
+ * (`portForwarding`), answered by the host, which listens on the Mac's loopback. What a forwarded
  * connection carries never travels on an act.
  */
-export const PORT_FORWARD_ACT_KIND = {
+const PORT_FORWARD_ACT_KIND = {
   PORT_FORWARD_SET: "portForward.set",
 } as const;
 
@@ -1065,7 +1065,6 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...CLI_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
-  ...PORT_FORWARD_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

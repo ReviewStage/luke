@@ -2280,6 +2280,44 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a message waiting behind another call's lease is answered unavailable before the store's dispatch deadline",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        // Another instance's call holds the lease, as a launch elsewhere does.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), true);
+
+        // The store interrupts a hand-over at thirty seconds, so the send must answer by then.
+        const waiting = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Again.")),
+        );
+        for (let second = 0; second < 29; second += 1) {
+          yield* turnsPass;
+          yield* TestClock.adjust("1 second");
+        }
+        yield* turnsPass;
+        const answered = waiting.pollUnsafe();
+        yield* Fiber.interrupt(waiting);
+
+        assert.ok(answered !== undefined && Exit.isSuccess(answered));
+        assert.deepEqual(answered.value, { outcome: SESSION_SEND_OUTCOME.FAILED, status: 503 });
+        assert.equal(api.commands.length, 1);
+      }),
+  );
+
+  it.effect(
     "messages sent while another call holds the lease, as a launch does, are answered at once and read by the launch after its first, in the order sent",
     () =>
       Effect.gen(function* () {

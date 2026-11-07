@@ -123,6 +123,7 @@ import {
   readNativeRewind,
 } from "@repo/database/models/conversation-rewind";
 import { deviceAgentAwaitsUpdate } from "@repo/database/models/device-agent-store";
+import { parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
   ANY_LAUNCH,
   clearRunnerLines,
@@ -132,6 +133,7 @@ import {
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
+import { openWorkspaceEnvironment } from "@repo/database/models/workspace-environment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -148,10 +150,11 @@ import {
   Option,
   Redacted,
   Ref,
+  Result,
   Schedule,
 } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
-import type { HostedEnvironment } from "../../environment.js";
+import { HostedEnvironment } from "../../environment.js";
 import {
   recordServerEvent,
   type SERVER_AGENT_HARNESS,
@@ -564,6 +567,21 @@ function recordOf(found: FoundPlace, userId: string, agentId: string) {
   return { machine: found.machine, session: found.session, name: found.name, userId, agentId };
 }
 
+/**
+ * The agent's workspace's variables, opened for its launch on a cloud
+ * machine; none on a Mac, nor in a deployment with no ring, under which
+ * none could have been set.
+ */
+function workspaceEnvironmentOf(agent: Agent, machine: AgentMachineKind) {
+  return Effect.gen(function* () {
+    if (machine !== AGENT_MACHINE.VERCEL) return {};
+    const keys = (yield* HostedEnvironment).providerKeyEncryptionKeys;
+    const ring = keys === undefined ? undefined : parseKeyRing(keys);
+    if (ring === undefined || Result.isFailure(ring)) return {};
+    return yield* openWorkspaceEnvironment(ring.success, agent.organizationId);
+  });
+}
+
 /** How a message reached its runner, as the handoff counts it. */
 type HandoffPath = (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH];
 
@@ -919,7 +937,9 @@ export const runnerSessions = <
           handle,
           ready: { firstSequence, rewind, opening },
         } = yield* machine.launchRunner(place.running, {
+          // Note that the workspace's variables go first, so ours win a name they share.
           env: {
+            ...(yield* workspaceEnvironmentOf(agent, place.running.machine)),
             ...credential.env,
             ...delivered.env,
           },
@@ -1930,7 +1950,11 @@ export const runnerSessions = <
         const handed = yield* queues
           ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent, true))
           : Effect.map(
-              holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent, false)),
+              holdingRunner(
+                agent.id,
+                sendHolding(sessionId, message, layout, sent, false),
+                CODER.RUNNER_LEASE.SEND_WAIT,
+              ),
               Option.some,
             );
         if (Option.isSome(handed)) return handed.value;

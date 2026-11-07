@@ -58,7 +58,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -1507,10 +1506,6 @@ test("an admin's leave says the invitations they sent stay valid, and a member's
 test("a removal the account's role does not allow says so in a toast", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  // A press's refusal is said on the window's own toasts, which the page's registry does not hold.
-  const toasts = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(toasts);
-  act(() => toasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
 
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   await confirm("Remove member");

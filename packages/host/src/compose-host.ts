@@ -57,6 +57,7 @@ import {
   type ThisMacHost,
 } from "./effect/seams.js";
 import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
+import { ActRefused } from "./host-acts.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
@@ -353,7 +354,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS),
+          // Note that a host without the Mac commands holds no ask, so an answer finds none waiting and is answered all the same, as the Gateway's refusal of its method was.
+          acts: { MAC_COMMAND_ANSWER: () => Effect.void },
+        };
     const thisMacHost = platform.has(HOST_PLATFORM_CONCERN.THIS_MAC_HOST)
       ? yield* served(
           composeThisMacHost({
@@ -422,7 +427,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             listen: yield* LoopbackListener,
           }),
         )
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS), reset: Effect.void };
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS),
+          // Note that a host without the port forwards refuses its set in the act's own sentence, as the platform's refusal of its kind was.
+          acts: { PORT_FORWARD_SET: () => Effect.fail(new ActRefused({})) },
+          reset: Effect.void,
+        };
 
     /**
      * The signed-in account's store opened where none stands: only where the
@@ -588,6 +598,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ...automations.acts,
         ...installedSkills.acts,
         ...integrations.acts,
+        ...macCommands.acts,
+        ...portForwards.acts,
         ...tasks.acts,
       },
       nodes: kernel.nodes,
