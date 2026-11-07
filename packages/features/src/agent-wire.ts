@@ -1451,6 +1451,8 @@ export const listedAgentSchema = EffectSchema.Struct({
   ...agentSummarySchema.fields,
   workspaceId: agentPageSchema.fields.workspaceId,
   repository: agentPageSchema.fields.repository,
+  /** Epoch milliseconds its newest turn ended, which a settled agent's row says it last moved at; absent while that turn runs and before it has one. */
+  settledAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ListedAgent = typeof listedAgentSchema.Type;

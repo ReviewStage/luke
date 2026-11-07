@@ -122,7 +122,7 @@ export const AGENT_ACT_KIND = {
    * The models a coding agent may run on as the account is offered them,
    * and its devices, held for the window while it holds the stream open and
    * a while after among those let go lately, asked again as a window comes
-   * forward, as the provider keys move, and every `MODEL_CATALOG_TTL`: what
+   * forward and as the provider keys move: what
    * it holds reaches the panel on app state (`LIVE_READ.MODELS`), so the
    * stream carries nothing.
    */
@@ -131,6 +131,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
   /** The default drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
+  /** Whose API key chapters run on, drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
+  AGENTS_CHAPTERS_PROVIDER_WRITE: "agents.chaptersProviderWrite",
   /** The account's preferences row, which the host holds for the session and the panel reads on app state, read again at once, as Try again asks. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /**
@@ -832,6 +834,7 @@ export const PORT_ACT_USE = {
   AGENTS_MODELS_FOLLOW: ACT_USE.READ,
   AGENTS_MODELS_RETRY: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
+  AGENTS_CHAPTERS_PROVIDER_WRITE: ACT_USE.WRITE,
   AGENTS_PREFERENCES_RETRY: ACT_USE.READ,
   HOSTS_FOLLOW: ACT_USE.READ,
   HOSTS_RETRY: ACT_USE.READ,

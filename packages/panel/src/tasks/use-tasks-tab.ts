@@ -25,6 +25,7 @@ import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-li
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { agentMovedAt, agentsOfTask } from "@repo/features/task-agents-model";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
 import {
   type CodeRef,
@@ -225,7 +226,6 @@ import {
   MAIN_TAB,
   type MainTab,
   type MainTabsControl,
-  type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
 import {
@@ -1074,25 +1074,28 @@ function pinOnTask(pin: SidebarPin, taskId: string): boolean {
 /**
  * The agent a task the developer goes back to work on lands on, so they
  * arrive in the conversation: one with a thread waiting on them, a question
- * before a notice, as the Inbox lists what waits; else the agent its row
- * names that was last active, one at work counting as active now; none where
- * its row names none, so it opens on its description. Note that the row names a few
- * of its agents, archived ones left out and those at work first
- * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
+ * before a notice, as the Inbox lists what waits; else the task's agent
+ * that was last active, one at work counting as active now, archived ones
+ * left out (`agentsOfTask`); none where it has none, so it opens on its
+ * description.
  */
 function resumingAgentOf(
   taskId: string,
-  tasks: readonly TaskSummary[],
+  agents: readonly ListedAgent[] | undefined,
   waiting: readonly AppInboxTask[],
 ): string | undefined {
   const items = waiting.find((each) => each.taskId === taskId)?.items ?? [];
   const waitingOn = items.find(holdsAsk) ?? items[0];
   if (waitingOn !== undefined) return waitingOn.agentId;
-  const lines = tasks.find((task) => task.id === taskId)?.agents?.agents ?? [];
+  const lines = agentsOfTask(agents, taskId);
   const working = lines.find((line) => agentStillWriting(line.status));
   if (working !== undefined) return working.id;
   let latest = lines[0];
-  for (const line of lines) if ((line.at ?? 0) > (latest?.at ?? 0)) latest = line;
+  for (const line of lines) {
+    if ((agentMovedAt(line) ?? 0) > (latest === undefined ? 0 : (agentMovedAt(latest) ?? 0))) {
+      latest = line;
+    }
+  }
   return latest?.id;
 }
 
@@ -1742,22 +1745,10 @@ export function useTasksTab(input: {
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
   }, [tasklessAgents, listedWorkspaceId]);
-  // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
-  const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
-  const rowAgents = openRow?.agents;
-  const rowListed = openRow !== undefined;
-  const named = useMemo<NamedAgents | undefined>(() => {
-    if (!rowListed) return undefined;
-    // Note that a row names agents only for a task with one, so a row with none names a task with none.
-    if (rowAgents === undefined) return { ids: [], total: 0 };
-    const { agents: lines, total } = rowAgents;
-    return { ids: lines.map((line) => line.id), total };
-  }, [rowListed, rowAgents]);
   const mainTabs = useMainTabs(
     fixture === undefined ? undefined : { tab: tasksFixture?.fixtureColumnTab(input.run) },
     viewed.activeTaskId,
     agents.agentIds,
-    named,
     agents.draft?.id,
     input.room === SHELL_ROOM.NARROW,
   );
@@ -2968,7 +2959,7 @@ export function useTasksTab(input: {
     openUnpinned(taskId);
     const narrow = input.room === SHELL_ROOM.NARROW;
     if (narrow) sidePanel.onSetOpen(false);
-    const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
+    const agentId = resumingAgentOf(taskId, tasks.taskAgents, input.inboxWaiting);
     if (agentId !== undefined) mainTabs.onShow(taskId, agentTab(agentId));
     else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };

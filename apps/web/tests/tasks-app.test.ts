@@ -28,6 +28,7 @@ import {
   DESCRIPTION_ACTOR,
   descriptionRevisionAnswerSchema,
   descriptionRevisionsAnswerSchema,
+  heldTaskListAnswerSchema,
   TASK_BOUNDS,
   TASK_FILE_REFUSAL,
   TASK_MODE,
@@ -36,7 +37,6 @@ import {
   taskAnswerSchema,
   taskDeleteAnswerSchema,
   taskFileAnswerSchema,
-  taskListAnswerSchema,
   UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import { messagesProcedures } from "@repo/service/agents/messages-procedures";
@@ -394,7 +394,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const opened = yield* ask(request(ONE_TASK(taskId), owner));
 
       assert.deepEqual(
-        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
+        readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
           task.id,
           task.name,
         ]),
@@ -492,7 +492,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         const listed = yield* ask(request(TASKS, owner));
         assert.deepEqual(
-          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
+          readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
             task.id,
             task.mode,
           ]),
@@ -516,7 +516,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       );
       const listed = yield* ask(request(TASKS, owner));
       assert.deepEqual(
-        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+        readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
           (task) => task.workspaceId,
         ),
         [personal.value, personal.value],
@@ -540,7 +540,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       );
       const listed = yield* ask(request(TASKS, owner));
       assert.deepEqual(
-        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
+        readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
           task.name,
           task.workspaceId,
         ]),
@@ -566,10 +566,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         const ownersOf = (bearer: string) =>
           Effect.map(ask(request(TASKS, bearer)), (listed) =>
-            readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
-              task.ownerId,
-              task.createdBy,
-            ]),
+            readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+              (task) => [task.ownerId, task.createdBy],
+            ),
           );
         const opened = readAnswer(
           taskAnswerSchema,
@@ -606,7 +605,10 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(refused, notFound);
         assert.deepEqual(unknown, notFound);
         const listed = yield* ask(request(TASKS, owner));
-        assert.deepEqual(readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
+        assert.deepEqual(
+          readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans,
+          [],
+        );
       }),
   );
 
@@ -722,7 +724,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         ).plan;
         assert.equal(unassigned.assignee, undefined);
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         ).plans;
@@ -836,8 +838,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.equal(yield* deletedAs(relay, cookie), true);
         assert.equal(yield* deletedAs(ledger, cookie), true);
         assert.deepEqual(
-          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
-            .plans,
+          readAnswer(
+            heldTaskListAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(TASKS, owner)),
+          ).plans,
           [],
         );
       }),
@@ -973,8 +978,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         assert.deepEqual([opened.plan.name, opened.plan.repository], [RELAY.name, null]);
         assert.equal(
-          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
-            .plans.length,
+          readAnswer(
+            heldTaskListAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(TASKS, owner)),
+          ).plans.length,
           1,
         );
       }),
@@ -1575,7 +1583,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         assert.equal(opened.plan.repository, null);
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );

@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { MEMORY_BOUNDS, type MemorySummary, memoryIdSchema } from "@repo/features/memory-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { describeWire } from "@repo/wire/effect";
@@ -12,7 +13,6 @@ import {
 } from "../accounts/workspace-memories.js";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   type AgentCall,
   callerAgent,

@@ -26,7 +26,7 @@ import {
   type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import type { TasksTreeAnswer } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
@@ -75,15 +75,21 @@ import {
   handState,
   holdAutomations,
   registryWith,
+  stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import {
+  agentsControl,
+  listedAgent,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -1299,17 +1305,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
     agents: {
       total: 1,
       working: 1,
-      agents: [
-        {
-          id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-          title: "Alerts",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          status: AGENT_STATUS.RUNNING,
-        },
-      ],
       pullRequestTotal: 0,
-      pullRequests: [],
     },
   };
   openPalette(
@@ -1335,6 +1331,29 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
   const shown: [string, string][] = [];
+  // The task's agent, as the list followed live holds it.
+  writeAppState(
+    stateWith(
+      {},
+      {
+        tasks: {
+          ...IDLE_TASKS_VIEW,
+          taskAgents: [
+            listedAgent({
+              id: "agent-7",
+              planId: "plan-1",
+              title: "Invoice export",
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              status: AGENT_STATUS.RUNNING,
+              createdAt: 1,
+              turnId: null,
+            }),
+          ],
+        },
+      },
+    ),
+  );
   const sent = openPalette(
     tasksControl({
       tasks: [
@@ -1348,17 +1367,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
           agents: {
             total: 1,
             working: 1,
-            agents: [
-              {
-                id: "agent-7",
-                title: "Invoice export",
-                model: "anthropic/claude-opus-5.5",
-                effort: "high",
-                status: AGENT_STATUS.RUNNING,
-              },
-            ],
             pullRequestTotal: 0,
-            pullRequests: [],
           },
         },
       ],
@@ -2972,7 +2981,7 @@ const ROTATION: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  agents: { total: 1, working: 1, agents: [ASKER], pullRequestTotal: 0, pullRequests: [] },
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 
 /** An open item of the agent's, its thread one message of the agent's words. */

@@ -8,9 +8,8 @@ import { afterEach, test } from "vitest";
 import { ThreadsDock } from "./threads-dock.js";
 
 /**
- * threads-dock.test.ts -- the line over an agent's box names the one thread
- * waiting on the developer, or how many wait and the next of them, and
- * opens the next one, the oldest posted; once none waits it stays, quiet,
+ * threads-dock.test.ts -- the line over an agent's box counts the threads
+ * waiting on the developer, and opens the next one, the oldest posted; once none waits it stays, quiet,
  * counting every thread, and opens the latest changed. Synthetic items.
  */
 
@@ -60,12 +59,12 @@ function dock(threads: readonly InboxItem[], posted: readonly InboxItem[] = thre
   return { words: container.textContent, press, opened };
 }
 
-test("the dock names the one thread waiting, or how many and the next, and opens the oldest", () => {
+test("the dock counts the threads waiting, and opens the oldest", () => {
   const one = dock([waiting(1, "Expire after 7 days?")]);
-  assert.equal(one.words, "Expire after 7 days?Needs you");
+  assert.equal(one.words, "Inbox1 needs you");
 
   const many = dock([waiting(1, "Expire after 7 days?"), waiting(2, "Who can withdraw?")]);
-  assert.equal(many.words, "2 threads need youExpire after 7 days?");
+  assert.equal(many.words, "Inbox2 need you");
   many.press();
   assert.deepEqual(many.opened, ["Expire after 7 days?"]);
 

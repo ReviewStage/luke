@@ -60,6 +60,7 @@ import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   BROWSER_AGENT_ACTION,
   BROWSER_AGENT_LIMITS,
@@ -90,7 +91,6 @@ import { isRecord, type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
 import { connectRestoring } from "./restore-tabs.js";
 import { RECORDING_FAILURE, RECORDING_START_EXIT } from "./sandbox-recorder.js";

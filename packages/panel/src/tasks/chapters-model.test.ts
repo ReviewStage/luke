@@ -130,7 +130,7 @@ test("no pull request, no chapters yet, chapters being made, and a generation th
   );
   assert.deepEqual(
     chaptersShown(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false), undefined),
-    { kind: CHAPTERS_SHOWN.NONE, generatable: false, runsOn: undefined },
+    { kind: CHAPTERS_SHOWN.NONE, generatable: false, runsOn: undefined, runsOnChoices: undefined },
   );
   assert.deepEqual(
     chaptersShown(

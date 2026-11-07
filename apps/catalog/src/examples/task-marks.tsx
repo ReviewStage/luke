@@ -1,5 +1,10 @@
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
-import { TASK_PRIORITY, TASK_STATUS, type TaskAgentsSummary } from "@repo/features/task-wire";
+import {
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskAgentsSummary,
+  type TaskPullRequestLine,
+} from "@repo/features/task-wire";
 import {
   AttentionMark,
   FailedMark,
@@ -22,12 +27,12 @@ import { CatalogSection } from "../section";
  * stand, each of the seven it can wear, every one beside the word it stands for.
  */
 
-/** A task's agents at rest, with `counts` and a pull request standing in `state` where one is given, in the merge queue where `queued`. */
+/** A task's agents at rest, counted with `counts`, and a pull request standing in `state` where one is given, in the merge queue where `queued`. */
 function agents(
   counts: Partial<Pick<TaskAgentsSummary, "working" | "failed">>,
   state?: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE],
   queued?: true,
-): TaskAgentsSummary {
+): { readonly summary: TaskAgentsSummary; readonly pullRequests: readonly TaskPullRequestLine[] } {
   const pullRequests =
     state === undefined
       ? []
@@ -43,12 +48,8 @@ function agents(
           },
         ];
   return {
-    total: 1,
-    working: 0,
-    agents: [],
-    pullRequestTotal: pullRequests.length,
+    summary: { total: 1, working: 0, pullRequestTotal: pullRequests.length, ...counts },
     pullRequests,
-    ...counts,
   };
 }
 
@@ -67,9 +68,9 @@ const AGENTS_STATUSES = [
 function TaskAgentsMarks({ size }: { size: TaskAgentsMarkSize }): React.JSX.Element {
   return (
     <Inline gap={GAP.SECTION}>
-      {AGENTS_STATUSES.map(([words, summary]) => (
+      {AGENTS_STATUSES.map(([words, { summary, pullRequests }]) => (
         <Inline key={words} gap={GAP.CONTROL}>
-          <TaskAgentsMark agents={summary} size={size} />
+          <TaskAgentsMark agents={summary} pullRequests={pullRequests} size={size} />
           <Text variant={TEXT_VARIANT.CAPTION}>{words}</Text>
         </Inline>
       ))}

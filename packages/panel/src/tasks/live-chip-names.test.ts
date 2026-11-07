@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_STATUS, type ListedAgent } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { type TaskSummary, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
@@ -55,29 +55,23 @@ const TASK: TaskSummary = {
   createdAt: AT,
   updatedAt: AT,
   repository: "acme/relay",
-  agents: {
-    total: 2,
-    working: 0,
-    agents: [
-      {
-        id: TITLED_AGENT,
-        title: "Wire the desktop",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.COMPLETED,
-      },
-      {
-        id: UNTITLED_AGENT,
-        title: null,
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  agents: { total: 2, working: 0, pullRequestTotal: 0 },
 };
+
+/** The plan's agents, as the list followed live holds them. */
+const TASK_AGENTS: readonly ListedAgent[] = [
+  { id: TITLED_AGENT, title: "Wire the desktop", status: AGENT_STATUS.COMPLETED },
+  { id: UNTITLED_AGENT, title: null, status: AGENT_STATUS.RUNNING },
+].map((agent) => ({
+  ...agent,
+  planId: TASK_ID,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  createdAt: AT,
+  turnId: null,
+  workspaceId: "workspace-acme",
+  repository: "acme/relay",
+}));
 
 /** A plan whose agents have not named it yet. */
 const { agents: _agents, ...UNNAMED } = TASK;
@@ -90,6 +84,7 @@ const STATE: AppStateSnapshot = stateWith(
       ...IDLE_TASKS_VIEW,
       listStatus: TASKS_READ.READY,
       tasks: [TASK, { ...UNNAMED, id: UNTITLED_TASK, name: UNTITLED_TASK_NAME }],
+      taskAgents: TASK_AGENTS,
       tasklessAgents: [
         {
           id: TASKLESS_AGENT,

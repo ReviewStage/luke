@@ -39,7 +39,7 @@ import {
   hostedFailureFacts,
   type LivePollInput,
 } from "./hosted-link.js";
-import type { AnyLiveRead, LiveReadAnswer, LiveReadParams } from "./live-read.js";
+import type { AnyLiveRead, LiveReadAnswer, LiveReadAsked } from "./live-read.js";
 import { LIVE_POLL, LIVE_SIGNED_OUT } from "./live-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
@@ -135,7 +135,7 @@ export function hostedCall<
 export function askLiveRead<Read extends AnyLiveRead>(
   live: HostedClient["live"],
   read: Read,
-  params: LiveReadParams<Read>,
+  params: LiveReadAsked<Read>,
   poll?: HostedPoll,
 ): Effect.Effect<
   | LiveReadAnswer<Read>

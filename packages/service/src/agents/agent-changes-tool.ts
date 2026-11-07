@@ -21,6 +21,7 @@
  */
 
 import { hasRepository } from "@repo/database/models/agent-store";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
@@ -30,7 +31,6 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   type AgentReadCall,

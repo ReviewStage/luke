@@ -63,7 +63,11 @@ import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
-import { TASK_STATUS, taskListAnswerSchema, taskStartAnswerSchema } from "@repo/features/task-wire";
+import {
+  heldTaskListAnswerSchema,
+  TASK_STATUS,
+  taskStartAnswerSchema,
+} from "@repo/features/task-wire";
 import type { WireBoundaryInput } from "@repo/wire";
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
@@ -519,7 +523,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           request(TASKS, owner, { method: "POST", body: { ...body, workspaceId: team } }),
         );
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );
@@ -596,7 +600,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           agent: { ...agent, idempotencyKey: randomUUID() },
         });
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );

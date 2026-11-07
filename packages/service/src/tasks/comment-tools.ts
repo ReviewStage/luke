@@ -8,6 +8,7 @@ import {
   readDescriptionCommentThread,
   readDescriptionCommentThreads,
 } from "@repo/database/models/description-comments";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -22,7 +23,6 @@ import {
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { EXPERIMENT_OFF_REFUSAL, type ExperimentsOn } from "../agents/workspace-experiment-on.js";
 import {
   ACTION_RESULT_STATUS,

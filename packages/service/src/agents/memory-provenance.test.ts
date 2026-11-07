@@ -10,7 +10,7 @@ import { user } from "@repo/database/schemas/auth";
 import { messages, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@repo/database/testing";
-import { CLAUDE_CODE_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL } from "@repo/features/agent-tools";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option } from "effect";
@@ -23,7 +23,6 @@ import {
   TURN_STATUS,
 } from "../core.js";
 import { recordingSessions } from "../testing/recording-sessions.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";

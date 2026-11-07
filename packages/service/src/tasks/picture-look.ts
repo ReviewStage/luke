@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readDescriptionAttachment } from "@repo/database/models/description-attachments";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { type Picture, type PictureType, pictureTypeSchema } from "@repo/features/picture-wire";
@@ -7,7 +8,6 @@ import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
-import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import type { DescriptionDocumentBinding } from "./description-notes.js";
 

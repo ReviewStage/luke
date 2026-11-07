@@ -225,6 +225,17 @@ export const agentDefaultAnswerViewSchema = EffectSchema.Union([
 
 export type AgentDefaultAnswer = typeof agentDefaultAnswerViewSchema.Type;
 
+/** Whose API key chapters run on, as the window hears it written: the provider as kept, with the transaction it committed in, or why it is unchanged. */
+export const chaptersProviderAnswerViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    provider: modelProviderSchema,
+    txid: EffectSchema.optionalKey(EffectSchema.String),
+  }),
+  failed,
+]);
+
+export type ChaptersProviderAnswer = typeof chaptersProviderAnswerViewSchema.Type;
+
 /** The account's hosts, as the window hears them read (`host-wire.ts`): the list and the install script's address, or why there is none. */
 export const hostsAnswerViewSchema = answerView(hostsContract.list);
 
@@ -341,6 +352,13 @@ export type MemoryForgetParams = typeof memoryForgetParamsSchema.Type;
 
 /** Writing the default, as the window asks it: the choice to keep. */
 export const agentDefaultWriteParamsSchema = modelChoiceSchema;
+
+/** Writing whose API key chapters run on, as the window asks it: the provider to keep. */
+export const chaptersProviderWriteParamsSchema = EffectSchema.Struct({
+  provider: modelProviderSchema,
+});
+
+export type ChaptersProviderWriteParams = typeof chaptersProviderWriteParamsSchema.Type;
 
 /** One task's agents, as the window asks them: the task, and whether the archived agents are listed among the rest. */
 export const agentListParamsSchema = EffectSchema.Struct({

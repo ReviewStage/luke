@@ -842,74 +842,20 @@ test("a task none of whose tabs was viewed shows its agents' last tab, opens on 
   assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
 
-/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all. */
-function namingRow(lines: readonly string[], total: number) {
-  return {
-    ...row(TASK.id, 1),
-    agents: {
-      total,
-      working: 0,
-      agents: lines.map((id) => ({
-        id,
-        title: null,
-        model: RUNNING_AGENT.model,
-        effort: RUNNING_AGENT.effort,
-        status: AGENT_STATUS.COMPLETED,
-      })),
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
-  };
-}
+test("a task last viewed on an agent's tab shows nothing until its agents are read, then that agent's tab, never its details or a draft in the meantime", async () => {
+  window.localStorage.setItem(
+    "app.mainTabs",
+    JSON.stringify({ closedAgents: [], tasks: { [TASK.id]: { recent: [{ agent: AGENT_ID }] } } }),
+  );
+  const listed = { ...OPEN, tasks: [row(TASK.id, 1)] };
+  const tab = mount({ shown: true, tasks: listed });
+  await settle();
+  assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
+  assert.equal(tab.control().mainTabs.tab, undefined, "nothing stands in the agent's place");
 
-test("a task whose row settles its tab shows that agent's before its agents are read, and one with none viewed or whose row cannot say shows none until they are", async () => {
-  const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
-  const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
-  // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
-  const shownOn = async (
-    lines: readonly string[],
-    total: number,
-    recent: readonly string[] | undefined,
-  ) => {
-    window.localStorage.setItem(
-      "app.mainTabs",
-      JSON.stringify({
-        closedAgents: [],
-        tasks:
-          recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
-      }),
-    );
-    const tab = mount({ shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } });
-    await settle();
-    assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
-    return tab.control().mainTabs.tab;
-  };
-
-  assert.deepEqual(
-    await shownOn([AGENT_ID, OLDER, UNNAMED], 5, [OLDER]),
-    agentTab(OLDER),
-    "the agent last viewed, which the row names",
-  );
-  assert.equal(
-    await shownOn([AGENT_ID], 1, undefined),
-    undefined,
-    "none viewed waits on the agents, which it opens on",
-  );
-  assert.deepEqual(
-    await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
-    agentTab(OLDER),
-    "past one viewed since that the row shows is gone",
-  );
-  assert.equal(
-    await shownOn([AGENT_ID, OLDER], 4, [OLDER, UNNAMED]),
-    undefined,
-    "one viewed last that the row does not name may stand among those it leaves out",
-  );
-  assert.equal(
-    await shownOn([AGENT_ID, OLDER], 2, undefined),
-    undefined,
-    "of two agents none viewed, it waits too",
-  );
+  tab.stand({ tasks: { ...listed, taskAgents: [listedAgent(RUNNING_AGENT)] } });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID), "the agent once they are read");
 });
 
 test("a column kept while the plan, the Inbox, and the Call stood in it, and a side panel kept on its Plan and Comments tabs, read with each let go, the agents' order and the tab last viewed still standing", async () => {
@@ -1023,21 +969,25 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
 
 test("a task opened from a list, gone back to from the sidebar, or named by a chip opens on the agent waiting on the developer, past the one at work", () => {
   const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
-  // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
-  const named = namingRow([AGENT_ID, WAITING], 2);
-  const waitingRow = {
-    ...named,
-    agents: {
-      ...named.agents,
-      working: 1,
-      agents: named.agents.agents.map((line) =>
-        line.id === AGENT_ID ? { ...line, status: AGENT_STATUS.RUNNING } : line,
-      ),
-    },
-  };
+  // One agent at work and one resting, the resting one's thread waiting on the developer, as the list followed live holds them.
+  const waitingRow = { ...row(TASK.id, 1), agents: { total: 2, working: 1, pullRequestTotal: 0 } };
+  const followed = [
+    { id: AGENT_ID, status: AGENT_STATUS.RUNNING, createdAt: 2 },
+    { id: WAITING, status: AGENT_STATUS.COMPLETED, createdAt: 1 },
+  ].map((agent) =>
+    listedAgent({
+      ...agent,
+      planId: TASK.id,
+      title: null,
+      model: RUNNING_AGENT.model,
+      effort: RUNNING_AGENT.effort,
+      turnId: null,
+    }),
+  );
   const elsewhere = (tasks: TasksView["tasks"]) => ({
     ...OPEN,
     tasks,
+    taskAgents: followed,
     activeTaskId: OTHER_TASK_ID,
   });
   const tab = mount(
@@ -1055,17 +1005,17 @@ test("a task opened from a list, gone back to from the sidebar, or named by a ch
   );
 
   act(() => tab.control().onSelect(TASK.id));
-  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
+  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow], taskAgents: followed } });
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(WAITING), "from a list, the agent waiting");
 
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onShowMention({ kind: MENTION_KIND.TASK, taskId: TASK.id }));
-  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
+  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow], taskAgents: followed } });
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(WAITING), "from a chip, the agent waiting");
 
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onResume(TASK.id));
-  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
+  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow], taskAgents: followed } });
   assert.deepEqual(
     tab.control().mainTabs.tab,
     agentTab(WAITING),
