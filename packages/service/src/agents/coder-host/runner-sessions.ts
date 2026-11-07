@@ -100,6 +100,7 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
   type RunnerEnd,
+  type RunnerTrace,
 } from "@repo/agent-runner/protocol";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
@@ -162,6 +163,7 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
+import { sentryRunnerTrace } from "../../observability/sentry.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -835,6 +837,16 @@ export const runnerSessions = <
       fork = false,
     ) =>
       Effect.gen(function* () {
+        // The launch's trace, read here on its span, for a runner in the cloud's sandbox to trace
+        // its startup in; a device's runner is handed none and sends Sentry nothing.
+        const traced =
+          place.running.machine === AGENT_MACHINE.VERCEL
+            ? yield* Effect.sync(sentryRunnerTrace)
+            : undefined;
+        const trace: RunnerTrace | undefined =
+          traced === undefined
+            ? undefined
+            : { ...traced, ...(path === undefined ? undefined : { path }) };
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const delivered = machine.deliverCredentials(agent, [
           ...(credential.credentials ?? []),
@@ -888,6 +900,7 @@ export const runnerSessions = <
                       : undefined),
                     ...(fork ? { fork } : undefined),
                     ...(warm ? { warm } : undefined),
+                    ...(trace === undefined ? undefined : { trace }),
                   },
                   rewind,
                 };
