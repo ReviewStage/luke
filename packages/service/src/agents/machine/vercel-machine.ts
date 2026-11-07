@@ -289,7 +289,8 @@ const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not b
  * holds, root's and read-only as the image makes it, so a sandbox created
  * from a base snapshot or resumed on an older runner runs the deploy's, and
  * the upload removed (copied rather than moved, so an upload a readying cut
- * short leaves stays the default user's, which the next launch overwrites); the member's installed skills, where the sandbox's opening uploaded them,
+ * short leaves stays the default user's, which the next launch overwrites);
+ * the member's installed skills, where the sandbox's opening uploaded them,
  * moved where only root writes and every user reads (`native-skills.ts`),
  * each checkout marked safe for git and shared with `agent`'s group, the
  * agent's own and those of the repositories it works in beside it at the
@@ -305,7 +306,8 @@ function readyScript(extraCheckouts: readonly string[]): string {
   return [
     "set -euo pipefail",
     LINK_TOOLS_DIRECTORY,
-    `install -o root -g root -m 0444 ${RUNNER_UPLOAD} ${RUNNER_SCRIPT} && rm -f ${RUNNER_UPLOAD}`,
+    `install -o root -g root -m 0444 ${RUNNER_UPLOAD} ${RUNNER_SCRIPT}`,
+    `rm -f ${RUNNER_UPLOAD}`,
     `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
     ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
     `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
