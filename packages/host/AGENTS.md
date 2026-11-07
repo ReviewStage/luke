@@ -22,9 +22,12 @@ settings store reads no environment itself — it is handed what was resolved.
 
 ## Two shapes in the composition that are easy to undo
 
-Each concern is a composer owning its own state, timers, and Gateway methods,
-built as a scoped layer whose build runs `start` and whose scope closing runs
-`stop`. Two details of that are load-bearing and look like accidents:
+Each concern is a composer owning its own state and timers, the Gateway methods
+it answers, and the declared acts it answers directly, as a `HostActTable` of
+its domain's acts (`host-acts.ts`) with no Gateway method between the window's
+port and the handler. It is built as a scoped layer whose build runs its start
+and whose scope closing runs its stop. Two details of that are load-bearing
+and look like accidents:
 
 - **The stop is registered before the start runs**, not as the release of a
   successful acquire, because a composer's `stop` is written to give back what a
@@ -33,10 +36,44 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
   sides concurrently and closes them in parallel; a start that fails must release
   what began, in reverse, at once.
 
-A method two composers claim fails the build with `DuplicateGatewayMethod`, so
-that one does not need stating here. `client.bootstrap` is the one method no
-composer owns: it reads several of them, and giving it to any would hand that
-composer references to the others.
+A method two composers claim fails the build with `DuplicateGatewayMethod`
+(`composer.ts`), so that one does not need stating here. `client.bootstrap` and
+`shutdown` are the two methods no composer owns: `compose-host.ts` answers them
+itself, because the first reads several composers and giving it to any would
+hand that composer references to the others. They are spread over the folded
+table rather than folded with it, so a composer that claimed one would be
+replaced without an error.
+
+**Acts have no such refusal.** `compose-host.ts` spreads every composer's act
+table into the one the assembly holds, so an act two composers answer is not an
+error: the later spread wins, silently. The type holds only the other half,
+that the spread answers every act in `HOST_ACTS`. Where a contract's acts are
+split between two composers, as `TASKS_ACTS` is between the tasks and the
+workspaces, the split is one list (`compose-workspaces.ts`'s
+`WORKSPACES_TASKS_ACT`) that one side `Pick`s and the other `Omit`s. That list
+moves only the types: each side's handlers are written under their own act
+names, so moving an act means moving its handler too, since one left behind
+still compiles and, spread later, wins.
+
+## One domain, one composer
+
+A new method or act goes to the composer whose domain it is, not to whichever
+one already holds the client it calls: sign-in to the account; the account's
+own asks (provider keys, its GitHub token, memories, a ChatGPT login, hosts
+and pairing) to `compose-account-asks.ts`; workspaces, GitHub's connection, and
+the admin dashboard to `compose-workspaces.ts`; tasks and agents to their own.
+
+State two composers share crosses only as a dependency `compose-host.ts` hands
+the composer it builds: the entity pool, the account, window focus, and another
+composer's hook or view, such as `githubMoved`, `repositoriesMoved`, or the
+tasks' view the workspaces draw on, so a composer is built after every one whose
+hook it takes. The account gate reaches each composer the same way, as
+`compose-host.ts` running its `open` when the gate opens and its `reset` when
+it closes. An edge that is a genuine cycle goes through the composer's set-once
+`link`, written in one list once every concern is built, and a reader that
+awaits a link suspends until then. **A composer never reaches into another's
+closure**, because that reference is the coupling the split exists to remove,
+and one handed in shows in the assembly where one taken does not.
 
 ## One drain, in one place
 
