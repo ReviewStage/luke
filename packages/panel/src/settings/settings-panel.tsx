@@ -93,7 +93,11 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
           <>
-            <AccountSection account={account} onSignOut={onSignOut} />
+            <AccountSection
+              account={account}
+              workspaces={workspace?.workspaces}
+              onSignOut={onSignOut}
+            />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
             {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
             {panelView ? (

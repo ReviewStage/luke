@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { accountActor } from "@repo/ui/actor-model";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -131,5 +132,46 @@ test("a Sign out the host refused says so in a toast, and the button is pressabl
     /The account could not be signed out\. Try again\./u,
   );
   assert.equal(signOutButton(container).disabled, false);
+  act(() => root.unmount());
+});
+
+/** A workspace of the account's, by name, role, and member count, as the Workspace page lists it. */
+const workspaceOf = (name: string, role: Workspace["role"], memberCount: number): Workspace => ({
+  id: `workspace-${name}`,
+  name,
+  role,
+  github: null,
+  memberCount,
+});
+
+const deleteButton = (within: ParentNode) =>
+  [...within.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === "Delete account",
+  ) ?? assert.fail("a Delete account button stands");
+
+test("Delete account names the workspaces the account owns and is the only member of as going with it", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      withQueryClient(
+        createElement(AccountSection, {
+          account: ADA,
+          workspaces: [
+            workspaceOf("Ada", WORKSPACE_ROLE.OWNER, 1),
+            workspaceOf("Acme", WORKSPACE_ROLE.MEMBER, 3),
+          ],
+          onSignOut: () => Promise.resolve(),
+        }),
+      ),
+    ),
+  );
+
+  await act(async () => deleteButton(container).click());
+
+  const asked = document.body.textContent ?? "";
+  assert.match(asked, /Also deleted, with everything in them: Ada\./u);
+  assert.doesNotMatch(asked, /Acme/u);
   act(() => root.unmount());
 });
