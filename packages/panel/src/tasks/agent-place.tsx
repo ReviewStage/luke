@@ -5,9 +5,11 @@ import {
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@repo/features/agent-wire";
-import { RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
+import { RUN_ON_MAC_REASON, RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
+import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   ChipName,
+  GearIcon,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -27,6 +29,7 @@ import { ActorLine, ActorRef } from "../actor-ref.js";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { type RunOnMacRead, useRunOnMac } from "./run-on-mac.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
@@ -91,8 +94,10 @@ function runOnMacStands(read: RunOnMacRead): string {
  * `run_on_mac` runs shell commands on, drawn as the Runs on menu draws a
  * device: the Mac's glyph wearing its standing's dot, green while it
  * listens and gray while it is offline or off in Settings, beside
- * "run_on_mac" and its owner's person chip, "You" for the reader. The chip
- * takes no focus, so a reader hears the same after "Cloud". Note that the
+ * "run_on_mac" and its owner's person chip, "You" for the reader. Where it
+ * is the reader's own Mac that this Mac's Settings turned off, a row under
+ * it opens Settings › This Mac. The chip takes no focus, so a reader hears
+ * the same after "Cloud". Note that the
  * Mac is named by its owner, since any of their Macs that listens runs the
  * commands; nothing is said while it is read, or for an agent offered none.
  */
@@ -107,6 +112,7 @@ function CloudChip({
 }): React.JSX.Element {
   const read = useRunOnMac(agentId, (userId) => userId === readerId);
   const { members, former } = useMemberDirectory();
+  const openSettings = useOpenSettings();
   const owner: Actor | undefined =
     read.standing === undefined
       ? undefined
@@ -143,6 +149,13 @@ function CloudChip({
                 </ActorLine>
               }
             />
+            {read.reason === RUN_ON_MAC_REASON.SETTINGS_OFF ? (
+              <HoverCardRow
+                glyph={<GearIcon />}
+                label={OPEN_SETTINGS_LABEL}
+                onPress={() => openSettings({ page: SETTINGS_VIEW.THIS_MAC })}
+              />
+            ) : null}
           </>
         )
       }

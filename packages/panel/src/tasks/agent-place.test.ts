@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@repo/features/workspace-tools-wire";
 import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
+import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handBeats, handHostReads, handSettings, stateWith } from "../testing/app-state.js";
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
@@ -44,6 +46,9 @@ const DEVICE = "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d15";
 
 const AGENT_ID = "7a1c4e9b-2f3d-4b6a-8c5e-1d0f9a8b7c6e";
 
+/** Every place the box's presses opened Settings at. */
+let opened: SettingsLink[] = [];
+
 /** The reader's own account. */
 const READER = "user-reader";
 
@@ -65,6 +70,7 @@ async function placeOf(
   never = false,
 ): Promise<string> {
   clear();
+  opened = [];
   fakeActPort({});
   if (never) {
     const { run } = stateWith({}, {});
@@ -88,7 +94,11 @@ async function placeOf(
     root.render(
       onRegistry(
         registry,
-        createElement(AgentPlace, { agent: { id: AGENT_ID, ...agent }, readerId: READER }),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link) => opened.push(link) },
+          createElement(AgentPlace, { agent: { id: AGENT_ID, ...agent }, readerId: READER }),
+        ),
       ),
     ),
   );
@@ -143,8 +153,9 @@ async function runOnMacRowOf(
   restOn(document.querySelector(".ui-chip") ?? assert.fail("the chip stands"));
   await settle();
   const row =
-    [...document.querySelectorAll(".ui-hover-card-row")].at(-1) ??
-    assert.fail("the card names a Mac");
+    [...document.querySelectorAll(".ui-hover-card-row")].find(
+      (each) => each.querySelector("[data-actor-ref]") !== null,
+    ) ?? assert.fail("the card names a Mac");
   return [
     row.querySelector("[data-actor-ref] .ui-inline-ref-label")?.textContent ?? null,
     row.querySelector('.ui-status-glyph[role="img"]')?.getAttribute("aria-label") ?? null,
@@ -171,14 +182,25 @@ test("a cloud agent's card names a teammate's Mac, offline where none of theirs 
   );
 });
 
-test("a Mac set to let no agent run commands is off in Settings on the reader's own Mac alone, a teammate's offline", async () => {
+/** The card's press that opens Settings, where it offers one. */
+function openSettingsRow(): HTMLButtonElement | undefined {
+  return [...document.querySelectorAll<HTMLButtonElement>("button.ui-hover-card-row")].find(
+    (row) => row.textContent === "Open Settings",
+  );
+}
+
+test("a Mac set to let no agent run commands is off in Settings on the reader's own Mac alone, which the card opens, a teammate's offline", async () => {
   const away = { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY } as const;
   assert.deepEqual(
     await runOnMacRowOf({ ...away, owner: { userId: READER, name: "Ada Lovelace" } }, true),
     ["You", "Off in Settings"],
   );
+  act(() => (openSettingsRow() ?? assert.fail("the card offers Open Settings")).click());
+  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.THIS_MAC }]);
+
   assert.deepEqual(
     await runOnMacRowOf({ ...away, owner: { userId: "user-charles", name: "Charles Pan" } }, true),
     ["Charles Pan", "Offline"],
   );
+  assert.equal(openSettingsRow(), undefined, "a teammate's Mac is no Settings of this Mac's");
 });
