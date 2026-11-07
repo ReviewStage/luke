@@ -112,14 +112,9 @@ export const conversations = pgTable(
     // One main stands per account at a time: a first-use creation lands one, and this index is what
     // refuses a second whatever path raced to it, so reads never silently pick one of two. The
     // predicate is DDL, which takes no bound parameter, so the kind is inlined rather than passed.
-    // Note that it still names "deleted_at", which no module declares and every row this release
-    // writes leaves null, because the column stands until a later release drops it, and with it this
-    // index, which that release declares again without it.
     uniqueIndex("conversations_standing_main")
       .on(table.userId)
-      .where(
-        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)} and "deleted_at" is null`,
-      ),
+      .where(sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)}`),
     // The children and agents reads pick one account's rows of one kind.
     index("conversations_user_kind").on(table.userId, table.kind),
     // A recorded session is found by the runtime's own id, by the session's reads and by the sweep

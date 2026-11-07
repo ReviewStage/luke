@@ -22,8 +22,13 @@ import { user } from "../auth.js";
 
 const MIGRATION = "20261021105816_per_task_luke_data_drop";
 
-/** The migration undone, so the database stands as one from before it. */
+/**
+ * The migration undone, so the database stands as one from before it: the
+ * conversation's stamp, which a later migration dropped, back, and the task's
+ * conversation.
+ */
 const UNDO = [
+  `ALTER TABLE "conversations" ADD COLUMN "deleted_at" timestamp with time zone`,
   `ALTER TABLE "task" ADD COLUMN "conversation_id" uuid`,
   `ALTER TABLE "task" ADD CONSTRAINT "plan_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE set null`,
 ];
