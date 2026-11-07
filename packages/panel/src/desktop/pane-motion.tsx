@@ -18,9 +18,9 @@
  * its rounded corners riding the moving edge and nothing it holds drawn past
  * it (`playSheet`). What a sheet holds keeps the width it has landed at;
  * the task's tabs, its document or an agent's tab, and its toolbar's buttons
- * glide from where they were drawn to where they now stand, and so does the
- * task's summary as it is pinned or collapses to its rail, and a panel that grew over the document is uncovered from its old
- * edge to its new one. A pane leaving holds itself drawn through its own
+ * glide from where they were drawn to where they now stand, and a panel
+ * that grew over the document is uncovered from its old edge to its new
+ * one. A pane leaving holds itself drawn through its own
  * exit (side-panel.tsx), on the same travel (`pastRightEdge`), so only
  * arrivals and displacement are played here. A second press part way
  * through starts every part again from where it had got to; a window
@@ -58,9 +58,6 @@ const PANE = ".side-panel";
 /** The pane that arrives and grows; one leaving runs its own exit and is left to it. */
 const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 
-/** The plan's summary, drawn while the plan is wherever its column spares a rail, so it only ever moves, or arrives with the plan or the room. */
-const SUMMARY = ".task-summary";
-
 /**
  * The sheets whose edges a pane change can move: each column drawn on a card
  * of its own under its row (shell.css), as its `::before`. A sheet whose
@@ -74,7 +71,7 @@ const SHEETS =
 const SIDEBAR = ".desktop-shell > .desktop-sidebar";
 
 /** Everything a pane change may move. */
-const MOVED = `${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}, ${SHEETS}, ${SIDEBAR}`;
+const MOVED = `${GLIDERS}, ${ARRIVING_PANE}, ${SHEETS}, ${SIDEBAR}`;
 
 /** How far a sheet's card reaches past its box while it is drawn out to an edge it no longer stands at (shell.css). */
 const REACH = {
@@ -96,8 +93,7 @@ const STILL = 0.5;
 
 /**
  * Which panes are drawn under the root, and how, each by a name of its
- * owner's: the window's sidebar, side panel, and the plan's pinned summary,
- * or an automation's Runs. A change to any of them is what plays.
+ * owner's: the window's sidebar and side panel, or an automation's Runs. A change to any of them is what plays.
  */
 type PaneLayout = Readonly<Record<string, boolean>>;
 
@@ -365,10 +361,6 @@ function play(root: HTMLElement, before: Snapshot, sheets: SheetMotions): void {
     } else if (element.matches(SHEETS)) {
       if (was !== undefined) playSheet(element, was.frame, now, timing, sheets);
     } else if (was !== undefined) glide(element, was.rect.left - now.left, timing);
-    // The summary arrives from the window's right, as the side panel does.
-    else if (element.matches(SUMMARY)) {
-      element.animate([{ transform: "translateX(100%)" }, { transform: "none" }], timing);
-    }
   }
 }
 
@@ -400,9 +392,8 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   /**
    * Whether the window is still settling where it opened or arrived, for as
    * long as a pane's motion runs. Note that nothing plays meanwhile, because
-   * what a place stands with settles over the frames after it, a summary's
-   * pin waiting on its column's measure among it, and none of that is a
-   * change anyone asked for: the window stands as the place does.
+   * what a place stands with settles over the frames after it, and none of
+   * that is a change anyone asked for: the window stands as the place does.
    */
   #settling(root: HTMLElement): boolean {
     const duration = Number(paneTiming(root)?.duration ?? 0);

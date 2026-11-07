@@ -17,9 +17,8 @@
  * the crumb stands in, so its paths are that folder's, from it.
  *
  * The same bundle answers what icon a file's type draws as, so a file
- * attached to a message (`../tasks/attached-file-chips.tsx`) or listed in
- * the task's summary (`../desktop/task-summary.tsx`) is drawn as the tree
- * draws it, without Pierre's icons riding in the bundle every window parses.
+ * attached to a message (`../tasks/attached-file-chips.tsx`) is drawn as
+ * the tree draws it, without Pierre's icons riding in the bundle every window parses.
  */
 
 /** One entry of a folder: its name within the folder, and whether it is a folder itself. */

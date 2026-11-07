@@ -59,12 +59,7 @@ import {
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import {
-  agentsControl,
-  listedAgent,
-  tasksControl,
-  UNPINNED_SUMMARY,
-} from "./testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "./testing/tasks-control.js";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
@@ -218,7 +213,6 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
             createElement(SignedIn, { account }),
             createElement("ul", null, rows),
             createElement(DesktopTasks, {
-              summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
               tasks: tasks,
             }),
@@ -879,7 +873,7 @@ async function columnOn(
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
+          createElement(DesktopTasks, { looks: NO_LOOKS, tasks: tasks }),
         ),
       ),
     ),

@@ -47,7 +47,7 @@ import { TASKS_ACT_KIND } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { agentTab, changesTab, draftTab, fileTab } from "@repo/ui/tab-strip-model";
+import { agentTab, changesTab, draftTab, fileTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import { act, createElement, Fragment } from "react";
@@ -69,9 +69,8 @@ import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { askKept } from "../act.js";
 import { handHostReads, handMembers, handState, registryWith } from "../testing/app-state.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import type { SummaryPin } from "./task-summary.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -114,7 +113,6 @@ test("a task the service will not hand the reader, as a link to another workspac
     root.render(
       withQueryClient(
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -190,7 +188,6 @@ test("a task's comments are held from its open, so its first ready frame marks t
     onRegistry(
       registry,
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
       }),
@@ -229,7 +226,6 @@ test("a task with no agent tab draws a new agent's draft", () => {
     page.innerHTML = renderToStaticMarkup(
       withQueryClient(
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -273,7 +269,6 @@ test("a wide task's details with no agent offer New agent at their head, which o
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -314,7 +309,6 @@ function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
     withQueryClient(
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks: tasksControl({
           page: TASKS_PAGE.DOCUMENT,
@@ -440,7 +434,6 @@ async function _narrowTaskInbox(
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -578,7 +571,6 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -656,7 +648,6 @@ test("a sub-task's row opens the task as a sidebar row does, never a link to its
           OpenLinkProvider,
           { value: (link: ReadLink) => linked.push(link) },
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -713,7 +704,6 @@ test("opening another task draws only its own title and sub-tasks, none of the t
         onRegistry(
           registry,
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -792,7 +782,6 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
@@ -879,11 +868,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 });
 
 /** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
-function panelPage(
-  tab: SidePanelTab,
-  overrides: Partial<TasksControl> = {},
-  summary: SummaryPin = UNPINNED_SUMMARY,
-) {
+function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
@@ -892,7 +877,6 @@ function panelPage(
         onRegistry(
           registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
           createElement(DesktopTasks, {
-            summary,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
@@ -946,35 +930,40 @@ test("the description stays drawn, hidden, while an agent's tab of the column is
   page.unmount();
 });
 
-test("a summary row that opens a tab of the side panel hands the panel the keys, so ⌘W closes the panel's tab rather than the column's", () => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ width: 1200, height: 800 }),
-  );
+test("a page of the task's Overview opens in the side panel beside the agents, and the panel holds the keys, so ⌘W closes the page's tab rather than the column's", () => {
+  const chosen: SidePanelTab[] = [];
+  const columnChosen: MainTab[] = [];
   const closed: string[] = [];
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const page = panelPage(
-    NOTES,
-    {
-      mainTabs: {
-        ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
-        tab: agentTab(agentId),
-        onClose: () => closed.push("column"),
-      },
-      sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
-      pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
+  const column = (tab: MainTab): Partial<TasksControl> => ({
+    mainTabs: {
+      ...tasksControl().mainTabs,
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
+      tab,
+      returnTab: agentTab(agentId),
+      openAgents: [agentId],
+      onChoose: (opened) => columnChosen.push(opened),
+      onClose: () => closed.push("column"),
     },
-    // The summary stands pinned beside the document, since the rail draws the panel's kinds alone.
-    { ...UNPINNED_SUMMARY, pinned: true },
-  );
-  act(() => relayout());
-  const row = [...document.querySelectorAll<HTMLButtonElement>("li button")].find((each) =>
+    sidePanel: {
+      ...DOCUMENT_PANEL,
+      onChoose: (opened) => chosen.push(opened),
+      onClose: () => closed.push("panel"),
+    },
+    pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
+  });
+  const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
+  const row = [...page.container.querySelectorAll<HTMLButtonElement>("li button")].find((each) =>
     each.textContent?.includes("Invite funnel"),
   );
-  assert.ok(row, "the summary offers the page's tab");
+  assert.ok(row, "the Overview lists the task's page");
   act(() => row.click());
-  act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
+  assert.deepEqual(chosen, [pageTab("page-1")]);
+  assert.deepEqual(columnChosen, [agentTab(agentId)], "the details give way to the agents");
 
+  // Note that the panel draws its chosen tab as it last stood, since the page is the fake panel's to open.
+  page.draw(NOTES, column(agentTab(agentId)));
+  act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
   assert.deepEqual(closed, ["panel"]);
   page.unmount();
 });
@@ -1000,7 +989,6 @@ function standingPageMounted(keeps: boolean) {
           Fragment,
           null,
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
