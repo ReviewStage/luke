@@ -1,5 +1,9 @@
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
+import {
+  WORKSPACE_ENVIRONMENT_BOUNDS,
+  workspaceVariableNameSchema,
+} from "@repo/features/workspace-environment-wire";
 import { managesWorkspace } from "@repo/features/workspace-role";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -30,6 +34,7 @@ import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Schema } from "effect";
 import { useState } from "react";
 import { actFailureWords, askAct, sendAct } from "../act.js";
 import { useConfirmAct } from "../confirm-act.js";
@@ -61,6 +66,9 @@ const VARIABLE_ROW_SKELETON: SettingsRowSkeletonShape = {
   described: false,
   controls: [SETTINGS_SKELETON_CONTROL.MORE],
 };
+
+/** Whether a name is one the service takes, so Save waits for one it would not refuse by shape. */
+const isVariableName = Schema.is(workspaceVariableNameSchema);
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -106,7 +114,12 @@ function useVariableDialog(workspaceId: string, name?: string) {
     act,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_VARIABLE_SAVE),
   );
-  const form = useFormDialog(confirm, shownName !== "" && value !== "");
+  const form = useFormDialog(
+    confirm,
+    isVariableName(shownName) &&
+      value !== "" &&
+      value.length <= WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS,
+  );
   const dialog = (
     <Dialog
       open={form.open}
@@ -137,6 +150,7 @@ function useVariableDialog(workspaceId: string, name?: string) {
                   autoCorrect={false}
                   spellCheck={false}
                   placeholder="API_TOKEN"
+                  maxLength={WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS}
                   disabled={form.settling}
                   value={typedName}
                   onChange={setTypedName}
