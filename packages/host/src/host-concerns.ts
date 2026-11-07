@@ -26,6 +26,7 @@ export const HOST_CONCERN = {
   ACCOUNT: "account",
   TASKS: "tasks",
   AGENTS: "agents",
+  ACCOUNT_ASKS: "accountAsks",
   AUTOMATIONS: "automations",
   INTEGRATIONS: "integrations",
   INSTALLED_SKILLS: "installedSkills",
