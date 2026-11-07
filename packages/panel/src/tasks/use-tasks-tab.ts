@@ -1357,6 +1357,11 @@ function choiceAgentOf(choice: InboxChoice): string | undefined {
   return "agentId" in choice ? choice.agentId : undefined;
 }
 
+/** The agent that posted an item of a task an Inbox choice stands on; none for one on no task, or named by its task alone. */
+function choiceItemAgentOf(choice: InboxChoice): string | undefined {
+  return "taskId" in choice ? choice.itemAgentId : undefined;
+}
+
 /** Where an item stands, as the service says for one the account may read; nothing for one it may not, one that does not exist, or where the read failed. */
 function readInboxItemHome(
   queryClient: QueryClient,
@@ -1900,6 +1905,8 @@ export function useTasksTab(input: {
           pages: panelPages,
           // Each item is a stop of its own, two of one task among them.
           stop: inboxChosen?.itemId,
+          // An item of a task stands beside the strip of the agent that posted it, as that agent's column draws it.
+          agent: inboxChosen === undefined ? undefined : choiceItemAgentOf(inboxChosen),
         }
       : pageAgents === undefined
         ? {
