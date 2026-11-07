@@ -94,6 +94,8 @@ import {
   INPUT_LINE,
   type InputLine,
   type IntegrationServer,
+  LAUNCH_PATH,
+  type LaunchPath,
   RUNNER_END,
   RUNNER_ENV,
   type RunnerConfig,
@@ -569,6 +571,15 @@ function workspaceEnvironmentOf(agent: Agent, machine: AgentMachineKind) {
 /** How a message reached its runner, as the handoff counts it. */
 type HandoffPath = (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH];
 
+/** The span one launch of a runner runs under, from its swaps kept to its first lines taken, which the launch's path, harness, and machine annotate. */
+const LAUNCH_SPAN = "web/agentLaunch";
+
+/** The path of a launch in a place found and run again: made anew where its disk was lost, else launched again where it was still up, else resumed from its snapshot. */
+function resumedPath(created: boolean, wasUp: boolean): LaunchPath {
+  if (created) return LAUNCH_PATH.FRESH;
+  return wasUp ? LAUNCH_PATH.RELAUNCHED : LAUNCH_PATH.RESUMED;
+}
+
 /** A resume past an answer tried again while its sandbox is still stopping or being snapshotted (`CODER.RESUME_WHILE_ENDING`). */
 const RESUME_WHILE_ENDING = {
   schedule: Schedule.spaced(CODER.RESUME_WHILE_ENDING.SPACING),
@@ -817,6 +828,8 @@ export const runnerSessions = <
       resume: string | undefined,
       credential: HarnessLaunch,
       alongside: Effect.Effect<void, AE, AR>,
+      /** How the message reached the place, as the launch's span names it; none where its machine names none. */
+      path: LaunchPath | undefined,
       /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again, its words marked handed once the runner has it. */
       queuedFirst?: OpenedLine,
       /** Whether the session resumed is the source's of a continued or forked agent, which the CLI forks as its own. */
@@ -861,13 +874,9 @@ export const runnerSessions = <
                   yield* readNativeRewind({ userId, conversationId: agent.conversationId }),
                 );
                 const rewindBefore = resume === undefined ? undefined : rewind;
-                const config = yield* harness.config(
-                  agent,
-                  layout,
-                  resume,
-                  firstSequence,
-                  rewindBefore,
-                );
+                const config = yield* harness
+                  .config(agent, layout, resume, firstSequence, rewindBefore)
+                  .pipe(Effect.withSpan("web/runnerConfig"));
                 // Note that a runner stays warm past the agent's turn only on a machine with a warm
                 // window (`CODER.RUNNER_WARM`), for its sweep to retire; a sandbox's ends at its turn's end.
                 const warm = !Duration.isZero(CODER.RUNNER_WARM[place.running.machine]);
@@ -916,7 +925,10 @@ export const runnerSessions = <
             alongside,
           ],
           { concurrency: "unbounded" },
-        ).pipe(Effect.map(([made]) => made));
+        ).pipe(
+          Effect.map(([made]) => made),
+          Effect.withSpan("web/runnerLaunchReady"),
+        );
         const {
           handle,
           ready: { firstSequence, rewind, opening },
@@ -981,7 +993,15 @@ export const runnerSessions = <
             ),
           ),
         );
-      });
+      }).pipe(
+        Effect.withSpan(LAUNCH_SPAN, {
+          attributes: {
+            harness: harness.runtime,
+            machine: place.running.machine,
+            ...(path === undefined ? undefined : { path }),
+          },
+        }),
+      );
 
     /** Lines queued for the agent's runner to read, written for the launch named (`queuedFor`). */
     const queued = (agent: Agent, launch: number, lines: readonly InputLine[]) =>
@@ -1132,6 +1152,8 @@ export const runnerSessions = <
       credential: HarnessLaunch,
       queuedFirst?: OpenedLine,
       sandboxOpened: Effect.Effect<void> = Effect.void,
+      /** How the message reached the place where the caller knows better than the machine, as a place made anew where the one found was gone. */
+      path?: LaunchPath,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -1163,6 +1185,7 @@ export const runnerSessions = <
                   concurrency: "unbounded",
                   discard: true,
                 }),
+                path ?? opened.path,
                 queuedFirst,
                 from.fork,
               ),
@@ -1188,6 +1211,7 @@ export const runnerSessions = <
       running: MachinePlace,
       layout: MachineLayout,
       sent: RunnerMessage | undefined,
+      path: LaunchPath,
       created = false,
     ) =>
       Effect.gen(function* () {
@@ -1222,6 +1246,7 @@ export const runnerSessions = <
                 writeInstalledSkills(running, nativeSkillFiles(skills, layout.skillsUpload)),
               )
             : Effect.void,
+          path,
         );
       });
 
@@ -1284,22 +1309,25 @@ export const runnerSessions = <
         const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
         const handedAt = yield* Clock.currentTimeMillis;
         const handed = (path: HandoffPath) =>
-          recordServerEvent(
-            SERVER_EVENT.AGENT_HANDOFF,
-            { userId, workspaceId: agent.organizationId },
-            {
-              harness: harness.runtime,
-              path,
-              turn_running: turnRunning,
-              ...(turnRunning || turn?.settledAt == null
-                ? {}
-                : {
-                    idle_seconds: Math.max(
-                      0,
-                      Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
-                    ),
-                  }),
-            },
+          Effect.andThen(
+            Effect.annotateCurrentSpan("path", path),
+            recordServerEvent(
+              SERVER_EVENT.AGENT_HANDOFF,
+              { userId, workspaceId: agent.organizationId },
+              {
+                harness: harness.runtime,
+                path,
+                turn_running: turnRunning,
+                ...(turnRunning || turn?.settledAt == null
+                  ? {}
+                  : {
+                      idle_seconds: Math.max(
+                        0,
+                        Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
+                      ),
+                    }),
+              },
+            ),
           );
         const running = found.value.runner;
         if (running !== undefined) {
@@ -1316,7 +1344,15 @@ export const runnerSessions = <
             (yield* staleWarm(agent, layout, running.mark, turnRunning))
           ) {
             yield* machine.kill(running.handle);
-            yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
+            yield* relaunched(
+              agent,
+              sessionId,
+              found.value.name,
+              runnerPlace,
+              layout,
+              sent,
+              LAUNCH_PATH.RELAUNCHED,
+            );
             yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
             return accepted;
           }
@@ -1428,6 +1464,7 @@ export const runnerSessions = <
             place.place,
             layout,
             sent,
+            resumedPath(place.created, wasUp),
             place.created,
           );
           return place;
@@ -1442,7 +1479,16 @@ export const runnerSessions = <
           // standing for the next message to try again rather than retired; a delete that fails
           // leaves the expired one beside the fresh one, which `listTagged` lists after it as the
           // older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent, layout));
+          yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            sent,
+            yield* harness.launch(agent, layout),
+            undefined,
+            undefined,
+            LAUNCH_PATH.FRESH,
+          );
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1463,7 +1509,7 @@ export const runnerSessions = <
               : SERVER_HANDOFF_PATH.RESUMED,
         );
         return accepted;
-      });
+      }).pipe(Effect.withSpan("web/runnerSend", { attributes: { harness: harness.runtime } }));
 
     /**
      * A Stop of the turn named, under the agent's runner lease, to the runner
@@ -1657,6 +1703,7 @@ export const runnerSessions = <
             place.place,
             layout,
             undefined,
+            resumedPath(place.created, wasUp),
             place.created,
           );
           return place;
@@ -1668,6 +1715,9 @@ export const runnerSessions = <
             layout,
             undefined,
             yield* harness.launch(agent, layout),
+            undefined,
+            undefined,
+            LAUNCH_PATH.FRESH,
           );
           yield* Effect.ignore(machine.discard(found.value));
           return SERVER_HANDOFF_PATH.FRESH;
@@ -1795,7 +1845,7 @@ export const runnerSessions = <
           `A ${harness.name} message queued behind another call found its session ended`,
         );
         yield* withdrawRunnerLine(userId, agent.id, lineId);
-      });
+      }).pipe(Effect.withSpan("web/runnerHandOn", { attributes: { harness: harness.runtime } }));
 
     /**
      * A queued message's hand-on (`handedOn`) run past the answer, under the

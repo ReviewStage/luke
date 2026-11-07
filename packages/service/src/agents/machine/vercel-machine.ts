@@ -78,6 +78,7 @@ import {
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
   SHARED_FILES_DIRECTORY,
 } from "@repo/agent-runner/pins";
+import { LAUNCH_PATH, type LaunchPath } from "@repo/agent-runner/protocol";
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type AgentRunnerRecord,
@@ -89,7 +90,7 @@ import { type Agent, hasRepository, type WithRepository } from "@repo/database/m
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Brand, Context, Duration, Effect, Layer, Option, Redacted, Result, Tracer } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
@@ -353,6 +354,13 @@ const CREATED_FROM = { SOURCE: "source", BASE: "base", IMAGE: "image" } as const
 
 type CreatedFrom = (typeof CREATED_FROM)[keyof typeof CREATED_FROM];
 
+/** The launch's path for a sandbox created from each. */
+const LAUNCH_PATH_OF = {
+  [CREATED_FROM.SOURCE]: LAUNCH_PATH.SOURCE_SNAPSHOT,
+  [CREATED_FROM.BASE]: LAUNCH_PATH.BASE_SNAPSHOT,
+  [CREATED_FROM.IMAGE]: LAUNCH_PATH.IMAGE,
+} as const satisfies Record<CreatedFrom, LaunchPath>;
+
 /** One way the agent's sandbox may be created: what from, and the snapshot where it is one. */
 interface CreateAttempt {
   readonly from: CreatedFrom;
@@ -541,6 +549,30 @@ const diedAtStart = (session: SandboxSessionApi, commandId: string, secrets: rea
     );
   });
 
+/**
+ * The effect handed to the edge's runner under the span given, so what it
+ * runs stays in the caller's trace. Note that the runner runs it as a root
+ * of its own, with none of the caller's context, so without the span every
+ * span it opens would start a trace of its own.
+ */
+function runUnder<A, E>(
+  run: SandboxRunner,
+  parent: Option.Option<Tracer.AnySpan>,
+  effect: Effect.Effect<A, E>,
+): Promise<A> {
+  return run(
+    Option.match(parent, {
+      onNone: () => effect,
+      onSome: (span) => Effect.withParentSpan(effect, span),
+    }),
+  );
+}
+
+/** The services a context holds without the span it was read under, so an effect handed them goes on under its own caller's span. */
+function servicesOf(context: Context.Context<DatabaseServices>): Context.Context<DatabaseServices> {
+  return Context.omit(Tracer.ParentSpan)(context);
+}
+
 /** The sandbox session's firewall as the checkout reaches it, bound to the session and its account and to what stands beside the checkout's own, over the store the machine was made on. */
 function repositoryFirewallOver(
   api: VercelSandboxApi,
@@ -551,7 +583,10 @@ function repositoryFirewallOver(
   const firewall = sandboxFirewall(api);
   return {
     write: (sources) =>
-      Effect.provideContext(firewall.write(session, { ...beside, ...sources }), context),
+      Effect.provideContext(
+        firewall.write(session, { ...beside, ...sources }),
+        servicesOf(context),
+      ),
   };
 }
 
@@ -562,8 +597,10 @@ function repositorySandboxOver(
   firewall: RepositoryFirewall,
 ): RepositorySandbox {
   return {
-    run: (ask) =>
-      run(
+    run: (ask, parent) =>
+      runUnder(
+        run,
+        Option.fromNullishOr(parent),
         Effect.map(
           Effect.flatMap(session, (held) =>
             held.run({
@@ -767,17 +804,22 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           Effect.mapError(
             (failure) => new CheckoutRefused({ reason: failure.reason, detail: failure.detail }),
           ),
+          Effect.withSpan("web/checkoutHeld"),
         );
         if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
         return false;
       }
       // Note that a lockfile read that failed reads as unmoved, since it only decides a refill.
-      const base = yield* Effect.orElseSucceed(checkoutCommit(sandbox), () => undefined);
+      const base = yield* Effect.orElseSucceed(checkoutCommit(sandbox), () => undefined).pipe(
+        Effect.withSpan("web/checkoutCommit"),
+      );
       yield* refreshAgentCheckout(agent, sandbox, read);
       const moved =
         base === undefined
           ? false
-          : yield* Effect.orElseSucceed(lockfileMoved(sandbox, base), () => false);
+          : yield* Effect.orElseSucceed(lockfileMoved(sandbox, base), () => false).pipe(
+              Effect.withSpan("web/lockfileMoved"),
+            );
       yield* installDependencies(sandbox).pipe(
         Effect.catch(() =>
           Effect.logWarning("An agent's install on its repository's base snapshot failed"),
@@ -828,6 +870,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   ) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<DatabaseServices>();
+      const parent = yield* Effect.serviceOption(Tracer.ParentSpan);
       let refused: CheckoutRefused | undefined;
       let moved = false;
       const { sandbox, created } = yield* openAgentSandbox(
@@ -841,7 +884,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         checkout === undefined
           ? undefined
           : (opened) =>
-              run(
+              runUnder(
+                run,
+                parent,
                 checkedOutIn(context, checkout, attempt.from, runningOf(opened)).pipe(
                   Effect.tap((lockfile) =>
                     Effect.sync(() => {
@@ -857,7 +902,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
                 ),
               ),
       ).pipe(Effect.mapError((failure) => refused ?? failure));
-      return { ...runningOf(sandbox), created, lockfileMoved: moved };
+      return { ...runningOf(sandbox), created, lockfileMoved: moved, from: attempt.from };
     });
 
   /**
@@ -1034,7 +1079,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // fails leaves the sandbox standing under the session's name, where the next message finds it.
     open: (ask, use) =>
       Effect.gen(function* () {
-        const [{ name, running }, [plan, beside]] = yield* Effect.all(
+        const [{ name, running, created, from }, [plan, beside]] = yield* Effect.all(
           [
             openedCheckout(ask.target, ask.agent, ask.session),
             Effect.all(
@@ -1063,6 +1108,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             name: nameOfSandbox(name),
             checkoutPath: SANDBOX_LAYOUT.checkoutPath,
             finishCheckout,
+            path: created ? LAUNCH_PATH_OF[from] : LAUNCH_PATH.RESUMED,
           },
           beside,
         );
@@ -1128,23 +1174,27 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       Effect.gen(function* () {
         const session = yield* api.session(sessionOfPlace(place));
         const ready = yield* launch.ready;
-        const readied = yield* session.run({
-          command: "sudo",
-          args: ["-n", "bash", "-c", readyScript(launch.extraCheckouts ?? [])],
-        });
+        const readied = yield* session
+          .run({
+            command: "sudo",
+            args: ["-n", "bash", "-c", readyScript(launch.extraCheckouts ?? [])],
+          })
+          .pipe(Effect.withSpan("web/readyRunnerSandbox"));
         if (readied.exitCode !== 0) return yield* new SandboxUnavailable({ detail: NOT_READIED });
-        const commandId = yield* api.startAsUser(launch.name, AGENT_USER, {
-          command: "node",
-          args: [RUNNER_SCRIPT],
-          cwd: CODER.CHECKOUT_PATH,
-          env: {
-            ...SANDBOX_ENV,
-            HOME: `/home/${AGENT_USER}`,
-            USER: AGENT_USER,
-            LOGNAME: AGENT_USER,
-            ...launch.env,
-          },
-        });
+        const commandId = yield* api
+          .startAsUser(launch.name, AGENT_USER, {
+            command: "node",
+            args: [RUNNER_SCRIPT],
+            cwd: CODER.CHECKOUT_PATH,
+            env: {
+              ...SANDBOX_ENV,
+              HOME: `/home/${AGENT_USER}`,
+              USER: AGENT_USER,
+              LOGNAME: AGENT_USER,
+              ...launch.env,
+            },
+          })
+          .pipe(Effect.withSpan("web/startRunner"));
         const handle: RunnerHandle = { ...place, command: commandId };
         yield* Effect.gen(function* () {
           const { lines, mark } = yield* launch.firstLines(ready, handle);
@@ -1163,6 +1213,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
               Effect.tapError(() => diedAtStart(session, commandId, Object.values(launch.env))),
             );
         }).pipe(
+          Effect.withSpan("web/handRunnerFirstLines"),
           Effect.tapError(() =>
             Effect.ignore(Effect.andThen(session.kill(commandId), launch.abandon(ready))),
           ),

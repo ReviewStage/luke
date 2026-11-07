@@ -149,6 +149,27 @@ export const SANDBOX_CALL = {
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
 
+/** The span each call is traced under, named for the call alone, never for what it was asked. */
+const SANDBOX_CALL_SPAN = {
+  [SANDBOX_CALL.CREATE]: "web/sandboxCreate",
+  [SANDBOX_CALL.GET_OR_CREATE]: "web/sandboxGetOrCreate",
+  [SANDBOX_CALL.FS_WRITE]: "web/sandboxWriteFiles",
+  [SANDBOX_CALL.CMD]: "web/sandboxCommand",
+  [SANDBOX_CALL.STDIN]: "web/sandboxWriteStdin",
+  [SANDBOX_CALL.LOGS]: "web/sandboxCommandLogs",
+  [SANDBOX_CALL.KILL]: "web/sandboxKill",
+  [SANDBOX_CALL.TAGS]: "web/sandboxUpdateTags",
+  [SANDBOX_CALL.GET]: "web/sandboxGet",
+  [SANDBOX_CALL.LIST]: "web/sandboxList",
+  [SANDBOX_CALL.DELETE]: "web/sandboxDelete",
+  [SANDBOX_CALL.STOP]: "web/sandboxStop",
+  [SANDBOX_CALL.SESSION]: "web/sandboxSession",
+  [SANDBOX_CALL.EXTEND]: "web/sandboxExtend",
+  [SANDBOX_CALL.NETWORK_POLICY]: "web/sandboxNetworkPolicy",
+  [SANDBOX_CALL.INTERACTIVE]: "web/sandboxInteractive",
+  [SANDBOX_CALL.SNAPSHOT]: "web/sandboxSnapshot",
+} as const satisfies Record<SandboxCall, string>;
+
 /**
  * Vercel could not be asked, or did not confirm what was asked: the call
  * that failed, the status where Vercel answered one, its error code where it
@@ -661,12 +682,14 @@ function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
   return new SandboxUnavailable({ call, detail: causeDetail(cause) });
 }
 
-/** One SDK call as an effect, its failure read as the call's; interrupting it aborts the SDK's request. */
+/** One SDK call as an effect under the call's span, its failure read as the call's; interrupting it aborts the SDK's request. */
 function sdkCall<A>(
   call: SandboxCall,
   run: (signal: AbortSignal) => Promise<A>,
 ): Effect.Effect<A, SandboxUnavailable> {
-  return Effect.tryPromise({ try: run, catch: (cause) => sdkFailure(call, cause) });
+  return Effect.tryPromise({ try: run, catch: (cause) => sdkFailure(call, cause) }).pipe(
+    Effect.withSpan(SANDBOX_CALL_SPAN[call]),
+  );
 }
 
 /** Whether a failure is Vercel's answer that what was named is already gone. */
@@ -1014,7 +1037,7 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           Sandbox.get({ ...under, name, resume: true, signal }),
         ),
         openedOf,
-      );
+      ).pipe(Effect.withSpan("web/sandboxResume"));
 
     return {
       listTagged: (sessionId) =>

@@ -489,6 +489,15 @@ export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Lay
 /** How long an instance is kept awake after an answer for Sentry to send what it queued. */
 const REQUEST_FLUSH_MS = 2_000;
 
+/**
+ * What Sentry queued, sent within the bound an instance is kept awake for:
+ * at an answer, and as work a request ran past its answer ends, which the
+ * answer's own sending never waited for.
+ */
+export function sentryQueueSent(): Promise<boolean> {
+  return Sentry.flush(REQUEST_FLUSH_MS);
+}
+
 /** A web function's handler, as the platform calls it. */
 type WebFetch = (request: Request) => Promise<Response>;
 
@@ -513,7 +522,7 @@ export function sentryReportedFetch(
       });
       throw failure;
     } finally {
-      keepAwake(Sentry.flush(REQUEST_FLUSH_MS));
+      keepAwake(sentryQueueSent());
     }
   };
 }

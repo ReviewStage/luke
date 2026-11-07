@@ -87,6 +87,7 @@ import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
+import { sentryReportingLayer } from "../../observability/sentry.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_APP_WITH_TOKENS,
@@ -102,12 +103,13 @@ import {
   runnerTook,
   swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
+import { recordingSentry, sentOfType } from "../../testing/sentry-transport.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_SNAPSHOT } from "../base-snapshot.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
-import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import { type SandboxRunner, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import {
@@ -175,12 +177,12 @@ const NO_KEYS: HostedEnvironmentValues = {
   previewApiKeys: {},
 };
 
-/** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
-function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
-  return vercelMachineLayer({
-    readToken: deploymentOidcToken,
-    run: (effect) => Effect.runPromise(effect),
-  }).pipe(Layer.provide(http));
+/** This test's own edge runner: each effect run as a root of its own, with none of its caller's context. */
+const rootRunner: SandboxRunner = (effect) => Effect.runPromise(effect);
+
+/** The agent's machine over the fake Vercel the client given answers as, its checkout run on the runner given, this test's own by default. */
+function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>, run = rootRunner) {
+  return vercelMachineLayer({ readToken: deploymentOidcToken, run }).pipe(Layer.provide(http));
 }
 
 /** The script root readied the sandbox with before the runner started, as `sudo -n bash -c` ran it. */
@@ -401,6 +403,8 @@ afterEach(() => {
 /** What a repository agent's sessions are composed with beside the fake Vercel: what a test does as each request reaches GitHub. */
 interface RepositoryAgentSeams {
   readonly onGitHub?: (sent: SentToGitHub) => void;
+  /** The edge runner the machine's checkout runs on, where not this test's own. */
+  readonly run?: SandboxRunner;
 }
 
 /** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
@@ -446,7 +450,7 @@ const repositoryAgent = (
       Effect.provide(
         Layer.mergeAll(
           http,
-          machineOver(http),
+          machineOver(http, seams.run),
           Layer.succeed(HostedEnvironment, NO_KEYS),
           FIXTURE_IMAGE,
         ),
@@ -2298,6 +2302,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(read, []);
       }),
   );
+  it.effect(
+    "a repository agent's launch keeps every span it opens in the trace it was asked under, its checkout's on the edge's runner among them",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const sentry = recordingSentry();
+        // The edge runner traces as the web's runtime does, its root fiber handed nothing of the caller's.
+        const traced: SandboxRunner = (effect) =>
+          Effect.runPromise(effect.pipe(Effect.provide(sentryReportingLayer)));
+        const asked = yield* Effect.gen(function* () {
+          const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+            run: traced,
+          });
+          const opened = yield* sessions.open(message(agent, "Push a branch."));
+          assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+          assert.ok(api.runs.some(isClone));
+          return yield* Effect.currentSpan;
+        }).pipe(Effect.withSpan("web/startAgent"), Effect.provide(sentry.layer));
+        const traces = new Set(
+          sentOfType(sentry.sent, "span").flatMap((item) =>
+            JSON.parse(item.text).items.map((span: { trace_id: string }) => span.trace_id),
+          ),
+        );
+        assert.deepEqual([...traces], [asked.traceId]);
+      }),
+  );
+
   it.effect(
     "a launch's end leaves the sandbox up while a developer's Terminal holds it, its credentials still on its firewall",
     () =>
