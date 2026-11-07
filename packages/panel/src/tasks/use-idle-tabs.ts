@@ -10,7 +10,7 @@
  * quit on it still says when it was last on screen. A tab no stamp names
  * yet, whether just opened or kept by a version from before the stamps,
  * counts as viewed the first time it is seen here, so nothing closes the
- * moment it is first counted. A clock on the renderer's runtime sleeps until
+ * moment it is first counted. A wake forked on `@repo/ui`'s edge sleeps until
  * the next moment something falls due, a tab's day unviewed or the shown
  * tab's hour, and wakes the tidy then, rather than ticking while nothing
  * can; on each wake and on a task opening, every tab of the open task's
@@ -25,7 +25,7 @@
  * (`onWake`), where one the developer closed by hand stays closed.
  */
 
-import { useAtomValue } from "@effect/atom-react";
+import { effectServices, forkEffect, streamInto } from "@repo/ui";
 import {
   idleTabs,
   type StripTab,
@@ -33,11 +33,9 @@ import {
   type ViewedAt,
   viewedAtOf,
 } from "@repo/ui/tab-strip-model";
-import { Clock, Context, Duration, Effect, Option, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
+import { Clock, Context, Duration, Effect, Stream } from "effect";
 import { useEffect, useRef } from "react";
-import { rendererRuntime } from "../renderer-runtime.js";
 
 /** How long a tab may go unviewed before it closes itself. */
 const TAB_IDLE = Duration.hours(24);
@@ -59,18 +57,11 @@ const wokenAt = (due: number): Effect.Effect<number> =>
     return yield* Clock.currentTimeMillis;
   });
 
-/**
- * The time now, and again once `due` passes, unless it names no moment.
- * Note that each moment due is an atom of its own, so a new one replaces
- * the sleep standing rather than waiting it out.
- */
-const wakeAtom = Atom.family((due: number) =>
-  rendererRuntime.atom(
-    due === NEVER_DUE
-      ? Stream.fromEffect(Clock.currentTimeMillis)
-      : Stream.concat(Stream.fromEffect(Clock.currentTimeMillis), Stream.fromEffect(wokenAt(due))),
-  ),
-);
+/** The time now, and again once `due` passes, unless it names no moment. */
+const wakes = (due: number): Stream.Stream<number> =>
+  due === NEVER_DUE
+    ? Stream.fromEffect(Clock.currentTimeMillis)
+    : Stream.concat(Stream.fromEffect(Clock.currentTimeMillis), Stream.fromEffect(wokenAt(due)));
 
 /** One strip as the tidy reads and closes it. */
 interface IdleStrip<T extends StripTab> {
@@ -107,15 +98,21 @@ export interface IdleTabsInput<Column extends StripTab, Panel extends StripTab> 
   readonly onWake: (agents: readonly string[]) => void;
 }
 
-/** The time the tidy woke at, moved once `due` passes; none until the clock's first reading lands. */
+/**
+ * The time the tidy woke at, moved once `due` passes; none until the
+ * clock's first reading lands. Note that the wake is forked again as `due`
+ * changes, so a new moment interrupts the sleep standing rather than
+ * waiting it out.
+ */
 function useWokenAt(due: number): number | undefined {
-  return Option.getOrUndefined(AsyncResult.value(useAtomValue(wakeAtom(due))));
+  const woken = useCreateStore<number | undefined>(undefined);
+  useEffect(() => forkEffect(streamInto(wakes(due), woken)), [due, woken]);
+  return useSelector(woken);
 }
 
 /** Reads the time on the renderer's clock as it stands at the call, for a stamp, which is the moment it is made. */
-function useClockNow(): () => number {
-  const services = useAtomValue(rendererRuntime);
-  return () => Context.get(AsyncResult.getOrThrow(services), Clock.Clock).currentTimeMillisUnsafe();
+function clockNow(): number {
+  return Context.get(effectServices.state, Clock.Clock).currentTimeMillisUnsafe();
 }
 
 /** The next moment one of the strip's tabs falls due: the shown tab's hour since its stamp, or another's day unviewed where the strip does not keep it. */
@@ -202,7 +199,6 @@ export function useIdleTabs<Column extends StripTab, Panel extends StripTab>(
   input: IdleTabsInput<Column, Panel>,
 ): void {
   const woken = useWokenAt(Math.min(nextDueOf(input.column), nextDueOf(input.panel)));
-  const clockNow = useClockNow();
   // Note that the effects read the strips through a ref, because their
   // callbacks are new each render and only the moments below should run them.
   const latest = useRef(input);

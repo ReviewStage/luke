@@ -344,11 +344,12 @@ export const MAC_PRESENCE = {
   /** How often the host reads the beats of the account's devices while a window draws them: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
   /**
-   * How long one read of the beats may take before it counts as failed: past
-   * the hosted call's own ten-second deadline, so an answer that is merely
-   * slow still lands, and short enough that a wedged read (a body that never
-   * ends, a credential renewed and asked again) says unknown well inside a
-   * poll rather than letting every device age past `FRESH_MS` meanwhile.
+   * How long one read of the beats may take before it counts as failed, the
+   * read's whole deadline (`hosted-link.ts`'s `HOSTED_DEADLINE.PRESENCE`),
+   * its body and a credential renewed and asked again among it: past the
+   * usual ten seconds, so an answer that is merely slow still lands, and
+   * short enough that a wedged read says unknown well inside a poll rather
+   * than letting every device age past `FRESH_MS` meanwhile.
    */
   READ_TIMEOUT_MS: 12_000,
 } as const;

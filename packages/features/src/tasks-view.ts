@@ -9,6 +9,7 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
+import { githubContract } from "./contract/github.js";
 import { repositoryPinsContract } from "./contract/repository-pins.js";
 import { taskFilesContract } from "./contract/task-files.js";
 import { taskSectionsContract } from "./contract/task-sections.js";
@@ -30,7 +31,7 @@ import {
   githubRepositoryFullNameSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { failureSetOf } from "./hosted-failure.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
   pagePlaceSchema,
   pageVersionNumberSchema,
@@ -1052,25 +1053,21 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
-export const tasksGitHubPageAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ url: EffectSchema.String }),
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
+export const tasksGitHubPageAnswerSchema = answerView(githubContract.connect);
 
 export type TasksGitHubPageAnswer = typeof tasksGitHubPageAnswerSchema.Type;
 
 /** Why the account's GitHub was not disconnected: no answer, or GitHub is its only way to sign in. */
-export const GITHUB_DISCONNECT_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_PERMITTED: "not-permitted",
-} as const;
+export const GITHUB_DISCONNECT_FAILURE = failureSetOf(githubContract.disconnect);
 
-/** A disconnect of the account's GitHub, as the window's process hears it: the connection as it then stands, or why it is not. */
+/**
+ * A disconnect of the account's GitHub, as the window's process hears it:
+ * the connection as it then stands, under `connection` as it shipped, or
+ * how the disconnect failed, as its procedure's answer spells it.
+ */
 export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ connection: githubConnectionSchema }),
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(GITHUB_DISCONNECT_FAILURE)),
-  }),
+  answerView(githubContract.disconnect).members[1],
 ]);
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;

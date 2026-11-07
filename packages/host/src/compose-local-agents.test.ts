@@ -143,6 +143,8 @@ const followingDevice = (
     readonly writingTakes?: Duration.Input;
     /** The box's own GitHub sign-in does not reach the repository, as a box signed in to nothing does. */
     readonly signInUnreached?: boolean;
+    /** Whether the device's switch is on, read at each look; on where not given. */
+    readonly switchedOn?: () => boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -308,7 +310,7 @@ const followingDevice = (
         createId: () => `claim-${++minted}`,
       },
       deviceId: "device-1",
-      switchedOn: Effect.succeed(true),
+      switchedOn: Effect.sync(() => options.switchedOn?.() ?? true),
       client,
       update: options.update,
     }).pipe(Effect.provide(services), Effect.provideService(Clock.Clock, clock));
@@ -530,7 +532,7 @@ it.effect(
             }),
         });
         yield* until(() => claims.length === 1);
-        yield* TestClock.adjust(Duration.seconds(1));
+        yield* TestClock.adjust(Duration.seconds(2));
         yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => settled.some((each) => each.id === LINE_ID));
@@ -538,6 +540,81 @@ it.effect(
         assert.equal(claims.length, 2);
         assert.equal(claims[1], claims[0], "the retry is the same claim");
         assert.equal(spawned.filter((each) => each.program === RUNNER).length, 1);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose claim's answer was lost is not settled by a beat before its claim is asked again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the line is claimed at the fourteenth second and its answer lost, so the beat at the fifteenth hears the service hold it before the claim is asked again at the sixteenth; the service answers that claim only while it still holds the line, as it does once the line is settled.
+        let landed: string | undefined;
+        const { service, spawned, settled, beats } = yield* followingDevice(() => Effect.void, {
+          linesAfter: Duration.seconds(14),
+          claim: (
+            token,
+          ): Effect.Effect<DeviceAgentClaimedLine | { readonly claimed: false } | undefined> =>
+            Effect.sync(() => {
+              if (landed === undefined) {
+                landed = token;
+                service.held.add(LINE_ID);
+                return undefined;
+              }
+              return token === landed && service.held.has(LINE_ID)
+                ? LAUNCH
+                : { claimed: false as const };
+            }),
+        });
+        yield* until(() => beats.length > 0);
+        yield* TestClock.adjust(Duration.seconds(14));
+        yield* until(() => landed !== undefined);
+        yield* TestClock.adjust(Duration.seconds(2));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose claim's answer was lost is claimed again under the same token once a gate shut before the re-ask opens again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the line is claimed at the fourth second and its answer lost, and the switch goes off at once, so the follow ends at the fifth, before its re-ask at the sixth; the service reads no line again.
+        let on = true;
+        let landed: string | undefined;
+        const claims: (string | undefined)[] = [];
+        const { spawned, settled, beats } = yield* followingDevice(() => Effect.void, {
+          linesAfter: Duration.seconds(4),
+          switchedOn: () => on,
+          claim: (token) =>
+            Effect.sync(() => {
+              claims.push(token);
+              if (landed === undefined) {
+                landed = token;
+                on = false;
+                return undefined;
+              }
+              return token === landed ? LAUNCH : { claimed: false as const };
+            }),
+        });
+        yield* until(() => beats.length > 0);
+        yield* TestClock.adjust(Duration.seconds(4));
+        yield* until(() => landed !== undefined);
+        yield* TestClock.adjust(Duration.seconds(5));
+        on = true;
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(claims, [landed, landed]);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
       }),
     ),

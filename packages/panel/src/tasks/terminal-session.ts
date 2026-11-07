@@ -14,9 +14,8 @@ import {
   type TerminalState,
   terminalLook,
 } from "@repo/features/terminal-model";
+import { Store } from "@tanstack/react-store";
 import { Option, Schema } from "effect";
-import * as Atom from "effect/reactivity/Atom";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { TerminalHandle, TerminalModule, TerminalSize } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
 
@@ -113,7 +112,8 @@ function returnAction(state: TerminalState): TerminalAction | undefined {
 /** One terminal: its screen, its shell's port, and where it stands. */
 export class TerminalSession {
   readonly link: ShellLink;
-  #state: TerminalState = { kind: TERMINAL_STATE.CONNECTING };
+  /** Where the session stands, the session's own store; it never holds a byte the shell printed. */
+  readonly states = new Store<TerminalState>({ kind: TERMINAL_STATE.CONNECTING });
   #screen: TerminalHandle | undefined;
   /** The size the screen was last fitted at, none before it first had room. */
   #size: TerminalSize | undefined;
@@ -126,7 +126,6 @@ export class TerminalSession {
   #typed: string[] = [];
   /** How many bytes the screen has drawn since it last said so. */
   #unacked = 0;
-  #listeners = new Set<() => void>();
   /** Whether the tab draws the screen now, which a stopped sandbox is resumed for. */
   #shown = false;
   /** Whether the session resumed the sandbox since the shell last attached or the developer last asked again, so a sandbox that stays stopped is said once rather than resumed in a loop. */
@@ -139,7 +138,7 @@ export class TerminalSession {
   }
 
   get state(): TerminalState {
-    return this.#state;
+    return this.states.state;
   }
 
   get terminalId(): string | undefined {
@@ -150,12 +149,6 @@ export class TerminalSession {
   get screen(): TerminalHandle | undefined {
     return this.#screen;
   }
-
-  /** Hears each change of state, until the answer is called. */
-  subscribe = (listener: () => void): (() => void) => {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
-  };
 
   /** Opens a link pressed with ⌘ held through the opener the tab drawn last handed. */
   set openLink(opener: (url: string) => void) {
@@ -171,8 +164,8 @@ export class TerminalSession {
       onLink: (url) => this.#openLink(url),
     });
     this.#screen.attach(host);
-    this.#screen.dim(terminalLook(this.#state).dim);
-    if (this.#state.kind === TERMINAL_STATE.STOPPED) this.#enter(this.#state);
+    this.#screen.dim(terminalLook(this.state).dim);
+    if (this.state.kind === TERMINAL_STATE.STOPPED) this.#enter(this.state);
   }
 
   /** Says on the shell's port that its tab is shown in the window the developer is using; nothing while no port stands. */
@@ -242,7 +235,6 @@ export class TerminalSession {
     if (this.#terminalId !== undefined) this.link.close?.(this.#terminalId);
     this.#screen?.dispose();
     this.#screen = undefined;
-    this.#listeners.clear();
   }
 
   #open(size: TerminalSize): void {
@@ -288,9 +280,8 @@ export class TerminalSession {
       });
     }
     if (next.kind === TERMINAL_STATE.ATTACHED) this.#resumed = false;
-    this.#state = next;
     this.#screen?.dim(terminalLook(next).dim);
-    for (const listener of this.#listeners) listener();
+    this.states.setState(() => next);
   }
 
   #resized(size: TerminalSize): void {
@@ -304,7 +295,7 @@ export class TerminalSession {
   // shell ended or the connection closed, any key is the state's own, and
   // Return runs the bar's action.
   #input(data: string): void {
-    const state = this.#state;
+    const state = this.state;
     const action = returnAction(state);
     if (state.kind === TERMINAL_STATE.EXITED) {
       this.link.ended(this);
@@ -356,73 +347,65 @@ export const TERMINAL_KIND = {
 
 export type TerminalKind = (typeof TERMINAL_KIND)[keyof typeof TERMINAL_KIND];
 
-/** The sessions a window holds, by kind, then by the agent, then by the terminal's own key, and the listener that hands them their ports while any stands. */
-interface Sessions {
-  readonly held: Map<TerminalKind, Map<string, Map<string, TerminalSession>>>;
-  stopHearing: (() => void) | undefined;
-}
+/**
+ * The sessions a window holds, by kind, then by the agent, then by the
+ * terminal's own key, and the listener that hands them their ports while
+ * any stands. Note that it is a plain object rather than a store, because a
+ * session is no value to draw: it holds the screen the bytes go to.
+ */
+export class TerminalSessions {
+  readonly #held = new Map<TerminalKind, Map<string, Map<string, TerminalSession>>>();
+  #stopHearing: (() => void) | undefined;
 
-/** The window's sessions, one set for the registry's life, each let go with it. */
-const sessionsAtom = Atom.keepAlive(
-  Atom.make((get): Sessions => {
-    const sessions: Sessions = { held: new Map(), stopHearing: undefined };
-    get.addFinalizer(() => {
-      for (const each of everySession(sessions)) each.dispose();
-      sessions.held.clear();
-      sessions.stopHearing?.();
-    });
-    return sessions;
-  }),
-);
-
-function everySession(sessions: Sessions): TerminalSession[] {
-  return [...sessions.held.values()].flatMap((agents) =>
-    [...agents.values()].flatMap((held) => [...held.values()]),
-  );
-}
-
-/** The session a terminal holds, made with `make` the first time it is asked for. */
-export function terminalSession(
-  registry: AtomRegistry.AtomRegistry,
-  kind: TerminalKind,
-  agentId: string,
-  key: string,
-  make: () => TerminalSession,
-): TerminalSession {
-  const sessions = registry.get(sessionsAtom);
-  const agents = sessions.held.get(kind) ?? new Map<string, Map<string, TerminalSession>>();
-  sessions.held.set(kind, agents);
-  const held = agents.get(agentId) ?? new Map<string, TerminalSession>();
-  agents.set(agentId, held);
-  const found = held.get(key);
-  if (found !== undefined) return found;
-  const made = make();
-  held.set(key, made);
-  // Each shell's port goes to the session that asked for it.
-  sessions.stopHearing ??= onTerminalPort((ticket, port) =>
-    everySession(sessions)
-      .find((each) => each.takes(ticket.agentId, ticket.terminalId))
-      ?.attached(port),
-  );
-  return made;
-}
-
-/** Ends the sessions of an agent's terminals given, or every one of its kind with none given, as their tabs close. */
-export function endTerminalSessions(
-  registry: AtomRegistry.AtomRegistry,
-  kind: TerminalKind,
-  agentId: string,
-  keys?: readonly string[],
-): void {
-  const sessions = registry.get(sessionsAtom);
-  const held = sessions.held.get(kind)?.get(agentId);
-  if (held === undefined) return;
-  for (const key of keys ?? [...held.keys()]) {
-    held.get(key)?.dispose();
-    held.delete(key);
+  #every(): TerminalSession[] {
+    return [...this.#held.values()].flatMap((agents) =>
+      [...agents.values()].flatMap((held) => [...held.values()]),
+    );
   }
-  if (held.size === 0) sessions.held.get(kind)?.delete(agentId);
-  if (everySession(sessions).length > 0) return;
-  sessions.stopHearing?.();
-  sessions.stopHearing = undefined;
+
+  /** The session a terminal holds, made with `make` the first time it is asked for. */
+  session(
+    kind: TerminalKind,
+    agentId: string,
+    key: string,
+    make: () => TerminalSession,
+  ): TerminalSession {
+    const agents = this.#held.get(kind) ?? new Map<string, Map<string, TerminalSession>>();
+    this.#held.set(kind, agents);
+    const held = agents.get(agentId) ?? new Map<string, TerminalSession>();
+    agents.set(agentId, held);
+    const found = held.get(key);
+    if (found !== undefined) return found;
+    const made = make();
+    held.set(key, made);
+    // Each shell's port goes to the session that asked for it.
+    this.#stopHearing ??= onTerminalPort((ticket, port) =>
+      this.#every()
+        .find((each) => each.takes(ticket.agentId, ticket.terminalId))
+        ?.attached(port),
+    );
+    return made;
+  }
+
+  /** Ends the sessions of an agent's terminals given, or every one of its kind with none given, as their tabs close. */
+  end(kind: TerminalKind, agentId: string, keys?: readonly string[]): void {
+    const held = this.#held.get(kind)?.get(agentId);
+    if (held === undefined) return;
+    for (const key of keys ?? [...held.keys()]) {
+      held.get(key)?.dispose();
+      held.delete(key);
+    }
+    if (held.size === 0) this.#held.get(kind)?.delete(agentId);
+    if (this.#every().length > 0) return;
+    this.#stopHearing?.();
+    this.#stopHearing = undefined;
+  }
+
+  /** Lets every session go, as the window closes. */
+  dispose(): void {
+    for (const each of this.#every()) each.dispose();
+    this.#held.clear();
+    this.#stopHearing?.();
+    this.#stopHearing = undefined;
+  }
 }
