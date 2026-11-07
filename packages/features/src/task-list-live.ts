@@ -183,6 +183,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   queuedAt: EffectSchema.NullOr(countedNumber),
   startedAt: EffectSchema.NullOr(countedNumber),
   settledAt: EffectSchema.NullOr(countedNumber),
+  /** Until when the newest turn's runner is held to be at work; absent from a statement before it was carried. */
+  leaseUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   turnSessionEnded: EffectSchema.NullOr(EffectSchema.Boolean),
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
   /** When the newest turn to end ended, the newest turn's own end being null while it runs; absent from a statement before it was carried. */
@@ -243,6 +245,7 @@ function turnOf(row: AgentLiveRow): StatusTurn | undefined {
         queuedAt: row.queuedAt ?? row.createdAt,
         settledAt: row.settledAt,
         sessionEnded: row.turnSessionEnded === true,
+        leaseUntil: row.leaseUntil ?? undefined,
       };
 }
 

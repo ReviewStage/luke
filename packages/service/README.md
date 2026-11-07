@@ -2622,32 +2622,24 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs fifteen sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs five sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
 - `purged`: conversations stamped deleted more than seven days ago, which
   is what a deleted task's agents' conversations come to, with their
   sessions' sandboxes queued for deletion.
-- `abandoned`: turns still running past their kind's bound, an hour for a
-  turn of any other conversation and a day and an hour for an agent's
-  (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
-  `TURN_ABANDON.AGENT_AFTER_MS`), whose end the service never heard, settled
-  as failed for `abandoned` through the same write a turn's own end takes,
-  or as canceled where a Stop went unconfirmed, at most fifty a sweep.
-- `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
-  that stopped beating within their lease, and local runners left warm past
-  their device's window.
-- `sandboxes` and `nativeSandboxes`: the Vercel Sandboxes queued for
-  deletion deleted, and native agents' turns whose runner died mid-turn
-  settled as failed. An idle sandbox stops on Vercel's own timeout.
+- `deviceWarmRunners`: local runners left warm past their device's window.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `automations`: the automations whose schedule is due fired
-  ("Automations" below), at most twenty-five a sweep, and the runs still
-  queued from the last hour acted on, at most twelve a sweep and four at
-  once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
 - `agentQueues`: unpaused queues of idle agents handed on.
+- `syncLog`: the sync log's transactions older than its keep pruned.
+
+No sweep settles a turn whose runner went quiet. Every post a runner makes,
+its heartbeat among them, pushes on its open turns' lease
+(`packages/database/src/models/turn-lease.ts`); every reader takes a turn
+past its lease as its runner lost, and the agent's next touch (a message, a
+Stop, an open of it) settles it (`src/agents/coder-host/lapsed-runner.ts`).
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
