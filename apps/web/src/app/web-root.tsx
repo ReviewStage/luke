@@ -37,7 +37,7 @@ import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { installSendTracer } from "@repo/panel/send-traces";
-import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
+import { followAppState } from "@repo/panel/use-app-state";
 import { ErrorBoundary, RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import { createBrowserHistory } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
@@ -146,9 +146,11 @@ export async function mountWebApp(
     installed.push(installShownFailureReporter(sentry.reportShownFailure, queryClient));
     // Every send the panel is pressed for is traced through it too, its trace carried to the service.
     installed.push(installSendTracer(sentry.traceSend));
-    // The document is read into the window's Query client before anything is drawn over it, so
-    // no reader draws a first frame without it.
-    await queryClient.ensureQueryData(appStateQuery);
+    // The document is followed into the window's Query client, subscribed before it is read,
+    // and drawn over only once that read is written, so the first frame holds what moved meanwhile.
+    const following = followAppState(queryClient);
+    installed.push(following.stop);
+    await following.written;
   } catch (error) {
     console.error(
       "The tab's host could not stand or its state be read; its panel is not drawn.",
@@ -171,7 +173,6 @@ export async function mountWebApp(
     <ErrorBoundary failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
-          <AppStateSubscription />
           <LiveReadSubscription />
           <WebAppearance />
           <PanelRouterProvider router={router} />

@@ -24,7 +24,7 @@ import {
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { installSendTracer } from "@repo/panel/send-traces";
-import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
+import { followAppState } from "@repo/panel/use-app-state";
 import { RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
@@ -99,15 +99,20 @@ export function mountWindow(
     },
   });
 
+  // What stops the window's following of its document, which stands for the window's life once its first read is written.
+  let stopFollowing = (): void => undefined;
   void (async () => {
     try {
       // Main listens on the push stream before the document is read, so a
       // document pushed while the read is in flight is heard, not lost.
       await pushes.opened;
-      // The document is read into the window's Query client before anything is drawn over it, so
-      // no reader draws a first frame without it.
-      await queryClient.ensureQueryData(appStateQuery);
+      const following = followAppState(queryClient);
+      stopFollowing = following.stop;
+      // The document is followed into the window's Query client, subscribed before it is read,
+      // and drawn over only once that read is written, so the first frame holds what moved meanwhile.
+      await following.written;
     } catch (error) {
+      stopFollowing();
       console.error("The window's state could not be read; its surface is not drawn.", error);
       // A window with no state is a failure, so it is sent as an event through
       // this window's SDK and its filters, not only kept as the console's
@@ -130,7 +135,6 @@ export function mountWindow(
     draw(
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
-          <AppStateSubscription />
           <LiveReadSubscription />
           {surface}
         </QueryProvider>
