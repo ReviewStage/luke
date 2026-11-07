@@ -1,14 +1,13 @@
-import { useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { INBOX_BOUNDS, type InboxField } from "@repo/features/inbox-wire";
 import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@repo/ui";
 import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { PANEL_SPAN } from "../panel-spans.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -65,8 +64,8 @@ export function InboxFormText({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const statuses = useIntegrationStatuses();
-  const bundle = useAtomValue(useSideBundles().descriptionEditor);
-  const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
+  const bundle = useQuery(useSideBundles().descriptionEditor);
+  const module = bundle.data;
   const { agent } = doors;
   // Note that a press on the field's name takes the caret into its words, as a label does for its input, since an editor is no labelable element.
   const { labelId } = control;

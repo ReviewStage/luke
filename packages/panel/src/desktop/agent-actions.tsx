@@ -396,9 +396,9 @@ export function useAgentActions(
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
   const moveTo = useMoveToEntry(agent, agents);
   const added = useAddRepository(agent, agents, shown);
-  // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
-  // an archived agent is renamed then.
-  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
+  // Note that an Unarchive stands while what the agent stands under is archived, and it is not
+  // renamed then; an archived agent's tab on its task is renamed as a live one's is.
+  const renamable = agents.onUnarchive === undefined;
   const { onOpenTerminal, onOpenLocal } = terminals;
   const macTerminal =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.MAC_TERMINAL) }).data ===

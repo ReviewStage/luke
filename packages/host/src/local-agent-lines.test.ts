@@ -160,7 +160,7 @@ const following = (lines: readonly DeviceAgentLine[]) =>
     const composer = yield* composeLocalAgents({
       kernel: { stateRoot: path.join(root, "state"), createId: () => DEVICE_ID },
       deviceId: DEVICE_ID,
-      switchedOn: Effect.succeed(true),
+      switchedOn: Stream.make(true),
       client: new HostedDeviceAgentClient({
         credential: fixedBearer("device-token"),
         serviceBaseUrl: SERVICE,
@@ -326,7 +326,7 @@ const launching = (workStands: boolean, repositoryHangs = false) =>
     const composer = yield* composeLocalAgents({
       kernel: { stateRoot: path.join(root, "state"), createId: () => DEVICE_ID },
       deviceId: DEVICE_ID,
-      switchedOn: Effect.succeed(true),
+      switchedOn: Stream.make(true),
       client: new HostedDeviceAgentClient({
         credential: fixedBearer("device-token"),
         serviceBaseUrl: SERVICE,

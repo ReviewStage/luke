@@ -832,7 +832,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
-test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
+test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its tab on the task", () => {
   const shown: string[] = [];
   const agent = (id: string, title: string) => ({
     id,
@@ -844,7 +844,6 @@ test("an archived agent of the open task is still found, after the standing ones
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
-  const base = tasksControl();
   openPalette(
     tasksControl({
       activeTaskId: "plan-1",
@@ -863,7 +862,7 @@ test("an archived agent of the open task is still found, after the standing ones
         archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
         agentIds: ["agent-7"],
       }),
-      agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
+      onShowAgent: (taskId, agentId) => shown.push(`${taskId}:${agentId}`),
     }),
   );
   chooseFilter("This task");
@@ -877,7 +876,7 @@ test("an archived agent of the open task is still found, after the standing ones
   type("refund");
   assert.deepEqual(rows(), ["Refund export · Archived · Billing usage alerts"]);
   press("Refund export · Archived · Billing usage alerts");
-  assert.deepEqual(shown, ["agent-8"]);
+  assert.deepEqual(shown, ["plan-1:agent-8"]);
 });
 
 test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window", async () => {
@@ -1251,10 +1250,13 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
   await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
-  assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
-    renderToStaticMarkup(fileLook(path).icon),
-    "the row wears the file's type icon",
+  // Note that the icon is drawn once the file tree bundle it rides in has landed in the row.
+  await vi.waitFor(() =>
+    assert.equal(
+      row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
+      renderToStaticMarkup(withQueryClient(fileLook(path).icon)),
+      "the row wears the file's type icon",
+    ),
   );
   restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".ui-tooltip-card [data-file-card]");

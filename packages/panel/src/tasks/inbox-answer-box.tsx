@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@repo/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@repo/features/inbox-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -14,7 +13,7 @@ import {
 import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
@@ -228,8 +227,8 @@ function useAnswerField({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const { descriptionEditor } = useSideBundles();
-  const bundle = useAtomValue(descriptionEditor);
-  const reload = useAtomRefresh(descriptionEditor);
+  const bundle = useQuery(descriptionEditor);
+  const reload = () => void bundle.refetch();
   const pickers = useComposerPickers({
     editor,
     room,
@@ -251,8 +250,8 @@ function useAnswerField({
   return {
     editor,
     room,
-    module: AsyncResult.isSuccess(bundle) ? bundle.value : undefined,
-    failed: AsyncResult.isFailure(bundle),
+    module: bundle.data,
+    failed: bundle.isError,
     reload,
     pickers,
   };

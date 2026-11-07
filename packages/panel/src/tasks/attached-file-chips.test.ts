@@ -6,6 +6,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { attachmentChipName } from "../testing/attachment-chip.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 
 /**
@@ -117,7 +118,7 @@ function draw(start: readonly AgentAttachment[]) {
   const held = { now: start };
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(Box, { start, held })));
+  act(() => root?.render(withQueryClient(createElement(Box, { start, held }))));
   return held;
 }
 

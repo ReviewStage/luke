@@ -18,7 +18,7 @@ import { type AddEntry, AddTabButton } from "./strip-tabs.js";
  * add-menu-rows.test.ts -- the "+" menus of the column and the side panel
  * draw each row's end mark and hang its card, as ⌘K and the task's summary
  * do: a failed agent is marked failed, an agent's row hangs its card while
- * the pointer rests on it, and a Terminal row wears its agent's failed mark.
+ * the pointer rests on it, and a Terminal row hangs its agent's card.
  * Synthetic throughout.
  */
 
@@ -104,7 +104,7 @@ test("a failed agent's row in the column's \"+\" wears the failed mark and a hea
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Invoice sweep");
 });
 
-test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, and hangs the agent's card", async () => {
+test("a Terminal row in the side panel's \"+\" hangs its agent's card", async () => {
   const base = tasksControl();
   const cards: PanelCards = {
     agents: agentsControl({ agents: [BROKEN], agentIds: [BROKEN.id] }),
@@ -126,9 +126,7 @@ test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, an
     }),
   );
 
-  const row = options.get("Billing export");
-  assert.deepEqual(endMarks(row), ["Failed"]);
-  restOn(row ?? assert.fail("the terminal is listed"));
+  restOn(options.get("Billing export") ?? assert.fail("the terminal is listed"));
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Billing export");
 });

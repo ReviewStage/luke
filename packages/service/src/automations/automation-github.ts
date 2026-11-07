@@ -1,5 +1,6 @@
-import { githubAutomationsOn, recordAutomationRun } from "@repo/database/models/automation-store";
-import type { TaskStoreEffect } from "@repo/database/models/task-store";
+import type { DatabaseServices } from "@repo/database/core/query";
+import { githubAutomationsOn } from "@repo/database/models/automation-store";
+import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
@@ -16,8 +17,9 @@ import {
 } from "@repo/features/automation-wire";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Result, Schema } from "effect";
 import { isAgentBranch } from "../agents/coder-host/bounds.js";
+import { AutomationCadence, type AutomationCadenceUnavailable } from "./automation-cadence.js";
 
 /**
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
@@ -31,11 +33,12 @@ import { isAgentBranch } from "../agents/coder-host/bounds.js";
  * for either. Only what the run's history shows is
  * read off the delivery: the repository, the number, title, and address of
  * the issue or pull request, the branch, and a failed check's commit by its
- * address, never a body. The run is
- * recorded queued under GitHub's own delivery id, which a redelivery
- * carries again, so a delivery GitHub sends twice records one run per
- * automation; the sweep acts on it within the minute, since starting an
- * agent inside GitHub's ten seconds is not a promise this can keep.
+ * address, never a body. The firing is
+ * published under GitHub's own delivery id, which a redelivery carries
+ * again, so a delivery GitHub sends twice records one run per automation;
+ * the automation-runs queue's consumer records and starts it
+ * (`automation-run-consumer.ts`), since starting an agent inside GitHub's
+ * ten seconds is not a promise this can keep.
  *
  * Each event is read with who sent it, people, our agents (the App's
  * own bot, or a person opening, reopening, or marking ready a pull request
@@ -429,26 +432,32 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   return labeled && branched;
 }
 
-/** Queues a run under the delivery's id for every automation listening for the one event read, answering how many it queued. */
+/** Publishes a firing under the delivery's id for every automation listening for the one event read, answering how many it published. */
 const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHubEventRead) {
   const listening = (yield* githubAutomationsOn(
     read.repository,
     read.event,
     MAXIMUM_AUTOMATIONS,
   )).filter((automation) => triggerMatches(automation.trigger, read));
-  const firedAt = yield* DateTime.nowAsDate;
-  const recorded = yield* Effect.forEach(listening, (automation) =>
-    recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),
+  const firedAt = yield* Clock.currentTimeMillis;
+  const cadence = yield* AutomationCadence;
+  yield* Effect.forEach(listening, (automation) =>
+    cadence.publish({
+      automationId: automation.id,
+      dedupeKey: deliveryId,
+      firing: read.firing,
+      firedAt,
+    }),
   );
-  return recorded.filter(Option.isSome).length;
+  return listening.length;
 });
 
 /**
- * Queues a run, under the delivery's own id, for every enabled automation
+ * Publishes a firing, under the delivery's own id, for every enabled automation
  * working in the delivery's repository whose trigger listens for one of the
  * events it is, `agentLogin` naming the App's own bot, which our agents
- * act as; answers how many it queued, none for a delivery no automation
- * listens for or one recorded before. Note that the one id
+ * act as; answers how many firings it published, none for a delivery no
+ * automation listens for. Note that the one id
  * serves every event of the delivery, because an automation listens for
  * one event and so records at most one run of it.
  */
@@ -457,7 +466,7 @@ export function queueGithubRuns(
   event: string,
   payload: UnparsedWireValue,
   agentLogin: string | undefined,
-): TaskStoreEffect<number> {
+): Effect.Effect<number, TaskStoreFailure | AutomationCadenceUnavailable, DatabaseServices> {
   const reads = githubEventsOf(event, payload, agentLogin);
   if (reads.length === 0 || deliveryId.length === 0) return Effect.succeed(0);
   return Effect.map(

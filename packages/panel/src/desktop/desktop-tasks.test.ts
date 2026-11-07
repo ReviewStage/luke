@@ -801,7 +801,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
             sidePanel: {
               ...DOCUMENT_PANEL,
               onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
-              onPreview: (tab) => opened.push(tab),
+              onOpen: (tab) => opened.push(tab),
             },
             agents: agentsControl({
               agents: [agent],

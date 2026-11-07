@@ -27,7 +27,7 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { type SideBundles, sideBundles } from "../bundle-loader.js";
+import type { SideBundles } from "../bundle-loader.js";
 import {
   type DescriptionEditorModule,
   type DescriptionEditorPlacement,
@@ -48,7 +48,7 @@ import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { landedBundles, onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
@@ -173,6 +173,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /**
@@ -908,7 +909,7 @@ test("an editor emptied of a description's words gives the keyboard back to its 
 test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container, render } = mount();
     render(EMPTY_TASK);
@@ -954,7 +955,7 @@ test("a press on the room while the editor's bundle loads is where the editor op
   layTextOut();
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container } = mount();
     const scroller = scrollerOf(container);
@@ -1521,7 +1522,7 @@ test("a press on the room after a click while the editor's bundle loads opens th
   layTextOut();
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container } = mount();
     const scroller = scrollerOf(container);

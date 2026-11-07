@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   Button,
@@ -16,8 +15,7 @@ import {
   usePressAway,
 } from "@repo/ui";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { Cause } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
   createContext,
@@ -300,8 +298,8 @@ export function PierreDiffList({
   overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
-  const loaded = useAtomValue(diffView);
-  const retry = useAtomRefresh(diffView);
+  const loaded = useQuery(diffView);
+  const retry = () => void loaded.refetch();
   // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
@@ -329,7 +327,7 @@ export function PierreDiffList({
     stop();
     setHint(undefined);
   }, [stop]);
-  const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const module = loaded.data;
   const host = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement | null>(null);
   const holdBox = useCallback(
@@ -490,12 +488,12 @@ export function PierreDiffList({
     onPressAway: offer === undefined ? undefined : () => setOffer(undefined),
   });
 
-  if (AsyncResult.isFailure(loaded)) {
+  if (loaded.isError) {
     return (
       <ErrorState
         failure={failureShown({
           surface: FAILURE_SURFACE.DIFF_READ,
-          cause: Cause.squash(loaded.cause),
+          cause: loaded.error,
         })}
         placement={ERROR_STATE_PLACEMENT.CENTERED}
         onRetry={retry}

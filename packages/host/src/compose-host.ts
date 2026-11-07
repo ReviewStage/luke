@@ -24,7 +24,7 @@ import {
 } from "@repo/gateway";
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { entityPool } from "@repo/sync";
-import { Effect, Exit, Layer, Option, Scope } from "effect";
+import { Effect, Exit, Layer, Option, Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -197,14 +197,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * that may wait for the service is sent under a key of the host's own
      * minting and waits while the service does not answer: kept on disk
      * beside the lists where they are kept (`openEntities`), and in a
-     * browser tab for the tab's life alone. A fixture run keeps none
-     * waiting.
+     * browser tab for the tab's life alone, and sent again only as the
+     * account that asked it. A fixture run keeps none waiting.
      */
     const pool = yield* entityPool(
       kernel.runMode.requiresAccount
         ? {
             mintKey: kernel.createId,
             replayRefused: Effect.sync(() => offlineRefused.raise()),
+            holder: accountId,
           }
         : undefined,
     );
@@ -336,6 +337,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             mode: Effect.map(
               Effect.orDie(settings.store.snapshot()),
               (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
+            ),
+            changed: Effect.zipWith(settings.told, account.session.changes, (written, signed) =>
+              Stream.merge(written, signed),
             ),
             allowAlways: Effect.map(
               settings.settingsWrite(

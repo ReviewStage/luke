@@ -38,7 +38,6 @@ interface Recorded {
   sandboxed: number[];
   native: number[];
   wakeups: number[];
-  automated: number[];
   syncLog: number[];
 }
 
@@ -51,7 +50,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     native: [],
     wakeups: [],
-    automated: [],
     syncLog: [],
   };
   const options: MaintenanceSweepOptions = {
@@ -93,11 +91,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
       }),
-    sweepAutomations: (now) =>
-      Effect.sync(() => {
-        recorded.automated.push(now);
-        return { fired: 1, started: 1, skipped: 0, failed: 0 };
-      }),
     sweepAgentQueues: () => Effect.succeed(0),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
@@ -131,7 +124,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
       syncLog: [],
     });
   }),
@@ -155,7 +147,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
       syncLog: [],
     });
     assert.deepEqual(missing.recorded, {
@@ -166,7 +157,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
       syncLog: [],
     });
   }),
@@ -194,7 +184,6 @@ it.effect(
         sandboxed: [instant],
         native: [instant],
         wakeups: [instant],
-        automated: [instant],
         syncLog: [instant],
       });
     }),
@@ -207,7 +196,7 @@ it.effect(
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
         sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
-        sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
+        sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
@@ -223,7 +212,7 @@ it.effect(
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
-      assert.deepEqual(answer.body.automations, SWEEP_FAILED);
+      assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(recorded.syncLog.length, 1);
     }),

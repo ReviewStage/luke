@@ -9,6 +9,7 @@ import {
   continuationsOf,
   latestTurnsOfReached,
   nativeRuntimesOfReached,
+  openSandboxesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@repo/database/models/agent-store";
 import { replaceAgentWakeups } from "@repo/database/models/agent-wakeups";
@@ -65,7 +66,7 @@ import {
  * conversation, whichever of them started it.
  */
 
-/** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
+/** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, whether a line of the developer's awaits one, and whether its sandbox stands open. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationIds: readonly string[],
 ): Effect.fn.Return<
@@ -76,10 +77,12 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
   const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached(conversationIds));
+  const sandboxes = yield* hostedStoreOrUnavailable(openSandboxesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
     awaitingLineAt: awaiting.get(conversationId),
     runtime: runtimes.get(conversationId),
+    sandboxOpen: sandboxes.has(conversationId),
   });
 });
 

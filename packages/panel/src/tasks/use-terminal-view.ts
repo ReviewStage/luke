@@ -1,13 +1,12 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   TERMINAL_STATE,
   type TerminalAction,
   type TerminalState,
 } from "@repo/features/terminal-model";
 import { forkEffect } from "@repo/ui";
+import { useQuery } from "@tanstack/react-query";
 import { Store, useSelector } from "@tanstack/react-store";
-import { Duration, Effect, Option } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Duration, Effect } from "effect";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useSideBundles } from "../bundle-loader.js";
 import type { TerminalFind } from "../terminal/contract.js";
@@ -60,9 +59,9 @@ export function useTerminalView(
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
   const { terminal } = useSideBundles();
-  const loaded = useAtomValue(terminal);
-  const retryBundle = useAtomRefresh(terminal);
-  const module = Option.getOrUndefined(AsyncResult.value(loaded));
+  const loaded = useQuery(terminal);
+  const retryBundle = () => void loaded.refetch();
+  const module = loaded.data;
   const state = useSelector(session?.states ?? NO_TERMINAL);
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [find, setFind] = useState<TerminalFind | undefined>(undefined);
@@ -91,7 +90,7 @@ export function useTerminalView(
 
   return {
     state,
-    failed: AsyncResult.isFailure(loaded),
+    failed: loaded.isError,
     retryBundle,
     find,
     screen: setElement,
