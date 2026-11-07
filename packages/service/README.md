@@ -2073,21 +2073,24 @@ there, unread, and their runs fail as they fire.
 A schedule is five-field cron read in an IANA zone
 (`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
-often than every fifteen minutes is refused. Its next due instant is the
-row's `next_run_at`, which the minute sweep claims by
-(`src/automations/automation-sweep.ts`): in one transaction it locks the enabled
-rows due, skipping any another claim holds, writes each one's next instant,
-and records a queued run under the due instant. Vercel's cron may call the
-same minute twice; the second claim finds the row moved on or locked, and
-a claim that still read it at its old instant records nothing past the
-unique key. A schedule due more than an hour ago, the cron down or a
-deploy between, is moved on without a run, so a backlog is never replayed.
+often than every fifteen minutes is refused. On production each scheduled
+automation is one Vercel schedule (`src/automations/automation-cadence.ts`),
+named by the automation's id in its workspace's namespace, on its own cron
+and zone, kept as the automation is saved, paused, and deleted; it
+publishes to the `automation-runs` queue topic, as a webhook's call, a
+GitHub delivery, and a Sentry event publish their firings. The queue's
+consumer (`src/automations/automation-run-consumer.ts`) records each firing
+under its dedupe key, a schedule's `executionId` among them, so a firing
+delivered twice is one run, writes a schedule's next instant to
+`next_run_at` for the list to show, and acts on the run while it is still
+queued; a delivery that throws is left unacknowledged and the queue delivers
+it again. Off production nothing is scheduled or published, and a firing is
+recorded queued for nothing to start, since a Preview's database is a branch
+of production's.
 
-A queued run is acted on by `src/automations/automation-runs.ts`, one automation's
-runs one after another so each run's guards read what the one before
-settled; a run still queued two hours after it fired, an hour past the
-last sweep that would act on it, is settled as `missed`, which no failure
-count reads.
+A queued run is acted on by `src/automations/automation-runs.ts`, one
+automation's runs decided one after another under its row lock, so each
+run's guards read what the one before settled.
 Its guards come first: a run whose automation was paused after it was
 queued is skipped as `paused` (the owner's own "Run now" still runs), and
 a run past the daily cap (runs started in the last twenty-four
@@ -2098,10 +2101,10 @@ queued. Then it is a Start with a prompt, on the one path a Start takes
 the automation's repository and the reach of it through the workspace's
 installation, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and its session is
-reached through `routedSessions` acting for the owner, never on the bearer
-the cron called with, as an agent's own `start_agent` reaches one. The prompt is the
+reached through `routedSessions` acting for the owner, never on a
+caller's bearer, as an agent's own `start_agent` reaches one. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
-fired. The run's id is the Start's key, so a run two sweeps both act on
+fired. The run's id is the Start's key, so a run two deliveries both act on
 starts one agent, and a named model does not become the account's default.
 The MCP servers the action switches off (`disabledServers`) are switched off
 for the run's new agent, as a Start's draft switches them off; every other
