@@ -1,13 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7dbe635c-68b4-458a-a655-3d1438b239ee",
-  "prevIds": [
-    "1d196e79-c382-4edf-9de0-a24b9339e840",
-    "8deb2bdd-1c37-4e2e-a8ff-98f79a8d1dfb",
-    "bcc71c8a-bef4-4b1f-8104-76c834443b64",
-    "c3bad717-0628-4710-bb67-0fd0e974a920"
-  ],
+  "id": "e4eacca1-448b-49c6-9e4a-64c5b50e8dc0",
+  "prevIds": ["4765052f-2d2f-48c6-9ec0-9d96f050d30d", "caaf4d36-b114-43ce-aa2d-ad6ec64fd99f"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -1285,6 +1280,19 @@
       "generated": null,
       "identity": null,
       "name": "runner_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "seen_at",
       "entityType": "columns",
       "schema": "public",
       "table": "agent"
@@ -14143,7 +14151,7 @@
         }
       ],
       "isUnique": true,
-      "where": "\"kind\" = 'main' and \"deleted_at\" is null",
+      "where": "\"kind\" = 'main'",
       "with": "",
       "method": "btree",
       "concurrently": false,
