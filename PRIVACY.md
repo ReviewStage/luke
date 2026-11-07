@@ -250,13 +250,15 @@ affected users and relevant authorities as required by applicable law.
 
 We retain your data for as long as your account is active and as needed to
 provide the Service. Deleting a task deletes it at once with its history,
-pages, inbox items, and pictures; its agents' transcripts and sandboxes are
-removed seven days later. When you delete your account:
+pages, inbox items, and pictures; its agents' transcripts are removed seven
+days later, and their sandboxes and those sandboxes' snapshots expire and are
+removed seven days after they were last used. When you delete your account:
 
 - **Account data** (profile, sessions, OAuth tokens, saved credentials,
   preferences, and integration records) is deleted at once.
 - **Your tasks, descriptions, transcripts, and inbox items** are deleted at once, and
-  your agents' sandboxes shortly after.
+  your agents' sandboxes and their snapshots expire and are removed seven days
+  after they were last used.
 - **Workspaces you own**, and the memories, comments, and description text you left in
   them, stay with the workspace without your name.
 - **Usage data and screen recordings:** we ask PostHog to erase them; if it
