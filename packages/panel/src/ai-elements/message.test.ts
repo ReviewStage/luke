@@ -2,11 +2,10 @@
 
 import assert from "node:assert/strict";
 import { Tooltip } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { Message, MessageContent } from "./message.js";
 
 /**
@@ -23,13 +22,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` into the document, on a registry of its own. */
+/** Draws `element` into the document, on the test's Query client. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 

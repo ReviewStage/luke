@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { getTestDB, startTask } from "@repo/database/testing";
+import { experimentInTestWorkspace, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
@@ -39,6 +38,9 @@ import { coderTurnMessage } from "./turn-message.js";
 
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
+/** What a turn is told of a description last edited before Task descriptions was last turned on. */
+const STALE_WORDS = "before the most recent work; check it against the code before relying on it.";
+
 /** When the agent's first turn starts, which a test reads against its own clock, which starts at nothing. */
 const TURN_STARTS_AT = 10 * 60_000;
 
@@ -48,7 +50,7 @@ const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox 
 /** An account with one agent on Claude Code on a task, admitted as the MCP door admits it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
-  yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+  yield* experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS);
   const task = yield* startTask(userId, { name: "Teammate invitations", repository: "acme/relay" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -124,7 +126,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
   );
 
   it.effect(
-    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the description after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its starter turned Plans off",
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the description after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its workspace turned Task descriptions off, and says so where its last edit predates Task descriptions going back on",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent;
@@ -192,25 +194,24 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         );
         const changed = (yield* typedAt(nextTurn)) ?? "";
         assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
+        assert.ok(!changed.includes(STALE_WORDS), changed);
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
-        // With Descriptions off a save hands nothing, and the description is never what a turn reads.
-        yield* writeAccountPreferences(userId, {
-          experiments: { [EXPERIMENT.DESCRIPTIONS]: false },
-        });
+        // With Task descriptions off a save hands nothing, and the description is never what a turn reads.
+        yield* experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS, false);
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
 
-        // A turn runs after that save, and Descriptions goes back on: the next turn is handed the description it was not.
+        // A turn runs after that save, and Task descriptions goes back on: the next turn is handed the description it was not.
         yield* TestClock.adjust("1 minute");
         yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
         yield* TestClock.adjust("1 minute");
-        yield* writeAccountPreferences(userId, {
-          experiments: { [EXPERIMENT.DESCRIPTIONS]: true },
-        });
+        yield* experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS);
         const back = (yield* typedAt(randomUUID())) ?? "";
         assert.ok(back.includes("Only admins withdraw invites."), back);
+        // Its last edit came while Task descriptions was off, so it is said to predate the work since.
+        assert.ok(back.includes(STALE_WORDS), back);
       }),
   );
 });

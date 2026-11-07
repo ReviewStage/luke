@@ -7,7 +7,6 @@ import {
   type StoredTurnRecord,
   turnsNamed,
 } from "./message-reads.js";
-import { purgeClearedConversations } from "./soft-delete.js";
 
 /**
  * What every `HostedStore` method answers: an effect over the ambient client,
@@ -24,7 +23,7 @@ type HostedStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
  * The conversation rows are plain `jsonb`, readable by an operator.
  */
 export interface HostedStore {
-  /** The conversation rows the brain reads; every read skips a conversation stamped deleted. */
+  /** The conversation rows the brain reads; a deleted conversation's are gone with it. */
   messages: {
     /** The one message a writer's client id names — a turn's journal under the turn's id — read back under the registry; an empty page where none stands. */
     byClientId(
@@ -41,10 +40,6 @@ export interface HostedStore {
       turnIds: readonly string[],
     ): HostedStoreEffect<readonly StoredTurnRecord[]>;
   };
-  retention: {
-    /** The cron's purge of every conversation, of any account, stamped past the retention window. */
-    purgeCleared(now: Date): HostedStoreEffect<number>;
-  };
 }
 
 export function hostedStore(): HostedStore {
@@ -55,9 +50,6 @@ export function hostedStore(): HostedStore {
     },
     turns: {
       named: (userId, turnIds) => turnsNamed(userId, turnIds),
-    },
-    retention: {
-      purgeCleared: (now) => purgeClearedConversations(now),
     },
   };
 }

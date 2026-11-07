@@ -7,13 +7,11 @@ import type { AppStateSnapshot } from "@repo/host/app-state";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand } from "../app-commands.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   DESKTOP_CAPABILITIES,
@@ -21,7 +19,7 @@ import {
   handState,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, settleQueries, startQueriesAfresh } from "../testing/copy-feedback.js";
+import { settleQueries, startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
@@ -107,8 +105,7 @@ function mount(
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenPersonProvider,
           { value: options.openPerson },
@@ -141,12 +138,12 @@ function mount(
       ),
     ),
   );
-  // Note that a refusal's toast is shown on the window's own registry, which `showToast` writes to.
+  // Note that a refusal's toast is shown by the window's toasts, which `showToast` writes to.
   const toasts = document.createElement("div");
   document.body.append(toasts);
   const toastRoot = createRoot(toasts);
   roots.push(toastRoot);
-  act(() => toastRoot.render(onRegistry(rendererRegistry, createElement(ToastHost))));
+  act(() => toastRoot.render(withQueryClient(createElement(ToastHost))));
   return (
     container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the foot draws the account's button")

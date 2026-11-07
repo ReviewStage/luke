@@ -42,7 +42,8 @@
 # once where the box is connected already. Once it is connected it restarts the
 # service on the new release and removes every other release. Where the code
 # is denied or lapses, the service stands waiting, so a later
-# `vespin-host connect` by hand is followed within a minute. Run again, it
+# `vespin-host connect` by hand is followed as soon as it writes the box's
+# record, which the waiting service watches for. Run again, it
 # upgrades in place: the box keeps its pairing, and the service is restarted
 # on the new release.
 #
@@ -273,8 +274,8 @@ download() {
 # at boot. Note that it is restarted a minute after any exit, a clean one
 # among them: the daemon exits 0 on a record the service refused, the box removed in
 # the app, and asks the service nothing on it, so a box paired again by hand with
-# vespin-host connect is followed within a minute, as the daemon's own rest
-# follows one never connected.
+# vespin-host connect is followed as soon as it writes the record, which a
+# waiting daemon watches for, as it does on a box never connected.
 write_unit() {
   mkdir -p "$(dirname "$UNIT_FILE")"
   cat >"$UNIT_FILE" <<UNIT_EOF

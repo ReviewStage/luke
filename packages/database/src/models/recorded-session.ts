@@ -26,7 +26,6 @@ import {
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -56,17 +55,10 @@ const findStandingSession = SqlSchema.findOneOption({
         .select({ runtimeSessionId: conversations.runtimeSessionId })
         .from(conversations)
         .where(
-          and(
-            eq(conversations.id, target.conversationId),
-            eq(conversations.userId, target.userId),
-            isNull(conversations.deletedAt),
-          ),
+          and(eq(conversations.id, target.conversationId), eq(conversations.userId, target.userId)),
         ),
     ),
 });
-
-/** The conversation a child conversation was delegated from, read beside the child. */
-const parentConversation = alias(conversations, "parent_conversation");
 
 /** The condition that a coding agent, whichever workspace holds it, names this conversation as its own. */
 function namedByWork(conversationId: SQLWrapper): SQL {
@@ -75,21 +67,6 @@ function namedByWork(conversationId: SQLWrapper): SQL {
       .select({ one: agentTable.id })
       .from(agentTable)
       .where(eq(agentTable.conversationId, conversationId)),
-  );
-}
-
-/** The condition that the conversation the row was delegated from still stands. */
-function parentStands(): SQL {
-  return exists(
-    queryBuilder
-      .select({ one: parentConversation.id })
-      .from(parentConversation)
-      .where(
-        and(
-          eq(parentConversation.id, conversations.parentConversationId),
-          isNull(parentConversation.deletedAt),
-        ),
-      ),
   );
 }
 
@@ -104,8 +81,8 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
 }
 
 /**
- * The condition that the account reaches the standing conversation row a
- * statement reads: the conversation, or the standing one it was delegated
+ * The condition that the account reaches the conversation row a
+ * statement reads: the conversation, or the one it was delegated
  * from, is a coding agent's in a workspace the account is a member of; or
  * it is the account's own and no agent names it or its parent. Note that a
  * conversation an agent names is reached through the workspace alone, even
@@ -113,24 +90,21 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
  * leaves its agents' conversations with it. The per-task assistant's
  * conversation, and every worker's delegated from one, is reached by no
  * one: the migration that dropped its data stamped each of them deleted
- * (`20261021105816_per_task_luke_data_drop`), and a stamped row is reached
- * by no one.
+ * (`20261021105816_per_task_luke_data_drop`), and the purge that followed
+ * took them.
  */
 function reachableConversation(userId: string): SQL | undefined {
-  return and(
-    isNull(conversations.deletedAt),
-    or(
-      and(
-        eq(conversations.userId, userId),
-        not(namedByWork(conversations.id)),
-        or(
-          isNull(conversations.parentConversationId),
-          not(namedByWork(conversations.parentConversationId)),
-        ),
+  return or(
+    and(
+      eq(conversations.userId, userId),
+      not(namedByWork(conversations.id)),
+      or(
+        isNull(conversations.parentConversationId),
+        not(namedByWork(conversations.parentConversationId)),
       ),
-      namedByReachableWork(userId, conversations.id),
-      and(parentStands(), namedByReachableWork(userId, conversations.parentConversationId)),
     ),
+    namedByReachableWork(userId, conversations.id),
+    namedByReachableWork(userId, conversations.parentConversationId),
   );
 }
 
@@ -146,21 +120,6 @@ const findReachableConversation = SqlSchema.findOneOption({
     ),
 });
 
-const findReachableSession = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, runtimeSessionId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, runtimeSessionId }) =>
-    Database.use((db) =>
-      db
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(
-          and(eq(conversations.runtimeSessionId, runtimeSessionId), reachableConversation(userId)),
-        )
-        .limit(1),
-    ),
-});
-
 const claimSession = SqlSchema.void({
   Request: ClaimSchema,
   execute: (claim) =>
@@ -172,7 +131,6 @@ const claimSession = SqlSchema.void({
           and(
             eq(conversations.id, claim.conversationId),
             eq(conversations.userId, claim.userId),
-            isNull(conversations.deletedAt),
             or(
               isNull(conversations.runtimeSessionId),
               lt(conversations.runtimeSessionId, claim.runtimeSessionId),
@@ -217,7 +175,6 @@ const findStandingSessions = SqlSchema.findAll({
         .where(
           and(
             userId === null ? undefined : eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
             isNotNull(conversations.runtimeSessionId),
             conversationIds === undefined ? undefined : inArray(conversations.id, conversationIds),
           ),
@@ -276,14 +233,6 @@ export function conversationReachableBy(
   conversationId: string,
 ): Effect.Effect<boolean, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(findReachableConversation({ userId, conversationId }), Option.isSome);
-}
-
-/** Whether the account reaches the standing conversation that recorded this runtime session; no account reaches one none has recorded. */
-export function runtimeSessionReachableBy(
-  userId: string,
-  runtimeSessionId: string,
-): Effect.Effect<boolean, QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.map(findReachableSession({ userId, runtimeSessionId }), Option.isSome);
 }
 
 /**

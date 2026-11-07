@@ -1,28 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { inArray } from "drizzle-orm";
 import { Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createAgent } from "../../models/agent-store.js";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "../../models/recorded-session.js";
-import {
-  CLEARED_CONVERSATION_RETENTION_MS,
-  purgeClearedConversations,
-} from "../../models/soft-delete.js";
 import { createTask, deleteTask } from "../../models/task-store.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, migrationStatements, openWorkspace, replayable } from "../../testing/index.js";
 import { user } from "../auth.js";
-import { conversations } from "../storage.js";
 
 /**
  * The migration that drops the per-task assistant's data: its conversations,
- * stamped deleted with every child under them so the sweep purges them, and
+ * stamped deleted with every child under them, and
  * `task.conversation_id`. Each test
  * stands its own database where it stood before the migration, the migration
  * undone over it, and runs the migration's own statements, less those on the
@@ -97,34 +87,24 @@ const stampsOf = (ids: readonly string[]) =>
   });
 
 it.layer(getTestDB())("a task deleted after the migration", (it) => {
-  it.effect(
-    "leaves nothing of its old Vespin's conversation unstamped, and the purge takes it and its child seven days on",
-    () =>
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* undo;
-        const { userId, taskId } = yield* openTask;
-        const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION);
-        const worker = yield* openConversation(userId, "child", { parent: luke });
-        yield* sql`UPDATE task SET conversation_id = ${luke} WHERE id = ${taskId}`;
+  it.effect("leaves nothing of its old Vespin's conversation unstamped", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* undo;
+      const { userId, taskId } = yield* openTask;
+      const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION);
+      const worker = yield* openConversation(userId, "child", { parent: luke });
+      yield* sql`UPDATE task SET conversation_id = ${luke} WHERE id = ${taskId}`;
 
-        assert.ok(Exit.isSuccess(yield* migrate));
-        assert.equal(yield* deleteTask(userId, taskId), true);
+      assert.ok(Exit.isSuccess(yield* migrate));
+      assert.equal(yield* deleteTask(userId, taskId), true);
 
-        const stamps = yield* stampsOf([luke, worker]);
-        assert.ok(
-          stamps.every((stamp) => stamp !== null),
-          "the task's old conversation and its child stand stamped",
-        );
-        const latest = Math.max(...stamps.map((stamp) => Date.parse(stamp ?? "")));
-        yield* purgeClearedConversations(new Date(latest + CLEARED_CONVERSATION_RETENTION_MS));
-        const db = yield* Database;
-        const left = yield* db
-          .select({ id: conversations.id })
-          .from(conversations)
-          .where(inArray(conversations.id, [luke, worker]));
-        assert.deepEqual(left, []);
-      }),
+      const stamps = yield* stampsOf([luke, worker]);
+      assert.ok(
+        stamps.every((stamp) => stamp !== null),
+        "the task's old conversation and its child stand stamped",
+      );
+    }),
   );
 });
 
@@ -165,31 +145,6 @@ it.layer(getTestDB())("the per-task Vespin's conversations", (it) => {
 
         assert.ok(Exit.isSuccess(yield* migrate), "the migration runs a second time");
         assert.deepEqual(yield* stampsOf([luke, worker, nested, gone, ...others]), first);
-      }),
-  );
-});
-
-it.layer(getTestDB())("the per-task Vespin's conversations, once stamped", (it) => {
-  it.effect(
-    "are reached by no one, their opener included, with every worker's under them, while the opener's own conversation and its worker's stay theirs",
-    () =>
-      Effect.gen(function* () {
-        yield* undo;
-        const { userId } = yield* openTask;
-        const sessionId = `wrun_${randomUUID()}`;
-        const luke = yield* openConversation(userId, OLD_KIND.CONVERSATION, { sessionId });
-        const worker = yield* openConversation(userId, "child", { parent: luke });
-        const own = yield* openConversation(userId, "main");
-        const ownWorker = yield* openConversation(userId, "child", { parent: own });
-
-        assert.ok(Exit.isSuccess(yield* migrate));
-        assert.deepEqual(
-          yield* Effect.forEach([luke, worker, own, ownWorker], (id) =>
-            conversationReachableBy(userId, id),
-          ),
-          [false, false, true, true],
-        );
-        assert.equal(yield* runtimeSessionReachableBy(userId, sessionId), false);
       }),
   );
 });

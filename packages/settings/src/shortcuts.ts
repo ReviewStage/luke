@@ -26,6 +26,9 @@ import {
   type Experiment,
   type ExperimentChoices,
   experimentOn,
+  isWorkspaceExperiment,
+  type WorkspaceExperiment,
+  type WorkspaceExperimentChoices,
 } from "./experiments.js";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
@@ -1345,6 +1348,28 @@ export function shortcutShown(
   const capabilityStands =
     shortcut.capability === undefined || capabilities.includes(shortcut.capability);
   return experimentStands && capabilityStands;
+}
+
+/** The workspace experiment a keyed command stands on, where it is one's: a window offers it only while its own workspace has it on. */
+export function shortcutWorkspaceExperiment(
+  command: KeyedCommand,
+): WorkspaceExperiment | undefined {
+  const { experiment }: AppShortcut = APP_SHORTCUTS[command];
+  return experiment !== undefined && isWorkspaceExperiment(experiment) ? experiment : undefined;
+}
+
+/**
+ * The workspace experiments a window has on, as the commands it offers show
+ * them: one is on where the window offers a command it gates, since a
+ * window offers such a command only while its own workspace has it on.
+ */
+export function experimentsOffered(commands: readonly AppCommand[]): WorkspaceExperimentChoices {
+  const on: Partial<Record<WorkspaceExperiment, boolean>> = {};
+  for (const command of commands) {
+    const experiment = isKeyedCommand(command) ? shortcutWorkspaceExperiment(command) : undefined;
+    if (experiment !== undefined) on[experiment] = true;
+  }
+  return on;
 }
 
 /** What a keyed command is called for the account's experiments: its `renamed` label while that experiment is on, its own otherwise. */

@@ -15,7 +15,6 @@ import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -32,7 +31,7 @@ import {
   holdRepositoryLists,
 } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopHome } from "./desktop-home.js";
@@ -123,8 +122,7 @@ afterEach(() => {
 
 /** Home for Dean over `tasks` in `room`, each place of Settings it opens heard by `onSettings`. */
 function home(tasks: TasksControl, room: ShellRoom, onSettings: (link: SettingsLink) => void) {
-  return onRegistry(
-    AtomRegistry.make(),
+  return withQueryClient(
     createElement(
       OpenSettingsProvider,
       { value: onSettings },

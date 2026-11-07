@@ -13,13 +13,12 @@ import {
   NO_KEYS_HELD,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
 
@@ -186,12 +185,10 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (shown: Workspace | null, readerId: string | undefined) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(MemorySection, {
             signedIn,
             workspace: shown ?? undefined,

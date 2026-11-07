@@ -102,6 +102,8 @@ import {
 } from "../agent-sandbox-open.js";
 import {
   BASE_STATE,
+  BASE_WANTED,
+  type BaseReplacing,
   type BaseSnapshotOf,
   checkoutCommit,
   fillBaseSnapshot,
@@ -754,7 +756,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     of: BaseSnapshotOf,
     image: string,
     read: AgentRepositoryRead,
-    replacing: string | undefined,
+    replacing: BaseReplacing | undefined,
   ) =>
     Effect.gen(function* () {
       if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
@@ -927,7 +929,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     checkout: AgentCheckoutReads | undefined,
   ) =>
     Effect.gen(function* () {
-      let replacing: string | undefined;
+      let replacing: BaseReplacing | undefined;
       for (const attempt of attempts) {
         const opened = yield* Effect.result(gotOn(agent, sessionId, attempt, checkout));
         // Note that a sandbox standing under the name failed after its create, in its setup, so the
@@ -941,8 +943,11 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             Effect.orElseSucceed(() => false),
           ));
         const moved = Result.isSuccess(opened) && opened.success.lockfileMoved;
-        if ((gone || moved) && attempt.from === CREATED_FROM.BASE) {
-          replacing = attempt.snapshot?.snapshotId;
+        if ((gone || moved) && attempt.from === CREATED_FROM.BASE && attempt.snapshot) {
+          replacing = {
+            snapshotId: attempt.snapshot.snapshotId,
+            reason: gone ? BASE_WANTED.LAPSED : BASE_WANTED.LOCKFILE_MOVED,
+          };
         }
         if (!gone) return { opened, replacing };
         yield* Effect.logWarning(

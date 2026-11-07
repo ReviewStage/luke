@@ -120,6 +120,39 @@ describe("the menu bar's drawer", () => {
   });
 });
 
+/** The labels of every item in the menus, chosen or dimmed, every submenu walked. */
+function everyLabel(items: readonly MenuItemConstructorOptions[]): string[] {
+  return items.flatMap((item) => [
+    ...(item.label === undefined ? [] : [item.label]),
+    ...(Array.isArray(item.submenu) ? everyLabel(item.submenu) : []),
+  ]);
+}
+
+describe("a workspace experiment's items", () => {
+  test("stand only while the focused window offers them, whatever another workspace or the account's old choice holds", () => {
+    const drawn: MenuItemConstructorOptions[][] = [];
+    const show = menuBarDrawer({ appName: "Vespin", packaged: false }, (template) =>
+      drawn.push(template),
+    );
+    // The account's store still holds Task descriptions on, as it held it for another workspace before it was each workspace's.
+    show({ experiments: experimentsOn(EXPERIMENT.DESCRIPTIONS), capabilities: [] });
+    assert.ok(!everyLabel(drawn.at(-1) ?? []).includes("Version History"), "no panel told yet");
+
+    // The focused window's workspace has it off, so its panel offers no version history.
+    show({ offered: [APP_COMMAND.COPY_LINK] });
+    assert.ok(
+      !everyLabel(drawn.at(-1) ?? []).includes("Version History"),
+      "its workspace has it off",
+    );
+
+    show({ offered: [APP_COMMAND.COPY_LINK, APP_COMMAND.VERSION_HISTORY] });
+    assert.ok(
+      everyLabel(drawn.at(-1) ?? []).includes("Version History"),
+      "its workspace has it on",
+    );
+  });
+});
+
 /** The labels of every item a reader can choose, every submenu walked; a disabled item is a status, not a choice. */
 function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[] {
   return items.flatMap((item) => [

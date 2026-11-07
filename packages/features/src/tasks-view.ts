@@ -90,6 +90,7 @@ import {
 import {
   formerMemberSchema,
   workspaceCreateRequestSchema,
+  workspaceExperimentSetRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -880,6 +881,11 @@ export type TasksWorkspaceCreateParams = typeof tasksWorkspaceCreateParamsSchema
 export const tasksWorkspaceRenameParamsSchema = workspaceRenameRequestSchema;
 
 export type TasksWorkspaceRenameParams = typeof tasksWorkspaceRenameParamsSchema.Type;
+
+/** Turning one experiment on or off for everyone in a workspace, as the window asks it: the workspace, the experiment's key, and whether it is on, as the service takes them. */
+export const tasksWorkspaceExperimentSetParamsSchema = workspaceExperimentSetRequestSchema;
+
+export type TasksWorkspaceExperimentSetParams = typeof tasksWorkspaceExperimentSetParamsSchema.Type;
 
 /** Changing a workspace's slug, as the window asks it: the workspace and the slug as typed, as the service takes them. */
 export const tasksWorkspaceSlugSetParamsSchema = workspaceSlugSetRequestSchema;

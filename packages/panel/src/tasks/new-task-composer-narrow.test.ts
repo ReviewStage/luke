@@ -4,14 +4,13 @@ import assert from "node:assert/strict";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
@@ -53,8 +52,7 @@ async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promi
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(NewTaskComposer, {
           newTask: {
             ...control.newTask,

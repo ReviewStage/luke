@@ -27,6 +27,7 @@ import {
   WORKSPACE_PHOTO_BOUNDS,
   workspaceAnswerSchema,
   workspaceCreateRequestSchema,
+  workspaceExperimentSetRequestSchema,
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -112,6 +113,14 @@ export const workspacesContract = {
     .meta(bodyCap(PHOTO_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET }))
     .input(exactInput(workspacePhotoSetRequestSchema))
+    .output(EffectSchema.flip(workspaceAnswerSchema)),
+  setExperiment: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
+    .meta(bodyCap(BODY_BYTES))
+    .meta(
+      openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_EXPERIMENT_SET }),
+    )
+    .input(exactInput(workspaceExperimentSetRequestSchema))
     .output(EffectSchema.flip(workspaceAnswerSchema)),
   members: declaredProcedure
     .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))

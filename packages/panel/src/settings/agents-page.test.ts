@@ -14,7 +14,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -22,7 +21,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { type HostReadsHanded, handHostReads } from "../testing/app-state.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -189,8 +188,7 @@ async function mount(): Promise<HTMLElement> {
         OpenSettingsProvider,
         { value: (link: SettingsLink) => opened.push(link) },
         // Note that the toasts draw under the page's one client, since a second `withQueryClient` inside it is refused.
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(
             Fragment,
             null,
@@ -253,9 +251,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   document.body.append(page);
   const root = createRoot(page);
   roots.push(root);
-  act(() =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
-  );
+  act(() => root.render(withQueryClient(createElement(AgentsPage, { signedIn: true }))));
 
   assert.deepEqual(placeholders(page), [
     ["Reading your keys", 2],

@@ -2,7 +2,7 @@
 import { Option } from "effect";
 import { type AgentStanding, TOOL_GATE, type ToolGate } from "../agents/tool-catalog/gates.js";
 
-/** What a test names of an agent beside its repository: a local agent's machine, and its starter's Memory and Task descriptions. */
+/** What a test names of an agent beside its repository: a local agent's machine, and its workspace's Memory and Task descriptions. */
 interface StandingFor {
   readonly local?: boolean;
   readonly memory?: boolean;
@@ -26,5 +26,9 @@ export function standingFor(
     [TOOL_GATE.DESCRIPTIONS]: descriptions,
   };
   const open = Object.values(TOOL_GATE).filter((gate) => opens[gate]);
-  return { agent: Option.none(), open: new Set(open) };
+  return {
+    agent: Option.none(),
+    open: new Set(open),
+    experiments: { descriptionsOn: descriptions, memoryOn: memory, pilotOn: false },
+  };
 }

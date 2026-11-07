@@ -6,11 +6,10 @@ import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { AgentPicturesProvider } from "./agent-pictures.js";
 import { AgentQueueDock } from "./agent-queue-dock.js";
@@ -68,8 +67,7 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           AgentPicturesProvider,
           { value: PICTURES },

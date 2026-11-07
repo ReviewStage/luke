@@ -16,7 +16,6 @@ import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxTasklessItem } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
@@ -30,7 +29,7 @@ import {
   fakeActs,
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -236,7 +235,7 @@ async function inbox(options: {
   }
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  act(() => root?.render(withQueryClient(createElement(Page))));
   await act(async () => {
     for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
   });

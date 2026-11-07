@@ -8,13 +8,12 @@ import {
   sendShownFailure,
 } from "@repo/features/shown-failure";
 import { ErrorState } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { failureShown, installShownFailureReporter, type ShownFailure } from "./failure-report.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
-import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * failure-report.test.ts -- a failure drawn in place, through `ErrorState`
@@ -31,12 +30,10 @@ const LAPSE_MS = 5 * 60 * 1000;
 const LINE = "Your tasks could not be read.";
 
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
-  registry?.dispose();
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
@@ -45,15 +42,12 @@ afterEach(() => {
 function draw(failure: ShownFailure | undefined): void {
   if (root === undefined) {
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    registry = AtomRegistry.make();
   }
-  const held = registry;
-  if (held === undefined) throw new Error("no registry");
   const element =
     failure === undefined
       ? null
       : createElement(ErrorState, { failure: failureShown(failure), children: LINE });
-  act(() => root?.render(onRegistry(held, createElement("div", null, element))));
+  act(() => root?.render(withQueryClient(createElement("div", null, element))));
 }
 
 /** A read of a workspace's tasks that did not land, built afresh as a site builds it on each render. */

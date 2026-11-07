@@ -5,7 +5,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
 import {
@@ -16,7 +15,12 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
+import {
+  experimentInTestWorkspace,
+  getTestDB,
+  openWorkspace,
+  startTask,
+} from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
@@ -53,6 +57,7 @@ import {
   fakeCdpPeer,
   noSandboxBrowserLayer,
 } from "../../testing/agent-browser-fake.js";
+import { experimentWordsIn } from "../../testing/experiment-words.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -82,11 +87,12 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   isServedTool,
+  listedTool,
   refusedByDoor,
   TOOL_CATALOG,
   type WorkspaceMcpServices,
 } from "../tool-catalog/catalog.js";
-import { GATES, TOOL_GATE } from "../tool-catalog/gates.js";
+import { GATES, TOOL_GATE, type ToolGate } from "../tool-catalog/gates.js";
 import {
   WORKSPACE_INTEGRATION_MCP_PATH,
   WORKSPACE_MCP_PATH,
@@ -326,9 +332,9 @@ function post(
   });
 }
 
-/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
+/** Turns Task descriptions on for the workspace an agent's starter starts its tasks in, whose agents are offered the description's tools only then. */
 const descriptionsOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+  experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS);
 
 /** The agent tools about the workspace's agents, tasks, automations, and memory, each of whose catalog entries names its own run (`tool-catalog/catalog.ts`'s `agentTool`). */
 const AGENT_TOOLS = [
@@ -592,9 +598,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
-        });
+        yield* experimentInTestWorkspace(agent.userId, EXPERIMENT.MEMORY);
+        yield* descriptionsOn(agent.userId);
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
@@ -603,12 +608,34 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const names = listed.tools.map((tool) => tool.name);
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
+        // Pilot stays off in the agent's workspace, so its tools are listed in the words of that variant.
+        const standingOn = {
+          agent: Option.none(),
+          open: new Set<ToolGate>(),
+          experiments: { descriptionsOn: true, memoryOn: true, pilotOn: false },
+        };
         for (const tool of listed.tools) {
           const served = isServedTool(tool.name) ? TOOL_CATALOG.get(tool.name) : undefined;
           assert.ok(served !== undefined);
-          assert.equal(tool.description, served.description);
-          assert.deepEqual(tool.inputSchema, served.inputSchema);
+          const variant = listedTool(served, standingOn);
+          assert.equal(tool.description, variant.description);
+          assert.deepEqual(tool.inputSchema, variant.inputSchema);
         }
+      }),
+  );
+
+  it.effect(
+    "tools/list names no task description, pilot, or memory in any tool's words or input where the agent's workspace has every experiment off",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        assert.deepEqual(experimentWordsIn(listed.tools), []);
       }),
   );
 
@@ -792,9 +819,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         // Every gate stands open, so each call reaches its door.
-        yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
-        });
+        yield* experimentInTestWorkspace(agent.userId, EXPERIMENT.MEMORY);
+        yield* descriptionsOn(agent.userId);
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
         const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);

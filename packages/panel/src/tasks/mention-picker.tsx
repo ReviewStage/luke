@@ -115,7 +115,8 @@ import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { Highlighted } from "../search-field.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { appStateQuery } from "../use-app-state.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
   DATE_PICKER_CLOSE,
@@ -1804,9 +1805,8 @@ export function useMentionPicker({
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
-  // While Descriptions is off there is no description to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const descriptionsOn =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  // While the workspace has Descriptions off there is no description to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
+  const descriptionsOn = useWorkspaceExperiment(tasksWorkspaceId, EXPERIMENT.DESCRIPTIONS);
   const taskRowsOffered = open
     ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];

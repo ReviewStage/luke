@@ -133,7 +133,6 @@ const endedSessionTurns = SqlSchema.findAll({
           and(
             eq(conversations.runtimeSessionId, request.runtimeSessionId),
             eq(conversations.kind, CONVERSATION_KIND.AGENT),
-            isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
         )
@@ -173,7 +172,6 @@ const agentRunningTurns = SqlSchema.findAll({
           and(
             eq(turns.conversationId, conversationId),
             eq(conversations.kind, CONVERSATION_KIND.AGENT),
-            isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
         )

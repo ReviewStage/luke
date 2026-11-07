@@ -3,7 +3,7 @@
  *
  * What a coding agent is handed on a turn where its description changed since its
  * last turn (`../coder-host/turn-context.ts`): the developer's own time, the
- * task's name and brief, and, where its starter has Descriptions on, its saved
+ * task's name and brief, and, where its workspace has Task descriptions on, its saved
  * document, the agents' recent notes on it, and the open comment threads. It is data,
  * read again as each turn opens and remembered by none, so a turn reads
  * what was saved since the last one rather than a stale copy.
@@ -11,9 +11,9 @@
 
 import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
-import { NOTE_KIND, type DescriptionAgentEdit } from "@repo/features/description-notes";
+import { type DescriptionAgentEdit, NOTE_KIND } from "@repo/features/description-notes";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -77,6 +77,40 @@ const TIME_LOCALE = "en-US";
 /** A date names no workspace or repository, so its mention is written under none. */
 const NO_PLACE: MentionPlace = { workspace: "", repository: null };
 
+/**
+ * The one line said of a description last edited before Task descriptions
+ * was last turned on for its workspace: work may have gone on without it
+ * since, so the agent checks it against the code. It names no experiment,
+ * and nothing is said of a description edited since.
+ */
+function staleText(
+  stored: StoredTask,
+  descriptionsOnSince: number | undefined,
+  timeZone: string | undefined,
+): readonly string[] {
+  const edited = stored.task.lastEdit?.at;
+  if (descriptionsOnSince === undefined || edited === undefined || edited >= descriptionsOnSince) {
+    return [];
+  }
+  return [
+    `Last edited ${dayMention(edited, timeZone)}, before the most recent work; check it against the code before relying on it.`,
+  ];
+}
+
+/** The day an instant falls on in the developer's zone, or UTC where their window named none, as the date mention the description writes it. */
+function dayMention(at: number, timeZone: string | undefined): string {
+  const zoned = timeZone === undefined ? Option.none() : DateTime.makeZoned(at, { timeZone });
+  // Note that UTC is a zone every runtime holds, so the fallback cannot throw.
+  const day = DateTime.formatIsoDate(
+    Option.getOrElse(zoned, () => DateTime.makeZonedUnsafe(at, { timeZone: UTC_ZONE })),
+  );
+  return mentionMarkdown(
+    { kind: MENTION_KIND.DATE, start: day },
+    dateLabel({ start: day }),
+    NO_PLACE,
+  );
+}
+
 /** When a turn opens, and the zone the developer's window named for it, where it named one. */
 export interface TurnClock {
   readonly now: number;
@@ -134,14 +168,17 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * (so the agent can raise what a member asked), each read again
  * every turn so what the agent saved is what the next turn reads. A task that no
  * longer stands gets the heading and the developer's time alone, and one
- * whose agent's starter has Descriptions off (`../descriptions-on.ts`) its name and brief
- * without the description, its notes, or threads.
+ * whose agent's workspace has Task descriptions off (`../workspace-experiment-on.ts`) its name and brief
+ * without the description, its notes, or threads. A description last edited
+ * before Task descriptions was last turned on, at `descriptionsOnSince`, is
+ * said to be so in one line (`staleText`).
  */
 export function standingContext(
   stored: StoredTask | undefined,
   clock: TurnClock,
   comments: readonly DescriptionCommentThread[] = [],
   descriptionsOn = true,
+  descriptionsOnSince: number | undefined = undefined,
 ): string {
   const heading = [
     `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
@@ -153,6 +190,7 @@ export function standingContext(
     ? [
         DOCUMENT_MARKER,
         JSON.stringify(task.document),
+        ...staleText(stored, descriptionsOnSince, clock.timeZone),
         ...agentEditsText(stored.agentEdits),
         ...openThreadsText(comments),
       ]

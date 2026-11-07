@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -8,6 +7,7 @@ import {
   type DescriptionCommentThread,
   type DescriptionCommentWriter,
 } from "@repo/features/description-comment-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   DESCRIPTION_ACTOR,
   type DescriptionDocument,
@@ -24,13 +24,17 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
-import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceExperimentChoice,
+} from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  type AppHeldById,
-  type AppHistories,
   type AppDescriptionComments,
   type AppDescriptionDocuments,
+  type AppHeldById,
+  type AppHistories,
   type AppRepositoryLists,
   type AppStateSnapshot,
   EVERY_WORKSPACE,
@@ -38,6 +42,7 @@ import {
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@repo/host/fixture-stage";
+import { EXPERIMENT, type WorkspaceExperiment } from "@repo/settings";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import {
   agentActAnswer,
@@ -86,6 +91,21 @@ import type { AutomationsPlace } from "./use-tasks-tab.js";
  * about repositories its own GitHub reaches, as the service keeps them, so
  * no task here is one stranded in a workspace that cannot reach it.
  */
+/** A workspace experiment's choice as the fixture stages it: on or off, by whom, on the day named. */
+function chosen(
+  experiment: WorkspaceExperiment,
+  on: boolean,
+  by: { readonly userId: string; readonly name: string },
+  day: string,
+): WorkspaceExperimentChoice {
+  return {
+    experiment,
+    on,
+    changedBy: { id: by.userId, name: by.name },
+    changedAt: Date.parse(day),
+  };
+}
+
 const FIXTURE_FIRST: Workspace = {
   id: FIXTURE_IDS.WORKSPACE,
   name: "Ada Lovelace",
@@ -93,6 +113,12 @@ const FIXTURE_FIRST: Workspace = {
   role: WORKSPACE_ROLE.OWNER,
   github: { login: "ada", active: true },
   personal: true,
+  // Every workspace experiment the account turned on in its own workspace, so the captures draw each feature.
+  experiments: [
+    chosen(EXPERIMENT.DESCRIPTIONS, true, FIXTURE_PERSON.ADA, "2026-09-01T09:00:00Z"),
+    chosen(EXPERIMENT.MEMORY, true, FIXTURE_PERSON.ADA, "2026-09-01T09:00:00Z"),
+    chosen(EXPERIMENT.PILOT, true, FIXTURE_PERSON.ADA, "2026-09-01T09:00:00Z"),
+  ],
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
@@ -100,6 +126,12 @@ const FIXTURE_TEAM: Workspace = {
   slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
+  // Acme's owner turned Pilot off, so Settings › Experimental draws a switch turned off by someone else.
+  experiments: [
+    chosen(EXPERIMENT.DESCRIPTIONS, true, FIXTURE_PERSON.MAYA, "2026-09-01T09:00:00Z"),
+    chosen(EXPERIMENT.MEMORY, true, FIXTURE_PERSON.ADA, "2026-10-23T15:00:00Z"),
+    chosen(EXPERIMENT.PILOT, false, FIXTURE_PERSON.MAYA, "2026-11-02T10:00:00Z"),
+  ],
 };
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
 
@@ -723,14 +755,37 @@ function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
  * under every profile, which main holds as it does under any other.
  */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
-  return repositoriesAppState(
-    commentsAppState(
-      automationsAppState(
-        agentAppState(settingsAppState(state.run.profile, plannedAppState(state)), FIXTURE_TASK_ID),
-        FIXTURE_WORKSPACE_IDS,
+  return workspacesAppState(
+    repositoriesAppState(
+      commentsAppState(
+        automationsAppState(
+          agentAppState(
+            settingsAppState(state.run.profile, plannedAppState(state)),
+            FIXTURE_TASK_ID,
+          ),
+          FIXTURE_WORKSPACE_IDS,
+        ),
       ),
     ),
   );
+}
+
+/** Main's tasks with the fixture's workspaces laid over them, one object for each of main's. */
+const STAGED_WORKSPACES = new WeakMap<TasksView, TasksView>();
+
+/**
+ * Main's document with the workspaces the fixture's tasks tab lists, whose
+ * experiments every gate reads off the document (`workspace-experiments.ts`),
+ * so a gate and the tab agree on what each workspace chose.
+ */
+function workspacesAppState(state: AppStateSnapshot): AppStateSnapshot {
+  const fixture = fixtureTasksView(state.run);
+  if (fixture === undefined) return state;
+  const held = STAGED_WORKSPACES.get(state.tasks);
+  if (held !== undefined) return { ...state, tasks: held };
+  const laid = { ...state.tasks, workspaces: fixture.workspaces };
+  STAGED_WORKSPACES.set(state.tasks, laid);
+  return { ...state, tasks: laid };
 }
 
 /**

@@ -11,13 +11,12 @@ import {
 } from "@repo/features/inbox-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { UNREAD } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handInboxItems } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import {
   type HolderInboxItems,
   type InboxHolding,
@@ -88,10 +87,9 @@ function mount(holdings: readonly InboxHolding[]) {
     control = useHolderInboxItems(listed);
     return null;
   }
-  const registry = AtomRegistry.make();
   root = createRoot(document.createElement("div"));
   const draw = (listed: readonly InboxHolding[]) =>
-    act(() => root?.render(onRegistry(registry, createElement(Probe, { listed }))));
+    act(() => root?.render(withQueryClient(createElement(Probe, { listed }))));
   draw(holdings);
   return { control: () => control, list: draw };
 }

@@ -84,6 +84,7 @@ import {
   taskStatusSchema,
 } from "@repo/features/task-wire";
 import { taskKey } from "@repo/features/workspace-key";
+import { EXPERIMENT } from "@repo/settings";
 import { describeWire } from "@repo/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Data, Effect, Option, Result, Schema } from "effect";
@@ -161,6 +162,12 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
+import {
+  EVERY_EXPERIMENT_ON,
+  EXPERIMENT_OFF_REFUSAL,
+  type ExperimentsOn,
+  experimentOnIn,
+} from "./workspace-experiment-on.js";
 import {
   workspaceNamingOf,
   workspaceStepOf,
@@ -374,6 +381,9 @@ export const START_AGENT_REFUSAL = {
   NO_PROMPT:
     "Not started: you work on no task, so there is no description to hand it; give it a prompt, or name " +
     `a task by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+  PROMPT_NEEDED:
+    "Not started: give the agent a prompt carrying everything it needs to start on its work; " +
+    "every start takes one but a start from another agent.",
   NO_WORKSPACE:
     "Not started: the member you work for is no longer a member of your workspace, so no task " +
     "can be made for the agent there.",
@@ -429,10 +439,6 @@ export const START_AGENT_REFUSAL = {
   SELF_CONTINUE:
     "Not started: an agent does not continue itself, since you are still here to go on; to try " +
     "another direction from one of your own messages, fork yourself at its messageId.",
-  PILOT_OFF:
-    "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
-    "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
-    "Experimental.",
   STARTER_CONTINUE:
     "Not started: you can't continue an agent that started you, directly or through the agents " +
     "between you, since the agents it started would report to a pilot you started; tell its " +
@@ -697,140 +703,164 @@ const START_RUNS_ON = Schema.Union([
   }),
 ]);
 
-const START_AGENT_INPUT = Schema.Struct({
-  taskId: Schema.optionalKey(
-    describeWire(
-      wireUuidSchema,
-      `The task to start the agent on, by the id ${AGENT_TOOL.LIST_TASKS} answered; leave it out ` +
-        "for the task you work on.",
-    ),
-  ),
-  repository: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(githubRepositoryFullNameSchema),
-      "Where you work on no task and name none, the GitHub repository of the task made for the " +
-        "agent, as owner/name, which the workspace's GitHub installation must reach; null for " +
-        "none. Leave it out for the repository you work in, if any. A task's agent works in the " +
-        "task's own.",
-    ),
-  ),
-  prompt: Schema.optionalKey(
-    describeWire(
-      START_PROMPT,
+/**
+ * `start_agent`'s `prompt` and `note` as a workspace with Task descriptions on
+ * or off words them: off, a start is handed no description, so its prompt
+ * carries everything the agent needs, and nothing names a description.
+ */
+const START_WORDS = {
+  on: {
+    prompt:
       "What the agent should do, typed to it as its first message; the developer's words where " +
-        "they named the job. Leave it out to start the agent on the task's description itself.",
-    ),
-  ),
-  note: Schema.optionalKey(
-    describeWire(
-      START_PROMPT,
+      "they named the job. Leave it out to start the agent on the task's description itself.",
+    note:
       "Everything else the agent should hear as it starts (what to start with, what to watch out " +
-        "for, what to leave alone), handed to it after the description or the prompt in the same first " +
-        "message; leave it out where there is nothing beyond the description.",
+      "for, what to leave alone), handed to it after the description or the prompt in the same first " +
+      "message; leave it out where there is nothing beyond the description.",
+  },
+  off: {
+    prompt:
+      "What the agent should do, typed to it as its first message: everything it needs to start " +
+      "on its work, or the developer's words where they named the job. Every start takes one but " +
+      "a start from another agent, which takes none.",
+    note:
+      "Everything else the agent should hear as it starts (what to start with, what to watch out " +
+      "for, what to leave alone), handed to it after the prompt in the same first message; leave " +
+      "it out where there is nothing beyond the prompt.",
+  },
+} as const;
+
+/** Which of a tool's two wordings a workspace reads: the one naming its description, or the one naming none. */
+function wordsOf(on: Pick<ExperimentsOn, "descriptionsOn">): "on" | "off" {
+  return on.descriptionsOn ? "on" : "off";
+}
+
+/** `start_agent`'s input in the words of the workspace's experiments. */
+function startAgentInputOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
+  return Schema.Struct({
+    taskId: Schema.optionalKey(
+      describeWire(
+        wireUuidSchema,
+        `The task to start the agent on, by the id ${AGENT_TOOL.LIST_TASKS} answered; leave it out ` +
+          "for the task you work on.",
+      ),
     ),
-  ),
-  images: Schema.optionalKey(
-    describeWire(
-      Schema.Array(wireUuidSchema).check(Schema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS)),
-      "Pictures handed to the agent with its first message, which it sees as images: at most " +
-        `${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids, each a picture of your own ` +
-        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept; each at most ${megabytesOf(AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
-        `${megabytesOf(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} together, since a larger one is ` +
-        "refused, never made smaller. Leave it out to hand none.",
+    repository: Schema.optionalKey(
+      describeWire(
+        Schema.NullOr(githubRepositoryFullNameSchema),
+        "Where you work on no task and name none, the GitHub repository of the task made for the " +
+          "agent, as owner/name, which the workspace's GitHub installation must reach; null for " +
+          "none. Leave it out for the repository you work in, if any. A task's agent works in the " +
+          "task's own.",
+      ),
     ),
-  ),
-  title: Schema.optionalKey(
-    describeWire(
-      START_TITLE,
-      "The agent's title from the start, how the developer sees it named, such as the pull " +
-        "request it will open; leave it out to have it named from what it is told.",
+    prompt: Schema.optionalKey(describeWire(START_PROMPT, START_WORDS[wordsOf(on)].prompt)),
+    note: Schema.optionalKey(describeWire(START_PROMPT, START_WORDS[wordsOf(on)].note)),
+    images: Schema.optionalKey(
+      describeWire(
+        Schema.Array(wireUuidSchema).check(Schema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS)),
+        "Pictures handed to the agent with its first message, which it sees as images: at most " +
+          `${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids, each a picture of your own ` +
+          `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept; each at most ${megabytesOf(AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
+          `${megabytesOf(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} together, since a larger one is ` +
+          "refused, never made smaller. Leave it out to hand none.",
+      ),
     ),
-  ),
-  branch: Schema.optionalKey(
-    describeWire(
-      START_BRANCH,
-      "The branch of the task's repository to clone the agent's checkout at and cut its own " +
-        "branch from, such as the head branch of a pull request it builds on; it must already be " +
-        "on GitHub. Leave it out for the repository's default branch.",
+    title: Schema.optionalKey(
+      describeWire(
+        START_TITLE,
+        "The agent's title from the start, how the developer sees it named, such as the pull " +
+          "request it will open; leave it out to have it named from what it is told.",
+      ),
     ),
-  ),
-  alsoRepositories: Schema.optionalKey(
-    describeWire(
-      Schema.Array(
+    branch: Schema.optionalKey(
+      describeWire(
+        START_BRANCH,
+        "The branch of the task's repository to clone the agent's checkout at and cut its own " +
+          "branch from, such as the head branch of a pull request it builds on; it must already be " +
+          "on GitHub. Leave it out for the repository's default branch.",
+      ),
+    ),
+    alsoRepositories: Schema.optionalKey(
+      describeWire(
+        Schema.Array(
+          Schema.Struct({
+            repository: describeWire(
+              githubRepositoryFullNameSchema,
+              "The repository, as owner/name.",
+            ),
+            branch: Schema.optionalKey(
+              describeWire(
+                START_BRANCH,
+                "The branch to clone its checkout at, which must already be on GitHub; leave it " +
+                  "out for its default branch.",
+              ),
+            ),
+          }),
+        ).check(Schema.isMinLength(1), Schema.isMaxLength(AGENT_BOUNDS.MAX_ALSO_REPOSITORIES)),
+        "Other repositories the agent works in beside its own, each checked out in a folder of " +
+          "its own beside its checkout, which its instructions name: each reached through the " +
+          "GitHub App installation its own repository is on, and the agent in the cloud. Leave it " +
+          "out for one repository.",
+      ),
+    ),
+    model: Schema.optionalKey(
+      describeWire(
+        modelChoiceSchema.fields.model,
+        "The model to run on, by its catalog id (such as anthropic/claude-opus-5.5); leave it out " +
+          "with the effort for the member's default.",
+      ),
+    ),
+    effort: Schema.optionalKey(
+      describeWire(
+        modelChoiceSchema.fields.effort,
+        "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
+      ),
+    ),
+    runsOn: Schema.optionalKey(
+      describeWire(
+        START_RUNS_ON,
+        `Where the agent runs: ${IN_THE_CLOUD_WORDS} for the cloud, or ` +
+          `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, device: "<name>" })} for one of the ` +
+          "member's own devices (a Mac or a host) by its name, in any case, or " +
+          `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} by its id, which ` +
+          "must be registered and online; a name that matches none of the member's devices, or " +
+          "more than one, is refused with their devices listed by name, id, and whether each is " +
+          "online. " +
+          "With from, another place than that agent's moves it there. " +
+          "Leave it out for where the agent it starts from runs, with from; else where the " +
+          "member's newest agent on the task runs; else where the member last chose to run one; " +
+          "else the cloud.",
+      ),
+    ),
+    from: Schema.optionalKey(
+      describeWire(
         Schema.Struct({
-          repository: describeWire(
-            githubRepositoryFullNameSchema,
-            "The repository, as owner/name.",
+          agentId: describeWire(
+            wireUuidSchema,
+            `The agent to start from, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
           ),
-          branch: Schema.optionalKey(
+          messageId: Schema.optionalKey(
             describeWire(
-              START_BRANCH,
-              "The branch to clone its checkout at, which must already be on GitHub; leave it " +
-                "out for its default branch.",
+              wireUuidSchema,
+              `One of that agent's messages, by the messageId ${AGENT_TOOL.READ_AGENT} names on ` +
+                "an entry of its tail, to fork it there; leave it out to continue the agent from " +
+                "where it stands.",
             ),
           ),
         }),
-      ).check(Schema.isMinLength(1), Schema.isMaxLength(AGENT_BOUNDS.MAX_ALSO_REPOSITORIES)),
-      "Other repositories the agent works in beside its own, each checked out in a folder of " +
-        "its own beside its checkout, which its instructions name: each reached through the " +
-        "GitHub App installation its own repository is on, and the agent in the cloud. Leave it " +
-        "out for one repository.",
+        "Another agent of your workspace to take over from, on its own task, or on no " +
+          "task where it has none: the new " +
+          `agent is handed its brief and its transcript (with ${PRODUCT_NAME}'s summary of the steps that ` +
+          "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
+          "the note after them; it takes no prompt and no branch. Without messageId it continues " +
+          "the agent, which is stopped; with one it forks the agent at that message, which goes on.",
+      ),
     ),
-  ),
-  model: Schema.optionalKey(
-    describeWire(
-      modelChoiceSchema.fields.model,
-      "The model to run on, by its catalog id (such as anthropic/claude-opus-5.5); leave it out " +
-        "with the effort for the member's default.",
-    ),
-  ),
-  effort: Schema.optionalKey(
-    describeWire(
-      modelChoiceSchema.fields.effort,
-      "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
-    ),
-  ),
-  runsOn: Schema.optionalKey(
-    describeWire(
-      START_RUNS_ON,
-      `Where the agent runs: ${IN_THE_CLOUD_WORDS} for the cloud, or ` +
-        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, device: "<name>" })} for one of the ` +
-        "member's own devices (a Mac or a host) by its name, in any case, or " +
-        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} by its id, which ` +
-        "must be registered and online; a name that matches none of the member's devices, or " +
-        "more than one, is refused with their devices listed by name, id, and whether each is " +
-        "online. " +
-        "With from, another place than that agent's moves it there. " +
-        "Leave it out for where the agent it starts from runs, with from; else where the " +
-        "member's newest agent on the task runs; else where the member last chose to run one; " +
-        "else the cloud.",
-    ),
-  ),
-  from: Schema.optionalKey(
-    describeWire(
-      Schema.Struct({
-        agentId: describeWire(
-          wireUuidSchema,
-          `The agent to start from, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
-        ),
-        messageId: Schema.optionalKey(
-          describeWire(
-            wireUuidSchema,
-            `One of that agent's messages, by the messageId ${AGENT_TOOL.READ_AGENT} names on ` +
-              "an entry of its tail, to fork it there; leave it out to continue the agent from " +
-              "where it stands.",
-          ),
-        ),
-      }),
-      "Another agent of your workspace to take over from, on its own task, or on no " +
-        "task where it has none: the new " +
-        `agent is handed its brief and its transcript (with ${PRODUCT_NAME}'s summary of the steps that ` +
-        "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
-        "the note after them; it takes no prompt and no branch. Without messageId it continues " +
-        "the agent, which is stopped; with one it forks the agent at that message, which goes on.",
-    ),
-  ),
-});
+  });
+}
+
+const START_AGENT_INPUT = startAgentInputOf(EVERY_EXPERIMENT_ON);
 
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
 const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
@@ -840,55 +870,66 @@ const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
  * menu changes of it: its name, its repository, where it stands, and the
  * member's own pin.
  */
-const UPDATE_TASK_INPUT = Schema.Struct({
-  taskId: describeWire(
-    wireUuidSchema,
-    `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it.`,
-  ),
-  name: Schema.optionalKey(
-    describeWire(
-      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
-      "Its new name, as the sidebar shows it, which its description's heading follows.",
+/** `update_task`'s `name` as a workspace with Task descriptions on or off words it. */
+const UPDATE_NAME_WORDS = {
+  on: "Its new name, as the sidebar shows it, which its description's heading follows.",
+  off: "Its new name, as the sidebar shows it.",
+} as const;
+
+/** `update_task`'s input in the words of the workspace's experiments. */
+function updateTaskInputOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
+  return Schema.Struct({
+    taskId: describeWire(
+      wireUuidSchema,
+      `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it.`,
     ),
-  ),
-  repository: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(githubRepositoryFullNameSchema),
-      "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
-        "installation must reach; null for none.",
+    name: Schema.optionalKey(
+      describeWire(
+        Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
+        UPDATE_NAME_WORDS[wordsOf(on)],
+      ),
     ),
-  ),
-  pinned: Schema.optionalKey(
-    describeWire(
-      Schema.Boolean,
-      "true to pin it in the sidebar of the developer you work for, false to unpin it; their pin " +
-        "alone, no other member's.",
+    repository: Schema.optionalKey(
+      describeWire(
+        Schema.NullOr(githubRepositoryFullNameSchema),
+        "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
+          "installation must reach; null for none.",
+      ),
     ),
-  ),
-  status: Schema.optionalKey(describeWire(taskStatusSchema, "Where the task now stands.")),
-  priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
-  assignee: Schema.optionalKey(TASK_ASSIGNEE_INPUT),
-  sectionId: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(wireUuidSchema),
-      "The sidebar section the developer you work for keeps it in, by the id " +
-        `${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.CREATE_SECTION} answered; it leaves the section ` +
-        "it stood in and lands at the top of this one. null takes it out of its section, back " +
-        "under Tasks.",
+    pinned: Schema.optionalKey(
+      describeWire(
+        Schema.Boolean,
+        "true to pin it in the sidebar of the developer you work for, false to unpin it; their pin " +
+          "alone, no other member's.",
+      ),
     ),
-  ),
-  parentTaskId: Schema.optionalKey(
-    describeWire(
-      Schema.NullOr(wireUuidSchema),
-      `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a task of ` +
-        "your workspace working in the same repository, and neither this task nor one of its " +
-        "sub-tasks; where its agents run stays its own. null takes it out from under its parent, " +
-        "to stand at the top.",
+    status: Schema.optionalKey(describeWire(taskStatusSchema, "Where the task now stands.")),
+    priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
+    assignee: Schema.optionalKey(TASK_ASSIGNEE_INPUT),
+    sectionId: Schema.optionalKey(
+      describeWire(
+        Schema.NullOr(wireUuidSchema),
+        "The sidebar section the developer you work for keeps it in, by the id " +
+          `${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.CREATE_SECTION} answered; it leaves the section ` +
+          "it stood in and lands at the top of this one. null takes it out of its section, back " +
+          "under Tasks.",
+      ),
     ),
-  ),
-  blockedBy: Schema.optionalKey(BLOCKED_BY_INPUT),
-  blocks: Schema.optionalKey(BLOCKS_INPUT),
-});
+    parentTaskId: Schema.optionalKey(
+      describeWire(
+        Schema.NullOr(wireUuidSchema),
+        `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a task of ` +
+          "your workspace working in the same repository, and neither this task nor one of its " +
+          "sub-tasks; where its agents run stays its own. null takes it out from under its parent, " +
+          "to stand at the top.",
+      ),
+    ),
+    blockedBy: Schema.optionalKey(BLOCKED_BY_INPUT),
+    blocks: Schema.optionalKey(BLOCKS_INPUT),
+  });
+}
+
+const UPDATE_TASK_INPUT = updateTaskInputOf(EVERY_EXPERIMENT_ON);
 
 /**
  * A task's change as a call carries it: one from before a task stopped
@@ -958,22 +999,45 @@ export const CODER_READ_AGENT_TOOL = {
   inputSchema: CODER_READ_AGENT_INPUT,
 } as const;
 
-export const START_AGENT_TOOL = {
-  name: AGENT_TOOL.START_AGENT,
-  description:
-    "Start a new agent on the task you work on, or on another task of your workspace by " +
-    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer would: ` +
+/** How a start is handed what it is told, as a workspace with Task descriptions on or off words it. */
+const START_HANDED_WORDS = {
+  on:
     "on the task's description itself with no prompt, or on the prompt given in the " +
     "description's place, with the note after either and any pictures images names, which it sees as " +
-    "images. Start it on the task you work on, taskId left " +
+    "images.",
+  off:
+    "on the prompt given, with the note after it and any pictures images names, which it sees as " +
+    "images.",
+} as const;
+
+/** Why a start on no task needs a prompt, said only where a task would otherwise hand its description. */
+const NEW_TASK_PROMPT_WORDS = {
+  on: "; it needs a prompt, since that task has no description to hand it",
+  off: "",
+} as const;
+
+/** `start_agent` in the words of the workspace's experiments: its name, its words, and its input schema. */
+export function startAgentToolOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
+  return {
+    name: AGENT_TOOL.START_AGENT,
+    description: startAgentWords(on),
+    inputSchema: startAgentInputOf(on),
+  } as const;
+}
+
+function startAgentWords(on: Pick<ExperimentsOn, "descriptionsOn">): string {
+  const words = wordsOf(on);
+  return (
+    "Start a new agent on the task you work on, or on another task of your workspace by " +
+    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer would: ` +
+    `${START_HANDED_WORDS[words]} Start it on the task you work on, taskId left ` +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
     "branch, pull request, and transcript stand under that task; name another task only for " +
     "work unrelated to it, or where the developer asked for that, and for work that should " +
     `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first. Where you work ` +
     "on no task, taskId left out starts it on a new task made for it, named as its agent is, " +
     "assigned to the member you work for, in the repository you work in or the one repository " +
-    "names, and done by itself once its agents finish well; it needs a prompt, since that task " +
-    "has no description to hand it. " +
+    `names, and done by itself once its agents finish well${NEW_TASK_PROMPT_WORDS[words]}. ` +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -989,9 +1053,11 @@ export const START_AGENT_TOOL = {
     "at a messageId to try another direction while it goes on. An agent already continued may " +
     "be continued again, and the answer then names the earlier continuations by their id and " +
     "mention (earlierContinuations). A start from another agent " +
-    "copies its work and summarizes its transcript, so it may take a minute to answer.",
-  inputSchema: START_AGENT_INPUT,
-} as const;
+    "copies its work and summarizes its transcript, so it may take a minute to answer."
+  );
+}
+
+export const START_AGENT_TOOL = startAgentToolOf(EVERY_EXPERIMENT_ON);
 
 export const LIST_MODELS_TOOL = {
   name: AGENT_TOOL.LIST_MODELS,
@@ -1007,6 +1073,11 @@ export const LIST_MODELS_TOOL = {
     "fast version.",
   inputSchema: LIST_MODELS_INPUT,
 } as const;
+
+/** `update_task` in the words of the workspace's experiments. */
+export function updateTaskToolOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
+  return { ...UPDATE_TASK_TOOL, inputSchema: updateTaskInputOf(on) } as const;
+}
 
 export const UPDATE_TASK_TOOL = {
   name: AGENT_TOOL.UPDATE_TASK,
@@ -1462,6 +1533,11 @@ export function callerUserId(caller: AgentCaller): string {
   return caller.kind === AGENT_CALLER.AGENT ? caller.agent.userId : caller.userId;
 }
 
+/** The workspace a call is in, whose experiments it reads: the coding agent's own, or the one the member's call is about. */
+export function callerWorkspaceId(caller: AgentCaller): string {
+  return caller.kind === AGENT_CALLER.AGENT ? caller.agent.organizationId : caller.workspaceId;
+}
+
 /** The task the caller works on: the coding agent's own, which may be none; none for a member. */
 export function callerTask(caller: AgentCaller): string | null {
   return caller.kind === AGENT_CALLER.AGENT ? caller.agent.taskId : null;
@@ -1901,7 +1977,7 @@ function earlierContinuations(
 function startFromRefusalWords(refusal: HostedRefusal, from: AgentStartFrom | undefined): string {
   // Note that a fresh start is refused as not permitted only where it would be a pilot task's pilot.
   if (from === undefined && refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
-    return START_AGENT_REFUSAL.PILOT_OFF;
+    return EXPERIMENT_OFF_REFUSAL;
   }
   if (from !== undefined && refusal.error === HOSTED_API_ERROR.NOT_FOUND) {
     return START_AGENT_REFUSAL.NO_SOURCE;
@@ -2098,6 +2174,14 @@ export function runStartAgent(
       // A caller on no task that names none starts on a task made for the agent, handed words alone,
       // in the repository named or its own.
       const taskId = named ?? ownTask;
+      // Note that a workspace with Task descriptions off has no description to hand a start, so every start but one from another agent names its prompt.
+      if (
+        landing === undefined &&
+        prompt === undefined &&
+        !(yield* experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS))
+      ) {
+        return agentToolRejected(START_AGENT_REFUSAL.PROMPT_NEEDED);
+      }
       const fresh = landing === undefined && taskId === null;
       if (fresh && prompt === undefined) return agentToolRejected(START_AGENT_REFUSAL.NO_PROMPT);
       const repository =

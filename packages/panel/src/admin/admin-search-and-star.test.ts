@@ -4,8 +4,7 @@ import { ADMIN_WORKSPACES_KIND } from "@repo/features/admin-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { rendererRegistry } from "../renderer-runtime.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { type AdminDoors, AdminDoorsProvider, type AdminReads } from "./admin-doors.js";
 import { UsersScreen } from "./screens/users.js";
@@ -105,8 +104,7 @@ async function draw(
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        rendererRegistry,
+      withQueryClient(
         createElement(AdminDoorsProvider, { value: doors }, screen, createElement(ToastHost, {})),
       ),
     ),

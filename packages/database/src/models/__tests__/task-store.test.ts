@@ -12,14 +12,15 @@ import {
   TASK_STATUS,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import type { StoredPullRequest } from "../../schemas/agent.js";
+import { agentTable, type StoredPullRequest } from "../../schemas/agent.js";
 import { agentRepository } from "../../schemas/agent-repository.js";
 import { user } from "../../schemas/auth.js";
 import { inboxItem } from "../../schemas/inbox.js";
+import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import {
@@ -49,8 +50,8 @@ import {
   listTasks,
   nameUntitledTask,
   readTask,
-  readTaskHeader,
   readTaskDescription,
+  readTaskHeader,
   readTaskWorkspace,
   saveDescriptionText,
   setTaskParent,
@@ -280,6 +281,36 @@ it.layer(getTestDB())("a plan's pin", (it) => {
       assert.deepEqual(yield* pinnedOnes(taskId), [{ userId: dean }]);
       assert.equal(yield* deleteTask(dean, taskId), true);
       assert.deepEqual(yield* pinnedOnes(taskId), []);
+    }),
+  );
+
+  it.effect("a plan's agents' conversations go with it at once, and another plan's stand", () =>
+    Effect.gen(function* () {
+      const { dean, taskId, workspace } = yield* openSharedTask;
+      const other = yield* createTask(dean, { ...SHARED_TASK, organizationId: workspace });
+      const agents = [
+        yield* openTaskAgent(dean, workspace, taskId),
+        yield* openTaskAgent(dean, workspace, other.id),
+      ];
+      const db = yield* Database;
+      const owned = yield* db
+        .select({ id: agentTable.id, conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .where(inArray(agentTable.id, agents));
+      const conversationOf = (agentId: string | undefined) =>
+        owned.find(({ id }) => id === agentId)?.conversationId ?? assert.fail("no agent row");
+      const deleted = conversationOf(agents[0]);
+      const kept = conversationOf(agents[1]);
+
+      assert.equal(yield* deleteTask(dean, taskId), true);
+
+      assert.deepEqual(
+        yield* db
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(inArray(conversations.id, [deleted, kept])),
+        [{ id: kept }],
+      );
     }),
   );
 });

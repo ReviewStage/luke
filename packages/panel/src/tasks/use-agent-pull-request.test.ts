@@ -7,12 +7,11 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { useAgentPullRequest, useListedPullRequests } from "./use-agent-pull-request.js";
 
 /**
@@ -59,7 +58,7 @@ test("a tab draws the pull request the task list carries over a held read that f
     return null;
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  await act(async () => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await act(async () => root?.render(withQueryClient(createElement(Probe))));
   // Note that what the read found reaches the hook once it lands in its query.
   await vi.waitFor(() => assert.deepEqual(held, PUBLISHED));
 });

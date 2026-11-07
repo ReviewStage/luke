@@ -4,15 +4,13 @@ import assert from "node:assert/strict";
 import { HOST_CAPABILITY, type HostCapability, type ZoomPercent } from "@repo/settings";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { useAppKeymap } from "./app-commands.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 import { appStateQuery } from "./use-app-state.js";
 import { useWindowZoom } from "./window-zoom.js";
@@ -61,7 +59,7 @@ async function drawOn(
   roots.push(root);
   const landed: boolean[] = [];
   act(() => {
-    root.render(onRegistry(AtomRegistry.make(), createElement(ZoomWindow, { writes, landed })));
+    root.render(withQueryClient(createElement(ZoomWindow, { writes, landed })));
   });
   await vi.waitFor(() => expect(landed.at(-1)).toBe(true));
 }
@@ -107,7 +105,7 @@ for (const { name, key, code, zoom } of ZOOM_KEYS) {
   });
 }
 
-// Note that this test is the file's only one that presses a repeat and so the only one to read the window's capabilities outside React, which its one registry answers for every test after it.
+// Note that this test is the file's only one that presses a repeat and so the only one to read the window's capabilities outside React.
 test("a held ⌘+ keeps stepping the browser's zoom on the web, its repeats left alone too", async () => {
   await drawOn(WEB_CAPABILITIES, []);
   assert.equal(pressCommand("+", "Equal").defaultPrevented, false);
@@ -127,8 +125,8 @@ function RefusedZoomWindow({ landed }: { landed: boolean[] }): ReactElement {
   return createElement(
     Fragment,
     null,
-    onRegistry(AtomRegistry.make(), createElement(Keys)),
-    onRegistry(rendererRegistry, createElement(ToastHost)),
+    withQueryClient(createElement(Keys)),
+    withQueryClient(createElement(ToastHost)),
   );
 }
 

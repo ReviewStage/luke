@@ -4,6 +4,7 @@ import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire"
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceExperimentSetParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -29,6 +30,7 @@ import {
 } from "@repo/features/workspace-environment-wire";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace-wire";
+import { WORKSPACE_EXPERIMENT_LIST } from "@repo/settings";
 import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -42,7 +44,7 @@ import { WORKSPACE_ACT_KIND } from "./kinds.js";
  * plain act answers the value the panel reads, or is refused: a write the
  * account's role does not allow, an address already invited, or a slug
  * refused, each in words that say so, and anything else, the closed gate
- * among it, in the act's own sentence (`compose-tasks.ts`'s
+ * among it, in the act's own sentence (`compose-workspaces.ts`'s
  * `workspaceAnswered`). A write that answers nothing the panel reads answers
  * `void`. A connection's handler answers the install address the service
  * named, which its procedure, written by hand, opens (`act-port/workspace-procedures.ts`),
@@ -65,6 +67,16 @@ export const WORKSPACE_ACTS = declaredActs({
     input: tasksWorkspaceRenameParamsSchema,
     output: workspaceSchema,
     refusal: "Could not rename that workspace on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_EXPERIMENT_SET: hostAct({
+    input: EffectSchema.Struct({
+      ...tasksWorkspaceExperimentSetParamsSchema.fields,
+      experiment: EffectSchema.Literals(WORKSPACE_EXPERIMENT_LIST),
+    }),
+    output: workspaceSchema,
+    refusal: "Could not change that experiment on this system.",
     panelOnly: true,
     door: ACT.ROW_WRITE,
   }),

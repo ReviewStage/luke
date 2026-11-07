@@ -19,7 +19,6 @@ import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { personPage } from "@repo/ui/person-page-model";
 import { Effect, Result, Schema } from "effect";
 import { afterEach } from "vitest";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, refusedOnPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { readAppState } from "../testing/copy-feedback.js";
@@ -35,10 +34,7 @@ import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js"
  * lists. Any other profile leaves main's document as it is.
  */
 
-afterEach(() => {
-  // The window's one registry holds the document it read, so the next test's window reads its own.
-  rendererRegistry.reset();
-});
+afterEach(() => {});
 
 /** Main's document for a fixture run on `profile`: signed out, nothing read, nothing waiting. */
 function fixtureRun(profile: string): AppStateSnapshot {

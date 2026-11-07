@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { WORKSPACE_ACT_KIND } from "@repo/host/contract";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewWorkspaceSteps } from "./new-workspace-steps.js";
 
@@ -52,8 +51,7 @@ function mount(pressed: string[]): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(NewWorkspaceSteps, {
           tasks: {
             ...tasksControl(),

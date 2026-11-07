@@ -20,7 +20,7 @@ import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
-import { readHostDevice, writeHostDevice } from "../host-device-record.js";
+import { hostDeviceWhen, readHostDevice, writeHostDevice } from "../host-device-record.js";
 import { fakeClis } from "../testing/fake-clis.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon, hostRefusedRest } from "./host-daemon.js";
@@ -413,33 +413,68 @@ describe("a host's daemon", () => {
   );
 });
 
-describe("a refused host's rest", () => {
-  it.effect("says so once, and ends once a connect again replaces its record", () =>
-    Effect.gen(function* () {
-      const { stateRoot } = yield* box;
-      const reports: string[] = [];
-      const device = { ...DEVICE, refused: true as const };
-      yield* writeHostDevice(stateRoot, device);
+describe("a host waiting on its record", () => {
+  /** The clock moved on until the wait ends, each step letting the folder's watch and its read of the record, real file work, land in real time. */
+  const untilEnded = (waiting: Fiber.Fiber<unknown, unknown>) =>
+    TestClock.adjust(Duration.seconds(1)).pipe(
+      Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
+      Effect.repeat({ until: () => waiting.pollUnsafe() !== undefined, times: 200 }),
+      Effect.andThen(Effect.sync(() => expect(waiting.pollUnsafe()).toBeDefined())),
+      Effect.andThen(Fiber.join(waiting)),
+    );
 
-      const resting = yield* hostRefusedRest({ stateRoot, device }).pipe(
-        Effect.provide(reporterLayer((line) => reports.push(line))),
-        Effect.forkScoped,
-      );
-      yield* settled(() => reports.length === 1);
-      yield* elapsed(Duration.minutes(2));
-      expect(resting.pollUnsafe()).toBeUndefined();
-      yield* writeHostDevice(stateRoot, { ...DEVICE, deviceSecret: `lkd_${"b".repeat(43)}` });
-      // Note that each minute's read of the record is real file work, which may land a step late, so the clock moves on until the rest ends rather than by exactly a minute.
-      yield* TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)).pipe(
-        Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
-        Effect.repeat({ until: () => resting.pollUnsafe() !== undefined, times: 40 }),
-      );
-      yield* Fiber.join(resting);
+  it.effect(
+    "a refused box says so once, and ends its rest once a connect again replaces its record",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const reports: string[] = [];
+        const device = { ...DEVICE, refused: true as const };
+        yield* writeHostDevice(stateRoot, device);
 
-      expect(reports).toEqual([
-        "Vespin host: Vespin refused this box's secret, so it was removed. Connect it again to follow its agents.",
-      ]);
-    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+        const resting = yield* hostRefusedRest({ stateRoot, device }).pipe(
+          Effect.provide(reporterLayer((line) => reports.push(line))),
+          Effect.forkScoped,
+        );
+        yield* settled(() => reports.length === 1);
+        yield* elapsed(Duration.minutes(2));
+        expect(resting.pollUnsafe()).toBeUndefined();
+        yield* writeHostDevice(stateRoot, { ...DEVICE, deviceSecret: `lkd_${"b".repeat(43)}` });
+        yield* untilEnded(resting);
+
+        expect(reports).toEqual([
+          "Vespin host: Vespin refused this box's secret, so it was removed. Connect it again to follow its agents.",
+        ]);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+
+  it.effect(
+    "a box never connected, its state folder not made yet, ends its wait once a connect writes its record",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const waiting = yield* hostDeviceWhen(stateRoot, Option.isSome).pipe(Effect.forkScoped);
+        yield* elapsed(Duration.minutes(2));
+        expect(waiting.pollUnsafe()).toBeUndefined();
+        yield* writeHostDevice(stateRoot, DEVICE);
+        yield* untilEnded(waiting);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+
+  it.effect(
+    "a box whose state folder is removed while it waits watches the folder made again",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(stateRoot, { recursive: true });
+        const waiting = yield* hostDeviceWhen(stateRoot, Option.isSome).pipe(Effect.forkScoped);
+        yield* elapsed(Duration.seconds(30));
+        yield* fileSystem.remove(stateRoot, { recursive: true });
+        yield* elapsed(Duration.seconds(30));
+        yield* writeHostDevice(stateRoot, DEVICE);
+        yield* untilEnded(waiting);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 });
 

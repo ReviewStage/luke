@@ -1,5 +1,5 @@
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { Effect, Option, Path, Schema, type Stream } from "effect";
+import { Duration, Effect, Option, Path, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { folderMoves } from "./folder-moves.js";
 
@@ -22,6 +22,9 @@ import { folderMoves } from "./folder-moves.js";
 
 /** The record's file, in the daemon's state. */
 const DEVICE_FILE = "device.json";
+
+/** How long the state folder stands still after a change before the record is read, so the several pulses of one write read it once. */
+const RECORD_SETTLE = Duration.millis(250);
 
 const HostDeviceSchema = Schema.Struct({
   deviceId: Schema.String,
@@ -55,6 +58,33 @@ export const readHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
 export const hostDeviceMoves = (
   stateRoot: string,
 ): Stream.Stream<void, never, FileSystem.FileSystem | Path.Path> => folderMoves(stateRoot);
+
+/**
+ * A wait until the record is one `holds` takes, as a daemon waits on a
+ * connect: read as the wait starts, and again each time the state folder
+ * settles after a move (`hostDeviceMoves`), never on a timer. Note that the
+ * first read waits out the settle too, so the watch started beside it is
+ * armed after one stat of the folder, before the read unless that stat takes
+ * longer than the settle. A watch the system refuses fails the wait, for the
+ * daemon's service to start it again, rather than leaving it waiting on
+ * nothing.
+ */
+export const hostDeviceWhen = (
+  stateRoot: string,
+  holds: (record: Option.Option<HostDevice>) => boolean,
+) =>
+  Stream.merge(hostDeviceMoves(stateRoot), Stream.succeed(undefined)).pipe(
+    Stream.debounce(RECORD_SETTLE),
+    Stream.mapEffect(() => readHostDevice(stateRoot)),
+    Stream.filter(holds),
+    Stream.runHead,
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.fail(`The state folder ${stateRoot} could not be watched.`),
+        onSome: () => Effect.void,
+      }),
+    ),
+  );
 
 /** The record written whole, readable by its owner alone, beside the file and moved over it. */
 export const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, device: HostDevice) {

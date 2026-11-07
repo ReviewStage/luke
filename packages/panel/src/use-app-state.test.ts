@@ -5,13 +5,12 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { useQuery } from "@tanstack/react-query";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { deliveryOf, signedInAs, stateWith } from "./testing/app-state.js";
-import { onRegistry, readAppState, testQueryClientNow } from "./testing/copy-feedback.js";
+import { readAppState, testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 import { appStateQuery } from "./use-app-state.js";
 
 /**
@@ -70,7 +69,7 @@ async function window(first: AppStateSnapshot): Promise<{
     return null;
   }
   root = createRoot(document.createElement("div"));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
+  act(() => root?.render(withQueryClient(createElement(Reader))));
   await vi.waitFor(() => expect(drawn.length > 0).toBe(true));
   return {
     drawn,
@@ -94,7 +93,7 @@ test("a delivery that moves only the settings leaves every other slice the objec
   const { drawn, deliver } = await window(first);
   const held = drawn.at(-1);
 
-  const moved = stateWith(experimentsOn(EXPERIMENT.MEMORY), { version: 2 });
+  const moved = stateWith(experimentsOn(EXPERIMENT.SKILLS), { version: 2 });
   await deliver(moved);
   await vi.waitFor(() => expect(drawn.at(-1) === held).toBe(false));
   const now = drawn.at(-1);
@@ -167,7 +166,7 @@ test("a delivery heard after the window's second read is refused asks for the wh
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   await readAppState();
   root = createRoot(document.createElement("div"));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement("div"))));
+  act(() => root?.render(withQueryClient(createElement("div"))));
   await settle();
 
   // The account moved on main while the window could not read it, so this delivery was built on Bo's document, not Ada's.

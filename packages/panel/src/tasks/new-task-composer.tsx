@@ -41,6 +41,7 @@ import {
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { useOpenSettings } from "../open-settings.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
 import { unrunnableChoice } from "./agent-model.js";
 import { repositorySkillsQueryOptions } from "./agent-reads.js";
@@ -423,10 +424,8 @@ export function NewTaskComposer({
   };
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
-  // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
-  const offersPilot =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.PILOT) }).data === true &&
-    !forAutomation;
+  // Pilot or Agent stands on a task's card while the workspace it starts in has the Pilot experiment on, set to Pilot.
+  const offersPilot = useWorkspaceExperiment(workspaceId, EXPERIMENT.PILOT) && !forAutomation;
   const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
   const asked = offersPilot ? mode : undefined;
   // The relations the press that opened the card chose, or the refused card's, which the + menu and the rows change.

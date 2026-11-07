@@ -54,7 +54,7 @@ test("a link's workspace is named in Settings' address, which the Workspace page
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
-  act(() => root.render(held.provide(createElement(Probe))));
+  act(() => root.render(held.provide(withQueryClient(createElement(Probe)))));
 
   act(() => void settings?.open({ page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id }));
   const linked = [held.history.location.href, settings?.workspaceId, settings?.view];

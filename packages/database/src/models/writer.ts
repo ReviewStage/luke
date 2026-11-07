@@ -650,11 +650,7 @@ const lockConversation = SqlSchema.findOneOption({
         .select({ id: conversations.id, kind: conversations.kind })
         .from(conversations)
         .where(
-          and(
-            eq(conversations.id, target.conversationId),
-            eq(conversations.userId, target.userId),
-            isNull(conversations.deletedAt),
-          ),
+          and(eq(conversations.id, target.conversationId), eq(conversations.userId, target.userId)),
         )
         .for("update"),
     ),

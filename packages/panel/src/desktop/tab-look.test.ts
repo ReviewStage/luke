@@ -30,9 +30,8 @@ import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, registryWith } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, withExperiments } from "../testing/app-state.js";
 import { editorBundleLanded } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -187,8 +186,8 @@ async function mount(
   };
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           ChipCards,
           { value: chipCards },

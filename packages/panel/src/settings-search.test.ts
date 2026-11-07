@@ -164,11 +164,16 @@ test("the OpenAI key dictation runs on is found by that word, on Codex's row in 
 });
 
 /** Where `query` leads on the Experimental page, signed in or not. */
-function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
+function experimentalFound(
+  query: string,
+  accountDrawn: boolean,
+  workspace?: Workspace,
+): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
     accountDrawn,
     capabilities: DESKTOP_CAPABILITIES,
+    workspace,
   };
   const found = searchSettings(settingsSearchCorpus(input), query);
   return (found?.groups ?? [])
@@ -182,20 +187,19 @@ test("an experiment is found by its name, what it brings, and what other apps ca
     assert.deepEqual(experimentalFound(query, true), ["Pilot"], query);
   }
   assert.deepEqual(experimentalFound("hosts", true), ["Bring your own host"], "the page it holds");
-  for (const query of ["Experimental", "beta", "labs"]) {
-    assert.deepEqual(
-      experimentalFound(query, true),
-      [
-        "Task descriptions",
-        "Bring your own host",
-        "Skills",
-        "Pilot",
-        "Memory",
-      ],
-      query,
-    );
+  const experiments = ["Task descriptions", "Bring your own host", "Skills", "Pilot", "Memory"];
+  for (const query of ["beta", "labs"]) {
+    assert.deepEqual(experimentalFound(query, true), experiments, query);
   }
+  // The page's own name finds its group of the reader's own experiments too.
+  assert.deepEqual(experimentalFound("Experimental", true), ["Just for you", ...experiments]);
   assert.deepEqual(experimentalFound("Memory", false), []);
+});
+
+test("Experimental's two groups are found by whom they reach: everyone in the workspace Settings shows, and just the reader", () => {
+  assert.deepEqual(experimentalFound("everyone", true, TEAM), ["For everyone in acme"]);
+  assert.deepEqual(experimentalFound("just for you", true, TEAM), ["Just for you"]);
+  assert.deepEqual(experimentalFound("everyone", true), [], "no group for no workspace shown");
 });
 
 test("no two rows the search can land on wear the same id", () => {

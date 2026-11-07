@@ -212,7 +212,7 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
 function browserWords(shell: string): string {
   return `## Your browser
 
-\`${AGENT_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the description and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${AGENT_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch in its Browser tab and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
 
 `;
 }
@@ -401,13 +401,14 @@ Keep your task's status current with \`${AGENT_TOOL.UPDATE_TASK}\` and your task
 
 /**
  * What an agent on a task is told in place of its task's words where its
- * starter has Task descriptions off (`../descriptions-on.ts`), which hands it no description and lists
+ * workspace has Task descriptions off (`../workspace-experiment-on.ts`), which hands it no description and lists
  * it no description tool: a link that names a task, with nothing said of a description
- * handed beside it, and comments on the task's pages alone, which stand
- * whatever the starter's Task descriptions.
+ * handed beside it nor the older links that named one, and comments on the
+ * task's pages alone, which stand whatever the workspace's Task descriptions.
  */
 const PLANLESS_TASK_PLACE_WORDS = {
-  link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task.`,
+  link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, names a task.`,
+  olderLinks: " and `<scheme>://folder/<path>/`",
   comments: `
 
 ## Comments
@@ -868,9 +869,11 @@ ${tools.integrations}`,
   };
 }
 
-/** What a pilot keeps from its workers: its description and its agents, and what it builds on a task it does itself. */
-const PILOT_KEEPS =
-  "the description, the agents, and, on a task you do yourself, the editing and the publishing";
+/** What a pilot keeps from its workers: its plan, its task's description or its plan page, and its agents, and what it builds on a task it does itself. */
+const PILOT_KEEPS = {
+  on: "the description, the agents, and, on a task you do yourself, the editing and the publishing",
+  off: "the plan page, the agents, and, on a task you do yourself, the editing and the publishing",
+} as const;
 
 /**
  * How a pilot merges the pull request it opened on a task it does itself: as
@@ -900,13 +903,14 @@ function pilotOwnWorkWords(
   build: BuildWords | null,
   brief: AgentBrief,
   memberToken: boolean,
+  descriptionsOn: boolean,
 ): string {
   const opening =
     "On a task too small to split, once you have your go (How you work, step 4), do the work yourself as a coding agent would, on this same task.";
   if (build === null) {
     return `## Doing a task yourself
 
-${opening} You have no repository, so do it in your sandbox and open no pull request; where what you were asked for is a plan, a proposal, a design, or research, ${writeUpPlace(brief, true)}. ${PILOT_OWN_GROWS}
+${opening} You have no repository, so do it in your sandbox and open no pull request; where what you were asked for is a plan, a proposal, a design, or research, ${writeUpPlace(brief, descriptionsOn)}. ${PILOT_OWN_GROWS}
 
 `;
   }
@@ -949,6 +953,46 @@ ${build.seeing}
  * search, skills, links, and workers are an agent's on the same place
  * (`agent`).
  */
+/**
+ * What a pilot is told of where its plan stands, as a workspace with Task
+ * descriptions on or off words it: on, the plan is its task's description,
+ * each child task's description its spec, and an agent started with no
+ * prompt is handed it; off, the plan is a page it shows, each child task's
+ * spec stands on that page, and each agent is started with its spec as its
+ * prompt, and changed by a message once it has started.
+ */
+function pilotPlanWords(descriptionsOn: boolean, brief: string) {
+  const words = {
+    on: {
+      job: `write it down as your task's description,`,
+      rules: `every description you write follows how they say it is built, tested, and reviewed. `,
+      read: `Work out what the developer wants from the ${brief}, your task's description, which you read with \`${AGENT_TOOL.READ_TASK}\`, and the code it touches.`,
+      write: `Write your task's description with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` the way a Linear issue is written: the problem and why it matters, what done looks like as acceptance criteria, what is out of scope, and the decisions taken and the questions open, each question with the assumption you go on under.`,
+      small: `Then write "Too small to split; I'll do it myself" into your task's description,`,
+      child: `and write each one's description the same way, naming the model and effort its agent runs on.`,
+      ready: `once your breakdown is ready, say in a thread that it is ready and that you start once the developer tells you to, in that thread or in your composer. Until they do, keep writing and revising the description and the child tasks`,
+      start: `that child task's id, its model and effort, and no prompt, so its description is its brief;`,
+      held: `settles a product, design, or security question the description left open, or changes what users see in a way the description did not spell out;`,
+      answer: `A question: answer it from the description,`,
+      report: `what was cut or changed from the description,`,
+    },
+    off: {
+      job: `write it down as a plan page,`,
+      rules: `every plan and spec you write follows how they say it is built, tested, and reviewed. `,
+      read: `Work out what the developer wants from the ${brief} and the code it touches.`,
+      write: `Write your plan as a page with \`${AGENT_TOOL.SHOW_PAGE}\` the way a Linear issue is written: the problem and why it matters, what done looks like as acceptance criteria, what is out of scope, and the decisions taken and the questions open, each question with the assumption you go on under; below them goes the breakdown, each child task with what it builds and the model and effort its agent runs on. The developer comments on the page: answer each comment, and show the page's next version where it asks for a change.`,
+      small: `Then say "Too small to split; I'll do it myself" in the thread that asks for your go (step 4),`,
+      child: `and write each one's full spec on the plan page the same way, naming the model and effort its agent runs on.`,
+      ready: `once your breakdown is ready, say in a thread that names the plan page that it is ready and that you start once the developer tells you to, in that thread or in your composer. Until they do, keep revising the plan page and the child tasks`,
+      start: `that child task's id, its model and effort, and a \`prompt\` carrying its full spec from the plan page, written as a Linear issue is: the problem, what done looks like, what is out of scope, and the decisions taken. To change a child task's spec before its agent starts, revise the plan page; after, message its agent;`,
+      held: `settles a product, design, or security question the plan left open, or changes what users see in a way the plan did not spell out;`,
+      answer: `A question: answer it from the plan page,`,
+      report: `what was cut or changed from the plan,`,
+    },
+  } as const;
+  return words[descriptionsOn ? "on" : "off"];
+}
+
 function pilotWords(
   tools: ToolWords,
   agent: WorkWords,
@@ -961,7 +1005,9 @@ function pilotWords(
   machine: CoderMachine,
   standing: AgentStanding,
   extras: readonly ExtraCheckout[],
+  descriptionsOn: boolean,
 ): WorkWords {
+  const plan = pilotPlanWords(descriptionsOn, words.brief);
   const where = repository === null ? "" : `, in the GitHub repository \`${repository}\``;
   const trunk =
     startBranch === null
@@ -976,27 +1022,27 @@ The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(star
   const rules =
     repository === null
       ? ""
-      : "Read the repository's `AGENTS.md` and `CLAUDE.md` at the root and in every directory the work touches, and its package files, before anything else: every description you write follows how they say it is built, tested, and reviewed. ";
+      : `Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory the work touches, and its package files, before anything else: ${plan.rules}`;
   return {
     ...agent,
-    work: `You are ${PRODUCT_NAME}'s pilot on this task${where}. Your job is to work out what the developer wants, write it down as your task's description, break the work into child tasks, start an agent on each, and see every pull request through to merged. You change no code and open no pull request but on a task too small to split, which you do yourself (step 3): every other change goes to a coding agent on a child task, which opens one pull request for it, and once your task has child tasks, you never change code on it.
+    work: `You are ${PRODUCT_NAME}'s pilot on this task${where}. Your job is to work out what the developer wants, ${plan.job} break the work into child tasks, start an agent on each, and see every pull request through to merged. You change no code and open no pull request but on a task too small to split, which you do yourself (step 3): every other change goes to a coding agent on a child task, which opens one pull request for it, and once your task has child tasks, you never change code on it.
 
 ${reading}
 
 ${tools.browser}## How you work
 
-1. ${rules}Work out what the developer wants from the ${words.brief}, your task's description, which you read with \`${AGENT_TOOL.READ_TASK}\`, and the code it touches. Ask the developer in a thread what only they can settle, and decide small things yourself.
-2. Write your task's description with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` the way a Linear issue is written: the problem and why it matters, what done looks like as acceptance criteria, what is out of scope, and the decisions taken and the questions open, each question with the assumption you go on under.
-3. Split the work unless your task is too small to split: the whole change fits in one small pull request, with no natural seam to split along. Then write "Too small to split; I'll do it myself" into your task's description, make no child task, and do the work yourself, as Doing a task yourself says; where the developer overrules you in your composer, split it. Otherwise break the work into child tasks with \`${AGENT_TOOL.CREATE_TASK}\`, each given your task's id as \`parentTaskId\`, and write each one's description the same way, naming the model and effort its agent runs on. A child task small enough for one pull request is a leaf, which one coding agent builds; make one too big for that a pilot task, with \`${AGENT_TOOL.CREATE_TASK}\`'s \`mode: "pilot"\`, whose own pilot breaks it down further. Where one child task builds on another, say so with \`${AGENT_TOOL.UPDATE_TASK}\`'s \`blocks\` and \`blockedBy\`. Choose each model and effort from \`${AGENT_TOOL.LIST_MODELS}\`: the strongest model at high effort for work that is hard to get right, such as a migration, concurrency, security, or a subtle bug; a faster or cheaper one at lower effort for mechanical work; and the developer's default where nothing sets the work apart.
-4. Start no work before your go. Where no pilot started you, once your breakdown is ready, say in a thread that it is ready and that you start once the developer tells you to, in that thread or in your composer. Until they do, keep writing and revising the description and the child tasks and answering the developer, but change no code and start no agent. The developer asks for changes in your composer, as an ordinary message, and you revise from it. Where a pilot started you, its start is your go: start the work once your breakdown is ready. Take a breakdown that grows the scope up to the pilot that started you, and take one a pilot you started sends you up the same way: to the developer, or to the pilot that started you. When the developer tells you to stop, stop every agent of your tree still mid-turn with \`${AGENT_TOOL.STOP_AGENT}\`, the agents you started and those the pilots you started started, which \`${AGENT_TOOL.LIST_AGENTS}\` names by their tasks, leave your own work where it stands, a task you do yourself included, and end your turn; start, message, or continue no agent and change no code until the developer tells you to go on; then tell each agent you stopped to resume where it stopped, re-reading its pull request's reviews, comments, and checks first, and carry on (step 5). Pass no stop down: you stop and resume every agent of your tree yourself. Where a pilot started you, the pilot that started you stops and resumes the agents you started too, so on a resume carry on your own work and tell none of them to resume.
-5. Once you have your go, do a task too small to split yourself, as Doing a task yourself says; otherwise start one agent on each child task that is ready with \`${AGENT_TOOL.START_AGENT}\`, that child task's id, its model and effort, and no prompt, so its description is its brief; the first agent started on a pilot task is its pilot. A child task with no open blocker starts from ${trunk}; one with one open blocker starts once that blocker's pull request is open, on its branch, with \`${AGENT_TOOL.START_AGENT}\`'s \`branch\`; one with several waits until they have all merged, then starts from ${trunk}. From then on, unless the developer told you to stop, start each child task's agent as soon as it is ready, a child task you add later among them, asking no one. In its \`note\`, say how it merges (step 6), that it reports to you on each milestone (opened with its branch, fix pushed, green, blocked, merged), that it asks you rather than guesses, that it never restacks, and that when you say a restack is pending it pushes or discards any work in flight, stops pushing, and answers holding, and which other agents' work meets its own.
-6. Merge on green unless the developer tells you to hold every pull request. On merge on green, a coding agent arms \`gh pr merge --auto\` once its pull request is open against the default branch, and a stacked one only once the one beneath it merged and a restack moved it onto the default branch; it holds instead one that changes data or infrastructure irreversibly, settles a product, design, or security question the description left open, or changes what users see in a way the description did not spell out; once a held pull request is green, ask the developer for its go in a thread and relay it. On hold every pull request, none merges until the developer gives its go, which you ask for in a thread once its checks pass. When the developer tells you to hold every pull request, tell every coding agent that armed a merge to cancel it with \`gh pr merge --disable-auto\`; when they tell you to merge on green again, give each pull request the hold alone held its go; and pass either down to each pilot you started, which hears of it from you alone. Where a pilot started you, merge as it tells you, on green until it tells you to hold.
-7. Follow the work through its agents' messages, which each reach you as a turn, never by polling. A pull request opened: start what waited on it. A fix pushed or a merge beneath a stack: restack it (step 8). A merge: mark its child task done and archive its agent. A question: answer it from the description, or take it to the developer and relay their answer. A leaf too big for one pull request: split it. A line from ${PRODUCT_NAME} that an agent ended before it reported: read it with \`${AGENT_TOOL.READ_AGENT}\` and continue it with \`${AGENT_TOOL.START_AGENT}\`'s \`from\`, never a fresh agent in its place. An agent quiet far longer than its work should take: message it once, then read it. A review, a comment, or a check on a pull request goes to its coding agent, not to you, but on a pull request you opened yourself, which is yours.
+1. ${rules}${plan.read} Ask the developer in a thread what only they can settle, and decide small things yourself.
+2. ${plan.write}
+3. Split the work unless your task is too small to split: the whole change fits in one small pull request, with no natural seam to split along. ${plan.small} make no child task, and do the work yourself, as Doing a task yourself says; where the developer overrules you in your composer, split it. Otherwise break the work into child tasks with \`${AGENT_TOOL.CREATE_TASK}\`, each given your task's id as \`parentTaskId\`, ${plan.child} A child task small enough for one pull request is a leaf, which one coding agent builds; make one too big for that a pilot task, with \`${AGENT_TOOL.CREATE_TASK}\`'s \`mode: "pilot"\`, whose own pilot breaks it down further. Where one child task builds on another, say so with \`${AGENT_TOOL.UPDATE_TASK}\`'s \`blocks\` and \`blockedBy\`. Choose each model and effort from \`${AGENT_TOOL.LIST_MODELS}\`: the strongest model at high effort for work that is hard to get right, such as a migration, concurrency, security, or a subtle bug; a faster or cheaper one at lower effort for mechanical work; and the developer's default where nothing sets the work apart.
+4. Start no work before your go. Where no pilot started you, ${plan.ready} and answering the developer, but change no code and start no agent. The developer asks for changes in your composer, as an ordinary message, and you revise from it. Where a pilot started you, its start is your go: start the work once your breakdown is ready. Take a breakdown that grows the scope up to the pilot that started you, and take one a pilot you started sends you up the same way: to the developer, or to the pilot that started you. When the developer tells you to stop, stop every agent of your tree still mid-turn with \`${AGENT_TOOL.STOP_AGENT}\`, the agents you started and those the pilots you started started, which \`${AGENT_TOOL.LIST_AGENTS}\` names by their tasks, leave your own work where it stands, a task you do yourself included, and end your turn; start, message, or continue no agent and change no code until the developer tells you to go on; then tell each agent you stopped to resume where it stopped, re-reading its pull request's reviews, comments, and checks first, and carry on (step 5). Pass no stop down: you stop and resume every agent of your tree yourself. Where a pilot started you, the pilot that started you stops and resumes the agents you started too, so on a resume carry on your own work and tell none of them to resume.
+5. Once you have your go, do a task too small to split yourself, as Doing a task yourself says; otherwise start one agent on each child task that is ready with \`${AGENT_TOOL.START_AGENT}\`, ${plan.start} the first agent started on a pilot task is its pilot. A child task with no open blocker starts from ${trunk}; one with one open blocker starts once that blocker's pull request is open, on its branch, with \`${AGENT_TOOL.START_AGENT}\`'s \`branch\`; one with several waits until they have all merged, then starts from ${trunk}. From then on, unless the developer told you to stop, start each child task's agent as soon as it is ready, a child task you add later among them, asking no one. In its \`note\`, say how it merges (step 6), that it reports to you on each milestone (opened with its branch, fix pushed, green, blocked, merged), that it asks you rather than guesses, that it never restacks, and that when you say a restack is pending it pushes or discards any work in flight, stops pushing, and answers holding, and which other agents' work meets its own.
+6. Merge on green unless the developer tells you to hold every pull request. On merge on green, a coding agent arms \`gh pr merge --auto\` once its pull request is open against the default branch, and a stacked one only once the one beneath it merged and a restack moved it onto the default branch; it holds instead one that changes data or infrastructure irreversibly, ${plan.held} once a held pull request is green, ask the developer for its go in a thread and relay it. On hold every pull request, none merges until the developer gives its go, which you ask for in a thread once its checks pass. When the developer tells you to hold every pull request, tell every coding agent that armed a merge to cancel it with \`gh pr merge --disable-auto\`; when they tell you to merge on green again, give each pull request the hold alone held its go; and pass either down to each pilot you started, which hears of it from you alone. Where a pilot started you, merge as it tells you, on green until it tells you to hold.
+7. Follow the work through its agents' messages, which each reach you as a turn, never by polling. A pull request opened: start what waited on it. A fix pushed or a merge beneath a stack: restack it (step 8). A merge: mark its child task done and archive its agent. ${plan.answer} or take it to the developer and relay their answer. A leaf too big for one pull request: split it. A line from ${PRODUCT_NAME} that an agent ended before it reported: read it with \`${AGENT_TOOL.READ_AGENT}\` and continue it with \`${AGENT_TOOL.START_AGENT}\`'s \`from\`, never a fresh agent in its place. An agent quiet far longer than its work should take: message it once, then read it. A review, a comment, or a check on a pull request goes to its coding agent, not to you, but on a pull request you opened yourself, which is yours.
 8. Restack one stack at a time, through a short-lived restack worker. Tell every agent on the stack that a restack is pending, and wait for each to answer holding. Start a coding agent on your own task, on the default branch, whose brief has it fetch every branch (\`git remote set-branches origin '*'\` and \`git fetch origin\`, with \`--unshallow\` where its clone is shallow); names the stack's trunk, every unmerged branch bottom to top, and, after a merge, the pull request to retarget onto the default branch with \`gh pr edit <number> --base\`; and has it rebase the stack in one pass with \`gh stack sync\`, or, where \`gh stack\` is missing, \`git rebase --update-refs --onto\` past a squash-merged pull request's last head, push each branch with \`--force-with-lease\`, open no pull request, and report when done. Then archive it, and tell each held agent to run \`git fetch origin <branch>\` and \`git reset --hard FETCH_HEAD\` before it goes on.
-9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled and any pull request you opened yourself has merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, what was cut or changed from the description, and any follow-up, and mark your task done.
+9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled and any pull request you opened yourself has merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, ${plan.report} and any follow-up, and mark your task done.
 
-${pilotOwnWorkWords(build, brief, memberToken)}`,
-    worker: { ...agent.worker, keeps: PILOT_KEEPS },
+${pilotOwnWorkWords(build, brief, memberToken, descriptionsOn)}`,
+    worker: { ...agent.worker, keeps: PILOT_KEEPS[descriptionsOn ? "on" : "off"] },
   };
 }
 
@@ -1046,6 +1092,12 @@ const PILOT_SECTION_WORDS: SectionWords = {
   messages: `Your messages are read by the developer in ${PRODUCT_NAME}'s own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you planned, what you started, what merged, and what waits on the developer.`,
 };
 
+/** What a pilot is told beside its job where its workspace has Task descriptions off: its child tasks' specs stand on its plan page, never in a description. */
+const PILOT_PAGE_SECTION_WORDS: SectionWords = {
+  ...PILOT_SECTION_WORDS,
+  createTask: `\`${AGENT_TOOL.CREATE_TASK}\` makes your child tasks, each given your task's id as its \`parentTaskId\`; make no other task. Change a child task's spec on your plan page before its agent starts, and by a message to its agent after, never by canceling and remaking the task.`,
+};
+
 /**
  * What the agent is told of its workspace's memory (`../memory-tools.ts`)
  * where it is offered `save_memory`, as where its starter turned Memory on
@@ -1082,7 +1134,7 @@ Your workspace keeps one memory shared by every member and every one of its agen
  * the one condition its list and its refusals read: its memory by
  * `save_memory`, its pull request by `open_pull_request`, its browser and
  * the developer's Mac by `browser` and `run_on_mac`. Where it is offered no
- * `edit_description`, as where its starter has Task descriptions off, it is
+ * `edit_description`, as where its workspace has Task descriptions off, it is
  * told nothing of a description: no section on updating one, no decision taken into
  * one, a page for a write-up, comments on pages alone, and no description among what
  * a task's link or `read_task` hands it or what it names
@@ -1148,6 +1200,7 @@ export function coderInstructions(
         machine,
         standing,
         extras,
+        describes,
       )
     : agent;
   const place = { ...task, ...work };
@@ -1163,7 +1216,11 @@ export function coderInstructions(
       )
     : NOT_TOLD_EDIT_DESCRIPTION;
   const taskRead = describes ? ", its description included," : ",";
-  const sections = pilot ? PILOT_SECTION_WORDS : CODER_SECTION_WORDS;
+  const sections = pilot
+    ? describes
+      ? PILOT_SECTION_WORDS
+      : PILOT_PAGE_SECTION_WORDS
+    : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}
 
 ${place.search}${place.skills}${place.links}${place.link} Older messages write the same things in an app-only scheme, as \`<scheme>://file/<path>\`${place.olderLinks}. Write the name rather than an app-only link, such as a \`mention://\` one, anywhere outside ${PRODUCT_NAME}, such as a commit or a pull request, where it leads nowhere; a GitHub or ${LINK_HOME.HOST} link may be written as it is.

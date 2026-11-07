@@ -53,7 +53,6 @@
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
-import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
 import { listRevisions, readRevision } from "@repo/database/models/description-revisions";
 import { devicesNamed } from "@repo/database/models/device-store";
@@ -79,6 +78,7 @@ import {
   type TaskAssigneeNotMember,
   type TaskIdTaken,
 } from "@repo/database/models/task-store";
+import { workspaceExperimentOn } from "@repo/database/models/workspace-experiment-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@repo/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
@@ -323,15 +323,15 @@ const pickKept = (userId: string, asked: TaskRunsOnRequest) =>
   );
 
 /**
- * How a start asks its task to be worked, checked before anything is
- * written: a pilot only for an account with the Pilot experiment on, refused
- * as an invalid request otherwise; agents, or none named, for anyone.
+ * How a start asks its task to be worked, checked before the task is
+ * written: a pilot only in a workspace with the Pilot experiment on, refused
+ * as an invalid request otherwise; agents, or none named, anywhere.
  */
-const modeAsked = (userId: string, asked: TaskMode | undefined) =>
+const modeAsked = (workspaceId: string, asked: TaskMode | undefined) =>
   asked !== TASK_MODE.PILOT
     ? Effect.void
     : Effect.flatMap(
-        hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)),
+        hostedStoreOrUnavailable(workspaceExperimentOn(workspaceId, EXPERIMENT.PILOT)),
         (on) => (on ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
       );
 
@@ -439,8 +439,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * on it. The agent's session is opened for the account the request
      * resolved to (`coder-host/runtime-sessions.ts`); one whose agent's key
      * already started an agent in the workspace answers that agent's plan and
-     * the agent (`startedBefore`). A pilot task is refused, before anything is
-     * written, to an account without the Pilot experiment (`modeAsked`). An
+     * the agent (`startedBefore`). A pilot task is refused, before the task is
+     * written, in a workspace without the Pilot experiment (`modeAsked`). An
      * id a plan the account does not reach stands under is refused as a
      * workspace it is not in is. A start sent again under the idempotency key
      * it was taken under is refused as already written without running
@@ -449,8 +449,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     create: plans.create.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId } = context;
       const { agent } = input;
-      yield* modeAsked(userId, input.mode);
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
+      yield* modeAsked(organizationId, input.mode);
       const before =
         agent === undefined
           ? Option.none()

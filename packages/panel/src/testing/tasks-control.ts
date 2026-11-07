@@ -48,7 +48,7 @@ import {
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
-import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
+import type { BoardRoute, PersonRoute, UnknownWorkspaceRoute } from "../workspace-routes.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
 
 const ignore = () => undefined;
@@ -456,6 +456,13 @@ export const AGENT_AWAY: AgentRoute = {
   onClose: ignore,
 };
 
+/** A workspace not there for the reader standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const UNKNOWN_WORKSPACE_AWAY: UnknownWorkspaceRoute = {
+  workspace: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+};
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -631,7 +638,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     failedRuns: [],
     adminView: ADMIN_AWAY,
     boardView: { open: false, onOpen: ignore, onClose: ignore, onPreload: ignore },
-    unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },

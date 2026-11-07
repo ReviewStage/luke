@@ -14,8 +14,8 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { forgetPictures } from "../picture-query.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { registryWith } from "../testing/app-state.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { withExperiments } from "../testing/app-state.js";
+import { testQueryClientNow } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { viewerPlace } from "../testing/viewer-place.js";
@@ -84,9 +84,7 @@ function standHost(
 async function drawn(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() =>
-    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), element)),
-  );
+  act(() => root?.render(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), element)));
   await settle();
   return container;
 }
@@ -325,8 +323,8 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   const next = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})`;
   act(() =>
     root?.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DescriptionBody, { task: taskOf(taskId, next) }),
       ),
     ),

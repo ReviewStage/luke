@@ -13,7 +13,6 @@ import {
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -34,7 +33,7 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { AGENT } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -156,8 +155,7 @@ function mount(
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(SidebarAgent, {
           agent,
           agents,
@@ -326,8 +324,7 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
     const agents = agentsControl({});
     act(() =>
       held.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(
             Fragment,
             null,
@@ -525,8 +522,7 @@ function sharedOnRow(agent: TasklessAgent): string[] {
   const held = createRoot(container);
   act(() =>
     held.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(OfferedActions, {
           agent,
           onActions: (actions) => {
@@ -614,8 +610,7 @@ test("a local agent offers Terminal only where it runs on This Mac", async () =>
     const held = createRoot(document.createElement("div"));
     act(() =>
       held.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(OfferedActions, {
             agent,
             onActions: (actions) => {

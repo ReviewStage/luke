@@ -36,6 +36,16 @@ import { onTerminalPort } from "../terminal/terminal-port.js";
  * the session that asked for that shell. Closing the port is the detach:
  * main hears it close.
  *
+ * A session can ask for the same shell again before the port it asked for
+ * first arrives: a Retry while connecting, or another account signing in
+ * and out again within one round trip. The ticket names only the shell, so
+ * the session counts its attaches and the ports that arrive for them, and
+ * the latest attach takes the last port, every earlier one closed. This
+ * relies on ports arriving in the order they were asked for. It holds
+ * because every attach rides the window's one act port, an ordered channel,
+ * and main posts each attach's port synchronously as it answers it, before
+ * it reads the next.
+ *
  * The bytes go to the screen and to the port, and nowhere else.
  */
 
@@ -121,6 +131,10 @@ export class TerminalSession {
   #terminalId: string | undefined;
   /** The shell whose port is on its way. */
   #awaiting: string | undefined;
+  /** The shell whose attaches are counted, and how many were asked for and how many ports arrived since it was first asked for. */
+  #counted: string | undefined;
+  #asked = 0;
+  #arrived = 0;
   #port: MessagePort | undefined;
   /** What was typed before a port stood, in order. */
   #typed: string[] = [];
@@ -197,11 +211,17 @@ export class TerminalSession {
     const terminalId = this.#terminalId;
     if (terminalId === undefined) return void this.#open(size);
     this.#awaiting = terminalId;
+    const asked = this.#ask(terminalId);
     this.link.attach(terminalId, size).then(
       (attached) => {
-        if ("state" in attached) this.#enter(attached.state);
+        if (!("state" in attached)) return;
+        this.#refused(terminalId, asked);
+        this.#enter(attached.state);
       },
-      () => this.#enter(SERVICE_UNREACHED),
+      () => {
+        this.#refused(terminalId, asked);
+        this.#enter(SERVICE_UNREACHED);
+      },
     );
   }
 
@@ -212,13 +232,20 @@ export class TerminalSession {
     this.connect();
   }
 
-  /** The port handed in by main for the shell it names, where this session asked for it. */
+  /** The port handed in by main for the shell it names, where this session asked for it and is owed one. */
   takes(agentId: string, terminalId: string): boolean {
-    return agentId === this.link.agentId && terminalId === this.#awaiting;
+    return (
+      agentId === this.link.agentId && terminalId === this.#counted && this.#arrived < this.#asked
+    );
   }
 
-  /** The shell's port, as main posted it. */
+  /** The shell's port, as main posted it: kept where it answers the latest attach still awaited, closed otherwise. */
   attached(port: MessagePort): void {
+    this.#arrived += 1;
+    if (this.#arrived < this.#asked || this.#awaiting === undefined) {
+      port.close();
+      return;
+    }
     this.#awaiting = undefined;
     this.#port = port;
     this.#unacked = 0;
@@ -279,6 +306,27 @@ export class TerminalSession {
     } catch {
       this.#enter(SERVICE_UNREACHED);
     }
+  }
+
+  /** One attach more counted for the shell, by the number it is asked as; a shell other than the one counted starts the count again. */
+  #ask(terminalId: string): number {
+    if (terminalId !== this.#counted) {
+      this.#counted = terminalId;
+      this.#asked = 0;
+      this.#arrived = 0;
+    }
+    this.#asked += 1;
+    return this.#asked;
+  }
+
+  // An attach refused may have posted no port, so where it was the latest
+  // asked, the count is dropped, and a port that still arrives for it is
+  // owed to no one and closed.
+  #refused(terminalId: string, asked: number): void {
+    if (terminalId !== this.#counted || asked !== this.#asked) return;
+    this.#counted = undefined;
+    this.#asked = 0;
+    this.#arrived = 0;
   }
 
   #letGo(): void {

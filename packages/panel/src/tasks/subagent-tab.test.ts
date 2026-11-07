@@ -5,13 +5,12 @@ import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { WireRecord } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -113,8 +112,7 @@ async function workerTab(
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentSubagentTab, {
           agentId: AGENT.id,
           callId: "delegation-call",
@@ -280,8 +278,7 @@ test("a worker's tab whose earlier messages could not be read says so over its l
   };
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentSubagentTab, {
           agentId: AGENT.id,
           callId: "delegation-call",

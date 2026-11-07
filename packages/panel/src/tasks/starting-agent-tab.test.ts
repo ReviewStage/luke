@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { agentTab } from "@repo/ui/tab-strip-model";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MainTabContent } from "../desktop/main-tabs.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -51,9 +50,7 @@ test("an agent still starting draws the words it was started on as its first lin
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(StartingAgentTab, { line }))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(StartingAgentTab, { line }))));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
@@ -75,8 +72,7 @@ test("the column draws a Start still out on the description as its agent's tab s
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MainTabContent, {
           tab: agentTab("press-1"),
           agents,

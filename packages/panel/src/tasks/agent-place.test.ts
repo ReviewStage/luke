@@ -6,7 +6,6 @@ import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@repo/features/workspace-
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
@@ -19,7 +18,7 @@ import {
   handState,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { AgentPlace } from "./agent-place.js";
 
@@ -37,12 +36,10 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 /** Lets go of every box drawn so far. */
 function clear(): void {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 }
 
@@ -88,16 +85,13 @@ async function placeOf(
     handHostReads({ workspaceTools: { [AGENT_ID]: { rows: { runOnMac } } } });
   // Note that the label is read once, so the document is in the client from its first frame, as the root's `ensureQueryData` leaves it.
   writeAppState(await appBridge().requestAppState());
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(AgentPlace, { agent: { id: AGENT_ID, ...agent }, readerId: READER }),
       ),
     ),

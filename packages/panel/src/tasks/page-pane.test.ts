@@ -24,7 +24,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -35,7 +34,7 @@ import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { onPhone } from "../testing/phone-tab.js";
@@ -117,8 +116,7 @@ function mount(
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(
             LinkWorkspaceProvider,
             { value: "acme" },
@@ -491,7 +489,7 @@ test("on a phone the page draws no bar, and the task's header's ⋯ offers every
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
 
   assert.equal(container.querySelector(".file-view-bar"), null);
   assert.equal(container.querySelectorAll("button").length, 0, "nothing over the page presses");

@@ -5,13 +5,11 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateDelivery, MacCommandAsk } from "@repo/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandAnswer } from "@repo/host/contract";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { tellAct } from "./act.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import {
   fakeActPort,
   fakeAppBridge,
@@ -19,7 +17,7 @@ import {
   refusedOnPort,
 } from "./testing/app-bridge.js";
 import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
 /**
@@ -64,17 +62,15 @@ async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(MacCommandAskDialog))));
   if (asks.length > 0) await vi.waitFor(() => assert.equal(promptStands(), true));
   return answered;
 }
 
 /**
  * The dialog over main's document holding `FIRST`, main refusing every answer
- * in `sentence`, beside the window's toasts on the window's own registry, the
- * one its root provides and a press's toast is raised on.
+ * in `sentence`, beside the window's toasts, which a press's toast is raised
+ * on.
  */
 async function mountRefusing(sentence: string): Promise<void> {
   handState({}, { macCommands: { asks: [FIRST] } });
@@ -89,8 +85,8 @@ async function mountRefusing(sentence: string): Promise<void> {
       createElement(
         Fragment,
         null,
-        onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog)),
-        onRegistry(rendererRegistry, createElement(ToastHost)),
+        withQueryClient(createElement(MacCommandAskDialog)),
+        withQueryClient(createElement(ToastHost)),
       ),
     ),
   );
@@ -173,9 +169,7 @@ test("an ask main drops fades its card out in place, its words as they were, bef
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(MacCommandAskDialog))));
   await vi.waitFor(() => assert.equal(promptStands(), true));
   await act(async () => vi.advanceTimersToNextFrame());
   const card = document.querySelector('[role="alertdialog"]') ?? assert.fail("the prompt stands");

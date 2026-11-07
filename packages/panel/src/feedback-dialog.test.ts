@@ -14,7 +14,6 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -22,7 +21,7 @@ import { useAppCommand, useMenuCommands } from "./app-commands.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { holdMotion, releaseMotion } from "./testing/motion-held.js";
 import { ToastHost } from "./toast.js";
 
@@ -59,13 +58,11 @@ beforeEach(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   releaseMotion();
@@ -96,10 +93,7 @@ function mount(account: AccountSnapshot = SIGNED_IN): void {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Each surface holds its own atoms, so a toast one test raised is not the next one's.
-  const registry = AtomRegistry.make();
-  registries.push(registry);
-  act(() => root.render(onRegistry(registry, createElement(Harness, { account }))));
+  act(() => root.render(withQueryClient(createElement(Harness, { account }))));
 }
 
 function button(name: string, within: ParentNode = document): HTMLButtonElement {
@@ -151,12 +145,9 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(FeedbackDialog, {
           kind: FEEDBACK_KIND.FEEDBACK,
           about: EXPERIMENT.MEMORY,
@@ -194,13 +185,10 @@ test("a note kept from one experiment's row is not sent under another place's ti
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const draw = (about: typeof EXPERIMENT.MEMORY | undefined) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(FeedbackDialog, {
             kind: FEEDBACK_KIND.FEEDBACK,
             about,

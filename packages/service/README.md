@@ -1602,11 +1602,13 @@ experiment, and only a value that is not a record at all is
 
 ### Workspace memory
 
-Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for
-the agent's starter by `memoryOnFor` (`src/agents/memory-tools.ts`): while it
-is off the agent is offered neither tool, its instructions say nothing of the
-memory, and the tools' door refuses a call a harness offering every tool
-still makes; Settings › Memory stands nowhere in the panel.
+Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), which a
+workspace's owners and admins turn on for everyone in it, read for the
+workspace the agent works in by `experimentOnIn`
+(`src/agents/workspace-experiment-on.ts`): while it is off the agent is
+offered neither tool, its instructions say nothing of the memory, and the
+tools' door refuses a call a harness offering every tool still makes, in
+words that name no experiment; Settings › Memory stands nowhere in the panel.
 
 The `memory` table (`packages/database/src/schemas/memory.ts`) holds the facts
 and conventions a workspace's agents kept, one short statement a row,
@@ -2263,7 +2265,7 @@ whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its agents go with it, its number in the
 workspace it left kept for the links written with it, and
 `DELETE /api/plans/{id}` stops each of its agents for good, then deletes
-it, its agents' rows going with it and their conversations stamped deleted
+it, its agents' rows going with it and their conversations deleted with them
 (`deleteTask`), or answers `agent-not-ready` where an agent started
 meanwhile,
 the id read from the path by the hosted oRPC router.
@@ -2488,7 +2490,7 @@ conversation row names its kind (`CONVERSATION_KIND` in
 `packages/database/src/models/agent-store.ts` opens, is the one any
 code still opens, and `child` a subagent's or worker's; `main` and
 `observed` are older rows' kinds), the
-runtime's own session id, its soft-delete instant, and the counter that
+runtime's own session id and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
 idempotency key; a turn is one run's origin, status, model, prompt and
@@ -2546,7 +2548,7 @@ every message is held to the vocabulary before it lands, through the same
 catalog does not register, an input its schema refuses, or metadata outside
 the set; a message the reader would refuse is refused whole and reported,
 never cut down to the parts that would pass. Every write runs under a lock on
-the conversation row, which no write reaches once it is stamped deleted; the
+the conversation row, which no write reaches once it is deleted; the
 sequence comes from the row's counter, each allocation landing on the first
 position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
@@ -2622,13 +2624,10 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs four sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs its sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
-- `purged`: conversations stamped deleted more than seven days ago, which
-  is what a deleted task's agents' conversations come to, with their
-  sessions' sandboxes queued for deletion.
 - `deviceWarmRunners`: local runners left warm past their device's window.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.

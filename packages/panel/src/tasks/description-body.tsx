@@ -14,7 +14,7 @@ import {
   type DescriptionSectionEdit,
   type Task,
 } from "@repo/features/task-wire";
-import { agoText, momentText, sinceText } from "@repo/features/time-format";
+import { agoText, dateOfText, momentText, sinceText } from "@repo/features/time-format";
 import { EXPERIMENT } from "@repo/settings";
 import {
   Button,
@@ -36,7 +36,7 @@ import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/descript
 import { GLYPH } from "@repo/ui/icons";
 import { type MarkdownTaskBox, TaskBox, type TaskBoxItem } from "@repo/ui/markdown";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { diffArrays } from "diff";
 import {
   Fragment,
@@ -65,7 +65,7 @@ import {
 import { useCreator } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { useWorkspaceExperiment, useWorkspaceExperimentOnSince } from "../workspace-experiments.js";
 import {
   CommentsToggle,
   DescriptionCommentLayer,
@@ -252,6 +252,7 @@ function EditTime({
   onPreload,
   short = false,
   whole = false,
+  dated = false,
 }: {
   at: number;
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
@@ -262,10 +263,16 @@ function EditTime({
   short?: boolean;
   /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
   whole?: boolean;
+  /** Whether the time is said as its day, "Oct 3", rather than how long ago it was. */
+  dated?: boolean;
 }): React.JSX.Element {
   // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
   const now = useMinute();
-  const words = short ? sinceText(at, now, { year: false }) : agoText(at, now);
+  const words = dated
+    ? dateOfText(at, now)
+    : short
+      ? sinceText(at, now, { year: false })
+      : agoText(at, now);
   const time =
     onShow === undefined ? (
       <span>{words}</span>
@@ -316,7 +323,9 @@ function Ago({ at }: { at: number }): React.JSX.Element {
  * phrase wrapping whole. The creator hangs their card, and the edit's time
  * opens the description's version history where the window offers it. Who last
  * edited it is the task's ⋯ menu's to say, in its footer. A description nobody has
- * edited says only who created it.
+ * edited says only who created it. A description last saved before its
+ * workspace last turned Task descriptions on says "Not updated since Oct 3"
+ * in the edit's place, since the work while it was off may have passed it by.
  */
 function DescriptionByline({
   task,
@@ -326,8 +335,11 @@ function DescriptionByline({
   onShowHistory,
   onPreloadHistory,
   comments,
+  onSince,
 }: {
   task: Task;
+  /** When the task's workspace last turned Task descriptions on, while it stands on; none while it is off. */
+  onSince: number | undefined;
   /** The description's last edit, said after who created the task; none while nothing changed, or while Descriptions is off and there is no description to have edited. */
   edit: DescriptionLastEdit | undefined;
   place: EditPlace;
@@ -342,6 +354,9 @@ function DescriptionByline({
   const creator = useCreator(task, place.reader.readerId);
   const maker = useTaskMaker(task);
   const now = useMinute();
+  // Note that a description nobody edited since history began was last saved as the task last changed.
+  const saved = edit?.at ?? task.updatedAt;
+  const stale = onSince !== undefined && saved < onSince;
   return (
     <DocumentByline
       creator={creator}
@@ -349,7 +364,23 @@ function DescriptionByline({
       createdAt={task.createdAt}
       now={now}
       edited={
-        edit === undefined ? undefined : (
+        stale ? (
+          <>
+            {"Not updated since "}
+            <EditTime
+              at={saved}
+              label={editedLabel}
+              onShow={
+                edit === undefined || onShowHistory === undefined
+                  ? undefined
+                  : () => onShowHistory(undefined)
+              }
+              onPreload={onPreloadHistory}
+              whole
+              dated
+            />
+          </>
+        ) : edit === undefined ? undefined : (
           <>
             {"Edited "}
             <EditTime
@@ -1100,9 +1131,9 @@ export const DescriptionBody = memo(function DescriptionBody({
   shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
-  // While Descriptions is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  // While its workspace has Descriptions off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
+  const documented = useWorkspaceExperiment(task.workspaceId, EXPERIMENT.DESCRIPTIONS);
+  const onSince = useWorkspaceExperimentOnSince(task.workspaceId, EXPERIMENT.DESCRIPTIONS);
   const editable = edit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1462,6 +1493,7 @@ export const DescriptionBody = memo(function DescriptionBody({
           )}
           <DescriptionByline
             task={task}
+            onSince={documented ? onSince : undefined}
             edit={documented ? edited : undefined}
             place={place}
             saves={documented ? editing.saves : undefined}

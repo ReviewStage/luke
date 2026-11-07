@@ -1,15 +1,4 @@
-import {
-  type HostedAdminClient,
-  type HostedGitHubConnectionClient,
-  type HostedTaskClient,
-  type HostedWorkspaceClient,
-  type TaskCallResult,
-  type TaskWritten,
-  WORKSPACE_CALL_FAILURE,
-  type WorkspaceCallFailure,
-  type WorkspaceCallResult,
-} from "@repo/features";
-import { ADMIN_UNANSWERED } from "@repo/features/admin-wire";
+import type { HostedTaskClient, TaskCallResult, TaskWritten } from "@repo/features";
 import {
   type AgentBrowserTab,
   BROWSER_TABS_PLACE,
@@ -38,11 +27,6 @@ import {
 } from "@repo/features/page-wire";
 import { markedAs, readMarkOf } from "@repo/features/read-mark";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
-import type {
-  SlackBotChannel,
-  SlackListedChannel,
-  WorkspaceSlackBot,
-} from "@repo/features/slack-bot-wire";
 import { revisionsOfLiveRows, TASK_HISTORY_READ } from "@repo/features/task-history-live";
 import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import { AGENT_PAGES_READ, pagesOfLiveRows, TASK_PAGES_READ } from "@repo/features/task-pages-live";
@@ -64,7 +48,6 @@ import {
 } from "@repo/features/task-wire";
 import {
   type CodeLines,
-  GITHUB_DISCONNECT_FAILURE,
   HOST_LIVE,
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -90,17 +73,6 @@ import {
   type TasksStartAnswer,
   type TasksStartRequest,
   type TasksView,
-  type TasksWorkspaceAnswer,
-  type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceMemberRemoveParams,
-  type TasksWorkspaceMemberRoleParams,
-  type TasksWorkspaceMembersAnswer,
-  type TasksWorkspaceRenameParams,
-  type TasksWorkspaceSentryAnswer,
-  type TasksWorkspaceSlackBotAnswer,
-  type TasksWorkspaceSlugSetParams,
-  type TasksWorkspaceTokenRepositoriesAnswer,
-  type TasksWorkspaceTokenRepositorySetParams,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
   taskHistoryFollowSchema,
@@ -113,21 +85,7 @@ import {
   tasksRenameParamsSchema,
   tasksRepositoriesParamsSchema,
   tasksSetStandingParamsSchema,
-  tasksWorkspaceParamsSchema,
-  tasksWorkspaceTokenRepositoriesParamsSchema,
-  workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
-import { WORKSPACE_INTEGRATIONS_READ } from "@repo/features/workspace-integrations-live";
-import {
-  WORKSPACE_INVITATIONS_READ,
-  WORKSPACE_MEMBERS_READ,
-  WORKSPACES_READ,
-} from "@repo/features/workspace-live";
-import {
-  WORKSPACE_SLUG_PROBLEM,
-  type Workspace,
-  type WorkspaceMember,
-} from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
   type AnyWrite,
@@ -160,27 +118,23 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { slackNotificationsWritten } from "./account-preferences-follow.js";
-import {
-  ALREADY_INVITED_REFUSAL,
-  GITHUB_LAST_SIGN_IN_REFUSAL,
-  WORKSPACE_NOT_PERMITTED_REFUSAL,
-  WORKSPACE_SLUG_REFUSAL,
-} from "./acts.js";
 import {
   type AppLinkStanding,
   type AppLinkStandings,
   type AppRepositoryLists,
-  type AppTokenRepositories,
-  type AppWorkspacePhotos,
   EVERY_WORKSPACE,
   NO_BROWSER_TABS,
   NO_KEYS_HELD,
   NO_PAGES,
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
+import type {
+  OpenTaskLeaving,
+  TasksForWorkspaces,
+  WorkspacesTasksAct,
+} from "./compose-workspaces.js";
 import type { Composer } from "./composer.js";
-import type { TASKS_ACTS, WORKSPACE_ACTS } from "./contract/index.js";
+import type { TASKS_ACTS } from "./contract/index.js";
 import {
   type CommentSubjectKey,
   commentSubjectOf,
@@ -188,11 +142,12 @@ import {
 } from "./description-comment-reads.js";
 import { descriptionCommentWrites } from "./description-comment-writes.js";
 import { descriptionDocumentReads } from "./description-document-reads.js";
+import { lateService } from "./effect/kernel.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
-import { ActRefused, type HostActTable } from "./host-acts.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   DescriptionPictureKey,
@@ -202,7 +157,7 @@ import {
   PageVersionKey,
 } from "./kept-content.js";
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
-import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
+import { confirmWrite, FOLLOW_BACKOFF, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { PullRequestListing } from "./pull-request-parts.js";
 import { type OfflineRefused, TASK_QUEUED_WRITE, untaken } from "./queued-writes.js";
@@ -210,29 +165,8 @@ import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
-import { type TokenRepositoryWrites, tokenRepositoryWrites } from "./token-repository-writes.js";
 import type { WindowFocus } from "./window-focus.js";
-import {
-  heldWorkspaceIntegrations,
-  sentryDisconnect,
-  slackBotAnswered,
-  slackBotChannel,
-  slackBotDisconnect,
-  slackBotRepository,
-} from "./workspace-integrations-follow.js";
-import { workspaceInvitationsReads } from "./workspace-invitations-read.js";
-import {
-  type MemberMoved,
-  type MemberWritten,
-  workspaceMembersReads,
-} from "./workspace-members-read.js";
-import {
-  type AskedOver,
-  type WorkspaceWritten,
-  workspaceRows,
-  workspaceWrite,
-} from "./workspace-rows.js";
-import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
+import { followSidebarRows } from "./workspaces-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and the descriptions the windows opened.
@@ -259,34 +193,13 @@ import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
  * process's memory by its version (`kept-content.ts`), never in the view, as
  * a description's pictures and a file read at a commit are.
  *
- * The workspaces the account is a member of are carried on the view beside
- * the tasks and followed apart from them over Neon Realtime, so the tasks
- * never wait on them: from the account gate opening, at a launch or a
- * sign-in, until a sign-out, each change drawn as it lands, a teammate's and the
- * browser's among them. Whether the account's GitHub is connected is read
- * once beside them, and again when the panel comes forward, at most once a
- * minute, since it is measured against the clock and cannot be followed. A
- * workspace made, renamed, or given a photo, a GitHub
- * organization connected or disconnected, a removal of a member, a
- * member's role changed, a handover, and a leave are carried to the
- * service on the developer's word, and a workspace's members and a
- * connection's install address are answered to the caller that asked and
- * held nowhere here.
+ * The workspaces the account is a member of, and whether its GitHub is
+ * connected, are carried on the view beside the tasks, drawn there by the
+ * workspaces' own concern (`compose-workspaces.ts`).
  */
 
 /** A task's pin and where it stands as the list carries them, each only where it stands. */
 type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition">;
-
-/**
- * How long a read of whether the account's GitHub is connected stands
- * before a refresh or the panel coming forward reads it again. Note that a
- * connection made in the browser reaches this Mac only on a read, and a
- * panel brought forward over and over is not a reason to read each time.
- */
-const GITHUB_READ_EVERY = Duration.minutes(1);
-
-/** A GitHub page asked behind a closed gate, or of a service that did not answer, which opens nothing. */
-const GITHUB_PAGE_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
 /**
  * How long the answer to a link's read of one pull request or issue is kept
@@ -311,13 +224,6 @@ class LinkReadKey extends Data.Class<{
   readonly repository: string;
   readonly number: number;
 }> {}
-
-/** Whether a live read's seal failed, rather than answered. */
-function isFailed<Answer>(
-  sealed: Answer | { readonly failure: string },
-): sealed is { readonly failure: string } {
-  return typeof sealed === "object" && sealed !== null && "failure" in sealed;
-}
 
 /** The key a link's read is kept under, of the place and number it asked. */
 function linkReadKey(asked: {
@@ -404,47 +310,6 @@ function browserTabsPlaceOf(owner: BrowserTabsOwnerKey): BrowserTabsPlace {
   return owner.kind === BROWSER_TABS_PLACE.TASK ? { taskId: owner.id } : { agentId: owner.id };
 }
 
-/** A workspace call behind a closed gate, which never reaches the service. */
-const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
-
-/** The sentence a workspace act is refused in for a failure that says why, each other failure refused in the act's own. */
-const WORKSPACE_REFUSAL: Partial<Record<WorkspaceCallFailure, string>> = {
-  [WORKSPACE_CALL_FAILURE.NOT_PERMITTED]: WORKSPACE_NOT_PERMITTED_REFUSAL,
-  [WORKSPACE_CALL_FAILURE.ALREADY_INVITED]: ALREADY_INVITED_REFUSAL,
-  [WORKSPACE_CALL_FAILURE.SLUG_MALFORMED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.MALFORMED],
-  [WORKSPACE_CALL_FAILURE.SLUG_RESERVED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.RESERVED],
-  [WORKSPACE_CALL_FAILURE.SLUG_TAKEN]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN],
-};
-
-/** A workspace act refused for `failure`: in words that say why where the failure says it, and in the act's own sentence otherwise. */
-function workspaceRefused(failure: WorkspaceCallFailure): Effect.Effect<never, ActRefused> {
-  const sentence = WORKSPACE_REFUSAL[failure];
-  return Effect.fail(new ActRefused(sentence === undefined ? {} : { sentence }));
-}
-
-/**
- * A workspace answer as its act answers the panel: the value under `field`,
- * or refused for the failure it carries (`workspaceRefused`), as the act
- * port refused it before the act was declared.
- */
-function workspaceAnswered<const Field extends string>(field: Field) {
-  return <Value>(
-    answer: { readonly [Key in Field]: Value } | { readonly failure: WorkspaceCallFailure },
-  ): Effect.Effect<Value, ActRefused> =>
-    // SAFETY: an answer that carries no failure is the value under `field`, by its type.
-    "failure" in answer
-      ? workspaceRefused(answer.failure)
-      : Effect.succeed((answer as { readonly [Key in Field]: Value })[field]);
-}
-
-/** A channel of a workspace's Slack team as the held list keeps it, with no repository, which is the workspace's held integrations'. */
-function listedChannel({
-  repository: _repository,
-  ...channel
-}: SlackBotChannel): SlackListedChannel {
-  return channel;
-}
-
 /** The description a task starts on, empty, as the service makes it. */
 const EMPTY_DESCRIPTION = { body: "", assumptions: [] } as const satisfies Task["document"];
 
@@ -491,7 +356,7 @@ function unsealed(sealed: unknown): sealed is { readonly failure: string } {
   return typeof sealed === "object" && sealed !== null && "failure" in sealed;
 }
 
-/** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
+/** The service's side of the tasks as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
   | "open"
@@ -529,43 +394,7 @@ export type TasksClient = Pick<
   | "setStanding"
   | "move"
   | "edit"
-> & {
-  /** The account's workspaces, the ones it may join, and their members. */
-  workspaces: Pick<
-    HostedWorkspaceClient,
-    | "liveRead"
-    | "create"
-    | "rename"
-    | "setSlug"
-    | "setPhoto"
-    | "githubConnect"
-    | "githubDisconnect"
-    | "sentryInstall"
-    | "sentryDisconnect"
-    | "slackBot"
-    | "slackBotConnect"
-    | "slackBotDisconnect"
-    | "slackBotNotifications"
-    | "slackBotRepository"
-    | "slackBotChannel"
-    | "photo"
-    | "removeMember"
-    | "tokenRepositories"
-    | "setTokenRepository"
-    | "environment"
-    | "putVariable"
-    | "deleteVariable"
-    | "changeRole"
-    | "transfer"
-    | "leave"
-    | "invite"
-    | "cancelInvitation"
-  >;
-  /** Whether the account has GitHub connected, and the pages that connect and disconnect it. */
-  github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
-  /** The admin dashboard's reads and its star, under the account's session; the service's gate decides each. */
-  admin: Pick<HostedAdminClient, "read" | "favorite">;
-};
+>;
 
 export interface TasksDependencies {
   kernel: Pick<HostKernel, "emit" | "now" | "createId"> & {
@@ -587,20 +416,28 @@ export interface TasksDependencies {
   offlineRefused: Pick<OfflineRefused, "clear">;
   /** The member signed in, by id and name, whose comment a write draws before the service answers; none where nobody is. */
   member: () => { readonly userId: string; readonly name: string } | undefined;
-  /** GitHub's standing as an integration asked again, as a GitHub disconnect that answered asks; done once each ask has landed (`compose-integrations.ts`). */
-  githubMoved: Effect.Effect<void>;
+}
+
+/** What the tasks reach of a concern built after them, linked once it is (`compose-host.ts`). */
+export interface TasksLinks {
+  /** The workspaces followed where nothing follows them, and GitHub's connection read where stale, as the list's Try again asks (`WorkspacesComposer.refreshed`). */
+  workspacesRefreshed: Effect.Effect<void>;
 }
 
 export interface TasksComposer extends Composer {
-  /** The Tasks tab's plain asks and the workspaces' plain acts, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof TASKS_ACTS> & HostActTable<typeof WORKSPACE_ACTS>;
+  /** The Tasks tab's plain asks, answered directly as the panel's port asks them, but GitHub's connection's and the admin dashboard's (`compose-workspaces.ts`). */
+  readonly acts: Omit<HostActTable<typeof TASKS_ACTS>, WorkspacesTasksAct>;
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
+  /** Links what the tasks reach of a concern built after them; the first link stands. */
+  link: (links: TasksLinks) => Effect.Effect<void>;
+  /** The view's workspaces and GitHub's connection, which the workspaces' concern draws, and what a workspace's move asks of the tasks. */
+  workspaces: TasksForWorkspaces;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
   /**
-   * Follows the account's task list, workspaces, and sidebar, and every read
-   * a window holds anew, as the account gate opening asks, so the list loads
+   * Follows the account's task list and sidebar, and every read a window
+   * holds anew, as the account gate opening asks, so the list loads
    * with no window asking and a hold taken while nobody was signed in reads now.
    */
   open: Effect.Effect<void>;
@@ -929,6 +766,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * numbers instead (`description-document-reads.ts`).
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
+  const late = yield* lateService<TasksLinks>();
 
   let view: TasksView = idleView();
   let published: TasksView = view;
@@ -960,6 +798,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const { activeTaskId: _closed, ...rest } = view;
     view = rest;
     publish();
+  }
+
+  /** The task open as a workspace's leave is asked, and its close, which leaves it only while it is still the one open. */
+  function openTaskLeaving(): OpenTaskLeaving {
+    const openTaskId = view.activeTaskId;
+    return {
+      workspaceId: view.tasks.find((task) => task.id === openTaskId)?.workspaceId,
+      close: serial(
+        Effect.sync(() => {
+          if (view.activeTaskId === openTaskId) closeActive();
+        }),
+      ),
+    };
   }
 
   const decodeHistory = Schema.decodeUnknownOption(TASK_HISTORY_READ.rows);
@@ -1354,513 +1205,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     yield* FiberHandle.run(listFollow, followList);
   });
 
-  /** The one follow of the account's workspaces, from the account gate opening, at a launch or a sign-in, until a sign-out. */
-  const workspacesFollow = yield* FiberHandle.make<void>();
-
-  /**
-   * Each listed workspace's photo, by the workspace, told on the app state
-   * every window draws its tiles from (`LIVE_READ.WORKSPACE_PHOTOS`): its
-   * bytes as a `data:` URL under the version the workspaces carry, fetched
-   * once per version as the version the view lists moves, a newer version's
-   * fetch taking the place of one still out, and let go where a workspace
-   * lists another version, none, or leaves the list. A fetch that did not
-   * land is asked again as the workspaces next move.
-   */
-  let photos: AppWorkspacePhotos = NO_KEYS_HELD;
-  /** Each workspace's photo fetch out, by the workspace. */
-  const photoFetches = yield* FiberMap.make<string>();
-  /** The version each photo fetch out asks for, by the workspace. */
-  const photosAsked = new Map<string, string>();
-  const tellPhotos = (next: AppWorkspacePhotos) => {
-    photos = next;
-    kernel.emit(GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED, carried(photos));
-  };
-  /** `workspaceId`'s photo at `version` fetched and laid; nothing is laid where it did not land. */
-  const photoFetched = (workspaceId: string, version: string) =>
-    Effect.gen(function* () {
-      const photo = yield* served(client.workspaces.photo(workspaceId));
-      if (photosAsked.get(workspaceId) === version) photosAsked.delete(workspaceId);
-      if (!photo.ok) return;
-      const url = `data:${photo.answer.contentType};base64,${photo.answer.base64}`;
-      tellPhotos({ ...photos, [workspaceId]: { rows: { version, url } } });
-    });
-  /** The photos of the workspaces the view lists now: each version neither held nor asked for fetched, and each no workspace lists at its version let go. */
-  const photosListed = Effect.suspend(() => {
-    if (!gate()) return Effect.void;
-    const listed = new Map<string, string>();
-    for (const each of view.workspaces) {
-      if (each.photoVersion !== undefined) listed.set(each.id, each.photoVersion);
-    }
-    const held = Object.entries(photos).filter(
-      ([workspaceId, read]) => listed.get(workspaceId) === read.rows?.version,
-    );
-    if (held.length !== Object.keys(photos).length) tellPhotos(Object.fromEntries(held));
-    return Effect.gen(function* () {
-      for (const workspaceId of [...photosAsked.keys()]) {
-        if (listed.has(workspaceId)) continue;
-        photosAsked.delete(workspaceId);
-        yield* FiberMap.remove(photoFetches, workspaceId);
-      }
-      for (const [workspaceId, version] of listed) {
-        if (photos[workspaceId]?.rows?.version === version) continue;
-        if (photosAsked.get(workspaceId) === version) continue;
-        photosAsked.set(workspaceId, version);
-        yield* FiberMap.run(photoFetches, workspaceId, photoFetched(workspaceId, version));
-      }
-    });
-  });
-
-  /**
-   * The account's workspaces in the sync engine's pool
-   * (`workspace-rows.ts`), drawn on the view with every write standing over
-   * them, from a launch or a sign-in until a sign-out closes their scope, so
-   * a rename still out for the account signed out draws on nothing the next
-   * account sees.
-   */
-  const openWorkspaces = Effect.gen(function* () {
-    const scope = yield* Scope.make();
-    const rows = yield* Scope.provide(scope)(
-      workspaceRows({
-        pool: dependencies.pool,
-        draw: (workspaces) =>
-          Effect.andThen(
-            Effect.sync(() => write({ workspaces })),
-            photosListed,
-          ),
-      }),
-    );
-    return { scope, rows };
-  });
-  let workspaceList = yield* openWorkspaces;
-  yield* Effect.addFinalizer(() => Scope.close(workspaceList.scope, Exit.void));
-
-  /**
-   * Follows the account's workspaces over Realtime where nothing follows
-   * them yet (`workspaces-follow.ts`), polled while Realtime fails them, and
-   * draws each change as it lands, a teammate's and the browser's among
-   * them. Note that there is no other read of them: a seal the service did
-   * not answer, or a follow that stopped, is sealed again on
-   * `FOLLOW_BACKOFF` while the gate stands open, and what was drawn stays meanwhile.
-   * Every account holds its own workspace, which this read makes where none
-   * stands, so a list of none is a failed read: said as failed, so each
-   * surface shows its failure and reports it, and sealed again on the backoff.
-   */
-  const followWorkspaces = Effect.gen(function* () {
-    // Note that a list that answered none is sealed again at once on Retry, rather than after the backoff.
-    const failed = view.workspacesStatus === TASKS_READ.FAILED;
-    if (view.workspacesStatus !== TASKS_READ.READY) {
-      write({ workspacesStatus: TASKS_READ.READING });
-    }
-    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-    const userId = dependencies.accountId();
-    const seal = (poll: boolean, after?: string) =>
-      userId === undefined
-        ? Effect.succeed(LIVE_SIGNED_OUT)
-        : served(
-            client.workspaces.liveRead(WORKSPACES_READ, { userId }, poll ? { after } : undefined),
-          );
-    /** One seal followed until it stops, which fails it so the backoff seals it again. */
-    const attempt = Effect.gen(function* () {
-      const sealed = yield* seal(false);
-      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
-      const moves = workspacesMoves({ poll: (after) => seal(true, after) }, sealed);
-      // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
-      const gone = yield* Stream.runForEach(moves, (workspaces) =>
-        Effect.gen(function* () {
-          // Note that a list of none is said before anything is drawn or let go, so the last good list and its kept content stay.
-          if (workspaces.length === 0) {
-            write({ workspacesStatus: TASKS_READ.FAILED });
-            return yield* new LiveBroken({ reason: "the account holds no workspace" });
-          }
-          const drawn = new Set(view.workspaces.map((each) => each.id));
-          const installed = new Map(
-            view.workspaces.map((each) => [
-              each.id,
-              JSON.stringify(each.githubInstallations ?? []),
-            ]),
-          );
-          // Note that a workspace whose GitHub installations moved reaches other repositories now, so its list is asked again.
-          const reinstalled = new Set(
-            workspaces
-              .filter((each) => {
-                const was = installed.get(each.id);
-                return was !== undefined && was !== JSON.stringify(each.githubInstallations ?? []);
-              })
-              .map((each) => each.id),
-          );
-          const listed = new Set(workspaces.map((each) => each.id));
-          // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
-          if ([...drawn].some((id) => !listed.has(id))) yield* kept.clear;
-          yield* workspaceList.rows.answer(workspaces);
-          if (view.workspacesStatus !== TASKS_READ.READY) {
-            write({ workspacesStatus: TASKS_READ.READY });
-          }
-          yield* dependencies.entities()?.keep(KEPT_READ.WORKSPACES, workspaces) ?? Effect.void;
-          if (reinstalled.size > 0) yield* repositoriesMovedIn(reinstalled);
-        }),
-      ).pipe(
-        Effect.as(false),
-        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
-      );
-      return yield* Effect.fail(gone ? LIVE_SIGNED_OUT.failure : WORKSPACE_CALL_FAILURE.UNANSWERED);
-    });
-    // A session that is no longer the account's is signed out, which no seal mends.
-    const followed = attempt.pipe(
-      Effect.retry({
-        schedule: FOLLOW_BACKOFF,
-        while: (why) => why !== LIVE_SIGNED_OUT.failure && gate(),
-      }),
-      Effect.ignore,
-    );
-    yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: !failed });
-  });
-
-  /**
-   * One workspace's read sealed for following, or polled past `after`, for
-   * the account the follow starts for, which every seal names, so one under
-   * another's session is refused as signed out. A workspace the account no
-   * longer reaches as the read asks is `gone`, and followed no longer, until
-   * every window lets it go and one holds it anew.
-   */
-  function workspaceSeal<Answer>(
-    seal: (
-      userId: string,
-      poll: boolean,
-      after: string | undefined,
-    ) => Effect.Effect<Answer | { readonly failure: string }, never, HttpClient.HttpClient>,
-  ): (
-    poll: boolean,
-    after?: string,
-  ) => Effect.Effect<Answer | { readonly failure: string; readonly gone: boolean }> {
-    const userId = dependencies.accountId();
-    return (poll, after) =>
-      gate() && userId !== undefined
-        ? Effect.map(served(seal(userId, poll, after)), (sealed) => {
-            if (!isFailed(sealed)) return sealed;
-            return {
-              failure: sealed.failure,
-              gone:
-                sealed.failure === LIVE_SIGNED_OUT.failure ||
-                sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
-                sealed.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-            };
-          })
-        : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true });
-  }
-
-  /**
-   * Each workspace's people the windows draw, and the few drawn latest, told
-   * on the app state every window draws (`LIVE_READ.WORKSPACE_MEMBERS`):
-   * followed from the first window's hold, so a surface drawn again draws
-   * them from where they stand, in the sync engine's pool, where a member
-   * write is drawn over them until the read carries it
-   * (`workspace-members-read.ts`). A workspace the account no longer
-   * reaches is followed no longer, until every window lets it go and one
-   * holds it anew.
-   */
-  const membersReads = yield* workspaceMembersReads({
-    gate,
-    seal: (workspaceId) =>
-      workspaceSeal((userId, poll, after) =>
-        client.workspaces.liveRead(
-          WORKSPACE_MEMBERS_READ,
-          { userId, workspaceId },
-          poll ? { after } : undefined,
-        ),
-      ),
-    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
-    pool: dependencies.pool,
-    entities: dependencies.entities,
-  });
-  /** The windows' hold on each workspace's people, one fiber standing until let go. */
-  const memberHolds = yield* FiberMap.make<string>();
-
-  /**
-   * Each workspace's token repositories the windows draw, told on the app
-   * state every window draws (`LIVE_READ.TOKEN_REPOSITORIES`): asked of the
-   * service as a window first holds them, again as a window comes forward
-   * and on Try again, and laid from each addition's or removal's own
-   * answer, since nothing wakes them as a live read is woken.
-   */
-  /** The token repositories as the fetch last told them, which every addition or removal standing is drawn over as they are told. */
-  let tokenRepositoriesFetched: AppTokenRepositories = NO_KEYS_HELD;
-  const tellTokenRepositories = (): void =>
-    kernel.emit(
-      GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
-      carried(tokenRepositoryWritten.drawn(tokenRepositoriesFetched)),
-    );
-  const tokenRepositories = yield* heldFetch<typeof LIVE_READ.TOKEN_REPOSITORIES, string>({
-    empty: NO_KEYS_HELD,
-    path: (workspaceId) => [workspaceId],
-    gate,
-    focus: dependencies.focus,
-    fetch: (workspaceId) =>
-      Effect.map(served(client.workspaces.tokenRepositories(workspaceId)), (listed) =>
-        listed.ok ? Option.some(listed.answer) : Option.none(),
-      ),
-    tell: (held: AppTokenRepositories) => {
-      tokenRepositoriesFetched = held;
-      tellTokenRepositories();
-    },
-  });
-  /** The windows' hold on each workspace's token repositories, one fiber standing until let go. */
-  const tokenRepositoryHolds = yield* FiberMap.make<string>();
-  /**
-   * Each token repository added or removed, drawn over its workspace's
-   * list at once and kept until the service answers the list
-   * (`token-repository-writes.ts`).
-   */
-  const tokenRepositoryWritten: TokenRepositoryWrites = yield* tokenRepositoryWrites({
-    pool: dependencies.pool,
-    fetched: () => tokenRepositoriesFetched,
-    tell: Effect.sync(() => tellTokenRepositories()),
-    // Note that the workspace reaches other repositories once the service took the change, so its lists are woken with the answer, and only for the session it was asked in.
-    answered: (workspaceId, repositories) =>
-      Effect.andThen(
-        tokenRepositories.answered(workspaceId, repositories),
-        repositoriesMovedIn(new Set([workspaceId])),
-      ),
-  });
-  /** A token repository added or removed, sent where the gate stands open. */
-  const tokenRepositorySet = tokenRepositoryWritten.set<TasksWorkspaceTokenRepositoriesAnswer>(
-    ({ workspaceId, repository, added }) =>
-      gate()
-        ? Effect.gen(function* () {
-            const changed = yield* served(
-              client.workspaces.setTokenRepository(workspaceId, repository, added),
-            );
-            if (!changed.ok) {
-              return {
-                refused: {
-                  failure: changed.failure,
-                },
-              };
-            }
-            return {
-              answer: {
-                repositories: changed.answer,
-              },
-              repositories: changed.answer,
-            };
-          })
-        : Effect.succeed({
-            refused: WORKSPACE_UNANSWERED,
-          }),
-    WORKSPACE_UNANSWERED,
-  );
-
-  /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
-  const slackBotOf = (
-    answer: WorkspaceCallResult<WorkspaceSlackBot>,
-  ): TasksWorkspaceSlackBotAnswer =>
-    answer.ok ? { slackBot: answer.answer } : { failure: answer.failure };
-
-  /**
-   * The channels of each workspace's Slack team an owner's or an admin's
-   * window lists, and the few listed latest, as Slack last listed them,
-   * told on the app state every window draws (`LIVE_READ.SLACK_CHANNELS`).
-   * They are Slack's own, which no row carries, so the host asks for them
-   * (`held-fetch.ts`): as a window holds them, as one comes forward, as the
-   * workspace's bot is connected or disconnected, and on Try again; a
-   * channel write lays the channels its answer carries. Each channel's
-   * repository is the workspace's held integrations', so none is kept here,
-   * and an ask that did not land keeps the channels last listed.
-   */
-  const slackChannels = yield* heldFetch<typeof LIVE_READ.SLACK_CHANNELS, string>({
-    empty: NO_KEYS_HELD,
-    path: (workspaceId) => [workspaceId],
-    gate,
-    focus: dependencies.focus,
-    fetch: (workspaceId) =>
-      gate()
-        ? Effect.map(served(client.workspaces.slackBot(workspaceId)), (read) => {
-            if (!read.ok) return Option.none();
-            // Note that a bot not connected is in no channel, and one whose channels Slack did not list keeps those it last listed.
-            if (read.answer.team === undefined) return Option.some([]);
-            return Option.fromNullishOr(read.answer.channels).pipe(
-              Option.map((channels) => channels.map(listedChannel)),
-            );
-          })
-        : Effect.succeed(Option.none()),
-    tell: (held) => kernel.emit(GATEWAY_EVENT.SLACK_CHANNELS_CHANGED, carried(held)),
-  });
-  /** The windows' hold on each workspace's Slack channels, one fiber standing until let go. */
-  const channelHolds = yield* FiberMap.make<string>();
-
-  /**
-   * Each workspace's own integrations the windows draw, and the few drawn
-   * latest, its Sentry installations and its Slack bot, told on the app state
-   * every window draws (`LIVE_READ.WORKSPACE_INTEGRATIONS`): followed from
-   * the first window's hold into the sync engine's pool, every write to them
-   * drawn there the moment it is asked (`workspace-integrations-follow.ts`).
-   * A workspace the account no longer reaches is followed no longer, until
-   * every window lets it go and one holds it anew.
-   */
-  const integrations = yield* heldWorkspaceIntegrations({
-    seal: (workspaceId, userId, poll, after) =>
-      gate()
-        ? Effect.map(
-            served(
-              client.workspaces.liveRead(
-                WORKSPACE_INTEGRATIONS_READ,
-                { userId, workspaceId },
-                poll ? { after } : undefined,
-              ),
-            ),
-            (sealed) => {
-              if (!isFailed(sealed)) return sealed;
-              return {
-                failure: sealed.failure,
-                gone:
-                  sealed.failure === LIVE_SIGNED_OUT.failure ||
-                  sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND,
-              };
-            },
-          )
-        : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
-    accountId: dependencies.accountId,
-    gate,
-    pool: dependencies.pool,
-    slackMoved: (workspaceId) => slackChannels.wake((held) => held === workspaceId),
-    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED, carried(held)),
-  });
-  /** The windows' hold on each workspace's integrations, one fiber standing until let go. */
-  const integrationHolds = yield* FiberMap.make<string>();
-
-  /** What a member write's answer says of each of `userIds`: the role it answers them with, or gone where it names them no more. */
-  function membersMoved(
-    answered: readonly WorkspaceMember[],
-    userIds: readonly (string | undefined)[],
-  ): MemberMoved[] {
-    return userIds.flatMap((userId) => {
-      if (userId === undefined) return [];
-      const member = answered.find((each) => each.userId === userId);
-      return [member === undefined ? { userId, gone: true } : { userId, role: member.role }];
-    });
-  }
-
-  /**
-   * Each workspace's pending invitations an owner's or an admin's windows
-   * draw, and the few drawn latest, told on the app state every window draws
-   * (`LIVE_READ.WORKSPACE_INVITATIONS`): followed from the first window's
-   * hold, built again as each expires, in the sync engine's pool, where a
-   * cancel, and an invite's answer, is drawn over them until the read
-   * carries it (`workspace-invitations-read.ts`). A workspace the account
-   * no longer owns or administers is followed no longer, as one it left is,
-   * until every window lets it go and one holds it anew.
-   */
-  const invitationsReads = yield* workspaceInvitationsReads({
-    gate,
-    seal: (workspaceId) =>
-      workspaceSeal((userId, poll, after) =>
-        client.workspaces.liveRead(
-          WORKSPACE_INVITATIONS_READ,
-          { userId, workspaceId },
-          poll ? { after } : undefined,
-        ),
-      ),
-    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
-    pool: dependencies.pool,
-    entities: dependencies.entities,
-  });
-  /** The windows' hold on each workspace's invitations, one fiber standing until let go. */
-  const invitationHolds = yield* FiberMap.make<string>();
-
-  /**
-   * A member write's call carried to the service where the gate stands open:
-   * the members it answers, and what it says of each of `userIds`, or why it
-   * refused.
-   */
-  function memberWritten(
-    call: Effect.Effect<
-      WorkspaceCallResult<readonly WorkspaceMember[]>,
-      never,
-      HttpClient.HttpClient
-    >,
-    userIds: readonly string[],
-  ): Effect.Effect<MemberWritten<TasksWorkspaceMembersAnswer>> {
-    if (!gate()) {
-      return Effect.succeed({
-        refused: WORKSPACE_UNANSWERED,
-      });
-    }
-    return Effect.map(workspaceCall(call), (written) =>
-      written.ok
-        ? {
-            answer: { members: written.answer },
-            moved: membersMoved(written.answer, userIds),
-          }
-        : { refused: { failure: written.failure } },
-    );
-  }
-
-  /** A member's role changed, drawn on their row at once, kept until the people's read carries it. */
-  const memberRoleChanged = membersReads.write<
-    TasksWorkspaceMemberRoleParams,
-    TasksWorkspaceMembersAnswer
-  >({
-    workspaceId: ({ workspaceId }) => workspaceId,
-    moves: ({ userId, role }) => [{ userId, role }],
-    send: ({ workspaceId, userId, role }) =>
-      memberWritten(client.workspaces.changeRole(workspaceId, userId, role), [userId]),
-  });
-
-  /** A member removed, drawn gone at once, kept until the people's read no longer carries them. */
-  const memberRemoved = membersReads.write<
-    TasksWorkspaceMemberRemoveParams,
-    TasksWorkspaceMembersAnswer
-  >({
-    workspaceId: ({ workspaceId }) => workspaceId,
-    moves: ({ userId }) => [{ userId, gone: true }],
-    send: ({ workspaceId, userId }) =>
-      memberWritten(client.workspaces.removeMember(workspaceId, userId), [userId]),
-  });
-
-  /**
-   * An invitation canceled, drawn gone at once, kept until the invitations'
-   * read no longer carries it. Note that the list it answers is never laid
-   * whole, since the read alone says what stands.
-   */
-  const invitationCanceled = invitationsReads.cancel<TasksWorkspaceInvitationsAnswer>(
-    ({ workspaceId, invitationId }) =>
-      gate()
-        ? Effect.map(
-            served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
-            (pending) =>
-              pending.ok
-                ? {
-                    answer: { invitations: pending.answer },
-                  }
-                : { refused: { failure: pending.failure } },
-          )
-        : Effect.succeed({ refused: WORKSPACE_UNANSWERED }),
-  );
-
-  /**
-   * When whether GitHub is connected was last asked, none since a sign-out;
-   * and the latest read started, which a sign-out and a disconnection also
-   * move past, so a read that answers after either is dropped.
-   */
-  let githubAskedAt: number | undefined;
-  let githubRead = 0;
-
-  /** Reads whether the account's GitHub is connected; a failed read keeps what it last read. */
-  const readGithub = Effect.gen(function* () {
-    githubRead += 1;
-    const read = githubRead;
-    githubAskedAt = yield* Clock.currentTimeMillis;
-    const status = yield* served(client.github.status());
-    if (read === githubRead && !("failure" in status)) write({ github: status });
-  });
-
-  /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
-  const readGithubWhenStale = Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const fresh =
-      githubAskedAt !== undefined && now - githubAskedAt < Duration.toMillis(GITHUB_READ_EVERY);
-    if (!fresh) yield* readGithub;
-  });
-
   /** The one follow of the account's sidebar sections and pinned repositories, from the account gate opening, at a launch or a sign-in, until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
   /** The sidebar follow's wait for a write's transaction once Sync woke it; none while it polls or is let go. */
@@ -1952,7 +1296,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * The account's lists as the entity store kept them, drawn as the service
    * last answered them before any follow does, each only where nothing has
    * answered it since: the task list, which its next follow reads past the
-   * sync id it was kept at, the sidebar, and the workspaces.
+   * sync id it was kept at, and the sidebar.
    */
   const drawnFromDisk = Effect.gen(function* () {
     const entities = dependencies.entities();
@@ -1968,32 +1312,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (sidebarRows !== undefined && !sidebarAnswered) {
       yield* sidebar.collections.answer(sidebarRows);
     }
-    const workspaces = entities.stored(KEPT_READ.WORKSPACES);
-    // Note that a list of none, as a build before #6753 could keep, is no list: the follow's first answer draws one.
-    if (
-      workspaces !== undefined &&
-      workspaces.length > 0 &&
-      view.workspacesStatus !== TASKS_READ.READY
-    ) {
-      yield* workspaceList.rows.answer(workspaces);
-      write({ workspacesStatus: TASKS_READ.READY });
-    }
   });
 
   /**
-   * Follows the account's task list, workspaces, and sidebar where nothing
-   * follows each yet, the list saying it is reading until its first answer
-   * lands.
+   * Follows the account's task list and sidebar where nothing follows each
+   * yet, the list saying it is reading until its first answer lands.
    */
   const followAccount = Effect.gen(function* () {
     if (view.listStatus === TASKS_READ.IDLE) write({ listStatus: TASKS_READ.READING });
     yield* FiberHandle.run(listFollow, followList, { onlyIfMissing: true });
-    yield* followWorkspaces;
     yield* followSidebar;
   });
-
-  /** The read of GitHub's connection the gate opening starts beside the follows, so a sign-in waits on none of it. */
-  const githubOpened = yield* FiberHandle.make<void>();
 
   /**
    * `task` given everything its row of the list now reads, its name,
@@ -2265,74 +1594,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       held === undefined ? undefined : withMarksOf(held, task),
     );
   }
-
-  /**
-   * One workspace call. The workspaces it moved arrive over the follow, and
-   * the tasks a leave takes out of the list move with the followed list.
-   */
-  function workspaceCall<Answer>(
-    call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceCallResult<Answer>> {
-    return served(call);
-  }
-
-  /** A workspace call asked where the gate stands open, answering its answer or refused for why not (`workspaceRefused`). */
-  function workspaceAsked<Answer>(
-    call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer, ActRefused> {
-    return Effect.gen(function* () {
-      if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-      const asked = yield* workspaceCall(call);
-      if (!asked.ok) return yield* workspaceRefused(asked.failure);
-      return asked.answer;
-    });
-  }
-
-  /**
-   * A workspace write's call carried to the service where the gate stands
-   * open: the workspace as it then stands, or why it refused.
-   */
-  function workspaceWritten(
-    call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceWritten<TasksWorkspaceAnswer>> {
-    if (!gate()) {
-      return Effect.succeed({ refused: WORKSPACE_UNANSWERED });
-    }
-    return Effect.map(served(call), (written) =>
-      written.ok
-        ? {
-            answer: { workspace: written.answer },
-            workspace: written.answer,
-          }
-        : { refused: { failure: written.failure } },
-    );
-  }
-
-  /** A workspace renamed, its name drawn at once and kept until the follow moves it. */
-  const workspaceRenamed = workspaceWrite<
-    TasksWorkspaceRenameParams & AskedOver,
-    TasksWorkspaceAnswer
-  >({
-    workspaceId: ({ workspaceId }) => workspaceId,
-    change:
-      ({ name }) =>
-      (row) => ({ ...row, name }),
-    send: ({ workspaceId, name }) => workspaceWritten(client.workspaces.rename(workspaceId, name)),
-    unsent: WORKSPACE_UNANSWERED,
-  });
-
-  /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
-  const workspaceSlugSet = workspaceWrite<
-    TasksWorkspaceSlugSetParams & AskedOver,
-    TasksWorkspaceAnswer
-  >({
-    workspaceId: ({ workspaceId }) => workspaceId,
-    change:
-      ({ slug }) =>
-      (row) => ({ ...row, slug }),
-    send: ({ workspaceId, slug }) => workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
-    unsent: WORKSPACE_UNANSWERED,
-  });
 
   /**
    * A task renamed, its name drawn on its row at once and kept once the list
@@ -2784,229 +2045,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     };
   }
 
-  /** The workspaces' plain acts, each answering what the panel reads or refused as `workspaceAnswered` words it. */
-  const workspaceActs: HostActTable<typeof WORKSPACE_ACTS> = {
-    WORKSPACE_CREATE: ({ name }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const made = yield* workspaceCall(client.workspaces.create(name));
-        return yield* workspaceAnswered("workspace")(
-          made.ok ? { workspace: made.answer } : { failure: made.failure },
-        );
-      }),
-    // A rename moves no task: its name is drawn at once, and the follow
-    // carries the same name a moment later.
-    WORKSPACE_RENAME: declaredWrite(dependencies.pool, workspaceRenamed, {
-      read: (rename: TasksWorkspaceRenameParams) =>
-        Effect.succeed({ ...rename, rows: workspaceList.rows }),
-      answered: workspaceAnswered("workspace"),
-    }),
-    // A slug moves no task either: links resolve by id, or by a former
-    // slug the workspace keeps, so it is drawn at once as a rename is.
-    WORKSPACE_SLUG_SET: declaredWrite(dependencies.pool, workspaceSlugSet, {
-      read: (slugSet: TasksWorkspaceSlugSetParams) =>
-        Effect.succeed({ ...slugSet, rows: workspaceList.rows }),
-      answered: workspaceAnswered("workspace"),
-    }),
-    // A photo moves no task either, but it uploads, so its workspace is
-    // drawn once the service answers it, its photo's new version or none,
-    // and the photo at that version is fetched for the windows' tiles
-    // (`photosListed`).
-    WORKSPACE_PHOTO_SET: ({ workspaceId, photo }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
-        if (!written.ok) return yield* workspaceRefused(written.failure);
-        yield* workspaceList.rows.answered(written.answer);
-        return written.answer;
-      }),
-    // The install address is answered to the procedure that opens it and
-    // held nowhere: the connection lands in the browser, and the follow
-    // carries the organization.
-    WORKSPACE_GITHUB_CONNECT: ({ workspaceId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const begun = yield* served(client.workspaces.githubConnect(workspaceId));
-        if (!begun.ok) return yield* workspaceRefused(begun.failure);
-        return begun.answer;
-      }),
-    WORKSPACE_GITHUB_DISCONNECT: ({ workspaceId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const disconnected = yield* workspaceCall(client.workspaces.githubDisconnect(workspaceId));
-        if (!disconnected.ok) return yield* workspaceRefused(disconnected.failure);
-      }),
-    // Sentry's install address is answered to the procedure that opens it
-    // and held nowhere: the install lands in the browser.
-    WORKSPACE_SENTRY_INSTALL: ({ workspaceId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const begun = yield* served(client.workspaces.sentryInstall(workspaceId));
-        if (!begun.ok) return yield* workspaceRefused(begun.failure);
-        return begun.answer;
-      }),
-    WORKSPACE_SENTRY_DISCONNECT: declaredWrite(
-      dependencies.pool,
-      sentryDisconnect(({ workspaceId, installationId }) =>
-        gate()
-          ? Effect.map(
-              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
-              (sentry): TasksWorkspaceSentryAnswer =>
-                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
-            )
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      { answered: workspaceAnswered("sentry") },
-    ),
-    WORKSPACE_SLACK_BOT_CONNECT: ({ workspaceId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const connected = yield* served(client.workspaces.slackBotConnect(workspaceId));
-        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
-        if (connected.ok) yield* integrations.confirmed(workspaceId, connected.answer.txid);
-        return yield* workspaceAnswered("slackBot")(slackBotAnswered(slackBotOf(connected)));
-      }),
-    WORKSPACE_SLACK_BOT_DISCONNECT: declaredWrite(
-      dependencies.pool,
-      slackBotDisconnect(({ workspaceId }) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      { answered: workspaceAnswered("slackBot") },
-    ),
-    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
-    WORKSPACE_SLACK_BOT_NOTIFICATIONS: declaredWrite(
-      dependencies.pool,
-      slackNotificationsWritten(
-        (write) =>
-          gate()
-            ? Effect.map(
-                served(
-                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
-                ),
-                slackBotOf,
-              )
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        dependencies.accountId,
-      ),
-      { answered: workspaceAnswered("slackBot") },
-    ),
-    WORKSPACE_SLACK_BOT_REPOSITORY: declaredWrite(
-      dependencies.pool,
-      slackBotRepository((repository) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      { answered: workspaceAnswered("slackBot") },
-    ),
-    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
-    WORKSPACE_SLACK_BOT_CHANNEL: declaredWrite(
-      dependencies.pool,
-      slackBotChannel(
-        (channel) =>
-          gate()
-            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        ({ workspaceId }, answer) => {
-          if (!("slackBot" in answer)) return Effect.void;
-          const { channels } = answer.slackBot;
-          return channels === undefined
-            ? slackChannels.wake((held) => held === workspaceId)
-            : slackChannels.answered(workspaceId, channels.map(listedChannel));
-        },
-      ),
-      { answered: workspaceAnswered("slackBot") },
-    ),
-    // An addition is drawn as the reader's own, newest first and removable,
-    // until the service answers the list as it then stands.
-    WORKSPACE_TOKEN_REPOSITORY_SET: declaredWrite(dependencies.pool, tokenRepositorySet, {
-      read: (set: TasksWorkspaceTokenRepositorySetParams) =>
-        Effect.map(Clock.currentTimeMillis, (addedAt) => ({
-          ...set,
-          addedBy: dependencies.accountId() ?? "",
-          addedAt,
-          session: tokenRepositoryWritten.session(),
-        })),
-      answered: workspaceAnswered("repositories"),
-    }),
-    // Note that the environment is asked of the service on each act and held
-    // nowhere here, because no answer carries a value and Settings reads the
-    // names again after each write.
-    WORKSPACE_ENVIRONMENT_LIST: ({ workspaceId }) =>
-      workspaceAsked(client.workspaces.environment(workspaceId)),
-    WORKSPACE_ENVIRONMENT_PUT: ({ workspaceId, name, value }) =>
-      workspaceAsked(client.workspaces.putVariable(workspaceId, name, value)),
-    WORKSPACE_ENVIRONMENT_DELETE: ({ workspaceId, name }) =>
-      workspaceAsked(client.workspaces.deleteVariable(workspaceId, name)),
-    WORKSPACE_MEMBER_REMOVE: declaredWrite(dependencies.pool, memberRemoved, {
-      answered: workspaceAnswered("members"),
-    }),
-    // A role changed moves no task; the people's read carries it, as a
-    // removal's, drawn at once until then.
-    WORKSPACE_MEMBER_ROLE: declaredWrite(dependencies.pool, memberRoleChanged, {
-      answered: workspaceAnswered("members"),
-    }),
-    // Note that a handover changes the account's own role in the workspace,
-    // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, and which the follow carries; it moves no task. The heir's
-    // role and the account's own are drawn from its answer until the
-    // people's read carries them.
-    WORKSPACE_TRANSFER: ({ workspaceId, userId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
-        if (!handedOver.ok) return yield* workspaceRefused(handedOver.failure);
-        yield* membersReads.moved(
-          workspaceId,
-          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
-        );
-        return handedOver.answer;
-      }),
-    // Note that a leave closes the open task where it is that workspace's, as
-    // a delete of it does, because the account can no longer read or write a
-    // task of a workspace it left; a refused leave closes nothing. The
-    // account is drawn gone from the workspace's people, which its read,
-    // ended as the account no longer reaches it, never takes back.
-    WORKSPACE_LEAVE: ({ workspaceId }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const openTaskId = view.activeTaskId;
-        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
-        const closeOpenTask = Effect.gen(function* () {
-          yield* serial(
-            Effect.sync(() => {
-              if (view.activeTaskId === openTaskId) closeActive();
-            }),
-          );
-        });
-        const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
-          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
-        );
-        const left = yield* workspaceCall(leave);
-        if (!left.ok) return yield* workspaceRefused(left.failure);
-        const readerId = dependencies.accountId();
-        if (readerId !== undefined) {
-          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
-        }
-      }),
-    // An invitation made or canceled moves no workspace or task, so nothing
-    // else is read with it; the invitations' read carries it, an invitation
-    // made drawn from its answer until then where a window holds them.
-    WORKSPACE_INVITE: ({ workspaceId, email, role }) =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
-        const made = yield* served(client.workspaces.invite(workspaceId, email, role));
-        if (!made.ok) return yield* workspaceRefused(made.failure);
-        yield* invitationsReads.made(workspaceId, made.answer);
-        return made.answer;
-      }),
-    WORKSPACE_INVITATION_CANCEL: declaredWrite(dependencies.pool, invitationCanceled, {
-      answered: workspaceAnswered("invitations"),
-    }),
-  };
-
   /** A page's version, answered to the frame or the source tab that asked and kept by its version, which is never written again, so its HTML never enters the view every window is told. */
   const pageRead = (read: TasksPageParams): Effect.Effect<TasksPageAnswer> =>
     Effect.gen(function* () {
@@ -3028,17 +2066,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
     });
 
-  /** The Tasks tab's plain asks, answered as the panel's port asks them (`TASKS_ACTS`). */
-  const taskActs: HostActTable<typeof TASKS_ACTS> = {
+  /** The Tasks tab's plain asks, answered as the panel's port asks them (`TASKS_ACTS`), but GitHub's connection's and the admin dashboard's (`compose-workspaces.ts`). */
+  const taskActs: Omit<HostActTable<typeof TASKS_ACTS>, WorkspacesTasksAct> = {
     // The list's Try again: what is followed already stands (`open`), so it
-    // starts only a follow that is not running, and reads GitHub's
-    // connection again where the last read is stale. A held description has a Try
-    // again of its own (`TASKS_DOCUMENT_RETRY`).
+    // starts only a follow that is not running, the workspaces' among them,
+    // and reads GitHub's connection again where the last read is stale
+    // (`compose-workspaces.ts`). A held description has a Try again of its
+    // own (`TASKS_DOCUMENT_RETRY`).
     TASKS_REFRESH: () =>
       Effect.gen(function* () {
         if (!gate()) return;
         yield* followAccount;
-        yield* readGithubWhenStale;
+        yield* Effect.flatMap(late.value, (links) => links.workspacesRefreshed);
       }),
     // A window said the changes made offline the service refused, so the count it said is cleared for every window.
     TASKS_OFFLINE_REFUSED_CLEAR: () => Effect.sync(() => dependencies.offlineRefused.clear()),
@@ -3311,43 +2350,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         return edited.answer;
       }),
-    // The browser connects or disconnects GitHub, so the panel coming
-    // forward again reads the connection whatever the bound says.
-    GITHUB_CONNECT: () =>
-      Effect.gen(function* () {
-        if (!gate()) return GITHUB_PAGE_UNANSWERED;
-        const page = yield* served(client.github.connect());
-        githubAskedAt = undefined;
-        return "failure" in page ? GITHUB_PAGE_UNANSWERED : { url: page.url };
-      }),
-    // The view takes the connection the service answers at once, so Settings
-    // reads disconnected without waiting for the next read of it. Note that
-    // GitHub as the last way to sign in is refused in words that say so.
-    GITHUB_DISCONNECT: () =>
-      Effect.gen(function* () {
-        if (!gate()) return yield* new ActRefused({});
-        const disconnected = yield* served(client.github.disconnect());
-        githubAskedAt = undefined;
-        // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
-        yield* dependencies.githubMoved;
-        if ("failure" in disconnected) {
-          return yield* new ActRefused(
-            disconnected.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
-              ? { sentence: GITHUB_LAST_SIGN_IN_REFUSAL }
-              : {},
-          );
-        }
-        // Note that a read started before the answer is made stale, because
-        // the status it read may predate the unlink.
-        githubRead += 1;
-        write({ github: disconnected });
-      }),
-    // An admin read is answered to the caller as the service answered it and
-    // held nowhere, since it is other accounts' data, which no view keeps.
-    ADMIN_READ: (read) =>
-      gate() ? served(client.admin.read(read)) : Effect.succeed({ refused: ADMIN_UNANSWERED }),
-    ADMIN_FAVORITE: (read) =>
-      gate() ? served(client.admin.favorite(read.id, read.favorite)) : Effect.succeed(false),
   };
 
   const methods: HostMethodTable = {
@@ -3372,17 +2374,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         yield* dependencies.focus.raise;
         yield* resealList;
-        return {};
-      }),
-    // The panel coming forward, which may follow GitHub connected in the
-    // browser, reads the connection no oftener than the bound allows; the
-    // workspaces are followed and need no read. It is also the host's one
-    // word that a window came forward, which every read asked again on
-    // focus hears (`window-focus.ts`).
-    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
-      Effect.gen(function* () {
-        yield* dependencies.focus.raise;
-        if (gate()) yield* readGithubWhenStale;
         return {};
       }),
     // A link's standing is held for the windows while a chip draws it, and told only on the app state (`LINK_STANDINGS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -3622,212 +2613,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* repositoryLists.retry(yield* repositoryScopeOf(params));
         return {};
       }),
-    // A workspace's own integrations are held for the windows while they
-    // draw them, and told only on the app state
-    // (`WORKSPACE_INTEGRATIONS_CHANGED`). Note that the windows' hold is one
-    // fiber standing until let go, so a window holding it again holds
-    // nothing anew.
-    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "holding a workspace's integrations names the workspace",
-        );
-        yield* FiberMap.run(
-          integrationHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(integrations.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "letting a workspace's integrations go names the workspace",
-        );
-        yield* FiberMap.remove(integrationHolds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "reading a workspace's integrations again names the workspace",
-        );
-        yield* integrations.retry(workspaceId);
-        return {};
-      }),
-    // A workspace's Slack channels are held for an owner's or an admin's
-    // windows while they list them, and told only on the app state
-    // (`SLACK_CHANNELS_CHANGED`), on the terms its integrations are held.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "holding a workspace's Slack channels names the workspace",
-        );
-        yield* FiberMap.run(
-          channelHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(slackChannels.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "letting a workspace's Slack channels go names the workspace",
-        );
-        yield* FiberMap.remove(channelHolds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "asking a workspace's Slack channels again names the workspace",
-        );
-        yield* slackChannels.retry(workspaceId);
-        return {};
-      }),
-    // A workspace's people are held for a window while it draws them, and
-    // told only on the app state (`WORKSPACE_MEMBERS_CHANGED`). Note that the
-    // windows' hold is one fiber standing until let go, so a window holding
-    // it again holds nothing anew.
-    [GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "holding a workspace's people names the workspace",
-        );
-        const { workspaceId } = read;
-        yield* FiberMap.run(
-          memberHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(membersReads.held.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "letting a workspace's people go names the workspace",
-        );
-        yield* FiberMap.remove(memberHolds, read.workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "reading a workspace's people again names the workspace",
-        );
-        yield* membersReads.held.retry(read.workspaceId);
-        return {};
-      }),
-    // A workspace's invitations are held for an owner's or an admin's
-    // window while it draws them, and told only on the app state
-    // (`WORKSPACE_INVITATIONS_CHANGED`), as its people are.
-    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "holding a workspace's invitations names the workspace",
-        );
-        const { workspaceId } = read;
-        yield* FiberMap.run(
-          invitationHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(invitationsReads.held.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "letting a workspace's invitations go names the workspace",
-        );
-        yield* FiberMap.remove(invitationHolds, read.workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          workspacePeopleFollowSchema,
-          params,
-          "reading a workspace's invitations again names the workspace",
-        );
-        yield* invitationsReads.held.retry(read.workspaceId);
-        return {};
-      }),
-    // A workspace's token repositories are held for a window while it
-    // draws them, and told only on the app state (`TOKEN_REPOSITORIES_CHANGED`);
-    // each change's own answer is laid there too. Note that the windows'
-    // hold is one fiber standing until let go, so a window holding it again
-    // holds nothing anew.
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceTokenRepositoriesParamsSchema,
-          params,
-          "holding a workspace's token repositories names the workspace",
-        );
-        yield* FiberMap.run(
-          tokenRepositoryHolds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(tokenRepositories.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceTokenRepositoriesParamsSchema,
-          params,
-          "letting a workspace's token repositories go names the workspace",
-        );
-        yield* FiberMap.remove(tokenRepositoryHolds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          tasksWorkspaceTokenRepositoriesParamsSchema,
-          params,
-          "reading a workspace's token repositories again names the workspace",
-        );
-        yield* tokenRepositories.retry(workspaceId);
-        return {};
-      }),
   };
 
   return {
-    acts: { ...taskActs, ...workspaceActs },
+    acts: taskActs,
     methods,
     snapshot: () => view,
-    // The gate opening follows the account's task list, workspaces, and
-    // sidebar, so the list loads after a launch or a sign-in with no window
-    // asking; GitHub's connection is read beside them where the last read is stale.
+    link: (links) => Effect.asVoid(late.set(links)),
+    workspaces: {
+      view: () => view,
+      draw: write,
+      repositoriesMovedIn,
+      openTaskLeaving,
+    },
+    // The gate opening follows the account's task list and sidebar, so the
+    // list loads after a launch or a sign-in with no window asking.
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
       yield* heldBrowserTabs.open;
@@ -3835,16 +2635,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* comments.open;
       yield* linkStandings.open;
       yield* repositoryLists.open;
-      yield* membersReads.held.open;
-      yield* invitationsReads.held.open;
-      yield* tokenRepositories.open;
-      yield* integrations.open;
-      yield* slackChannels.open;
       yield* documents.open;
       if (!gate()) return;
       yield* drawnFromDisk;
       yield* followAccount;
-      yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
     }),
     listed,
     queueable: [
@@ -3858,45 +2652,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     pullRequestListings: Effect.map(PubSub.subscribe(listings), Stream.fromSubscription),
     repositoriesMoved: repositoryLists.reread(() => true),
     reset: Effect.gen(function* () {
-      // Note that the session's token repository writes are let go first, so none still out lays its answer while the rest of the reset runs.
-      yield* tokenRepositoryWritten.letGo;
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, histories, comments, people, token repositories, invitations, and descriptions stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, and descriptions stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* heldHistories.end;
       yield* comments.end;
       yield* linkStandings.end;
       yield* repositoryLists.end;
-      yield* membersReads.held.end;
-      yield* invitationsReads.held.end;
-      yield* FiberMap.clear(photoFetches);
-      photosAsked.clear();
-      tellPhotos(NO_KEYS_HELD);
-      yield* tokenRepositories.end;
-      yield* integrations.end;
-      yield* slackChannels.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
       yield* FiberHandle.clear(listFollow);
       yield* Scope.close(taskList.scope, Exit.void);
       taskList = yield* openTaskList;
-      yield* FiberHandle.clear(workspacesFollow);
       yield* FiberHandle.clear(sidebarFollow);
-      yield* FiberHandle.clear(githubOpened);
       yield* Scope.close(sidebar.scope, Exit.void);
       sidebar = yield* openSidebar;
-      yield* Scope.close(workspaceList.scope, Exit.void);
-      workspaceList = yield* openWorkspaces;
       sidebarAnswered = false;
       listKeptAt = undefined;
       yield* serial(
         Effect.sync(() => {
-          githubAskedAt = undefined;
-          githubRead += 1;
           view = idleView();
           publish();
         }),

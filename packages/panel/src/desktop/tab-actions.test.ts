@@ -36,9 +36,8 @@ import {
   handCapabilities,
   handHostReads,
   holdPullRequestParts,
-  registryWith,
+  withExperiments,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
@@ -179,9 +178,8 @@ async function mountEveryTab(
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-        // Only the tabs' bars are asked about, so no bundle lands under them.
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         onSideBundles(
           unlandedBundles(),
           createElement(DesktopTasks, {

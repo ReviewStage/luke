@@ -39,9 +39,8 @@ import { user } from "./auth.js";
  * The hosted brain writes here through the store writer and the read routes
  * answer from these rows. Every row is keyed by the user it belongs to and
  * cascades with the user row, so deleting an account is still one statement,
- * and a conversation's children cascade with their parent. Clear is a soft
- * delete here, `deleted_at` stamped on the row, so a cleared conversation's
- * rows stand until the purge.
+ * and a conversation's children cascade with their parent. A deleted
+ * conversation's rows go at once (`models/conversation-delete.ts`).
  *
  * The sequence counter on a conversation row is what numbers its messages;
  * it is allocated under the conversation's own row lock, counted up, and
@@ -75,8 +74,6 @@ export const conversations = pgTable(
     runtimeSessionId: text("runtime_session_id"),
     createdAt: createdAt(),
     lastActivityAt: timestamptz("last_activity_at").notNull().defaultNow(),
-    /** Stamped by Clear; a row so stamped is purged later and read by nothing meanwhile. */
-    deletedAt: timestamptz("deleted_at"),
     /** The next message sequence to hand out; counted up under the conversation's row lock and never reused. */
     nextMessageSeq: bigint("next_message_seq", { mode: "number" }).notNull().default(1),
     /** Counted up whenever a message of the conversation is amended, so a reader can tell a journal it has from one it has not. */
@@ -112,19 +109,17 @@ export const conversations = pgTable(
     dispatchLine: uuid("dispatch_line"),
   },
   (table) => [
-    // One main stands per account at a time: Clear stamps the old one and opens the next in one
-    // transaction, and a first-use creation lands one; this index is what refuses a second standing
-    // main whatever path raced to it, so reads never silently pick one of two. The predicate is
-    // DDL, which takes no bound parameter, so the kind is inlined rather than passed.
+    // One main stands per account at a time: a first-use creation lands one, and this index is what
+    // refuses a second whatever path raced to it, so reads never silently pick one of two. The
+    // predicate is DDL, which takes no bound parameter, so the kind is inlined rather than passed.
+    // Note that it still names "deleted_at", which no module declares and every row this release
+    // writes leaves null, because the column stands until a later release drops it, and with it this
+    // index, which that release declares again without it.
     uniqueIndex("conversations_standing_main")
       .on(table.userId)
       .where(
-        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)} and ${table.deletedAt} is null`,
+        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)} and "deleted_at" is null`,
       ),
-    // The purge runs every minute over the stamped rows alone.
-    index("conversations_deleted_at")
-      .on(table.deletedAt)
-      .where(sql`${table.deletedAt} is not null`),
     // The children and agents reads pick one account's rows of one kind.
     index("conversations_user_kind").on(table.userId, table.kind),
     // A recorded session is found by the runtime's own id, by the session's reads and by the sweep
@@ -132,8 +127,8 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
-    // A conversation's children are found by their parent: by the purge's cascade from a parent it
-    // deletes, by a delete's stamp, and by the usage a transcript reads.
+    // A conversation's children are found by their parent: by the cascade from a parent a delete
+    // takes, and by the usage a transcript reads.
     index("conversations_parent")
       .on(table.parentConversationId)
       .where(sql`${table.parentConversationId} is not null`),

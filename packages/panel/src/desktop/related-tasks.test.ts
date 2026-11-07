@@ -9,14 +9,13 @@ import {
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import type { Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { RelatedTasks } from "./related-tasks.js";
@@ -125,8 +124,7 @@ test("a related task's row is led by its owner's relation and ends with its open
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(RelatedTasks, {
           tasks,
           room: { scroller: { current: container }, column: { current: container } },
@@ -174,8 +172,7 @@ test("a related task's row says it is blocked beside its name and how many of it
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(RelatedTasks, {
           tasks,
           room: { scroller: { current: container }, column: { current: container } },
@@ -211,8 +208,7 @@ test("under a finger, a related task's row draws no ⋯, and a long press on it 
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(RelatedTasks, {
           tasks,
           room: { scroller: { current: container }, column: { current: container } },

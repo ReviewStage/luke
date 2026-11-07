@@ -20,7 +20,6 @@ import {
   TASKS_GROUPING,
   type TasksDisplay,
 } from "@repo/ui/tasks-page-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -32,7 +31,7 @@ import { taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { layScrollerOut } from "../testing/scroller.js";
@@ -196,11 +195,9 @@ async function mountBoard(
     }, undefined),
     ...overrides,
   });
-  const registry = AtomRegistry.make();
   const draw = (shown: TasksDisplay, changed: Partial<typeof control> = {}) =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           Fragment,
           null,

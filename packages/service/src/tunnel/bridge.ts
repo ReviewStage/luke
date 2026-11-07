@@ -32,8 +32,8 @@ export type TunnelBridge =
       readonly wake: boolean;
     };
 
-/** The bridge's own word, a line with a `bridge` key: ready, from then on speaking frames. */
-export const TUNNEL_BRIDGE_WORD = { KEY: "bridge", READY: "ready" } as const;
+/** The bridge's own word, a line with a `bridge` key: ready, from then on speaking frames, or failed at the step it names, as it exits. */
+export const TUNNEL_BRIDGE_WORD = { KEY: "bridge", READY: "ready", FAILED: "failed" } as const;
 
 /**
  * Whether a kind's traffic holds the agent's sandbox, keeping it alive and

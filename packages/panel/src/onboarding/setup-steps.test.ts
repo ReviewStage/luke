@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { SetupSteps } from "./setup-steps.js";
 
@@ -62,8 +61,7 @@ test("Just me after a team's workspace was made lists the account's own workspac
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(SetupSteps, {
           tasks: {
             ...base,

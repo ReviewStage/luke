@@ -32,7 +32,7 @@ import {
   upsertBrowserTab,
 } from "../agent-browser-tabs.js";
 import { createAgent } from "../agent-store.js";
-import { CLEARED_CONVERSATION_RETENTION_MS, purgeClearedConversations } from "../soft-delete.js";
+import { deleteConversations } from "../conversation-delete.js";
 import { createTask } from "../task-store.js";
 
 /**
@@ -595,21 +595,14 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
   );
 
   it.effect(
-    "a tab goes with its agent's conversation when the purge removes it, and with its task",
+    "a tab goes with its agent's conversation when a delete removes it, and with its task",
     () =>
       Effect.gen(function* () {
         const { starter, taskId, agent, other } = yield* openTask;
         yield* upsertBrowserTab(action(agent.conversationId, "target-1", "https://shop.test/"));
         yield* upsertBrowserTab(action(other.conversationId, "target-1", "https://docs.test/"));
-        const now = yield* DateTime.nowAsDate;
-        yield* Database.use((db) =>
-          db
-            .update(conversations)
-            .set({ deletedAt: new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS) })
-            .where(eq(conversations.id, agent.conversationId)),
-        );
 
-        yield* purgeClearedConversations(now);
+        yield* deleteConversations([agent.conversationId]);
 
         assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
         assert.deepEqual(

@@ -22,7 +22,6 @@ import { localTab } from "@repo/ui/tab-strip-model";
 import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -32,7 +31,7 @@ import { SIDE_BUNDLES, type SideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import {
   bundleLanded,
@@ -149,7 +148,6 @@ interface Main {
 }
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 // The terminal bundle landed before any tab is drawn, as it is once a terminal has been shown in this window.
 let FITTED: SideBundles;
@@ -270,7 +268,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   document.body.style.removeProperty("--ui-duration-pane");
@@ -308,8 +305,6 @@ async function mount(
   // Note that the working agent's mark never steps here, because it steps on a beat forever, and a
   // test that runs every fake timer out would never finish.
   serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const terminals = windowTerminals();
   const wrapped = (tab: React.ReactElement) =>
     findable
@@ -341,8 +336,7 @@ async function mount(
     handed = shown.handed;
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           onTerminals(
             terminals,
             createElement(
@@ -376,10 +370,10 @@ async function mount(
       render(on);
       await settle();
     },
-    /** Another account signs in, the tab no longer drawn, as the strip draws none of the first's. */
-    signIn: async (next: string) => {
+    /** Another account signs in, the tab no longer drawn unless asked, as the strip draws none of the first's. */
+    signIn: async (next: string, drawn = false) => {
       signedIn = next;
-      render(true, false);
+      render(true, drawn);
       await settle();
     },
     terminals,
@@ -511,6 +505,30 @@ test("a port that arrives after another account signed in is let go, its shell o
   const port = main.post(MADE);
 
   assert.equal(port.closed(), true);
+  assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
+});
+
+test("a switch away and back before the first attach's port arrives keeps the screen on the latest port, the earlier one closed and no shell ended", async () => {
+  const tab = await mount(true, false, FITTED, false, FIRST, "ada");
+  await tab.signIn("grace");
+  await tab.signIn("ada", true);
+
+  const first = main.post(MADE);
+  const second = main.post(MADE);
+  second.say({ type: "state", state: "attached" });
+  await tab.type("a", 65);
+
+  assert.deepEqual(
+    tab.kinds().filter((kind) => kind === ACT_KIND.MAC_SHELL_ATTACH),
+    ["macShell.attach", "macShell.attach"],
+  );
+  assert.equal(first.closed(), true);
+  assert.equal(second.closed(), false);
+  assert.equal(tab.standing(), "· connected");
+  assert.deepEqual(
+    second.posted.filter((message) => message.type === "input"),
+    [{ type: "input", data: "a" }],
+  );
   assert.ok(!tab.kinds().includes(ACT_KIND.MAC_SHELL_CLOSE), "no shell was ended");
 });
 
@@ -822,7 +840,6 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  const registry = AtomRegistry.make();
   const terminals = windowTerminals();
   const tab = createElement(TerminalTab, {
     tab: localTab(AGENT.id, FIRST, "Local 1"),
@@ -835,8 +852,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   const draw = () =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           onTerminals(
             terminals,
             onSideBundles(

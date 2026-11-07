@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { hostedStore } from "@repo/database/models/hosted-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
@@ -47,7 +46,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     request,
     cronSecret: environment.cronSecret,
     monitor: sentryCronCheckIns(SWEEP_MONITOR),
-    purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
     sweepDeviceWarmRunners: (now) =>
       sweepDeviceWarmRunners(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),

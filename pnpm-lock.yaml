@@ -7,9 +7,6 @@ settings:
 
 catalogs:
   default:
-    '@effect/atom-react':
-      specifier: 4.0.4
-      version: 4.0.4
     '@effect/platform-node':
       specifier: 4.0.4
       version: 4.0.4
@@ -243,9 +240,6 @@ importers:
         specifier: 6.8.9
         version: 6.8.9
     devDependencies:
-      '@effect/atom-react':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
@@ -383,9 +377,6 @@ importers:
       '@better-auth/oauth-provider':
         specifier: 1.7.7
         version: 1.7.7(patch_hash=b4b560cbadacfe5a94972c9a6c390e724b8fc4d34b6328f41345f642cd1ec060)(@better-auth/core@1.7.7)(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.7)(better-call@1.4.0)
-      '@effect/atom-react':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -825,9 +816,6 @@ importers:
 
   packages/panel:
     dependencies:
-      '@effect/atom-react':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
       '@orpc/client':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -1817,13 +1805,6 @@ packages:
 
   '@drizzle-team/brocli@0.12.1':
     resolution: {integrity: sha512-yHwomvolVafvUXhy5TdiJVkuNCxXn+bKOs2aWiWEQh/5YaV97Oa/abJz3dmx7lxgIUsUlS1Jl4mEfvJPo3YsVw==}
-
-  '@effect/atom-react@4.0.4':
-    resolution: {integrity: sha512-/cd4zHAS/j4QEAJahvIuvCjASI9iKPsKoYDJF1WdqBH6ol+7PIzV5jfIxyd5K0hTlLlavZnzEfi849pcS84apg==}
-    peerDependencies:
-      effect: ^4.0.4
-      react: '>=19.0.0 <20.0.0'
-      scheduler: '>=0.25.0 <0.29.0'
 
   '@effect/platform-node-shared@4.0.4':
     resolution: {integrity: sha512-gh2KRmqGWrJ0FVL8GqnI1GpB+fCfCUI7sGiUZkxxBHyHj1t94rm6VDJffCfuVZWe6GpvYXtizifVczUrgOce8A==}
@@ -8713,12 +8694,6 @@ snapshots:
       ajv-keywords: 3.5.2(ajv@6.15.0)
 
   '@drizzle-team/brocli@0.12.1': {}
-
-  '@effect/atom-react@4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)':
-    dependencies:
-      effect: 4.0.4
-      react: 19.2.8
-      scheduler: 0.27.0
 
   '@effect/platform-node-shared@4.0.4(effect@4.0.4)':
     dependencies:

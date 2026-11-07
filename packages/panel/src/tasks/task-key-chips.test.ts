@@ -7,13 +7,12 @@ import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { appStateQuery, selectTasks } from "../use-app-state.js";
 import { mentionLinkDrawer } from "./mention-chip.js";
@@ -121,7 +120,7 @@ async function drawn(element: ReactElement, opened: Mention[] = []): Promise<HTM
     children: createElement(Fragment, null, createElement(Landed), element),
   });
   // Note that the words are drawn before the document lands, as a window drawn before its tasks are listed draws them.
-  act(() => root.render(onRegistry(AtomRegistry.make(), page)));
+  act(() => root.render(withQueryClient(page)));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

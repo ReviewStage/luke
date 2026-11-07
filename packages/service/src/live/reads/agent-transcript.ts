@@ -35,19 +35,7 @@ import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
 import { LIVE_POLL } from "@repo/features/live-wire";
 import { TRANSCRIPT_WINDOW } from "@repo/features/transcript-window";
 import { readEither } from "@repo/wire/effect";
-import {
-  and,
-  desc,
-  eq,
-  exists,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  or,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, exists, gt, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Result } from "effect";
 import { reachedAgentById } from "../../agents/agent-reach.js";
@@ -228,10 +216,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCu
       queryBuilder
         .select(selection)
         .from(messages)
-        .innerJoin(
-          conversations,
-          and(eq(conversations.id, messages.conversationId), isNull(conversations.deletedAt)),
-        )
+        .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .crossJoinLateral(element)
         .where(
           and(
@@ -303,10 +288,7 @@ function windowOf(target: ConversationTarget, reached: SQL, past: MessageCursor 
         queryBuilder
           .select({ ...selected, seq, partCount })
           .from(messages)
-          .innerJoin(
-            conversations,
-            and(eq(conversations.id, messages.conversationId), isNull(conversations.deletedAt)),
-          )
+          .innerJoin(conversations, eq(conversations.id, messages.conversationId))
           .leftJoin(user, eq(user.id, messages.senderUserId))
           .leftJoin(sendingAgent, eq(sendingAgent.id, messages.senderAgentId))
           .leftJoin(
@@ -431,12 +413,7 @@ function transcriptStatements(params: TranscriptParams, past?: MessageCursor) {
         .select(selection)
         .from(conversations)
         .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
-            reached,
-          ),
+          and(eq(conversations.id, conversationId), eq(conversations.userId, userId), reached),
         ),
   );
   const agent = liveRowsStatement(
@@ -476,7 +453,6 @@ function transcriptStatements(params: TranscriptParams, past?: MessageCursor) {
           and(
             eq(conversations.parentConversationId, parentConversationId),
             eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
             reached,
           ),
         ),

@@ -3,11 +3,10 @@
 import assert from "node:assert/strict";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@repo/features/automation-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 
 const SWEEP = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
@@ -15,7 +14,6 @@ const DIGEST = "6b1d5e3f-9a2c-4d4b-8f8e-3c7a2b9d0e15";
 
 let marked: boolean[] = [];
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   marked = [];
@@ -26,7 +24,6 @@ afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
@@ -65,12 +62,8 @@ function mount(runs: readonly AccountFailedRun[], opened?: string) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const draw = (next: readonly AccountFailedRun[], open: string | undefined) =>
-    act(() =>
-      root.render(onRegistry(registry, createElement(Harness, { runs: next, opened: open }))),
-    );
+    act(() => root.render(withQueryClient(createElement(Harness, { runs: next, opened: open }))));
   draw(runs, opened);
   return draw;
 }
@@ -119,12 +112,10 @@ test("an automation of another workspace left open does not see its own failure 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   function Other(): React.JSX.Element {
     marked.push(useFailedRunsMark([theirs], "workspace-other", undefined, false));
     return createElement(Fragment);
   }
-  act(() => root.render(onRegistry(registry, createElement(Other))));
+  act(() => root.render(withQueryClient(createElement(Other))));
   assert.equal(marked.at(-1), true, "its own workspace still marks it");
 });

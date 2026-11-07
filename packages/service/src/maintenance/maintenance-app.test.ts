@@ -1,24 +1,16 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
-import { deleteTask } from "@repo/database/models/task-store";
-import { agentTable } from "@repo/database/schemas/agent";
-import { conversations } from "@repo/database/schemas/storage";
-import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
-import { getTestDB, startTask } from "@repo/database/testing";
+import { getTestDB } from "@repo/database/testing";
 import { noDatabase } from "@repo/database/testing/no-database";
 import { noNetwork } from "@repo/wire/testing";
-import { eq } from "drizzle-orm";
-import { Clock, Duration, Effect, Layer, Redacted } from "effect";
+import { Clock, Effect, Layer, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
-import { openGithubUser } from "../testing/github-app-fake.js";
 import { recordingSentry, type SentItem, sentOfType } from "../testing/sentry-transport.js";
 import { maintenanceApp } from "./maintenance-app.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -27,9 +19,7 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  * The sweep's group as the cron reaches it, told to Sentry's Crons through a
  * recording transport. A sweep that runs does so over an empty migrated
  * database, so it finds nothing to do and reaches no provider; what each
- * sweep does is `maintenance-sweep.test.ts`'s. The exception is a
- * deleted task's agent, whose conversation the purge takes once its
- * retention has passed and not before.
+ * sweep does is `maintenance-sweep.test.ts`'s.
  */
 
 const CRON_SECRET = "cron-secret-1";
@@ -141,64 +131,5 @@ it.layer(getTestDB())("a sweep that runs", (it) => {
         timezone: "Etc/UTC",
       });
     }),
-  );
-});
-
-/** A task with one coding agent on it, deleted now, answering the agent's conversation. */
-const deleteTaskWithAgent = Effect.gen(function* () {
-  const owner = yield* openGithubUser();
-  const task = yield* startTask(owner, { name: "Rate limits", repository: "acme/api" });
-  const db = yield* Database;
-  const conversationId = randomUUID();
-  yield* db
-    .insert(conversations)
-    .values({ id: conversationId, userId: owner, kind: CONVERSATION_KIND.AGENT });
-  yield* db.insert(agentTable).values({
-    id: randomUUID(),
-    organizationId: task.workspaceId,
-    userId: owner,
-    taskId: task.id,
-    conversationId,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    repository: "acme/api",
-    idempotencyKey: randomUUID(),
-  });
-  assert.equal(yield* deleteTask(owner, task.id), true);
-  return conversationId;
-});
-
-/** Whether the conversation's row still stands. */
-const stands = (conversationId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const rows = yield* db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
-    return rows.length === 1;
-  });
-
-it.layer(getTestDB())("a deleted task's agent", (it) => {
-  it.effect(
-    "keeps its conversation through a sweep a minute short of seven days after the delete, and loses it to one a minute past",
-    () =>
-      Effect.gen(function* () {
-        const conversationId = yield* deleteTaskWithAgent;
-        const database = yield* testDatabase;
-        const sweepNow = sweep(CRON_SECRET, CRON_SECRET, database).pipe(
-          Effect.provide(recordingSentry().layer),
-        );
-
-        yield* TestClock.adjust(Duration.subtract(Duration.days(7), Duration.minutes(1)));
-        yield* sweepNow;
-        const kept = yield* stands(conversationId);
-
-        yield* TestClock.adjust(Duration.minutes(2));
-        yield* sweepNow;
-        const purged = !(yield* stands(conversationId));
-
-        assert.deepEqual({ kept, purged }, { kept: true, purged: true });
-      }),
   );
 });

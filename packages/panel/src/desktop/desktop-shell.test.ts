@@ -25,7 +25,6 @@ import { UPDATE_STATUS } from "@repo/settings/update";
 import { draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -48,7 +47,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
-import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
@@ -183,7 +182,6 @@ function mount(
   tab: PanelTab = PANEL_TAB.TASKS,
   onTabChange: (tab: PanelTab) => void = ignore,
   sidebarPatch: Partial<SidebarCollapse> = {},
-  registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -224,7 +222,7 @@ function mount(
             : (overrides.inboxView?.open ?? inboxOpen)
               ? SHELL_AT.INBOX
               : undefined;
-  act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
+  act(() => root?.render(withQueryClient(underRouter(createElement(Shell), at))));
   return container;
 }
 
@@ -271,12 +269,10 @@ async function mountSwitching(): Promise<(tab: PanelTab) => Promise<void>> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const registry = AtomRegistry.make();
   const draw = async (tab: PanelTab) => {
     act(() =>
       root?.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           underRouter(
             createElement(
               DesktopShell,
@@ -389,8 +385,7 @@ function drawLoadingNarrow(
   const props = shellProps(tasks, tab, ignore, {});
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         underRouter(
           createElement(DesktopShell, {
             ...props,
@@ -698,7 +693,6 @@ function mountListing(listed: readonly Task[]): (open: Task | undefined) => void
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const registry = AtomRegistry.make();
   return (open) => {
     const tasks = tasksControl({
       page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
@@ -710,7 +704,7 @@ function mountListing(listed: readonly Task[]): (open: Task | undefined) => void
           : { kind: DOCUMENT_REGION.READY, task: open },
     });
     const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, { collapsed: false });
-    act(() => root?.render(onRegistry(registry, underRouter(createElement(DesktopShell, props)))));
+    act(() => root?.render(withQueryClient(underRouter(createElement(DesktopShell, props)))));
   };
 }
 
@@ -878,8 +872,7 @@ async function mountNarrow(
   const tasks = tasksControl({ page: TASKS_PAGE.HOME, ...overrides });
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         underRouter(
           createElement(DesktopShell, {
             ...shellProps(tasks, PANEL_TAB.TASKS, ignore, sidebarPatch),
@@ -1097,7 +1090,6 @@ test("while the Automations pages are still loading their frame stands the list 
     onOpen: ignore,
     onClose: () => closed.push("closed"),
   };
-  const registry = AtomRegistry.make();
   handState({});
   mount(
     false,
@@ -1105,20 +1097,18 @@ test("while the Automations pages are still loading their frame stands the list 
     PANEL_TAB.TASKS,
     ignore,
     {},
-    registry,
   );
   await settle();
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  // Note that the window's state has landed in the registry, so Automations opens within one render, before their chunk can.
+  // Note that the window's state has landed in the test's Query client, so Automations opens within one render, before their chunk can.
   const page = mount(
     false,
     { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
     PANEL_TAB.TASKS,
     ignore,
     {},
-    registry,
   );
   // The router goes to the pages, whose frame stands while their chunk is read.
   await act(async () => {
@@ -1371,12 +1361,11 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const registry = AtomRegistry.make();
   const toggled: Partial<Record<Place, boolean>> = {};
   for (const place of PLACES) {
     act(() =>
       root?.render(
-        onRegistry(registry, underRouter(createElement(PlacedShell, { place }), routedAt(place))),
+        withQueryClient(underRouter(createElement(PlacedShell, { place }), routedAt(place))),
       ),
     );
     await settle();
@@ -1412,8 +1401,7 @@ test("the side panel's toggle stands for the Inbox's chosen item", async () => {
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         underRouter(createElement(PlacedShell, { place: PLACE.INBOX, patch: chosen })),
       ),
     ),
@@ -1436,10 +1424,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     root = createRoot(container);
     act(() =>
       root?.render(
-        onRegistry(
-          AtomRegistry.make(),
-          underRouter(createElement(PlacedShell, { place }), routedAt(place)),
-        ),
+        withQueryClient(underRouter(createElement(PlacedShell, { place }), routedAt(place))),
       ),
     );
     await settle();
@@ -1604,8 +1589,7 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
   const props = shellProps(tasksControl(), PANEL_TAB.TASKS, ignore, {});
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         underRouter(
           createElement(DesktopShell, {
             ...props,
@@ -1634,8 +1618,7 @@ test("on a phone an open task leads its own row with the way back the window's h
     const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, {});
     act(() =>
       root?.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           underRouter(
             createElement(DesktopShell, {
               ...props,
@@ -1686,8 +1669,7 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         underRouter(
           createElement(DesktopShell, {
             ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { onToggle: () => (toggled += 1) }),
@@ -1802,11 +1784,7 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
   // The Board is the router's place, which the window stands at before Admin and comes back to after it.
-  act(() =>
-    root?.render(
-      onRegistry(AtomRegistry.make(), underRouter(createElement(Shell), SHELL_AT.BOARD)),
-    ),
-  );
+  act(() => root?.render(withQueryClient(underRouter(createElement(Shell), SHELL_AT.BOARD))));
   await act(() => routed().settled());
   await settle();
   act(() => {
@@ -1871,7 +1849,7 @@ test("the Inbox left stays drawn, hidden from a reader, and comes back as it sto
     await act(() => routed().settled());
     await settle();
   };
-  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
+  act(() => root?.render(withQueryClient(underRouter(createElement(Shell)))));
   const search = () =>
     container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
   const input = search();
