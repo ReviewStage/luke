@@ -182,3 +182,9 @@ test("the first file an empty box takes on scales in too", () => {
     .some((motion) => motion.keyframes.some((frame) => String(frame.transform).includes("scale")));
   assert.ok(scaled, "it scales in");
 });
+
+test("a text file whose bytes spell no base64 still draws its chip, by its name", () => {
+  draw([{ name: "broken.txt", mediaType: "text/plain", data: "%%%" }]);
+  assert.equal(chips().length, 1);
+  assert.equal(chips()[0]?.textContent?.includes("broken.txt"), true);
+});
