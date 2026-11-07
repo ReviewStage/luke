@@ -1868,6 +1868,21 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
+  // The agent the task's column shows, whose tabs alone its side panel draws (`ownerOf`).
+  const columnAgent =
+    mainTabs.tab !== undefined &&
+    !isOverviewTab(mainTabs.tab) &&
+    mainTabs.tab.kind === STRIP_TAB_KIND.AGENT
+      ? mainTabs.tab.agent
+      : undefined;
+  // The agent whose cloud browser holds each Browser tab, so it stands in that agent's strip.
+  const cloudBrowserAgents = useMemo(
+    () =>
+      new Map(
+        [...(cloudListed ?? []), ...cloudDrafts].map((each) => [each.id, each.agentId] as const),
+      ),
+    [cloudListed, cloudDrafts],
+  );
   // The account's experiments, which hold where a link to the description's parts lands.
   const experiments =
     useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
@@ -1887,7 +1902,13 @@ export function useTasksTab(input: {
           stop: inboxChosen?.itemId,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: NO_HOLDS, files: panelFileReads, pages: panelPages }
+        ? {
+            id: viewed.activeTaskId,
+            holds: NO_HOLDS,
+            files: panelFileReads,
+            pages: panelPages,
+            agent: columnAgent,
+          }
         : { id: pageAgent, holds: NO_HOLDS, pages: panelPages },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
@@ -1906,6 +1927,7 @@ export function useTasksTab(input: {
         ? inboxTaskAgents.heldIds
         : inboxAgents
       : (pageAgents ?? agents.heldIds),
+    cloudBrowserAgents,
   );
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
@@ -3283,10 +3305,15 @@ export function useTasksTab(input: {
   };
 
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
+  // Note that the tab's agent is shown in the task's column too, since only that agent's strip draws it.
   const showPanelTab = (taskId: string, tab: SidePanelTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     clearStandIn();
     closeHistory();
+    const owner = sidePanel.ownerOf(tab);
+    if (owner !== undefined && agents.agentIds?.includes(owner) === true) {
+      mainTabs.onShow(taskId, agentTab(owner));
+    }
     sidePanel.onShow(taskId, tab);
   };
   // The task's description shown at the place given: its column's Overview, which

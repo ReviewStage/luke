@@ -537,6 +537,14 @@ interface TaskTabs {
   readonly changes?: readonly ChangesStripTab[] | undefined;
   /** When each tab was last viewed on the task, the latest last (`use-idle-tabs.ts`). */
   readonly viewedAt?: readonly ViewedAt<SidePanelTab>[] | undefined;
+  /** The agent each tab a link or the "+" opened stands under where it is not the tab's own (`ownerOf`), kept for this launch alone. */
+  readonly owners?: readonly TabOwner[] | undefined;
+}
+
+/** A tab and the agent whose strip it stands in. */
+interface TabOwner {
+  readonly tab: SidePanelTab;
+  readonly agent: string;
 }
 
 /**
@@ -737,6 +745,10 @@ export interface SidePanelControl {
    * (`OpenPage.shownOn`).
    */
   onOpen: (tab: SidePanelTab, place?: PagePlace) => void;
+  /** The agent the task's column shows, whose tabs alone the strip draws and the "+" offers; none while it shows none. */
+  agent: string | undefined;
+  /** The agent whose strip the tab stands in on the open task, as `onShow` must show that agent's tab in the task's column for the tab to be drawn; none for a tab every agent's strip draws. */
+  ownerOf: (tab: SidePanelTab) => string | undefined;
   /** Shows the panel on the tab of the task given, as `onChoose` does on the open task: what a pin or a notification asks, the task opened beside it. */
   onShow: (taskId: string, tab: SidePanelTab) => void;
   /**
@@ -829,6 +841,8 @@ export interface OpenTask {
   pages?: PagePlace | undefined;
   /** The stop the panel stands at, where it is not the task itself, as an Inbox item of the task is one; a new stop starts with the panel shut. */
   stop?: string | undefined;
+  /** The agent the task's column shows, whose tabs alone the strip draws (`ownerOf`); none while it shows none, as its Overview or a draft does, where every tab stands. */
+  agent?: string | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files opened on it. */
@@ -848,6 +862,8 @@ export interface DrawnTabs {
   cloudBrowsers?: readonly string[] | undefined;
   /** The terminals the window holds for the account signed in, whose Terminal and Local tabs alone the strip draws, so another account's stand hidden until it signs in again. */
   shells?: HeldShells | undefined;
+  /** The agent whose cloud browser holds each of `cloudBrowsers`, by its id. */
+  cloudBrowserAgents?: ReadonlyMap<string, string> | undefined;
 }
 
 /** The developer's own choices of fixed tab on the task. */
@@ -1496,6 +1512,81 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStr
 }
 
 /**
+ * The agent a tab is its own by: an agent's Pull request, Terminal, Local,
+ * transcript, and Browser tabs, and a worker's, its parent's; none for a
+ * file, a page, or a fixed kind, which stand on the task.
+ */
+function agentOwnerOf(tab: SidePanelTab, drawn: DrawnTabs): string | undefined {
+  if (isFixedTab(tab)) return undefined;
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.CHANGES:
+      return tab.changes;
+    case STRIP_TAB_KIND.TERMINAL:
+      return tab.terminal;
+    case STRIP_TAB_KIND.LOCAL:
+      return tab.local;
+    case STRIP_TAB_KIND.TRANSCRIPT:
+      return tab.transcript;
+    case STRIP_TAB_KIND.SUBAGENT:
+      return tab.delegation?.agent;
+    case STRIP_TAB_KIND.CLOUD_BROWSER:
+      return drawn.cloudBrowserAgents?.get(tab.cloudBrowser);
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The agent whose strip a tab stands in: the one it was opened under where
+ * that is not its own, as a page or a file a conversation's link opened is
+ * that agent's, else its own agent's (`agentOwnerOf`). A tab of no agent's
+ * stands in every agent's strip.
+ */
+function ownerOf(held: HeldState, drawn: DrawnTabs, tab: SidePanelTab): string | undefined {
+  const opened = (taskTabs(held, drawn.task.id).owners ?? []).find((each) =>
+    sameTab(each.tab, tab),
+  );
+  return opened?.agent ?? agentOwnerOf(tab, drawn);
+}
+
+/** Whether the strip of the agent the column shows draws the tab: one of that agent's, or of none; every tab while it shows no agent. */
+function ownedHere(held: HeldState, drawn: DrawnTabs, tab: SidePanelTab): boolean {
+  const agent = drawn.task.agent;
+  if (agent === undefined) return true;
+  const owner = ownerOf(held, drawn, tab);
+  return owner === undefined || owner === agent;
+}
+
+/**
+ * The state with the tab standing under `agent`: noted where that is not
+ * its own agent's, as a page a conversation's link opened is, and let go of
+ * where it is, so a tab opened again under its own agent stands there.
+ */
+function withOwner(
+  held: HeldState,
+  drawn: DrawnTabs,
+  tab: SidePanelTab,
+  agent: string | undefined,
+): HeldState {
+  if (agent === undefined || ownerOf(held, drawn, tab) === agent) return held;
+  const own = agentOwnerOf(tab, drawn) === agent;
+  return withTaskTabs(held, drawn.task.id, (was) => {
+    const others = (was.owners ?? []).filter((each) => !sameTab(each.tab, tab));
+    if (own && others.length === (was.owners ?? []).length) return was;
+    return { ...was, owners: own ? others : [...others, { tab, agent }] };
+  });
+}
+
+/** The state with the agent a tab was opened under let go of, as its close asks, so it opens afresh under whichever agent opens it next. */
+function withoutOwner(held: HeldState, taskId: string | undefined, tab: SidePanelTab): HeldState {
+  return withTaskTabs(held, taskId, (was) =>
+    was.owners?.some((each) => sameTab(each.tab, tab)) === true
+      ? { ...was, owners: was.owners.filter((each) => !sameTab(each.tab, tab)) }
+      : was,
+  );
+}
+
+/**
  * The tabs of each object kind the strip draws, in the place a tab the
  * task's order does not hold stands in after the fixed ones; a table over
  * every kind the panel holds, so a kind added draws nowhere until it says
@@ -1529,20 +1620,23 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
   const kinds = [
     ...drawnFixed(held, drawn.task),
     ...Object.values(DRAWN_OF_KIND).flatMap((drawnOf) => drawnOf(held, drawn)),
-  ];
+  ].filter((tab) => ownedHere(held, drawn, tab));
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
 }
 
 /**
  * The tabs a chosen tab the task does not have reads as the first of
  * (`shownTab`): the task's fixed tabs in the strip's order, after the tab of
- * another kind moved ahead of them where one stands first in the strip. Note
+ * another kind ahead of them: the strip's tab last viewed, as an agent's
+ * strip comes back to the tab it was left on, else the strip's first. Note
  * that the tab ahead is the task's order's own, so it is the same object from
  * one render to the next, as the tab shown must be.
  */
 function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
   const fixed = drawnFixed(held, drawn.task);
-  const head = stripOf(held, drawn)[0];
+  const strip = stripOf(held, drawn);
+  const recent = taskTabs(held, drawn.task.id).recent ?? [];
+  const head = recent.findLast((viewed) => strip.some((tab) => sameTab(tab, viewed))) ?? strip[0];
   const ahead =
     head === undefined || isFixedTab(head)
       ? undefined
@@ -1552,7 +1646,9 @@ function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[
 
 /** The tab the panel shows on the task: the chosen one as `shownTab` holds it to the task. */
 function shownIn(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
-  return shownTab(held.tab, fallbackTabs(held, drawn), drawn, drawnChanges(held, drawn));
+  // Note that a tab chosen under another agent gives way to this agent's own.
+  const kept = held.tab !== undefined && ownedHere(held, drawn, held.tab) ? held.tab : undefined;
+  return shownTab(kept, fallbackTabs(held, drawn), drawn, drawnChanges(held, drawn));
 }
 
 /**
@@ -1612,11 +1708,13 @@ function withTabLetGo(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): Hel
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
   const closed = withTabLetGo(held, tab, drawn);
   if (closed === undefined) return held;
-  const forgotten = withoutViewed(closed, drawn.task.id, tab);
+  const forgotten = withoutOwner(withoutViewed(closed, drawn.task.id, tab), drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
   // Note that only a close that empties the strip shuts the panel, because a
-  // tab the strip never drew may close without the developer seeing it go.
-  const shut = left.length === 0 && stripOf(held, drawn).length > 0;
+  // tab the strip never drew may close without the developer seeing it go,
+  // and that an agent's strip emptied leaves it open for the other agents'.
+  const shut =
+    drawn.task.agent === undefined && left.length === 0 && stripOf(held, drawn).length > 0;
   const kept = shut ? { ...forgotten, open: false } : forgotten;
   const shown = shownIn(held, drawn);
   if (shown === undefined || !sameTab(shown, tab)) return kept;
@@ -2060,6 +2158,7 @@ export function useSidePanel(
   room: ShellRoom = SHELL_ROOM.WIDE,
   cloudBrowsers?: readonly string[] | undefined,
   heldAgents?: readonly string[] | undefined,
+  cloudBrowserAgents?: ReadonlyMap<string, string> | undefined,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -2108,7 +2207,7 @@ export function useSidePanel(
   const shells = useOwnedShells(useContext(TerminalsContext).held, useWindowAccount());
   const shownFor = (holds: TaskHolds) =>
     shownIn(state, {
-      task: { id: taskId, holds },
+      task: { id: taskId, holds, agent: task.agent },
       agents,
       subagents,
       files: taskFiles,
@@ -2117,6 +2216,7 @@ export function useSidePanel(
       heldAgents,
       cloudBrowsers,
       shells,
+      cloudBrowserAgents,
     });
 
   // Note that something arriving on the task adds its tab without taking
@@ -2147,9 +2247,14 @@ export function useSidePanel(
     () => DRAWN_KINDS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
     [tabs, seen],
   );
+  // The task as the strip draws it: as seen, under the agent its column shows now.
+  const shownTask = useMemo(
+    () => (seen.agent === task.agent ? seen : { ...seen, agent: task.agent }),
+    [seen, task.agent],
+  );
   const drawn = useMemo(
     () => ({
-      task: seen,
+      task: shownTask,
       agents,
       subagents,
       files: taskFiles,
@@ -2158,8 +2263,20 @@ export function useSidePanel(
       heldAgents,
       cloudBrowsers,
       shells,
+      cloudBrowserAgents,
     }),
-    [seen, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers, shells],
+    [
+      shownTask,
+      agents,
+      subagents,
+      taskFiles,
+      pagesHere,
+      taskAgents,
+      heldAgents,
+      cloudBrowsers,
+      shells,
+      cloudBrowserAgents,
+    ],
   );
   // The Terminal and Local tabs open of the terminals the account signed in holds.
   const heldTerminals = useMemo(
@@ -2174,6 +2291,13 @@ export function useSidePanel(
       state.locals.filter((tab) => holdsShell(shells, TERMINAL_KIND.LOCAL, tab.local, tab.shell)),
     [state.locals, shells],
   );
+  // The agent each task's column last showed, which a link pressed while it shows none, as from its Overview, opens under.
+  const [lastAgents, setLastAgents] = useState<ReadonlyMap<string, string>>(new Map());
+  const columnAgent = task.agent;
+  if (taskId !== undefined && columnAgent !== undefined && lastAgents.get(taskId) !== columnAgent) {
+    setLastAgents((was) => new Map(was).set(taskId, columnAgent));
+  }
+  const opener = columnAgent ?? (taskId === undefined ? undefined : lastAgents.get(taskId));
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
@@ -2268,7 +2392,11 @@ export function useSidePanel(
       update((held) => ({
         ...withPagePlaced(
           withTab(
-            withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+            withTabLast(
+              withChosenViewed(withOwner(held, drawn, tab, columnAgent), tab, drawn),
+              tab,
+              drawn,
+            ),
             tab,
             taskId,
             drawn.task.bare === true,
@@ -2279,7 +2407,7 @@ export function useSidePanel(
         open: true,
       }));
     },
-    [update, drawn, taskId, pagePlace],
+    [update, drawn, taskId, pagePlace, columnAgent],
   );
   // Note that the retired kinds, which a step of the history or a pin an
   // earlier version kept may still name, are never chosen nor shown: a
@@ -2318,11 +2446,18 @@ export function useSidePanel(
     (ref: CodeRef, commit?: string, reads?: FileReads) => {
       setOpened((was) => was + 1);
       update((held) => ({
-        ...withFileAsked(held, ref, commit, drawn, taskId, reads ?? fileReads),
+        ...withFileAsked(
+          withOwner(held, drawn, fileTab(ref.path), opener),
+          ref,
+          commit,
+          drawn,
+          taskId,
+          reads ?? fileReads,
+        ),
         open: true,
       }));
     },
-    [update, drawn, taskId, fileReads],
+    [update, drawn, taskId, fileReads, opener],
   );
   const onOpen = useCallback(
     (tab: SidePanelTab, place?: PagePlace) => {
@@ -2345,7 +2480,11 @@ export function useSidePanel(
           : { ...drawn, pages: [...drawn.pages, tab.page] };
       update((held) => ({
         ...withPagePlaced(
-          withTab(withTabLast(withChosenViewed(held, tab, here), tab, here), tab, taskId),
+          withTab(
+            withTabLast(withChosenViewed(withOwner(held, here, tab, opener), tab, here), tab, here),
+            tab,
+            taskId,
+          ),
           tab,
           pagePlace,
           beside,
@@ -2353,8 +2492,9 @@ export function useSidePanel(
         open: true,
       }));
     },
-    [update, drawn, taskId, pagePlace],
+    [update, drawn, taskId, pagePlace, opener],
   );
+  const tabOwner = useCallback((tab: SidePanelTab) => ownerOf(state, drawn, tab), [state, drawn]);
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most (`withFileShown`).
   const onBrowseFile = useCallback(
@@ -2509,6 +2649,8 @@ export function useSidePanel(
     onPlacePins,
     onOpenFile,
     onOpen,
+    agent: columnAgent,
+    ownerOf: tabOwner,
     onBrowseFile,
     onFileHistory,
     onResize,
