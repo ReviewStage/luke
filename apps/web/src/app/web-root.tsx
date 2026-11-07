@@ -27,7 +27,7 @@
  */
 
 import type { LinkPlatform } from "@repo/features/link-open";
-import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
+import type { DuplicateGatewayMethod, DuplicateHostAct, HostTag } from "@repo/host/effect";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
@@ -120,7 +120,10 @@ export async function mountWebApp(
   const sentry = startWebSentry(options.sentry ?? webSentryBuild());
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that a count is forked only once the host stands, by which time the runtime is set.
-  let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
+  let runtime: ManagedRuntime.ManagedRuntime<
+    WebHostTag | HostTag,
+    DuplicateGatewayMethod | DuplicateHostAct
+  >;
   // A defect in a count is reported, as the desktop's acts are.
   const fork = (effect: Effect.Effect<void>): void => {
     runtime.runFork(Effect.withErrorReporting(effect, { defectsOnly: true }));

@@ -40,20 +40,20 @@ A method two composers claim fails the build with `DuplicateGatewayMethod`
 (`composer.ts`), so that one does not need stating here. `client.bootstrap` and
 `shutdown` are the two methods no composer owns: `compose-host.ts` answers them
 itself, because the first reads several composers and giving it to any would
-hand that composer references to the others. They are spread over the folded
-table rather than folded with it, so a composer that claimed one would be
-replaced without an error.
+hand that composer references to the others. They are folded with the
+composers' tables, so a composer that claimed one fails the build the same way.
 
-**Acts have no such refusal.** `compose-host.ts` spreads every composer's act
-table into the one the assembly holds, so an act two composers answer is not an
-error: the later spread wins, silently. The type holds only the other half,
-that the spread answers every act in `HOST_ACTS`. Where a contract's acts are
-split between two composers, as `TASKS_ACTS` is between the tasks and the
-workspaces, the split is one list (`compose-workspaces.ts`'s
+**An act two composers claim fails the build too**, with `DuplicateHostAct`:
+`compose-host.ts` folds every composer's act table into the one the assembly
+holds, as it folds the methods. A platform concern left out answers its acts
+in its composer's place, so that is one claim, not a second. The type holds
+the other half, that the fold answers every act in `HOST_ACTS`. Where a
+contract's acts are split between two composers, as `TASKS_ACTS` is between
+the tasks and the workspaces, the split is one list (`compose-workspaces.ts`'s
 `WORKSPACES_TASKS_ACT`) that one side `Pick`s and the other `Omit`s. That list
 moves only the types: each side's handlers are written under their own act
 names, so moving an act means moving its handler too, since one left behind
-still compiles and, spread later, wins.
+still compiles and fails the build as a second claim.
 
 ## One domain, one composer
 

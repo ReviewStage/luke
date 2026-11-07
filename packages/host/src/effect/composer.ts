@@ -6,7 +6,14 @@
  */
 import type { GatewayMethodTable } from "@repo/gateway";
 import { Effect, Layer, type Scope } from "effect";
-import { type Composer, type DuplicateGatewayMethod, foldMethods } from "../composer.js";
+import {
+  type ActClaims,
+  type DuplicateGatewayMethod,
+  type DuplicateHostAct,
+  type Folded,
+  foldActs,
+  foldMethods,
+} from "../composer.js";
 
 /**
  * A lifetime written as the two halves a concern that holds something has:
@@ -44,8 +51,14 @@ export const layersInOrder = <E, R>(
     Layer.empty,
   );
 
-/** The composers' method tables folded into one, or the collision that fails the build holding it. */
+/** The method tables folded into one, or the collision that fails the build holding it. */
 export const mergedMethods = (
-  composers: readonly Composer[],
+  tables: readonly GatewayMethodTable[],
 ): Effect.Effect<GatewayMethodTable, DuplicateGatewayMethod> =>
-  Effect.suspend(() => Effect.fromResult(foldMethods(composers)));
+  Effect.suspend(() => Effect.fromResult(foldMethods(tables)));
+
+/** The composers' act tables folded into one, or the collision that fails the build holding it. */
+export const mergedActs = <const Tables extends readonly ActClaims[]>(
+  tables: Tables,
+): Effect.Effect<Folded<Tables>, DuplicateHostAct> =>
+  Effect.suspend(() => Effect.fromResult(foldActs(tables)));

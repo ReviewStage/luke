@@ -11,6 +11,7 @@ import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
   type DuplicateGatewayMethod,
+  type DuplicateHostAct,
   Environment,
   type HostAssemblyTag,
   hostAssemblyLayer,
@@ -96,7 +97,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
  */
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
-): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod> {
+): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod | DuplicateHostAct> {
   const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
     // The desktop runs every platform concern: it is the host they were written for.
