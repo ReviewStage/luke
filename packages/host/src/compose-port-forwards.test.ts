@@ -204,9 +204,9 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
 
 it.effect("forwarding is let go once a sandbox seen running stops", () =>
   Effect.gen(function* () {
-    const { call, serve, stop, listeners, told } = yield* subject();
+    const { set, serve, stop, listeners, told } = yield* subject();
     serve(AGENT_ID, [3000]);
-    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
+    yield* set({ agentId: AGENT_ID, on: true });
     yield* settle;
     assert.deepEqual([...listeners.keys()], [3000]);
 
