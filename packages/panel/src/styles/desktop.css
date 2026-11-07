@@ -638,10 +638,11 @@ body,
   max-width: max(280px, calc(100cqi - var(--document-reserve)));
 }
 
+/* Note that only a task's page holds the row, so it is placed without asking the page what it holds. */
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
-  .desktop-task:has(> .desktop-task-main)
+  .desktop-task
   > .task-tabs
   > * {
   grid-column: 1 / -1;
