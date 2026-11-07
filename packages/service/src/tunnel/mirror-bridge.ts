@@ -113,10 +113,10 @@ const watchFolders = () => {
   }
   for (const folder of folders) {
     if (watched.has(folder)) continue;
-    // Note that a folder gone since the listing is skipped rather than failed, because the changes of that listing are still to be told and the next listing drops it.
+    // Note that a folder gone since the listing is skipped rather than failed, and listed again, because the changes of that listing are still to be told and the folder may be back before its parent's watch.
     let watcher;
     try { watcher = fs.watch(path.join(root, folder), stir); } catch (error) {
-      if (error.code === "ENOENT") continue;
+      if (error.code === "ENOENT") { stir(); continue; }
       throw error;
     }
     watcher.on("error", () => fail("${MIRROR_BRIDGE_STEP.WATCH}"));
