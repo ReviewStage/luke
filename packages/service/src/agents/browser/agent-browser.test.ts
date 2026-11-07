@@ -315,7 +315,7 @@ it.effect("a resume whose snapshot is gone is given up on at once, saying so", (
 );
 
 it.effect(
-  "a reopen whose image is still being prepared answers starting at once, its wait on the image kept past the answer",
+  "a reopen whose image is still being prepared answers starting at once, and the open kept past the answer brings the sandbox up once the image is ready",
   () =>
     Effect.gen(function* () {
       const peer = yield* fakeCdpPeer();
@@ -324,15 +324,21 @@ it.effect(
         named: true,
         resumeUnavailable: 400,
         resumeCode: "image_not_ready",
+        resumeRefusals: 2,
       });
       const kept = keptAfterResponse();
 
-      // Note that the clock never moves, so an open that waited on the image here would never answer.
+      // Note that the clock has not moved yet, so an open that waited on the image here would never answer.
       const unreachable = yield* Effect.flip(service.ensure(SESSION)).pipe(
         Effect.provide(kept.layer),
       );
+      const opening = yield* Effect.forkChild(kept.run);
+      yield* TestClock.adjust(Duration.seconds(10));
+      yield* Fiber.join(opening);
+      const standing = yield* service.ensure(SESSION);
 
       assert.equal(unreachable.reason, BROWSER_UNREACHABLE.STARTING);
+      assert.deepEqual(standing, { sandboxSessionId: FAKE_SANDBOX.RESUMED_SESSION, started: true });
     }),
 );
 
