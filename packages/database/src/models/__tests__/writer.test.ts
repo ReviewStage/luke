@@ -534,4 +534,54 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         assert.deepEqual(handed, [sentLineId("plan")]);
       }),
   );
+  it.effect(
+    "a resend the runtime refused partway stops there: the lines it took go to the end of the transcript, and the refused line stands where it was, still lost, for the next resend",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        for (const clientKey of ["first", "second"]) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text: `The ${clientKey} ask.`, clientKey, sender: { kind: MESSAGE_SENDER.APP } },
+            Effect.succeed(true),
+          );
+        }
+        yield* TestClock.adjust(Duration.seconds(1));
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: turnId,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 1000, "the sandbox failed");
+        yield* TestClock.adjust(Duration.seconds(1));
+        const handed: string[] = [];
+        const takesFirstOnly = (line: { readonly clientId: string }) =>
+          Effect.sync(() => {
+            handed.push(line.clientId);
+            return line.clientId === sentLineId("first");
+          });
+        const transcript = Effect.map(
+          listMessagesPast(target.userId, target.conversationId, TOOLS, { seq: 0, revision: 0 }),
+          (page) =>
+            page.read.ok ? page.read.value.map((row) => [row.clientId, row.createdAt]) : [],
+        );
+        const before = yield* transcript;
+
+        const resent = yield* writer.resendLostLines(target, takesFirstOnly);
+        const after = yield* transcript;
+        const again = yield* writer.resendLostLines(target, takesFirstOnly);
+
+        assert.ok(Result.isSuccess(resent));
+        assert.equal(resent.success.stopped, true);
+        assert.equal(resent.success.taken.length, 1);
+        assert.deepEqual(after[0], before[1]);
+        assert.equal(after[1]?.[0], sentLineId("first"));
+        assert.ok(Number(after[1]?.[1]) > Number(before[0]?.[1]), "the line taken is written anew");
+        assert.ok(Result.isSuccess(again));
+        assert.deepEqual(again.success, { taken: [], stopped: true });
+        assert.deepEqual(handed, [sentLineId("first"), sentLineId("second"), sentLineId("second")]);
+      }),
+  );
 });
