@@ -11,7 +11,6 @@
  */
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
-import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
@@ -35,7 +34,6 @@ import {
   inboxMessageSync,
   memberSync,
   messagesSync,
-  pullRequestChaptersSync,
   taskBlockSync,
   taskPinSync,
   taskReadSync,
@@ -50,11 +48,6 @@ import { Effect, Option } from "effect";
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
-  automationRunsLiveStatements,
-  automationsLiveStatements,
-  automationWorkspaceRunsLiveStatements,
-} from "../automations/automation-live.js";
-import {
   accountInboxLiveStatements,
   accountItemsDeltaStatements,
   accountItemsLiveStatements,
@@ -64,12 +57,18 @@ import {
 import type { AnyBoundRead } from "../live/live-read-binding.js";
 import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { agentOriginRead } from "../live/reads/agent-origin.js";
+import {
+  automationRunsRead,
+  automationsRead,
+  automationWorkspaceRunsRead,
+} from "../live/reads/automations.js";
 import { agentBrowserTabsRead, taskBrowserTabsRead } from "../live/reads/browser-tabs.js";
 import { hostsRead } from "../live/reads/hosts.js";
 import { installedSkillsRead } from "../live/reads/installed-skills.js";
 import { integrationStatusesRead } from "../live/reads/integration-statuses.js";
 import { macCommandsRead } from "../live/reads/mac-commands.js";
 import { agentPagesRead, taskPagesRead } from "../live/reads/pages.js";
+import { pullRequestChaptersRead } from "../live/reads/pull-request-chapters.js";
 import { sidebarRead } from "../live/reads/sidebar.js";
 import { taskCommentsRead } from "../live/reads/task-comments.js";
 import { taskHistoryRead } from "../live/reads/task-history.js";
@@ -260,111 +259,6 @@ export const agentInboxLive = defineLiveQuery({
 });
 
 /**
- * What an automation's reads read (`automation-live.ts`): the automations
- * and their runs, the agent each run started and what its status is read
- * from (`agent-standing.ts`), its newest turn and the newest line awaiting
- * one, and the membership that admits the reader to the workspace.
- */
-const AUTOMATION_READS = [
-  automationSync,
-  automationRunSync,
-  agentSync,
-  turnsSync,
-  messagesSync,
-  conversationsSync,
-  memberSync,
-] as const;
-
-/**
- * A workspace's automations, each with its newest run and that run's
- * agent, woken on the workspace's topic by an automation made, changed, or
- * deleted, a run fired, started, or settled, the run's agent renamed or its
- * turn queued, started, or settled, and a membership of the workspace
- * moved, all of which name it. Note that a line awaiting the agent's next
- * turn is written on its conversation's topic alone (`messagesSync`),
- * because every streamed step rewrites a journal and waking the workspace
- * on each would re-run every workspace-keyed read for nothing: the mark
- * that line moves shows with the next turn, or at the hold's end.
- */
-export const automationsLive = defineLiveQuery({
-  name: "automations",
-  params: ["userId", "workspaceId"],
-  reads: AUTOMATION_READS,
-  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
-  statements: ({ userId, workspaceId }) => automationsLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/** The newest runs of a workspace's automations, each with its automation and its agent, woken as the automations are. */
-export const automationWorkspaceRunsLive = defineLiveQuery({
-  name: "automationWorkspaceRuns",
-  params: ["userId", "workspaceId"],
-  reads: AUTOMATION_READS,
-  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
-  statements: ({ userId, workspaceId }) =>
-    automationWorkspaceRunsLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * One automation's newest runs, each with its agent, woken as the
- * automations are, on the topic of the workspace the automation stands in,
- * which its procedure reads it by before it binds the read
- * (`automationId`, `workspaceId`): a run names no topic of its automation.
- */
-export const automationRunsLive = defineLiveQuery({
-  name: "automationRuns",
-  params: ["userId", "automationId", "workspaceId"],
-  reads: AUTOMATION_READS,
-  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
-  statements: ({ userId, automationId }) => automationRunsLiveStatements(userId, automationId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/** A pull request's number a read's param binds, as its procedure wrote it; zero, which numbers no pull request, where it names none. */
-function pullRequestNumberParam(param: string): number {
-  const number = Number(param);
-  return Number.isSafeInteger(number) && number > 0 ? number : 0;
-}
-
-/**
- * One coding agent's pull request's newest chapters, by the number the
- * reader names, as the agent's read answers them, woken by a claim, finish,
- * or failure in the agent's workspace (`workspaceId`, which the procedure
- * binds from the agent's own row), all of which name its chapters topic, by
- * the agent's own row, and by what admits the reader to its workspace or
- * repository. The agent's task is read for the reader's reach of it
- * (`agentVisibleTo`) and wakes nothing, as a task's reach moves with what
- * admits the reader. Note that whether the reader can generate them comes
- * from their own keys, which no statement reads, so the procedure answers it
- * beside the rows on every poll, and a key saved while the read is held
- * shows on the next.
- */
-export const pullRequestChaptersLive = defineLiveQuery({
-  name: LIVE_READ.PULL_REQUEST_CHAPTERS,
-  params: ["userId", "agentId", "number", "workspaceId"],
-  reads: [
-    pullRequestChaptersSync,
-    agentSync,
-    taskSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-  ],
-  topics: ({ userId, agentId, workspaceId }) => [
-    [TOPIC.WORKSPACE_CHAPTERS, workspaceId],
-    [TOPIC.AGENT, agentId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, agentId, number }) =>
-    Option.map(
-      pullRequestChaptersLiveStatement(userId, agentId, pullRequestNumberParam(number)),
-      (chapters) => ({ chapters }),
-    ),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
  * A coding agent's transcript, or one of its workers' (`conversationId`,
  * under the agent's own `parentConversationId`), started by `ownerId` and
  * read by `readerId` while it is a member of the agent's workspace
@@ -463,6 +357,10 @@ export const BOUND_READS: readonly AnyBoundRead[] = [
   installedSkillsRead,
   accountPreferencesRead,
   workspaceMemoriesRead,
+  automationsRead,
+  automationWorkspaceRunsRead,
+  automationRunsRead,
+  pullRequestChaptersRead,
 ];
 
 export const LIVE_QUERIES = liveQueryRegistry([
@@ -471,10 +369,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   inboxItemsLive,
   taskInboxLive,
   agentInboxLive,
-  automationsLive,
-  automationWorkspaceRunsLive,
-  automationRunsLive,
-  pullRequestChaptersLive,
   agentTranscriptLive,
   ...BOUND_READS,
 ]);

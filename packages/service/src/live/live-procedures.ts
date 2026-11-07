@@ -87,11 +87,11 @@
  * `GET /api/live/automations?workspaceId=` answers a workspace's automations
  * the account reads, each with its newest run, and
  * `GET /api/live/automation-workspace-runs?workspaceId=` their newest runs,
- * one statement each (`automation-live.ts`); `GET /api/live/automation-runs?id=`
- * answers one automation's newest runs, after the automation is read as the
- * account, so one it does not read is not found. Each is woken by a write
- * that names the automation's workspace (`automationsLive`,
- * `automationWorkspaceRunsLive`, `automationRunsLive`).
+ * one statement each; `GET /api/live/automation-runs?id=` answers one
+ * automation's newest runs, after the automation is read as the account,
+ * so one it does not read is not found. Each is woken by a write that names
+ * the automation's workspace (`automationsRead`,
+ * `automationWorkspaceRunsRead`, `automationRunsRead`).
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -130,10 +130,10 @@
  * agent's pull request's newest chapters as one statement, after the agent
  * is read as the account and a token minted for its repository confirms its
  * workspace still reaches it, as the agent's own read of them admits a
- * reader (`agentChaptersAdmission`), so an agent it does not reach is not
+ * reader, so an agent it does not reach is not
  * found; with whether the reader can generate them on a key of their own
  * beside it, which no statement can read. It is woken by a claim, finish,
- * or failure in the agent's workspace (`pullRequestChaptersLive`), so
+ * or failure in the agent's workspace (`pullRequestChaptersRead`), so
  * another member's Generate reaches an open view without a Refresh.
  *
  * `GET /api/live/integration-statuses` answers every integration row the
@@ -157,7 +157,6 @@
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readVisibleAgent } from "@repo/database/models/agent-store";
-import { readAutomation } from "@repo/database/models/automation-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
 import { readTaskHeader } from "@repo/database/models/task-store";
@@ -186,8 +185,6 @@ import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
-import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -201,12 +198,8 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentInboxLive,
   agentTranscriptLive,
-  automationRunsLive,
-  automationsLive,
-  automationWorkspaceRunsLive,
   inboxItemsLive,
   inboxLive,
-  pullRequestChaptersLive,
   taskInboxLive,
   tasksLive,
 } from "../sync/live-queries.js";
@@ -222,12 +215,18 @@ import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { agentOriginRead } from "./reads/agent-origin.js";
+import {
+  automationRunsRead,
+  automationsRead,
+  automationWorkspaceRunsRead,
+} from "./reads/automations.js";
 import { agentBrowserTabsRead, taskBrowserTabsRead } from "./reads/browser-tabs.js";
 import { hostsRead } from "./reads/hosts.js";
 import { installedSkillsRead } from "./reads/installed-skills.js";
 import { integrationStatusesRead } from "./reads/integration-statuses.js";
 import { macCommandsRead } from "./reads/mac-commands.js";
 import { agentPagesRead, taskPagesRead } from "./reads/pages.js";
+import { pullRequestChaptersRead } from "./reads/pull-request-chapters.js";
 import { sidebarRead } from "./reads/sidebar.js";
 import { taskCommentsRead } from "./reads/task-comments.js";
 import { taskHistoryRead } from "./reads/task-history.js";
@@ -917,44 +916,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         ? liveQueryParts(tasksLive, { userId: context.userId }, input)
         : liveDeltaParts(tasksLive, { userId: context.userId }, sync);
     }),
-    automations: signedIn.automations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      return yield* liveQueryParts(
-        automationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(function* ({
-      input,
-      context,
-    }) {
-      yield* sameUser(input, context.userId);
-      if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      return yield* liveQueryParts(
-        automationWorkspaceRunsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const automationId = yield* pathUuid(input.id);
-      const automation = yield* hostedStoreOrUnavailable(
-        readAutomation(context.userId, automationId),
-      );
-      if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        automationRunsLive,
-        {
-          userId: context.userId,
-          automationId,
-          workspaceId: automation.value.organizationId,
-        },
-        input,
-      );
-    }),
+    automations: signedIn.automations.effect(answerBoundRead(automationsRead)),
+    automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(
+      answerBoundRead(automationWorkspaceRunsRead),
+    ),
+    automationRuns: signedIn.automationRuns.effect(answerBoundRead(automationRunsRead)),
     taskRecord: signedIn.taskRecord.effect(answerBoundRead(taskRecordRead)),
     taskPages: signedIn.taskPages.effect(answerBoundRead(taskPagesRead)),
     agentPages: signedIn.agentPages.effect(answerBoundRead(agentPagesRead)),
@@ -1039,26 +1005,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       answerBoundRead(workspaceIntegrationsRead),
     ),
 
-    pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const number = yield* pullRequestNumberOf([input.number]);
-      // One number named always reads as one or is refused.
-      if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const { agent } = yield* reachedAgentById(context.userId, input.id);
-      // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
-      const { generator } = yield* agentChaptersAdmission(context.userId, agent);
-      const sealed = yield* liveQueryParts(
-        pullRequestChaptersLive,
-        {
-          userId: context.userId,
-          agentId: agent.id,
-          number: String(number),
-          workspaceId: agent.organizationId,
-        },
-        input,
-      );
-      return { ...sealed, ...generator };
-    }),
+    pullRequestChapters: signedIn.pullRequestChapters.effect(
+      answerBoundRead(pullRequestChaptersRead),
+    ),
     integrationStatuses: signedIn.integrationStatuses.effect(
       answerBoundRead(integrationStatusesRead),
     ),

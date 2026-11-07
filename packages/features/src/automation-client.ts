@@ -2,16 +2,10 @@ import { readEither } from "@repo/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import {
-  type AutomationRunsLiveAnswer,
-  type AutomationsLiveAnswer,
-  type AutomationWorkspaceRunsLiveAnswer,
-  withWebhookUrl,
-} from "./automation-live.js";
+import { withWebhookUrl } from "./automation-live.js";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_RENAMES,
-  type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
@@ -26,11 +20,9 @@ import {
   automationCreateParamsSchema,
 } from "./automation-view.js";
 import type { automationChangeRequestSchema } from "./automation-wire.js";
-import { hostedCall } from "./hosted-call.js";
-import { askLive, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
-import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
-import type { RepositoryUnreached } from "./repository-reach-wire.js";
-import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
+import { type HostedClient, hostedClient } from "./hosted-link.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 
 /**
  * automation-client.ts -- the window's side of the account's automations, as the host asks the service for them.
@@ -53,53 +45,10 @@ export interface HostedAutomationClientOptions {
   requestTimeoutMs?: number;
 }
 
-type Failed = {
-  readonly failure: AutomationCallFailure;
-  readonly unreached?: RepositoryUnreached;
-};
-
-const UNANSWERED: Failed = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
-
-/** The refusals a call may answer with, by the service's own word for each. */
-type NamedRefusals = Readonly<Partial<Record<HostedApiError, AutomationCallFailure>>>;
-
-/** The refusals a live read can answer with, until live reads move onto `hostedCall`. */
-const REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: AUTOMATION_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.NO_REPOSITORY]: AUTOMATION_CALL_FAILURE.NO_REPOSITORY,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.INVALID_REQUEST]: AUTOMATION_CALL_FAILURE.INVALID,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: AUTOMATION_CALL_FAILURE.NOT_PERMITTED,
-} satisfies NamedRefusals;
-
-function failedAs(failed: HostedFailure, named: NamedRefusals): Failed {
-  if (failed._tag !== "HostedRefused") return UNANSWERED;
-  const failure = named[failed.refusal];
-  if (failure === undefined) return UNANSWERED;
-  const unreached =
-    failure === AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
-      ? failed.data?.unreached
-      : undefined;
-  return unreached === undefined ? { failure } : { failure, unreached };
-}
-
 /** A write's answer as the window hears it: the summary with its webhook's address, and a webhook secret the write minted, the window's to show once by root AGENTS.md's carve-out. */
 function summaryOnly(serviceBaseUrl: string, read: AutomationView): AutomationView {
   if ("failure" in read) return read;
   return { ...read, automation: withWebhookUrl(serviceBaseUrl, read.automation) };
-}
-
-/** A live read's seal, or why there is none: signed out where the session is not the account it names. */
-function liveAnswered<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<Answer | Failed | typeof LIVE_SIGNED_OUT, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) =>
-    Effect.succeed(
-      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
-        ? LIVE_SIGNED_OUT
-        : failedAs(failed, REFUSALS),
-    ),
-  );
 }
 
 /** The window's reads and writes of the account's automations. */
@@ -233,70 +182,11 @@ export class HostedAutomationClient {
   }
 
   /**
-   * A workspace's automations sealed for following over Neon Realtime for
-   * the account `userId` names, or with `poll` their rows inline: signed
-   * out where the session is another account's, and why there is none
-   * otherwise.
+   * A declared automation read sealed for following (a workspace's
+   * automations or runs, or one automation's runs), or polled where `poll`
+   * asks (`askLiveRead`), its failures spelled as the automation calls'.
    */
-  listLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AutomationsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveAnswered(
-      askLive(
-        this.#hosted.live.automations,
-        { workspaceId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
-  }
-
-  /** Every run of a workspace's automations the account reads, sealed for following over Neon Realtime, on the terms the list is. */
-  workspaceRunsLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AutomationWorkspaceRunsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveAnswered(
-      askLive(
-        this.#hosted.live.automationWorkspaceRuns,
-        { workspaceId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
-  }
-
-  /** One automation's runs sealed for following over Neon Realtime, on the terms the list is: not found where the account does not read it. */
-  runsLive(
-    automationId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AutomationRunsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return liveAnswered(
-      askLive(
-        this.#hosted.live.automationRuns,
-        { id: automationId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-    );
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll, AUTOMATION_RENAMES);
   }
 }

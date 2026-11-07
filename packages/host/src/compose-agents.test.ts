@@ -63,6 +63,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -390,6 +391,8 @@ function fakeService() {
           case WORKSPACE_MEMORIES_READ.name:
             if (poll === undefined) asked.push(`memories-live:${params.workspaceId}`);
             return answered(live.memories);
+          case PULL_REQUEST_CHAPTERS_READ.name:
+            return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
           default:
             return assert.fail(`no script answers the live read ${read.name}`);
         }
@@ -569,7 +572,6 @@ function fakeService() {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
-    pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);

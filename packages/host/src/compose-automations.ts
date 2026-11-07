@@ -1,11 +1,11 @@
 import type { HostedAutomationClient } from "@repo/features";
 import {
+  AUTOMATION_RUNS_READ,
+  AUTOMATION_WORKSPACE_RUNS_READ,
+  AUTOMATIONS_READ,
   automationRunsGraceEdge,
-  automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
-  automationsLiveRowsSchema,
   automationWorkspaceRunsGraceEdge,
-  automationWorkspaceRunsLiveRowsSchema,
   automationWorkspaceRunsOfLiveRows,
 } from "@repo/features/automation-live";
 import {
@@ -80,14 +80,7 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the automations, as this concern asks it. */
 export type AutomationsClient = Pick<
   HostedAutomationClient,
-  | "create"
-  | "change"
-  | "remove"
-  | "runNow"
-  | "replaceWebhookSecret"
-  | "listLive"
-  | "runsLive"
-  | "workspaceRunsLive"
+  "create" | "change" | "remove" | "runNow" | "replaceWebhookSecret" | "liveRead"
 >;
 
 export interface AutomationsDependencies {
@@ -236,9 +229,15 @@ function automationFollows(
               if (lists.get(workspaceId) === list) lists.delete(workspaceId);
             }),
           );
-          yield* followAutomationRead(automationsLiveRowsSchema, {
+          yield* followAutomationRead(AUTOMATIONS_READ.rows, {
             live: (poll, after) =>
-              sealed(userId, (user) => client.listLive(workspaceId, user, poll, after)),
+              sealed(userId, (user) =>
+                client.liveRead(
+                  AUTOMATIONS_READ,
+                  { workspaceId, userId: user },
+                  poll ? { after } : undefined,
+                ),
+              ),
             take: (rows) =>
               Effect.andThen(
                 list.answer(rows),
@@ -261,9 +260,15 @@ function automationFollows(
         Effect.flatMap(
           historyAtEdges(automationRunsOfLiveRows, automationRunsGraceEdge, answers.answered),
           (take) =>
-            followAutomationRead(automationRunsLiveRowsSchema, {
+            followAutomationRead(AUTOMATION_RUNS_READ.rows, {
               live: (poll, after) =>
-                sealed(userId, (user) => client.runsLive(automationId, user, poll, after)),
+                sealed(userId, (user) =>
+                  client.liveRead(
+                    AUTOMATION_RUNS_READ,
+                    { id: automationId, userId: user },
+                    poll ? { after } : undefined,
+                  ),
+                ),
               take,
               unanswered: answers.unanswered,
               onTxWait: wait.onTxWait,
@@ -282,9 +287,15 @@ function automationFollows(
             answers.answered,
           ),
           (take) =>
-            followAutomationRead(automationWorkspaceRunsLiveRowsSchema, {
+            followAutomationRead(AUTOMATION_WORKSPACE_RUNS_READ.rows, {
               live: (poll, after) =>
-                sealed(userId, (user) => client.workspaceRunsLive(workspaceId, user, poll, after)),
+                sealed(userId, (user) =>
+                  client.liveRead(
+                    AUTOMATION_WORKSPACE_RUNS_READ,
+                    { workspaceId, userId: user },
+                    poll ? { after } : undefined,
+                  ),
+                ),
               take,
               unanswered: answers.unanswered,
               onTxWait: wait.onTxWait,

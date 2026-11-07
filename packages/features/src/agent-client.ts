@@ -166,7 +166,6 @@ import {
   providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
-import type { PullRequestChaptersLiveAnswer } from "./pull-request-chapters-live.js";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -1317,32 +1316,6 @@ export class HostedAgentClient {
     const read = { id: agentId, [LIVE_USER_QUERY]: userId };
     return Effect.catchIf(
       askLive(this.#hosted.live.agentInbox, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * One agent's pull request's newest chapters sealed for following, by the
-   * number the tab's own read of the pull request found, with whether the
-   * reader can generate them beside the statement, on the terms an agent's
-   * inbox is.
-   */
-  pullRequestChaptersLive(
-    agentId: string,
-    number: number,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    PullRequestChaptersLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { id: agentId, number: String(number), [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.pullRequestChapters, read, poll, after),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

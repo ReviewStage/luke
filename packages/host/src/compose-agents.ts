@@ -68,6 +68,7 @@ import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
@@ -256,7 +257,6 @@ const AGENT_QUEUED_WRITE = {
 /** The service's side of the agents, as this concern asks it. */
 export type AgentClient = Pick<
   HostedAgentClient,
-  | "pullRequestChaptersLive"
   | "generateChapters"
   | "models"
   | "writeDefault"
@@ -540,7 +540,13 @@ export function composeAgents(
     });
     const chapters = yield* heldChapters({
       seal: (key, poll, userId, after) =>
-        asked(client.pullRequestChaptersLive(key.agentId, key.number, userId, poll, after)),
+        asked(
+          client.liveRead(
+            PULL_REQUEST_CHAPTERS_READ,
+            { id: key.agentId, number: String(key.number), userId },
+            poll ? { after } : undefined,
+          ),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppChapters) =>

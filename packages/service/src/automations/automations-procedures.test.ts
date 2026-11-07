@@ -17,9 +17,9 @@ import {
 import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import { AGENT_FAILURE, AGENT_STATUS } from "@repo/features/agent-wire";
 import {
-  automationRunsLiveRowsSchema,
+  AUTOMATION_RUNS_READ,
+  AUTOMATIONS_READ,
   automationRunsOfLiveRows,
-  automationsLiveRowsSchema,
   automationsOfLiveRows,
 } from "@repo/features/automation-live";
 import { SCHEDULE_PRESET } from "@repo/features/automation-schedule";
@@ -72,6 +72,7 @@ import {
 } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { automationRunsRead, automationsRead } from "../live/reads/automations.js";
 import { hostedFetch } from "../orpc/handler.js";
 import {
   type ModelCatalog,
@@ -87,7 +88,6 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
-import { automationRunsLiveStatements, automationsLiveStatements } from "./automation-live.js";
 import { automationsProcedures } from "./automations-procedures.js";
 
 /** An automation's "Run now" (POST). */
@@ -747,8 +747,10 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const run = (statement: { readonly sql: string; readonly params: readonly unknown[] }) =>
           sql.unsafe(statement.sql, [...statement.params]);
         for (const reader of [owner, other]) {
-          const statements = Option.getOrThrow(automationsLiveStatements(reader, plan.workspaceId));
-          const rows = yield* Schema.decodeUnknownEffect(automationsLiveRowsSchema)({
+          const statements = Option.getOrThrow(
+            automationsRead.statements({ userId: reader, workspaceId: plan.workspaceId }),
+          );
+          const rows = yield* Schema.decodeUnknownEffect(AUTOMATIONS_READ.rows)({
             automations: yield* run(statements.automations),
           });
           const held = readAnswer(
@@ -761,9 +763,15 @@ it.layer(getTestDB())("the automation routes", (it) => {
           );
           assert.deepEqual(automationsOfLiveRows(rows, now, ORIGIN), held.automations);
         }
-        const statements = Option.getOrThrow(automationRunsLiveStatements(owner, ran.id));
+        const statements = Option.getOrThrow(
+          automationRunsRead.statements({
+            userId: owner,
+            id: ran.id,
+            workspaceId: plan.workspaceId,
+          }),
+        );
         const runs = automationRunsOfLiveRows(
-          yield* Schema.decodeUnknownEffect(automationRunsLiveRowsSchema)({
+          yield* Schema.decodeUnknownEffect(AUTOMATION_RUNS_READ.rows)({
             runs: yield* run(statements.runs),
           }),
           now,
@@ -787,9 +795,15 @@ it.layer(getTestDB())("the automation routes", (it) => {
           [ended, `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.SESSION_ENDED}`],
           [awaiting, `${AGENT_STATUS.RUNNING}:`],
         ] as const) {
-          const read = Option.getOrThrow(automationRunsLiveStatements(owner, automationId));
+          const read = Option.getOrThrow(
+            automationRunsRead.statements({
+              userId: owner,
+              id: automationId,
+              workspaceId: plan.workspaceId,
+            }),
+          );
           const [only] = automationRunsOfLiveRows(
-            yield* Schema.decodeUnknownEffect(automationRunsLiveRowsSchema)({
+            yield* Schema.decodeUnknownEffect(AUTOMATION_RUNS_READ.rows)({
               runs: yield* run(read.runs),
             }),
             now,
@@ -802,7 +816,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
           assert.deepEqual([only], heldRuns);
           assert.equal(`${only?.agent?.status}:${only?.agent?.failureReason ?? ""}`, said);
         }
-        const outsiders = Option.getOrThrow(automationRunsLiveStatements(other, ran.id));
+        const outsiders = Option.getOrThrow(
+          automationRunsRead.statements({
+            userId: other,
+            id: ran.id,
+            workspaceId: plan.workspaceId,
+          }),
+        );
         assert.deepEqual(yield* run(outsiders.runs), []);
       }),
   );
