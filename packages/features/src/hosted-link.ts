@@ -274,7 +274,7 @@ export type HostedProcedure<Input, Output, Failure = unknown> = (
   options: { readonly context: HostedLinkContext },
 ) => Effect.Effect<Output, Failure>;
 
-export interface HostedClientOptions {
+interface HostedClientOptions {
   /** The service origin; any trailing separator is trimmed once. */
   baseUrl: string;
   credential: CallCredential;

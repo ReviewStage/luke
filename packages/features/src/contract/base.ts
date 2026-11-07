@@ -4,9 +4,10 @@
  * The import above is oRPC's Effect input-output extension, loaded here
  * because every contract module builds from this one, so `.input` and
  * `.output` take an Effect Schema before any contract is declared. Every
- * procedure declares the whole refusal map: which refusals a route answers
- * is its handler's to say, and a refusal it answers is then always a
- * declared error rather than an unknown one.
+ * procedure declares the refusals any procedure may answer and those its
+ * handler answers beyond them (`declaredProcedure`, `refuses`); a refusal
+ * it does not declare is reported by the service and read by a client as no
+ * answer.
  *
  * A JSON body is read as the old routes read one (`readEither`): a key its
  * schema does not name is refused, where the extension would drop it.
@@ -48,9 +49,6 @@ export function refuses<const Slugs extends readonly HostedApiError[]>(
   // SAFETY: every slug named was copied from the map above, and only those.
   return declared as Pick<typeof HOSTED_ERRORS, Slugs[number]>;
 }
-
-/** The builder a procedure that declares every refusal starts from, until each domain declares its own. */
-export const hostedProcedure = oc.errors(HOSTED_ERRORS);
 
 /** The builder a procedure that declares its own refusals starts from: those any procedure may answer, and its own added with `.errors(refuses(...))`. */
 export const declaredProcedure = oc.errors(refuses(...ANY_PROCEDURE_REFUSALS));
