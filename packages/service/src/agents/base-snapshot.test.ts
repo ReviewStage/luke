@@ -139,11 +139,19 @@ it.effect("launches that fill at once leave one base snapshot", () =>
 );
 
 it.effect(
-  "a base made on another image is not created from, and the next fill makes it again on the new image",
+  "a base made on another image is not created from, and the next fill makes it again on the new image, while one whose runner alone moved stands",
   () =>
     Effect.gen(function* () {
       const { fake, api } = yield* fixture;
       yield* filled(api);
+      yield* fillBaseSnapshot(
+        api,
+        RELAY,
+        { reference: NEXT_IMAGE, base: IMAGE },
+        CREDENTIAL,
+        opener(api),
+      );
+      assert.equal(fake.sandboxes.length, 1, "a runner's change alone filled the base again");
 
       const onNext = yield* readySnapshot(api, NEXT_IMAGE);
       yield* filled(api, NEXT_IMAGE);
