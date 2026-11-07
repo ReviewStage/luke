@@ -51,13 +51,16 @@ function routedHere(link: ShownLink | undefined): link is ReadLink {
   return link !== undefined && "workspace" in link && opensAtItsRoute(link);
 }
 
-/** The address a link is written at now, its path, query, and fragment, as `linkOf` writes it, every other key the tab's own query carries kept after its own. */
+/** The address a link is written at now, its path, query, and fragment, as `linkOf` writes it, every value of every other key the tab's own query carries kept after its own, and the tab's fragment where the link writes none. */
 function addressOfLink(link: ReadLink): string {
   const url = new URL(linkOf(link.place, link.workspace));
+  // Note that the link's own keys are read before any is kept, so a key the tab's query repeats keeps every value.
+  const own = new Set(url.searchParams.keys());
   for (const [key, value] of new URLSearchParams(location.search)) {
-    if (!url.searchParams.has(key)) url.searchParams.append(key, value);
+    if (!own.has(key)) url.searchParams.append(key, value);
   }
-  return `${url.pathname}${url.search}${url.hash}`;
+  const hash = url.hash === "" ? location.hash : url.hash;
+  return `${url.pathname}${url.search}${hash}`;
 }
 
 /** Moves the tab's entry onto `address` in place, flushed at once, before anything reads it. */

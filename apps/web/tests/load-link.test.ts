@@ -76,6 +76,15 @@ test("a tab opened at a link place keeps every other key its query carries as it
   assert.equal(addressBar(), `/acme/task/${TASK_ID}?ref=mail#rollout`);
 });
 
+test("a tab opened at an agent's place under its task keeps every value of a key its query repeats, and its fragment, as it stands on its link written now", () => {
+  const address = `/acme/task/${TASK_ID}/agent/${AGENT_ID}/changes?ref=a&ref=b#x`;
+  openAt(address);
+
+  installPanelDoors();
+
+  assert.equal(addressBar(), address);
+});
+
 test("a tab opened at an agent's own address says it as a link, which finds where the agent stands, while a place under the agent is left to its route", () => {
   assert.deepEqual(saidAt(`/acme/agent/${AGENT_ID}`), {
     workspace: "acme",
