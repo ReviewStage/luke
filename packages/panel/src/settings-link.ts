@@ -45,6 +45,9 @@ export interface SettingsRoute {
   readonly list: () => void;
 }
 
+/** The route of a pairing's link, `/connect/<code>`, which Settings' Hosts page opens from. */
+const PAIRING_ROUTE = "/places/connect/$code";
+
 /** Settings as the router stands it, over the account's `workspaces`, the sidebar listing `listedId`, in a room `narrow` or not. */
 export function useSettingsRoute(input: {
   workspaces: readonly Workspace[];
@@ -96,8 +99,10 @@ export function useSettingsRoute(input: {
   const open = (link: SettingsLink) => {
     // Note that entering Settings in a narrow room stands it on its page list, which a link to the list keeps.
     const to = link.listed === true ? undefined : link.page;
-    // A page opened from a narrow room's list is a step after it; any other turn of Settings takes its step in place.
-    const replace = standing && !(narrow && listed && to !== undefined);
+    // A page opened from a narrow room's list is a step after it; any other turn of Settings takes its step in place, and so
+    // does Settings opened from a pairing's link loaded at its own address, which names no place to come back to.
+    const fromPairing = here.leaf === PAIRING_ROUTE;
+    const replace = (standing && !(narrow && listed && to !== undefined)) || fromPairing;
     go(to, slugFor(link.workspaceId ?? workspaceId ?? listedId), replace);
     return link.section === undefined ? () => undefined : landOnSettingsRow(link.section);
   };

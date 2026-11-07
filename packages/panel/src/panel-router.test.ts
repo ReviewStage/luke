@@ -21,7 +21,7 @@ type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 /** Where an address must land: the route it names, the ids that route reads from it, and its search where it has one. */
 interface Landing {
   readonly routeId: PanelRouteId;
-  readonly params: Record<string, string>;
+  readonly params: Readonly<Record<string, string | undefined>>;
   readonly search?: Record<string, string>;
 }
 

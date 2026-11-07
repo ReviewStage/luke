@@ -10,6 +10,7 @@
  * routed place's declaration names its gate (`places/routed-places.ts`).
  */
 
+import { TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import {
@@ -21,8 +22,10 @@ import {
 } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import { type QueryClient, useQuery } from "@tanstack/react-query";
+import { Effect } from "effect";
 import { useMemo } from "react";
 import { useKeptChoice } from "./desktop/chosen-workspace.js";
+import { rendererPromise } from "./renderer-runtime.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import {
@@ -87,14 +90,58 @@ function selectAdminStands(state: AppStateSnapshot): boolean {
   return state.access.pending === true || state.access.admin === true;
 }
 
+/** The task list the window lists from: main's document's, or a fixture run's synthetic one, which main's document holds none of. */
+function listedTasksView(state: AppStateSnapshot): TasksView | undefined {
+  return loadedTasksFixture()?.fixtureTasksView(state.run) ?? state.tasks;
+}
+
 /**
  * The reader's workspaces as the window lists them: main's document's, or a
- * fixture run's synthetic ones, which main's document holds none of, so a
- * fixture run's gates read what its window draws.
+ * fixture run's synthetic ones, so a fixture run's gates read what its
+ * window draws.
  */
 function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
-  const fixture = loadedTasksFixture()?.fixtureTasksView(state.run);
-  return fixture?.workspaces ?? state.tasks?.workspaces ?? NO_WORKSPACES;
+  return listedTasksView(state)?.workspaces ?? NO_WORKSPACES;
+}
+
+/**
+ * Whether the account's workspaces are read by `state`: some are listed, or
+ * the list's read failed. Every account holds a workspace of its own, so
+ * none listed means none read yet.
+ */
+function selectWorkspacesRead(state: AppStateSnapshot | undefined): boolean {
+  const view = state === undefined ? undefined : listedTasksView(state);
+  return (view?.workspaces.length ?? 0) > 0 || view?.listStatus === TASKS_READ.FAILED;
+}
+
+/**
+ * What a route waiting on the account's workspaces answers its `loader`,
+ * as a link's slug is read against them (`panel-router.tsx`): nothing where
+ * the document `client` holds has read them, so the route draws at once,
+ * else a promise settling on the first write of the document that reads
+ * them, heard on the client's query cache, the route's own frame standing
+ * meanwhile. Note that the cache is let go as it answers, since a
+ * callback's own cleanup runs only on an interruption.
+ */
+export function workspacesReadFor(
+  client: QueryClient,
+  signal: AbortSignal,
+): Promise<void> | undefined {
+  if (selectWorkspacesRead(appStateIn(client))) return undefined;
+  const read = Effect.callback<void>((resume) => {
+    let stop: (() => void) | undefined;
+    let answered = false;
+    const settle = (): void => {
+      if (answered || !selectWorkspacesRead(appStateIn(client))) return;
+      answered = true;
+      stop?.();
+      resume(Effect.void);
+    };
+    stop = client.getQueryCache().subscribe(settle);
+    settle();
+    return Effect.sync(() => stop?.());
+  });
+  return rendererPromise(read, signal);
 }
 
 /**

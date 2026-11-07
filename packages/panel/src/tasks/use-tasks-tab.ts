@@ -166,7 +166,12 @@ import {
 } from "../use-app-state.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
 import { workspaceExperimentChoices } from "../workspace-experiments.js";
-import type { BoardRoute, PersonRoute, UnknownWorkspaceRoute } from "../workspace-routes.js";
+import type {
+  BoardRoute,
+  HomeRoute,
+  PersonRoute,
+  UnknownWorkspaceRoute,
+} from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -741,6 +746,10 @@ export interface TasksControl {
   /** The window's Automations page: whether it stands in the task's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
+  /** Whether Home stands, the page of no task bound, which only its own route draws (`ROUTED_PLACE.HOME`), with no task still bound there. */
+  atHome: boolean;
+  /** Whether the task's own place stands, with neither Home nor any routed place, the not-found page among them, standing in its place. */
+  taskPlaceStands: boolean;
   boardView: BoardViewControl;
   /** A Home or Board link whose first step names none of the reader's workspaces, which stands as not found (`desktop-shell.tsx`). */
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
@@ -857,8 +866,10 @@ export interface TasksControl {
   };
   /** Leaves the open task for Home (`desktop-home.tsx`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
-  /** Goes to Home from wherever the tab stands: the open task left, and whatever page stands in its place put away. */
+  /** Goes to Home from wherever the tab stands, which lets go of the open task as it arrives. */
   onGoHome: () => void;
+  /** Asks the host to bind no task, as arriving on Home does (`places/place-binding.ts`); no door of its own. */
+  onUnbindTask: () => void;
   /** The options a surface renaming a task holds its own mutation over (`taskRenameMutation`). */
   renameTask: TaskRenameMutation;
   /**
@@ -1414,6 +1425,8 @@ export function useTasksTab(input: {
   inboxView: InboxRoute;
   /** A workspace's address naming none of the reader's as the router stands it, not found (`workspace-routes.ts`). */
   unknownWorkspaceView: UnknownWorkspaceRoute;
+  /** Home as the router stands it (`workspace-routes.ts`). */
+  homeView: HomeRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -2051,6 +2064,29 @@ export function useTasksTab(input: {
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
+  // Home is the listed workspace's too, at `/app` while none is listed, so another listed, or the first one read, stands its
+  // Home in the step's place. Note that Home with a task still bound is left as it is, since the binding moves it next
+  // (`places/place-binding.ts`).
+  const homeWorkspace =
+    input.homeView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.homeView.standingIn)?.id;
+  const homeElsewhere =
+    input.homeView.open &&
+    boundFor === undefined &&
+    listedWorkspace !== undefined &&
+    homeWorkspace !== listedWorkspace.id;
+  // Note that Home whose own workspace the reader is no longer in is found not there by its route without moving, and turns
+  // the same way, while an address naming a workspace never the reader's, as a link's, stays not found.
+  const homeWasIn = useRef<string | undefined>(undefined);
+  const unknownIn = input.unknownWorkspaceView.workspace;
+  if (input.homeView.open) homeWasIn.current = input.homeView.standingIn;
+  else if (unknownIn === undefined) homeWasIn.current = undefined;
+  const homeLost = unknownIn !== undefined && unknownIn === homeWasIn.current;
+  const turnHome = input.homeView.onTurn;
+  useEffect(() => {
+    if ((homeElsewhere || homeLost) && listedStep !== undefined) turnHome(listedStep);
+  }, [homeElsewhere, homeLost, listedStep, turnHome]);
   // Descriptions is each workspace's choice, so a task's description, its sections, comments, and history stand by its own
   // workspace's: a task the window holds none of by the workspace its link names, else by the open task's, whose words
   // mention it, else by the listed one. Its choices are read off main's document, as the description's own page reads
@@ -2208,15 +2244,26 @@ export function useTasksTab(input: {
     },
     [sendSelect, fixture, openTaskId, leaveOverPlan],
   );
-  // A leave is asked rather than told, so a refused one takes its ask back too.
-  const leaveTask = useCallback(() => {
-    leaveOverPlan();
+  // Binding no task is asked rather than told, so a refused one takes its ask back too. It is what arriving on Home asks of
+  // the host (`places/place-binding.ts`), never a door of its own.
+  const unbindTask = useCallback(() => {
     opening.current = undefined;
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
     sendClose().catch(() => setAsked((held) => (held === ask ? undefined : held)));
-  }, [fixture, openTaskId, sendClose, leaveOverPlan]);
+  }, [fixture, openTaskId, sendClose]);
+  // Home is the page of no task bound, so leaving the open task, or going Home from anywhere, is a navigation to Home, whose
+  // arrival asks the host to bind none; on Home already, it only lets go of a task still bound there. Note that it reads
+  // where the window stands as it is called, since a toast's Back calls it long after it was handed.
+  const homeOpen = input.homeView.open;
+  const homeNow = useRef({ home: input.homeView, boundFor });
+  homeNow.current = { home: input.homeView, boundFor };
+  const leaveTask = useCallback(() => {
+    const now = homeNow.current;
+    if (!now.home.open) now.home.onOpen();
+    else if (now.boundFor !== undefined) unbindTask();
+  }, [unbindTask]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
   const navigations = useRef(0);
@@ -3231,8 +3278,8 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    // Note that Home under a routed place is no Home on screen, so its composer is no New task there (`admin-route.ts`).
-    const atHome = page === TASKS_PAGE.HOME && !overPlan && !historyRoute.open && !routedOver;
+    // Note that only Home's own route draws its composer (`ROUTED_PLACE.HOME`), once no task is bound there.
+    const atHome = input.homeView.open && boundFor === undefined;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3685,12 +3732,7 @@ export function useTasksTab(input: {
     input.automationsView.onOpen(to, stepOf(shown));
   };
 
-  // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
-  const goHome = () => {
-    closeHistory();
-    if (boundFor === undefined) leaveOverPlan();
-    else leaveTask();
-  };
+  const goHome = leaveTask;
 
   /**
    * An app link's place opened through the door each kind already has: the
@@ -4132,8 +4174,7 @@ export function useTasksTab(input: {
       const next = others.find((each) => each.personal === true) ?? others[0];
       navigations.current += 1;
       if (next !== undefined) chooseListed(next.id);
-      if (boundFor === undefined) leaveOverPlan();
-      else leaveTask();
+      leaveTask();
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
@@ -4371,6 +4412,9 @@ export function useTasksTab(input: {
     },
     onLeaveTask: guard(() => leaveTask()),
     onGoHome: guard(goHome),
+    onUnbindTask: unbindTask,
+    atHome: homeOpen && boundFor === undefined,
+    taskPlaceStands: !homeOpen && !routedNow.current,
     renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),

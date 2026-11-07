@@ -1520,20 +1520,34 @@ function StartingTaskPage({
 }
 
 /**
- * The Tasks tab's work column: the open task's page, or Home.
- *
- * A memo boundary: the shell drawn again over the same tasks, as a setting
- * that moves draws it, leaves the open plan, its transcripts, and its side
- * panel as they were.
+ * The page of a task the host has not yet opened, as a link's route waiting
+ * on the account's workspaces stands it or a task pressed waits on the host:
+ * the task's page in the shape it lands in, as its document's read draws it.
  */
-export const DesktopTasks = memo(function DesktopTasks({
+export function TaskOpening({
   tasks,
-  looks,
   room = SHELL_ROOM.WIDE,
   away,
-  accountName,
-  staged = false,
 }: {
+  tasks: TasksControl;
+  room?: ShellRoom;
+  away?: TaskHeadBack | undefined;
+}): React.JSX.Element {
+  const drawing = useSidePanelDrawing(tasks.sidePanel);
+  const phoneAway =
+    room === SHELL_ROOM.NARROW
+      ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
+      : undefined;
+  return (
+    <TaskPageSkeleton
+      drawing={drawing}
+      head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
+    />
+  );
+}
+
+/** What the work column's two places are handed: the Tasks tab and how the column stands. */
+interface WorkColumnProps {
   tasks: TasksControl;
   /** The signed-in account's name, which Home greets. */
   accountName?: string | undefined;
@@ -1545,50 +1559,84 @@ export const DesktopTasks = memo(function DesktopTasks({
   room?: ShellRoom;
   /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); Home where none is handed. */
   away?: TaskHeadBack | undefined;
-}): React.JSX.Element {
-  // A task New task is starting with its agent stands as its page until the start answers.
-  if (tasks.starting !== undefined) {
-    return (
-      <StartingTaskPage
+}
+
+/** A task New task is starting with its agent, which stands as its page until the start answers, wherever it was started. */
+function startingPage(
+  tasks: TasksControl,
+  room: ShellRoom,
+  away: TaskHeadBack | undefined,
+): React.JSX.Element | undefined {
+  if (tasks.starting === undefined) return undefined;
+  return (
+    <StartingTaskPage
+      tasks={tasks}
+      starting={tasks.starting}
+      phoneAway={
+        room === SHELL_ROOM.NARROW
+          ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
+          : undefined
+      }
+    />
+  );
+}
+
+/**
+ * The Tasks tab's work column on a task's place: the open task's page, or
+ * its page in the shape it lands in while the host opens it.
+ *
+ * A memo boundary: the shell drawn again over the same tasks, as a setting
+ * that moves draws it, leaves the open plan, its transcripts, and its side
+ * panel as they were.
+ */
+export const DesktopTasks = memo(function DesktopTasks({
+  tasks,
+  looks,
+  room = SHELL_ROOM.WIDE,
+  away,
+}: WorkColumnProps): React.JSX.Element {
+  const starting = startingPage(tasks, room, away);
+  if (starting !== undefined) return starting;
+  if (tasks.page === TASKS_PAGE.HOME) return <TaskOpening tasks={tasks} room={room} away={away} />;
+  return (
+    <SkillFiles
+      source={tasks.agents.readSkills}
+      // Note that a skill's file opens as a file the palette finds does, whole,
+      // so its tab stands on this task though the app never showed it.
+      onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
+    >
+      <DescriptionDocument
         tasks={tasks}
-        starting={tasks.starting}
-        phoneAway={
-          room === SHELL_ROOM.NARROW
-            ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
-            : undefined
-        }
+        looks={looks}
+        room={room}
+        away={away ?? { label: HOME_BACK, onPress: tasks.onGoHome }}
       />
-    );
-  }
-  switch (tasks.page) {
-    case TASKS_PAGE.DOCUMENT:
-      return (
-        <SkillFiles
-          source={tasks.agents.readSkills}
-          // Note that a skill's file opens as a file the palette finds does, whole,
-          // so its tab stands on this task though the app never showed it.
-          onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
-        >
-          <DescriptionDocument
-            tasks={tasks}
-            looks={looks}
-            room={room}
-            away={away ?? { label: HOME_BACK, onPress: tasks.onGoHome }}
-          />
-        </SkillFiles>
-      );
-    // With no task open the column is Home, whose own composer New task
-    // hands the caret rather than opening its dialog over it.
-    case TASKS_PAGE.HOME:
-      return (
-        <>
-          <div className="desktop-drag-strip" />
-          <PageFind page={FIND_PAGE.HOME} active={tasks.shown}>
-            <Fill as={FILL_ELEMENT.SECTION} className="home" aria-label="Home">
-              <DesktopHome tasks={tasks} room={room} accountName={accountName} staged={staged} />
-            </Fill>
-          </PageFind>
-        </>
-      );
-  }
+    </SkillFiles>
+  );
+});
+
+/**
+ * The Tasks tab's work column on Home, the page of no task bound, whose own
+ * composer New task hands the caret rather than opening its dialog over it;
+ * a task started from it stands as its page until the start answers.
+ */
+export const DesktopHomePage = memo(function DesktopHomePage({
+  tasks,
+  room = SHELL_ROOM.WIDE,
+  away,
+  accountName,
+  staged = false,
+}: WorkColumnProps): React.JSX.Element {
+  const starting = startingPage(tasks, room, away);
+  if (starting !== undefined) return starting;
+  return (
+    <>
+      <div className="desktop-drag-strip" />
+      <PageFind page={FIND_PAGE.HOME} active={tasks.shown}>
+        <Fill as={FILL_ELEMENT.SECTION} className="home" aria-label="Home">
+          <DesktopHome tasks={tasks} room={room} accountName={accountName} staged={staged} />
+        </Fill>
+      </PageFind>
+    </>
+  );
 });

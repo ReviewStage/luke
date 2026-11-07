@@ -191,6 +191,8 @@ function mount(
     const [asked, setAsked] = useState(false);
     const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
+      // Home stands where the router stands it, on no place over it, as the window's root reads it.
+      atHome: home,
       inboxView: {
         open: inboxOpen,
         chosen: undefined,
@@ -210,6 +212,17 @@ function mount(
     });
     return createElement(DesktopShell, shellProps(tasks, tab, onTabChange, sidebarPatch));
   }
+  const home =
+    tab === PANEL_TAB.TASKS &&
+    !inboxOpen &&
+    (overrides.page ?? TASKS_PAGE.HOME) === TASKS_PAGE.HOME &&
+    overrides.inboxView?.open !== true &&
+    overrides.adminView?.open !== true &&
+    overrides.boardView?.open !== true &&
+    overrides.automationsView?.open !== true &&
+    overrides.history?.open !== true &&
+    overrides.personView?.userId === undefined &&
+    overrides.agentView?.agentId === undefined;
   const at =
     tab === PANEL_TAB.SETTINGS
       ? SHELL_AT.SETTINGS
@@ -1349,9 +1362,10 @@ async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
 
 const PLACES = Object.values(PLACE);
 
-/** Where the router stands for a place it draws, Settings and a version history; none for a place the shell's props say. */
+/** Where the router stands for a place it draws, Settings, a task, an agent's page, and a version history; none for Home, under the places the shell's props say. */
 function routedAt(place: Place): string | undefined {
   if (place === PLACE.SETTINGS) return SHELL_AT.SETTINGS;
+  if (place === PLACE.OTHER_TASK || place === PLACE.SIDE_PANEL_FULL_SCREEN) return SHELL_AT.TASK;
   if (place === PLACE.AGENT_PAGE) return agentAt("agent-page-1");
   return place === PLACE.VERSION_HISTORY ? SHELL_AT.VERSION_HISTORY : undefined;
 }

@@ -232,7 +232,7 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
 /** The links of what is open or focused, the most specific first, each under the workspace it is in, empty where that is unknown: a routed place's by its declaration, over the links of the place the window's state says. */
 function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   const listed = slugOf(tasks.workspaces, tasks.workspace?.id);
-  const under = () => stateLinks(tasks, at, listed);
+  const under = () => stateLinks(tasks, at);
   if (at.place === undefined || at.underRouted === true) return under();
   return at.place.links({ tasks, at, listed, under });
 }
@@ -259,19 +259,9 @@ export function agentPageLinks(
   return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
 }
 
-/** The links of the place the window's state says: the home page, or the task. */
-function stateLinks(tasks: TasksControl, at: WindowAt, listed: string): readonly LinkAtHand[] {
-  // `at_` writes the link of the step the window stands on.
-  const at_ = (place: LinkPlace, thing: LinkThing, workspace = listed): LinkAtHand => ({
-    link: { workspace, place },
-    thing,
-    step: true,
-  });
-  // With no task bound for, the window stands on the home page.
-  if (tasks.boundFor === undefined) {
-    return [at_({ kind: LINK_PLACE.HOME }, LINK_THING.HOME)];
-  }
-  return taskLinks(tasks, at);
+/** The links of the place the window's state says, the task bound for; none while none is, as a link's task waits on its open, Home being the router's (`ROUTED_PLACE.HOME`). */
+function stateLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
+  return tasks.boundFor === undefined ? [] : taskLinks(tasks, at);
 }
 
 /**

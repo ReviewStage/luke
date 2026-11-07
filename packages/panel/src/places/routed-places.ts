@@ -31,6 +31,7 @@ import {
 import { useMemo, useSyncExternalStore } from "react";
 import { adminLinkFields } from "../admin/routing.js";
 import {
+  HOME_WORDS,
   INBOX_WORDS,
   NAMED_STEP,
   type NamedStep,
@@ -64,6 +65,19 @@ type PanelRouteId = RouteIds<RegisteredRouter["routeTree"]>;
 
 /** The params an address's routes read, every match's together. */
 export type PlaceParams = Readonly<Record<string, string | undefined>>;
+
+/**
+ * What a place holds of the task the host binds the window to while it
+ * stands (`place-binding.ts`): none, as Home is the page of no task bound,
+ * so arriving on it asks the host to bind none and the host binding one
+ * leaves it; or whatever stands bound, kept as it is under it.
+ */
+export const PLACE_BINDING = {
+  NONE: "none",
+  KEPT: "kept",
+} as const;
+
+export type PlaceBinding = (typeof PLACE_BINDING)[keyof typeof PLACE_BINDING];
 
 /** What a declaration reads to name a step later: the task a version history's address names, and the task an Inbox item is of, by the item's id. */
 interface PlaceNaming {
@@ -102,6 +116,8 @@ export interface PlaceDeclaration {
   readonly gate: (params: PlaceParams, access: RouteAccess) => boolean;
   /** Whether what a step of it names is still there, so Back and Forward may go to it: a step naming a task or an automation deleted since is passed over. */
   readonly stillThere: (params: PlaceParams, search: URLSearchParams, there: PlaceThere) => boolean;
+  /** What it holds of the task the host binds while it stands (`PLACE_BINDING`). */
+  readonly binding: PlaceBinding;
   /** Whether it stands over the plan's place beside the sidebar, the window's state staying as it was under it, its workspace its address's. */
   readonly overThePlan: boolean;
   /** Whether Back and Forward pass over a step of it once another workspace is listed than the one its address names, as a place over the plan that the listed workspace's work fills. */
@@ -183,6 +199,7 @@ export const ROUTED_PLACE = {
     gate: (params, access) =>
       params.page === undefined || settingsPageRouteStands(params.page, access, params.workspace),
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: false,
     listedOnly: false,
     title: () => ({ label: "Settings" }),
@@ -206,6 +223,7 @@ export const ROUTED_PLACE = {
     claims: everyAddress,
     gate: (_params, access) => adminRouteStands(access),
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: false,
     listedOnly: false,
     // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
@@ -230,6 +248,7 @@ export const ROUTED_PLACE = {
     claims: everyAddress,
     gate: workspaceGate,
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     listedOnly: true,
     title: (tasks, under) => (tasks.boardView.open ? { label: "Tasks" } : under()),
@@ -246,6 +265,7 @@ export const ROUTED_PLACE = {
     claims: everyAddress,
     gate: workspaceGate,
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     listedOnly: true,
     title: (tasks, under) =>
@@ -272,6 +292,7 @@ export const ROUTED_PLACE = {
     // An automation's page stands no more once it is deleted.
     stillThere: (params, _search, there) =>
       params.automationId === undefined || there.automationStands(params.automationId),
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     listedOnly: true,
     title: (tasks, under) => (tasks.automationsView.open ? { label: "Automations" } : under()),
@@ -307,6 +328,7 @@ export const ROUTED_PLACE = {
     // Note that a version history is passed over once its task is deleted, as the task's own step is.
     stillThere: (_params, _search, there) =>
       there.historyTask === undefined || there.taskStands(there.historyTask),
+    binding: PLACE_BINDING.KEPT,
     overThePlan: false,
     listedOnly: false,
     // Note that a history whose task is not yet bound for is named as the place under it, as it stands until its task opens.
@@ -335,6 +357,7 @@ export const ROUTED_PLACE = {
     // Note that its route draws the page under any address, as it always has, so this gate is Back and Forward's alone.
     gate: workspaceGate,
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     // Note that an agent's page is reached under whichever workspace it opened in, as it always was.
     listedOnly: false,
@@ -347,6 +370,22 @@ export const ROUTED_PLACE = {
     narrowList: undefined,
     surfaces: (params) => [{ surface: PRODUCT_SURFACE.AGENT, of: params.agentId }],
   },
+  HOME: {
+    // Note that it shares its workspace's route with the not-found place, which claims an address naming none of the reader's workspaces.
+    routes: ["/places/$workspace/", "/places/app"],
+    claims: workspaceGate,
+    gate: workspaceGate,
+    stillThere: () => true,
+    binding: PLACE_BINDING.NONE,
+    overThePlan: false,
+    // Note that Back reaches Home under whichever workspace it stood in, as it always has, and stands it under the one listed (`home-route.ts`).
+    listedOnly: false,
+    title: () => ({ label: HOME_WORDS }),
+    named: () => undefined,
+    links: ({ listed }) => [stepLink({ kind: LINK_PLACE.HOME }, LINK_THING.HOME, listed)],
+    narrowList: undefined,
+    surfaces: () => [{ surface: PRODUCT_SURFACE.HOME }],
+  },
   UNKNOWN_WORKSPACE: {
     // Note that it shares Home's route, whose `beforeLoad` throws `notFound()` where it claims the address (`panel-router.tsx`).
     routes: ["/places/$workspace/"],
@@ -355,6 +394,7 @@ export const ROUTED_PLACE = {
     // A workspace's address naming none of the reader's is no place of theirs to come back to, so Back and Forward pass over it.
     gate: () => false,
     stillThere: () => true,
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     listedOnly: false,
     // Note that it is no step, so it has no name of its own.
@@ -374,6 +414,7 @@ export const ROUTED_PLACE = {
       const narrowed = params.taskId ?? search.get("task") ?? undefined;
       return narrowed === undefined || there.taskStands(narrowed);
     },
+    binding: PLACE_BINDING.KEPT,
     overThePlan: true,
     listedOnly: true,
     title: (tasks, under) => {

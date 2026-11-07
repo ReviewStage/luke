@@ -81,7 +81,7 @@ import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
-import { DesktopTasks } from "./desktop-tasks.js";
+import { DesktopHomePage, DesktopTasks, TaskOpening } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -1189,15 +1189,38 @@ export function UnknownWorkspacePlace(): React.JSX.Element {
 }
 
 /**
- * What a place the window's state says draws in the places' content slot,
- * a task or Home. Every route not yet moved onto the router draws this one
+ * What a task's place draws in the places' content slot: the task bound
+ * for, or its page in the shape it lands in while the host opens it, as a
+ * link to it waits on its task. Every route of a task's draws this one
  * component, so moving between them keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
+  const { tasks, room, looks, away } = useShellPlaces();
+  return <DesktopTasks tasks={tasks} looks={looks} room={room} away={away} />;
+}
+
+/** A task's route's frame while it waits on the account's workspaces, a link's slug read against them (`panel-router.tsx`). */
+export function TaskRouteLoading(): React.JSX.Element {
+  const { tasks, room, away } = useShellPlaces();
+  return <TaskOpening tasks={tasks} room={room} away={away} />;
+}
+
+/**
+ * What Home's routes draw in the places' content slot: the page of no task
+ * bound, its New task composer, under the workspace listed
+ * (`ROUTED_PLACE.HOME`). Note that a task still bound there draws as it
+ * does on its own place, because the binding moves one or the other next
+ * (`places/place-binding.ts`), and Home drawn for that turn would flash, as
+ * on a window opening at `/app` with a task already bound.
+ */
+export function HomePlace(): React.JSX.Element {
   const { tasks, room, sidebar, settings, looks, away } = useShellPlaces();
   const { account } = settings;
+  if (tasks.boundFor !== undefined) {
+    return <DesktopTasks tasks={tasks} looks={looks} room={room} away={away} />;
+  }
   return (
-    <DesktopTasks
+    <DesktopHomePage
       tasks={tasks}
       looks={looks}
       room={room}

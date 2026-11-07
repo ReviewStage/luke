@@ -17,12 +17,12 @@
  * `Outlet` (`desktop-shell.tsx`). Every place but Settings and a version history stands beside the
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
- * window as Settings does. Settings, Admin, a workspace's Board, a
+ * window as Settings does. Home, Settings, Admin, a workspace's Board, a
  * person's page, an agent's own page, the Automations pages, a task's version history, the Inbox, and a workspace's address naming none of the reader's, not found, are routed places: the router alone says the window stands
- * on them, their routes draw them, as lazy routes but for an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
+ * on them, their routes draw them, as lazy routes but for Home and an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`), but for an agent's page, which stands at any address
- * as it always has. Every other place
+ * as it always has. A task's place
  * is still the window's state's, which its routes draw through one
  * component (`StatePlace`), so moving a place onto the router swaps its
  * route's component and deletes its place kind from `navigation-history.ts`.
@@ -51,11 +51,13 @@ import {
   AgentPlace,
   AutomationsRouteLoading,
   BoardRouteLoading,
+  HomePlace,
   InboxPlace,
   PersonRouteLoading,
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  TaskRouteLoading,
   UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
@@ -68,6 +70,7 @@ import {
   useRouteAccess,
   versionHistoryRouteStands,
   workspaceRouteStands,
+  workspacesReadFor,
 } from "./route-gates.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
@@ -146,10 +149,15 @@ const placesRoute = createRoute({
   component: ShellPlaces,
 });
 
+/**
+ * Home while the window lists no workspace, the address a fresh window
+ * opens on, which takes the listed workspace's Home in its place once one
+ * is (`ROUTED_PLACE.HOME`).
+ */
 const appRoute = createRoute({
   getParentRoute: () => placesRoute,
   path: "/app",
-  component: StatePlace,
+  component: HomePlace,
 });
 
 const connectRoute = createRoute({
@@ -161,10 +169,10 @@ const connectRoute = createRoute({
 const workspaceRoute = createRoute({ getParentRoute: () => placesRoute, path: "/$workspace" });
 
 /**
- * A workspace's Home, the place the window's state says, of one of the
- * reader's workspaces (`workspaceRouteStands`): an address naming none of
- * theirs is not found, its page saying the workspace is not there for them
- * and drawing nothing of it, at its own address
+ * A workspace's Home, the page of no task bound (`ROUTED_PLACE.HOME`), of
+ * one of the reader's workspaces (`workspaceRouteStands`): an address
+ * naming none of theirs is not found, its page saying the workspace is not
+ * there for them and drawing nothing of it, at its own address
  * (`ROUTED_PLACE.UNKNOWN_WORKSPACE`).
  */
 const homeRoute = createRoute({
@@ -174,7 +182,7 @@ const homeRoute = createRoute({
     if (workspaceRouteStands(params.workspace, context.access)) return;
     throw notFound();
   },
-  component: StatePlace,
+  component: HomePlace,
   notFoundComponent: UnknownWorkspacePlace,
 });
 
@@ -197,9 +205,24 @@ const boardRoute = createRoute({
   ...LAZY_ROUTE,
 }).lazy(() => import("./desktop/board-route.lazy.js").then((loaded) => loaded.boardLazyRoute));
 
+/**
+ * A task's place, which the window's state draws (`StatePlace`). A link to
+ * it is read against the account's workspaces, so as the window loads at
+ * it the route waits on their read, its own frame standing at once as a
+ * lazy route's does, rather than the window resting anywhere else
+ * meanwhile. Note that the frame is the task's loading page alone, never
+ * the place itself, because a move onto the route shows it for the turn
+ * the wait takes even once the workspaces are read, and the task's page
+ * drawn there would be drawn twice.
+ */
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "task/$taskId",
+  loader: ({ context, abortController }) =>
+    workspacesReadFor(context.queryClient, abortController.signal),
+  pendingComponent: TaskRouteLoading,
+  pendingMs: 0,
+  pendingMinMs: 0,
   component: StatePlace,
 });
 
@@ -541,6 +564,18 @@ const appSettingsPageRoute = createRoute({
   },
 });
 
+/**
+ * An address naming no place of the panel's, as a tab opened at the site's
+ * root, opens Home in its place, as a window resting nowhere always has.
+ */
+const nowhereRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "$",
+  beforeLoad: () => {
+    throw redirect({ to: "/app", replace: true });
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   placesRoute.addChildren([
     appRoute,
@@ -600,6 +635,7 @@ const routeTree = rootRoute.addChildren([
   ]),
   settingsRoute.addChildren([settingsIndexRoute, settingsPageRoute]),
   appSettingsRoute.addChildren([appSettingsIndexRoute, appSettingsPageRoute]),
+  nowhereRoute,
 ]);
 
 /**

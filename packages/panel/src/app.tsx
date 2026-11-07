@@ -79,6 +79,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { usePlaceBinding } from "./places/place-binding.js";
 import { ROUTED_PLACE } from "./places/routed-places.js";
 import { forgetAccountReads } from "./query-keys.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
@@ -123,7 +124,12 @@ import { ViewingAs } from "./viewing-as.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 import { useExperimentsIn } from "./workspace-experiments.js";
-import { useBoardRoute, usePersonRoute, useUnknownWorkspaceRoute } from "./workspace-routes.js";
+import {
+  useBoardRoute,
+  useHomeRoute,
+  usePersonRoute,
+  useUnknownWorkspaceRoute,
+} from "./workspace-routes.js";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -321,7 +327,8 @@ function AppWindow(): React.JSX.Element {
     }
     route.open(link);
   }, []);
-  const routedStanding = routedHere !== undefined;
+  // Note that Home is the Tasks tab's own place, the one of no task bound, so it is no routed place the tab leaves.
+  const routedStanding = routedHere !== undefined && routedHere.place !== ROUTED_PLACE.HOME;
   // Arriving at Settings is arriving at its page list and its first page, Profile; the Tasks tab is the place the window's
   // state says, which a routed place standing is left for. Note that `PanelTab` and the counted tab are the same union:
   // both are `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
@@ -451,6 +458,10 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
   });
+  const homeView = useHomeRoute({
+    listed: () => listedSlug.current,
+    onClose: () => leaveRouted.current(),
+  });
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -477,6 +488,7 @@ function AppWindow(): React.JSX.Element {
     versionHistoryView,
     inboxView,
     unknownWorkspaceView,
+    homeView,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -561,6 +573,9 @@ function AppWindow(): React.JSX.Element {
   const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   const adminPending =
     useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
+  // The account's workspaces, which a link's slug is read against, are read once some are listed, as every account holds
+  // its own workspace, or once their read failed.
+  const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open description among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
@@ -591,7 +606,6 @@ function AppWindow(): React.JSX.Element {
   // An app link the system handed the app opens once sign-in no longer stands in the way, and
   // the account's workspaces are read, since a link's slug is read against them (every account
   // holds its own workspace, so none read means none read yet).
-  const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openAppLink);
   // A link of the account's own names no workspace, so it waits on the sign-in alone.
   const openAccount = useLinkOpener(accountGated, openAccountLink);
@@ -601,9 +615,12 @@ function AppWindow(): React.JSX.Element {
     [openLink, openAccount],
   );
   // Where the window has stood, for back and forward, from the moment it
-  // knows where it stands.
+  // knows where it stands: past sign-in, with the account's workspaces read,
+  // so a link loaded waits on its own place rather than standing anywhere
+  // first.
+  const known = run !== undefined && !accountGated && !workspacesUnread;
   const history = useWindowHistory({
-    known: run !== undefined && !accountGated,
+    known,
     link: copyLink.placed,
     title: stepTitle(routedHere?.place, tasks),
     routed: routedHere,
@@ -612,11 +629,21 @@ function AppWindow(): React.JSX.Element {
     automations: automationsView,
     versionHistory: versionHistoryView,
     inbox: inboxView,
+    home: homeView,
     room,
     tasks,
   });
   leaveRouted.current = history.onLeaveRouted;
   stayRouted.current = history.onStayRouted;
+  // Home and the task the host binds follow each other, each on the other's edge (`places/place-binding.ts`).
+  usePlaceBinding({
+    known,
+    place: routedHere?.place,
+    bound: tasks.boundFor,
+    onUnbind: tasks.onUnbindTask,
+    onToBound: history.onLeaveRouted,
+    onToUnbound: homeView.onOpen,
+  });
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = useSteadyDoors(
     useMemo(() => throughHistory(tasks, history.lists), [tasks, history.lists]),

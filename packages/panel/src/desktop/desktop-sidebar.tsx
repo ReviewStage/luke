@@ -113,7 +113,7 @@ import {
   unplaceAllWrites,
   workspaceSections,
 } from "@repo/ui/task-sections-model";
-import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { repositoryPageUrl, TASK_MARK } from "@repo/ui/tasks-model";
 import { useVirtualRuns, VIRTUAL_ROW_KEY_ATTRIBUTE } from "@repo/ui/virtual-rows";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -1896,10 +1896,9 @@ function SidebarColumn({
   const openAutomations = () => tasks.automationsView.onOpen();
   const openAdmin = () => tasks.adminView.onOpen();
   const goHome = () => leaveFor(() => tasks.onGoHome());
-  // Home is the place shown while no task is open and nothing stands in its
-  // place. New task's composer is on it, so its row draws no Draft pencil
-  // for the words shown there.
-  const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
+  // Home is the place of no task bound, standing on its own route. New task's
+  // composer is on it, so its row draws no Draft pencil for the words shown there.
+  const atHome = onTasks && tasks.atHome;
   const newTaskIn = (repository: string) => newTaskOver(() => tasks.onNewTaskIn(repository));
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
@@ -1919,7 +1918,8 @@ function SidebarColumn({
   const listedPullRequests = useListedTaskPullRequests();
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
+  const current = (taskId: string) =>
+    onTasks && !standingIn && tasks.taskPlaceStands && taskId === tasks.activeTaskId;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
   const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
