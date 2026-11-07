@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { DatabaseServices } from "@repo/database/core/query";
+import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
 import {
   claimQueueHead,
   type QueuedMessageRow,
@@ -10,10 +11,9 @@ import {
 import { readAgent } from "@repo/database/models/agent-store";
 import { sentLineStands } from "@repo/database/models/message-reads";
 import { storeWriter } from "@repo/database/models/writer";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace } from "@repo/database/testing";
 import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_KIND,
@@ -25,8 +25,7 @@ import {
 import type { WireBoundaryInput } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect, Layer, Option } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Layer, Option } from "effect";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -38,6 +37,7 @@ import {
 import { SERVER_EVENT } from "../events/server-events.js";
 import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { SlackBot, slackBotOver } from "../slack/slack-bot.js";
 import {
   AGENT_MESSAGES,
   AGENT_PICTURE,
@@ -53,8 +53,10 @@ import {
   SNAPSHOT,
   sessionCookieOf,
 } from "../testing/agents-app-support.js";
-import { queueAtTurnEnd, sendQueued, sweepAgentQueues } from "./coder-host/agent-queue.js";
-import { steerAgentWritten } from "./coder-host/steer.js";
+import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
+import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
+import { queueAtTurnEnd, sendQueued } from "./coder-host/agent-queue.js";
+import { settledTurnListener } from "./coder-host/settled-turns.js";
 import { canceledTurn } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { SESSION_SEND_OUTCOME } from "./sessions/agent-sessions.js";
@@ -447,24 +449,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           }).queue;
         },
       );
-      /** One queued message sent as a hand-off sends it, the hand-off cut off before the message left the queue. */
-      const sentAlone = (message: QueuedMessageRow) =>
-        Effect.flatMap(sessionsFor(message.userId), (agentSessionsAs) =>
-          steerAgentWritten(
-            agentSessionsAs,
-            storeWriter({ tools: CODER_TOOL_SET }),
-            message.userId,
-            stored,
-            {
-              text: message.text,
-              clientKey: message.id,
-              sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
-            },
-          ),
-        ).pipe(Effect.provide(reach));
-      /** The maintenance sweep's pass over the queues standing unpaused. */
-      const swept = sweepAgentQueues(sessionsFor).pipe(Effect.provide(reach));
-      return { agent, ask, owner, turnEnded, handedOn, sentAlone, swept, queued, stored };
+      return { agent, ask, owner, turnEnded, handedOn, queued, stored };
     });
 
   /** How many times the harness was handed words holding `text`. */
@@ -522,43 +507,6 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         assert.deepEqual(
           [handedCount(agentSessions, "Edited"), handedCount(agentSessions, "After")],
           [1, 0],
-        );
-      }),
-  );
-
-  it.effect(
-    "a hand-off cut off after its message went, its claim still standing, is finished by the sweep once the claim lapses, the message sent once",
-    () =>
-      Effect.gen(function* () {
-        const agentSessions = fakeAgentSessions();
-        const { swept, queued, stored, sentAlone } = yield* queuedBehindEndedTurn(agentSessions, [
-          "Cut off",
-        ]);
-        const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
-        yield* sentAlone(head);
-        assert.deepEqual(
-          (yield* queued)?.messages ?? [],
-          [],
-          "no window lists a message on its way",
-        );
-
-        yield* swept;
-        assert.equal(
-          handedCount(agentSessions, "Cut off"),
-          1,
-          "a standing claim is not handed on again",
-        );
-        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
-        yield* swept;
-        assert.equal(
-          handedCount(agentSessions, "Cut off"),
-          1,
-          "the repeat under its key sends nothing",
-        );
-        assert.deepEqual(
-          Option.getOrThrow(yield* readAgentQueue(stored.userId, stored.id)).messages,
-          [],
-          "the message left the queue rather than standing claimed",
         );
       }),
   );
@@ -972,17 +920,75 @@ it.layer(getTestDB())("an agent's queue", (it) => {
   );
 
   it.effect(
-    "a Stop pauses what is queued though the turn was already over, so no sweep sends it after the Stop",
+    "a turn settled other than by its runner's events, as a Stop's force settles one resumed while its cancel was out, hands on the queue",
+    () =>
+      Effect.gen(function* () {
+        let racing: Effect.Effect<void> = Effect.void;
+        const agentSessions = fakeAgentSessions({ canceling: Effect.suspend(() => racing) });
+        const { agent, ask, owner, target, turnId, github } = yield* messagedAgent(agentSessions, {
+          running: true,
+        });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Open the pull request.",
+          id: randomUUID(),
+        });
+        // The queue is resumed while the Stop's cancel is out, so the turn still runs and nothing goes.
+        racing = Effect.asVoid(queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME }));
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        assert.equal(handedCount(agentSessions, "Open the pull request."), 0);
+
+        // The runner never ends the turn, so the Stop's force settles it canceled, as a lost runner's turn is.
+        const listening = settledTurnListener.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              github.layer,
+              noNetwork,
+              LOCAL_AGENT_ENVIRONMENT,
+              Layer.succeed(SlackBot, slackBotOver(undefined)),
+            ),
+          ),
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* settleRunnerLostTurns(
+          writer,
+          target.conversationId,
+          0,
+          undefined,
+          new Set([turnId]),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              listening,
+              github.layer,
+              noNetwork,
+              scriptedHarnessLayer((account) => agentSessions.agentSessions(harnessFor(account))),
+            ),
+          ),
+        );
+
+        assert.equal(handedCount(agentSessions, "Open the pull request."), 1);
+        assert.deepEqual(
+          Option.getOrThrow(yield* readAgentQueue(owner, agent.id)).messages,
+          [],
+          "the message left the queue",
+        );
+      }),
+  );
+
+  it.effect(
+    "a Stop pauses what is queued though the turn was already over, so no later hand-on sends it after the Stop",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
         // The turn ended with a message still queued, which the turn's end has not handed on yet.
-        const { agent, ask, owner, queued, swept } = yield* queuedBehindEndedTurn(agentSessions, [
-          "Open the pull request.",
-        ]);
+        const { agent, ask, owner, queued, turnEnded } = yield* queuedBehindEndedTurn(
+          agentSessions,
+          ["Open the pull request."],
+        );
 
         yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        yield* swept;
+        yield* turnEnded;
 
         assert.equal((yield* queued)?.paused?.because, QUEUE_PAUSE.STOPPED);
         assert.equal(handedCount(agentSessions, "Open the pull request."), 0);

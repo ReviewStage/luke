@@ -3,7 +3,6 @@ import { hostedStore } from "@repo/database/models/hosted-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -29,8 +28,8 @@ const SWEEP_MONITOR: CronMonitor = {
 };
 
 /**
- * The scheduled sweep handed the deployment's real seams. A wakeup or a
- * queued message reaches its agent's session through `routedSessions` acting
+ * The scheduled sweep handed the deployment's real seams. A wakeup
+ * reaches its agent's session through `routedSessions` acting
  * for the agent's owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
@@ -55,7 +54,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       ),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
-    sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     sweepPortShares: (now) => sweepPortShares(new Date(now)),
   });

@@ -56,7 +56,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
       }),
-    sweepAgentQueues: () => Effect.succeed(0),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
         recorded.syncLog.push(now);
