@@ -154,9 +154,9 @@ export function askLiveRead<Read extends AnyLiveRead, As extends HostedRenames =
   >;
   // SAFETY: a read's params are the fields of its input its mode's poll fields stand beside, each as text.
   const input = params as LivePollInput & { readonly [LIVE_POLL.SYNC]?: string };
-  // Note that a poll past a sync id is held by the service until something moves, so it travels under the held deadline, as one past `after` does.
+  // Note that a read past a sync id is held by the service until something moves, polled or not, so it travels under the held deadline, as a poll past `after` does.
   const sync = input[LIVE_POLL.SYNC];
-  const held = poll !== undefined && sync !== undefined && sync !== "";
+  const held = sync !== undefined && sync !== "";
   return hostedCall(procedure, input, {
     live: true,
     ...(poll === undefined ? {} : { poll }),
