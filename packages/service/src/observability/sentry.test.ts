@@ -4,7 +4,13 @@ import * as Sentry from "@sentry/effect";
 import { Effect, ErrorReporter, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
-import { sentryCronCheckIns, sentryLogger, sentryReportedFetch, standReported } from "./sentry.js";
+import {
+  sentryCronCheckIns,
+  sentryLogger,
+  sentryOptions,
+  sentryReportedFetch,
+  standReported,
+} from "./sentry.js";
 
 /**
  * The deployment's Sentry at its own boundary, its transport
@@ -208,6 +214,18 @@ it.effect("a database statement's span leaves named by its statement, not by its
     assert.deepEqual([namedAs(statement), namedAs("postgres")], [true, false]);
   }),
 );
+
+it("an agent's start is traced whole even where its caller sampled it out; any other call follows its caller", () => {
+  const sampled = (name: string) =>
+    sentryOptions().tracesSampler?.({
+      name,
+      parentSampled: false,
+      inheritOrSampleWith: () => 0,
+      attributes: {},
+      transactionContext: { name },
+    });
+  assert.deepEqual([sampled("agents.start"), sampled("tasks.list")], [1, 0]);
+});
 
 it.effect("a monitored run returns only once its closing check-in has left", () =>
   Effect.gen(function* () {

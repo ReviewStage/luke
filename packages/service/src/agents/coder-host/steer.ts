@@ -51,6 +51,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { agentSpansAnnotated } from "../../observability/sentry.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { keptHandedImages, senderLabel, turnContent } from "../attached-files.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
@@ -366,6 +367,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   const routing = yield* Effect.fromResult(read.routing);
   if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { runtime, payer } = routing.value;
+  yield* agentSpansAnnotated({
+    agentId: agent.id,
+    userId,
+    workspaceId: agent.organizationId,
+    repository: agent.repository,
+    harness: runtime,
+  });
   if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
   // keeps none for its model now is refused by name and never moved to another payer; one on no
