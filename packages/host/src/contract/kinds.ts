@@ -576,12 +576,13 @@ const MAC_COMMAND_ACT_KIND = {
 /**
  * A coding agent's cloud ports forwarded to this Mac's localhost
  * (`@repo/features/port-forward-acts`), for one agent at a time: its
- * forwarding turned on or off, how it stands kept in app state
+ * forwarding turned on or off, one of its ports shared by public link, how it stands kept in app state
  * (`portForwarding`), answered by the host, which listens on the Mac's loopback. What a forwarded
  * connection carries never travels on an act.
  */
 const PORT_FORWARD_ACT_KIND = {
   PORT_FORWARD_SET: "portForward.set",
+  PORT_SHARE_SET: "portForward.share",
 } as const;
 
 /**
@@ -943,6 +944,7 @@ export const PORT_ACT_USE = {
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
 
   PORT_FORWARD_SET: ACT_USE.WRITE,
+  PORT_SHARE_SET: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,
   SETTINGS_RESET: ACT_USE.WRITE,

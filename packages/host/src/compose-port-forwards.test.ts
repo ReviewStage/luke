@@ -57,6 +57,8 @@ function subject(options: { taken?: number[] } = {}) {
   return Effect.gen(function* () {
     const ports = new Map<string, number[]>([[AGENT_ID, []]]);
     const stopped = new Set<string>();
+    /** The port the service reads as shared, by agent, with its link. */
+    const shares = new Map<string, { port: number; url: string }>();
     const taken = new Set(options.taken);
     /** Each listener standing, by the local port it holds: what it accepts. */
     const listeners = new Map<number, Queue.Queue<LoopbackConnection, Cause.Done>>();
@@ -90,6 +92,18 @@ function subject(options: { taken?: number[] } = {}) {
             running: !stopped.has(agentId),
             ports: stopped.has(agentId) ? [] : (ports.get(agentId) ?? []),
           })),
+        share: (agentId, port) =>
+          Effect.sync(() => {
+            const url = `https://sb-${port}.share.test`;
+            shares.set(agentId, { port, url });
+            return { url };
+          }),
+        unshare: (agentId) =>
+          Effect.sync(() => {
+            shares.delete(agentId);
+            return { shared: null };
+          }),
+        shared: (agentId) => Effect.sync(() => ({ shared: shares.get(agentId) ?? null })),
       },
       openSocket: (url) =>
         Effect.gen(function* () {
@@ -117,6 +131,10 @@ function subject(options: { taken?: number[] } = {}) {
     return {
       /** Forwarding turned on or off, as the panel's Forward to localhost asks it. */
       set: composer.acts.PORT_FORWARD_SET,
+      /** A port shared by public link, or its link closed, as the panel's Forward menu asks it. */
+      share: composer.acts.PORT_SHARE_SET,
+      /** The service closed the agent's link, as it closes one no one visited. */
+      expire: (agentId: string) => void shares.delete(agentId),
       /** How forwarding stands, as the windows were last told. */
       told: () => told.last,
       composer,
@@ -161,6 +179,35 @@ it.effect("a port taken on this Mac is listened on at the next free one", () =>
         { port: 3000, localPort: 3001, state: PORT_FORWARD_STATE.LISTENING },
         { port: 5173, localPort: 5173, state: PORT_FORWARD_STATE.LISTENING },
       ],
+    });
+  }),
+);
+
+it.effect("a shared port's link is told beside the ports until the service closes it", () =>
+  Effect.gen(function* () {
+    const { set, share, expire, serve, told } = yield* subject();
+    serve(AGENT_ID, [3000]);
+    yield* set({ agentId: AGENT_ID, on: true });
+    yield* settle;
+
+    yield* share({ agentId: AGENT_ID, port: 3000 });
+    assert.deepEqual(told(), {
+      agentId: AGENT_ID,
+      on: true,
+      running: true,
+      shared: { port: 3000, url: "https://sb-3000.share.test" },
+      ports: [{ port: 3000, localPort: 3000, state: PORT_FORWARD_STATE.LISTENING }],
+    });
+
+    // The link went idle and the service closed it: the next look reads it gone.
+    expire(AGENT_ID);
+    yield* TestClock.adjust(PORT_FORWARD.LOOK_EVERY);
+    yield* settle;
+    assert.deepEqual(told(), {
+      agentId: AGENT_ID,
+      on: true,
+      running: true,
+      ports: [{ port: 3000, localPort: 3000, state: PORT_FORWARD_STATE.LISTENING }],
     });
   }),
 );

@@ -15,11 +15,12 @@ import {
   Tooltip,
   useMenu,
 } from "@repo/ui";
-import { GlobeIcon, PlugIcon } from "@repo/ui/icons";
+import { CopyIcon, GlobeIcon, LinkIcon, PlugIcon, UnlinkIcon } from "@repo/ui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useToast } from "../toast.js";
 import {
@@ -54,8 +55,12 @@ import { agentStillWriting } from "./agent-model.js";
  * "Forwarding to localhost:3000". Its menu holds the Forward to localhost
  * switch and, while on, one row per port, "localhost:3000", whose press
  * opens it in the default browser, with where it came from beside it where
- * the Mac's port differs ("from :3000"). Every word drawn is the app's own,
- * port numbers among them, so a screen recording shows them as they read.
+ * the Mac's port differs ("from :3000"). Under them, a port may be shared
+ * by a public link (`PORT_SHARE_SET`): one row per port, "Share :3000",
+ * and while one is shared, its link, which opens it, Copy, and Stop
+ * sharing, as the host keeps the link beside the ports. Every word drawn
+ * but the link is the app's own, port numbers among them, so a screen
+ * recording shows them as they read.
  */
 
 /** What an agent forwarding is off for reads. */
@@ -73,6 +78,9 @@ const WORDS = {
   FORWARDED: "Forwarded",
   FROM_SANDBOX: "From the agent's sandbox",
   OPEN: "Open",
+  SHARE: "Share",
+  COPY: "Copy",
+  STOP_SHARING: "Stop sharing",
 } as const;
 
 /** The agents whose forwarding the developer turned off in this window, which none is forwarded again on its own. */
@@ -197,6 +205,41 @@ function portRows(answer: PortForwardingAnswer): MenuAction[] {
   );
 }
 
+/** The share rows: one per port, or the shared port's link, Copy, and Stop sharing. */
+function shareRows(
+  agentId: string,
+  answer: PortForwardingAnswer,
+  copy: (words: string, label: string) => void,
+): MenuAction[] {
+  const { shared } = answer;
+  if (shared === undefined)
+    return answer.ports.map(({ port }) => ({
+      key: port,
+      label: `${WORDS.SHARE} :${port}`,
+      icon: <LinkIcon aria-hidden="true" />,
+      onSelect: () => void pressAct(ACT_KIND.PORT_SHARE_SET, { agentId, port }),
+    }));
+  return [
+    {
+      label: shared.url,
+      // Note that the link opens the port to anyone holding it, so a screen recording keeps it masked.
+      replayMasked: true,
+      icon: <GlobeIcon aria-hidden="true" />,
+      onSelect: () => appPlatform().openWeb(shared.url),
+    },
+    {
+      label: WORDS.COPY,
+      icon: <CopyIcon aria-hidden="true" />,
+      onSelect: () => copy(shared.url, LINK_COPY.COPIED),
+    },
+    {
+      label: WORDS.STOP_SHARING,
+      icon: <UnlinkIcon aria-hidden="true" />,
+      onSelect: () => void pressAct(ACT_KIND.PORT_SHARE_SET, { agentId, port: null }),
+    },
+  ];
+}
+
 /**
  * The plug at the agent's box's foot, for an agent whose ports this Mac
  * can forward: a dot in the complete tone while they are, the address in
@@ -209,6 +252,7 @@ export function ForwardChip({
 }): React.JSX.Element | null {
   const { offered, answer } = useForwarding(agent);
   const menu = useMenu(true);
+  const copy = useCopyToast();
   if (!offered) return null;
   const first = reached(answer)[0];
   const words = !answer.on
@@ -227,6 +271,9 @@ export function ForwardChip({
       },
     ],
     ...(answer.on ? [portRows(answer)] : []),
+    ...(answer.on && (answer.shared !== undefined || answer.ports.length > 0)
+      ? [shareRows(agent.id, answer, copy)]
+      : []),
   ];
   const chip = (
     <Chip

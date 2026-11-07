@@ -24,6 +24,11 @@
  * connection it accepts opens the socket again. That lazy open is the whole
  * of reconnecting: nothing is retried on a schedule. No byte a connection
  * carries is read beyond its channel's frame, kept, logged, or counted.
+ *
+ * The forwarded agent's port shared by public link is read from the service
+ * at the first look its sandbox runs, and again at each look while one is
+ * shared, so a link the service closed as idle leaves the menu with it;
+ * sharing a port or closing its link sets it at once.
  */
 
 import { type HostedAgentPortsClient, portForwardAddress, webSocketOrigin } from "@repo/features";
@@ -76,7 +81,7 @@ export const PORT_FORWARD = {
 } as const;
 
 /** The service's side of the forward, as this concern asks it. */
-type PortForwardClient = Pick<HostedAgentPortsClient, "list">;
+type PortForwardClient = Pick<HostedAgentPortsClient, "list" | "share" | "unshare" | "shared">;
 
 export interface PortForwardsDependencies {
   kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "emit"> & {
@@ -116,6 +121,11 @@ interface Forwarding {
   readonly scope: Scope.Closeable;
   running: boolean;
   readonly forwards: Map<number, Forward>;
+  /** The port shared by public link and its link; none until read, or where none is. */
+  shared: { readonly port: number; readonly url: string } | undefined;
+  sharedRead: boolean;
+  /** How many times a share or its close set `shared`, so a read begun before one does not undo it. */
+  shareMoves: number;
 }
 
 const readFrame = readEither(Schema.fromJsonString(tunnelFrameSchema), {
@@ -155,6 +165,9 @@ export function composePortForwards(
       toldText = text;
       kernel.emit(GATEWAY_EVENT.PORT_FORWARDS_CHANGED, carried(told));
     });
+
+    const withHttp = <A, E>(call: Effect.Effect<A, E, HttpClient.HttpClient>) =>
+      Effect.provideService(call, HttpClient.HttpClient, http);
 
     /** A text frame the relay sent: a channel's bytes written to its connection, or its close ending it. */
     const heard = (tunnel: Tunnel, text: string) => {
@@ -271,11 +284,7 @@ export function composePortForwards(
     /** One read of the agent's ports, the forwards made to follow it: each port read forwarded, and each no longer read let go. */
     const look = (current: Forwarding) =>
       Effect.gen(function* () {
-        const answer = yield* Effect.provideService(
-          client.list(current.agentId),
-          HttpClient.HttpClient,
-          http,
-        );
+        const answer = yield* withHttp(client.list(current.agentId));
         if ("failure" in answer) return;
         // Note that a sandbox seen running and now stopped ends the forward, so the next agent may take the ports, and the release is forked because it closes the scope this read runs in.
         if (current.running && !answer.running) {
@@ -292,6 +301,14 @@ export function composePortForwards(
         for (const port of answer.ports) {
           if (!current.forwards.has(port))
             current.forwards.set(port, yield* forwarded(current, port));
+        }
+        if (answer.running && (!current.sharedRead || current.shared !== undefined)) {
+          const moves = current.shareMoves;
+          const read = yield* withHttp(client.shared(current.agentId));
+          if (!("failure" in read) && moves === current.shareMoves) {
+            current.shared = read.shared ?? undefined;
+            current.sharedRead = true;
+          }
         }
         yield* tell;
       });
@@ -318,6 +335,9 @@ export function composePortForwards(
           scope: yield* Scope.fork(lifetimeScope),
           running: false,
           forwards: new Map(),
+          shared: undefined,
+          sharedRead: false,
+          shareMoves: 0,
         };
         forwarding = current;
         yield* tell;
@@ -331,9 +351,11 @@ export function composePortForwards(
     const standing = (agentId: string): PortForwardingAnswer => {
       if (forwarding?.agentId !== agentId) return OFF;
       const forwards = [...forwarding.forwards.values()].sort((a, b) => a.port - b.port);
+      const { shared } = forwarding;
       return {
         on: true,
         running: forwarding.running,
+        ...(shared === undefined ? {} : { shared }),
         ports: forwards.map((forward) => {
           if (forward.localPort === undefined) {
             return { port: forward.port, state: PORT_FORWARD_STATE.UNAVAILABLE };
@@ -357,6 +379,25 @@ export function composePortForwards(
           // Note that a signed-out host refuses in the act's own sentence, as the Gateway's refusal of its method was drawn.
           if (!gate()) return yield* Effect.fail(new ActRefused({}));
           yield* turnOn(agentId);
+          return standing(agentId);
+        }),
+      PORT_SHARE_SET: ({ agentId, port }) =>
+        Effect.gen(function* () {
+          const current = forwarding;
+          if (current?.agentId !== agentId || !gate())
+            return yield* Effect.fail(new ActRefused({}));
+          if (port === null) {
+            const answer = yield* withHttp(client.unshare(agentId));
+            if ("failure" in answer) return yield* Effect.fail(new ActRefused({}));
+            current.shared = undefined;
+          } else {
+            const answer = yield* withHttp(client.share(agentId, port));
+            if ("failure" in answer) return yield* Effect.fail(new ActRefused({}));
+            current.shared = { port, url: answer.url };
+          }
+          current.shareMoves++;
+          current.sharedRead = true;
+          yield* tell;
           return standing(agentId);
         }),
     };
