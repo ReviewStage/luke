@@ -2622,7 +2622,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs eight sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs six sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2634,11 +2634,8 @@ the rest still run, and any failure fails the cron's check-in. In order:
   sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `automations`: the automations whose schedule is due fired
-  ("Automations" below), at most twenty-five a sweep, and the runs still
-  queued from the last hour acted on, at most twelve a sweep and four at
-  once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
 - `agentQueues`: unpaused queues of idle agents handed on.
+- `syncLog`: the sync log's transactions older than its keep pruned.
 
 No sweep settles a turn whose runner went quiet. Every post a runner makes,
 its heartbeat among them, pushes on its open turns' lease
