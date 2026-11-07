@@ -202,6 +202,14 @@ import {
   stripTabReopens,
   TAB_PIN,
 } from "./strip-tab-kinds.js";
+import {
+  COLUMN,
+  type Column,
+  type ColumnKeys,
+  pressTab,
+  TAB_PRESS,
+  useColumnKeys,
+} from "./tab-press.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { ComposerNote } from "./use-agent-composer.js";
@@ -700,6 +708,12 @@ export interface TasksControl {
   onShowColumnTab: (taskId: string, tab: MainTab) => void;
   /** Opens a task on a tab of its side panel, opening the panel where it was shut: what ⌃Tab's card asks. */
   onShowPanelTab: (taskId: string, tab: SidePanelTab) => void;
+  /** The column the last door that opened a tab outside a page's own presses asked the keys of, a link, a pin, or ⌃Tab's card, which the page standing hands them to (`useColumnFocus`) and lets go (`tab-press.ts`). */
+  tabKeys: ColumnKeys | undefined;
+  /** Asks the keys of the page standing for the column given, as such a door does. */
+  onTabKeys: (column: Column) => void;
+  /** Says the page standing handed the keys as asked; only the ask taken is let go. */
+  onTabKeysTaken: (ask: number) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab. */
   onShowSource: (taskId: string, source: RevisionSource) => void;
   /** Opens a task on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
@@ -1905,6 +1919,7 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.heldIds),
   );
+  const { keys: tabKeys, onKeys, onKeysTaken } = useColumnKeys();
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
   // pull request was read, or before a rename, catches up while its task is open.
@@ -3266,21 +3281,24 @@ export function useTasksTab(input: {
 
   // A task's own tab, its Inbox, and an agent's are in its column, so a
   // version history over it gives way, and so does a side panel filling the
-  // window over it.
+  // window over it; the column takes the keys, as a press opening a tab
+  // hands them to its column (`tab-press.ts`), so ⌘W closes the tab shown.
   const showColumnTab = (taskId: string, tab: MainTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     clearStandIn();
     closeHistory();
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(taskId, tab);
+    onKeys(COLUMN.MAIN);
   };
 
-  // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
+  // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place, the panel taking the keys.
   const showPanelTab = (taskId: string, tab: SidePanelTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
     clearStandIn();
     closeHistory();
     sidePanel.onShow(taskId, tab);
+    onKeys(COLUMN.SIDE);
   };
   // The task's description shown at the place given: its column's Overview, which
   // holds it, chosen in place on the task standing, and on another task as
@@ -3293,6 +3311,7 @@ export function useTasksTab(input: {
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
     );
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    onKeys(COLUMN.MAIN);
     if (routed.kind === ROUTE.OVERVIEW) {
       mainTabs.onChoose(MAIN_TAB.OVERVIEW);
       return;
@@ -3303,15 +3322,16 @@ export function useTasksTab(input: {
     mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
   };
   // A link to a tab of the task standing opens it as the panel's preview, as
-  // any link pressed there does; one to another task's goes there and opens
-  // it as a tab of its own (`route.ts`).
+  // any link pressed there does (`tab-press.ts`); one to another task's goes
+  // there and opens it as a tab of its own (`route.ts`).
   const linkPanelTab = (place: TaskTabPlace, tab: SidePanelTab) => {
     const standing = !overPlan && !historyRoute.open;
     const routed = route(
       { kind: ADDRESS.PLACE, link: { workspace: "", place } },
       { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
     );
-    if (routed.kind === ROUTE.PREVIEW) sidePanel.onPreview(tab);
+    if (routed.kind === ROUTE.PREVIEW)
+      pressTab({ sidePanel, mainTabs, onKeys }, { kind: TAB_PRESS.PANEL, tab });
     else showPanelTab(place.planId, tab);
   };
 
@@ -3484,25 +3504,41 @@ export function useTasksTab(input: {
     }
   };
 
+  // A tab of an agent's own page's panel: as the panel's preview where that page
+  // stands, as a link pressed on a task opens one there (`linkPanelTab`), and as
+  // a tab of its own on the page the window goes to otherwise.
+  const linkAgentPanelTab = (agentId: string, tab: SidePanelTab) => {
+    const standing =
+      agentView?.agentId === agentId && !historyRoute.open && inboxView === undefined;
+    if (standing) {
+      pressTab({ sidePanel, mainTabs, onKeys }, { kind: TAB_PRESS.PANEL, tab });
+      return;
+    }
+    standInFor({ kind: STAND_IN.AGENT, agentId });
+    sidePanel.onShow(agentId, tab);
+    onKeys(COLUMN.SIDE);
+  };
+
   // An agent's place on its own page, where it works on no task: the page, and the tab of its panel, held under the agent, that shows what the place names.
   const openOnAgentPage = (place: AgentPlace) => {
     const { agentId } = place;
-    standInFor({ kind: STAND_IN.AGENT, agentId });
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        sidePanel.onShow(agentId, subagentTab(place.callId, { agent: agentId, task: "" }));
+        linkAgentPanelTab(agentId, subagentTab(place.callId, { agent: agentId, task: "" }));
         return;
       case LINK_PLACE.CHANGES:
-        sidePanel.onShow(agentId, changesTab(agentId));
+        linkAgentPanelTab(agentId, changesTab(agentId));
         return;
       case LINK_PLACE.PULL_REQUEST_THREAD:
         sidePanel.onPullRequestView(changesTab(agentId), place.view);
-        sidePanel.onShow(agentId, changesTab(agentId));
+        linkAgentPanelTab(agentId, changesTab(agentId));
         revealThread(agentId, place);
         return;
       case LINK_PLACE.AGENT:
+        standInFor({ kind: STAND_IN.AGENT, agentId });
         return;
       case LINK_PLACE.MESSAGE:
+        standInFor({ kind: STAND_IN.AGENT, agentId });
         revealMessage(place);
         return;
     }
@@ -3764,8 +3800,7 @@ export function useTasksTab(input: {
       case LINK_PLACE.PAGE:
         // A page of an agent on no task opens on that agent's page, in its panel.
         if ("agentId" in place) {
-          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-          sidePanel.onShow(place.agentId, pageTab(place.pageId));
+          linkAgentPanelTab(place.agentId, pageTab(place.pageId));
           return;
         }
         linkPanelTab(place, pageTab(place.pageId));
@@ -4195,6 +4230,9 @@ export function useTasksTab(input: {
     ),
     onShowColumnTab: guard(showColumnTab),
     onShowPanelTab: guard(showPanelTab),
+    tabKeys,
+    onTabKeys: onKeys,
+    onTabKeysTaken: onKeysTaken,
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     inboxTasks: input.inboxTasks,
@@ -4312,7 +4350,8 @@ export function useTasksTab(input: {
         standInbox(inboxIn(home ?? listedWorkspace?.id, taskId), chosen);
       },
     ),
-    // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
+    // A pinned tab is in one of the task's columns, so a version history over it gives way as well,
+    // and the column it opens in takes the keys, as a press opening a tab hands them (`tab-press.ts`).
     onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;
       setChosen({ pin, over: openTaskId });
@@ -4322,16 +4361,15 @@ export function useTasksTab(input: {
         closeInbox();
         setStandIn({ kind: STAND_IN.AGENT, agentId: pin.agent });
         sidePanel.onShow(pin.agent, pin.tab);
+        onKeys(COLUMN.SIDE);
         return;
       }
-      if (pin.task !== tasks.activeTaskId) select(pin.task);
-      clearStandIn();
       if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.AGENT) {
-        sidePanel.onShow(pin.task, tab);
+        showPanelTab(pin.task, tab);
         return;
       }
-      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-      mainTabs.onShow(pin.task, tab);
+      // An agent's pin opens as its row's card does (`onShowAgent`), on its own page where it is archived.
+      openOnTask(pin.task, { kind: LINK_PLACE.AGENT, planId: pin.task, agentId: tab.agent });
     }),
     chosenPin: chosenPinOf(chosen, boundFor, agentView?.agentId),
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,

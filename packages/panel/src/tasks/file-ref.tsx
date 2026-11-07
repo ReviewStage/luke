@@ -20,9 +20,10 @@ import { useTaskMentions } from "./task-mentions.js";
  * before its name, says its lines one way (`lineRangeText`), and hangs the
  * file's tab's own card while the pointer rests on it: the file's whole
  * path. A press or
- * Enter shows the file's tab through the side panel's one door for it
- * (`SidePanelControl.onOpenFile`): the tab it has, or a new one at the
- * strip's end, on the lines the place names, where it names any.
+ * Enter opens the file through the door its place hands it, which opens it
+ * as a link pressed opens one, through the window's one door for a press
+ * (`tab-press.ts`): the tab it has, or the side panel's preview, on the
+ * lines the place names, where it names any.
  */
 
 /** A file as a row names it, in a menu, the summary, or ⌘K: its type's icon, its name, its folder after the name, and the whole path a search finds it by. */

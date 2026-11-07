@@ -150,6 +150,7 @@ import {
   TAB_KIND,
   tabLook,
 } from "../tasks/tab-look.js";
+import { COLUMN, type Column, type ColumnKeys } from "../tasks/tab-press.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TERMINAL_KIND, type TerminalKind } from "../tasks/terminal-session.js";
 import { TerminalCount, TerminalTab } from "../tasks/terminal-tab.js";
@@ -436,14 +437,6 @@ export function offeredPanelKinds(holder: SidePanelHolder): readonly FixedSidePa
   return HOLDER_KINDS[holder];
 }
 
-/** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
-export const COLUMN = {
-  MAIN: "main",
-  SIDE: "side",
-} as const;
-
-type Column = (typeof COLUMN)[keyof typeof COLUMN];
-
 /** The column holding the keys, the door its page's area is handed through, and the door a press that hands the keys over goes through. */
 export interface ColumnFocus {
   readonly onArea: (area: HTMLDivElement | null) => void;
@@ -453,13 +446,24 @@ export interface ColumnFocus {
 
 /**
  * The column of a page with a side panel that holds the keys: the one the
- * pointer or the focus last went into, and the door a press that hands the
- * keys over goes through. Note that it is heard on the page's area, handed
- * through `onArea`, as it bubbles, because the columns are no controls of
- * their own to hear it.
+ * pointer or the focus last went into, or the one a door that opened a tab
+ * asked for since (`keys`, `tab-press.ts`), and the door a press that hands
+ * the keys over goes through. Note that it is heard on the page's area,
+ * handed through `onArea`, as it bubbles, because the columns are no
+ * controls of their own to hear it; and that an ask is taken, and let go
+ * (`onTaken`), by the page standing as it is drawn, a page drawn by the door
+ * that asked among them, so it never waits for a page kept out of sight.
  */
-export function useColumnFocus(): ColumnFocus {
+export function useColumnFocus(
+  keys: ColumnKeys | undefined,
+  onTaken: (ask: number) => void,
+): ColumnFocus {
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
+  useLayoutEffect(() => {
+    if (keys === undefined) return;
+    setFocus(keys.column);
+    onTaken(keys.ask);
+  }, [keys, onTaken]);
   const [area, onArea] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (area === null) return;

@@ -1,12 +1,8 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
-import {
-  type DescriptionMention,
-  encodeMention,
-  MENTION_KIND,
-  type MentionLines,
-} from "@repo/features/mention-link";
+import type { DescriptionMention, MentionLines } from "@repo/features/mention-link";
+import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
 import { backToWords, readFailedWords } from "@repo/features/words";
@@ -25,14 +21,13 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { ADDRESS, type Address, addressOf, HERE, ROUTE, route, THING } from "../route.js";
+import { ADDRESS, type Address, HERE, ROUTE, route, THING } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
@@ -54,6 +49,7 @@ import {
 import { useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
+import { COLUMN, pressTab, TAB_PRESS, type TabPressed } from "../tasks/tab-press.js";
 import {
   heldTaskMentions,
   type TasklessPlace,
@@ -78,6 +74,7 @@ import {
   type FileReads,
   PULL_REQUEST_VIEW,
   type SidePanelControl,
+  type SidePanelTab,
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -85,7 +82,6 @@ import { useCloudTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
-  COLUMN,
   changesTabOf,
   type PanelRepositoryPlace,
   SIDE_PANEL_HOLDER,
@@ -302,13 +298,22 @@ export const DesktopInbox = memo(function DesktopInbox({
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
-  // A file the item names opens beside the Inbox as the panel's preview, an agent's with no task read through its repository.
-  const openFile = (ref: CodeRef, commit: string | undefined) =>
-    sidePanel.onPreviewFile(
+  const { onArea, focus, setFocus } = useColumnFocus(tasks.tabKeys, tasks.onTabKeysTaken);
+  // What the item names opens beside the Inbox as a link pressed opens it, through the window's one door for a press:
+  // as the panel's preview, the panel taking the keys (`tab-press.ts`).
+  const onPressTab = (pressed: TabPressed) =>
+    pressTab({ sidePanel, mainTabs: tasks.mainTabs, onKeys: setFocus }, pressed);
+  const previewPanelTab = (tab: SidePanelTab, at?: PagePlace) =>
+    onPressTab({ kind: TAB_PRESS.PANEL, tab, place: at });
+  // A file the item names opens the same way, an agent's with no task read through its repository.
+  const openFile = (ref: CodeRef, commit: string | undefined, reads?: FileReads) =>
+    onPressTab({
+      kind: TAB_PRESS.FILE,
       ref,
       commit,
-      chosen?.holder.kind === INBOX_HOLDER.TASK ? undefined : repositoryReads(place),
-    );
+      reads:
+        reads ?? (chosen?.holder.kind === INBOX_HOLDER.TASK ? undefined : repositoryReads(place)),
+    });
   // A file the item's words or box name opens as its code does, in the panel beside the Inbox.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     openFile(fileRef(path, lines), lines?.commit);
@@ -348,19 +353,19 @@ export const DesktopInbox = memo(function DesktopInbox({
         if (place === undefined) return false;
         const { repository } = thing;
         const reads = { place: { workspaceId: place.workspaceId, repository }, repository };
-        sidePanel.onPreviewFile(ref, thing.lines?.commit, reads);
+        openFile(ref, thing.lines?.commit, reads);
         return true;
       }
       case THING.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move;
         // another task's, a subtask's among them, opens here too, read on that task, so the reader stays on the item.
-        sidePanel.onPreview(pageTab(thing.pageId), thing.place);
+        previewPanelTab(pageTab(thing.pageId), thing.place);
         return true;
       case THING.CHANGES:
-        sidePanel.onPreview(changesTab(thing.agentId));
+        previewPanelTab(changesTab(thing.agentId));
         return true;
       case THING.TRANSCRIPT:
-        sidePanel.onPreview(transcriptTab(thing.agentId));
+        previewPanelTab(transcriptTab(thing.agentId));
         // A message is brought into view as the transcript beside the item lands, as its tab on the task brings it.
         if (thing.messageId !== undefined) {
           tasks.onRevealMessage({
@@ -372,7 +377,7 @@ export const DesktopInbox = memo(function DesktopInbox({
         return true;
       case THING.PULL_REQUEST:
         showPullRequest(
-          sidePanel,
+          { ...sidePanel, onPreview: previewPanelTab },
           named,
           thing.agentId,
           PULL_REQUEST_VIEW.CONVERSATION,
@@ -383,7 +388,7 @@ export const DesktopInbox = memo(function DesktopInbox({
       case THING.THREAD: {
         const tab = changesTabOf(named, thing.agentId, sidePanel.changes);
         sidePanel.onPullRequestView(tab, thing.view);
-        sidePanel.onPreview(tab);
+        previewPanelTab(tab);
         tasks.onRevealThread(tab.changes, {
           kind: LINK_PLACE.PULL_REQUEST_THREAD,
           agentId: thing.agentId,
@@ -450,7 +455,6 @@ export const DesktopInbox = memo(function DesktopInbox({
           );
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
-  const { onArea, focus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
@@ -504,10 +508,8 @@ export const DesktopInbox = memo(function DesktopInbox({
       <SkillFiles
         source={agents.readSkills}
         onOpen={(skill) => {
-          // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the panel cannot open it.
-          if (place === undefined) return;
-          const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-          if (!openHere(addressOf(url))) appPlatform().openGitHub(url);
+          // Note that a skill's file opens in the panel beside the Inbox as a file the item names does, once the item's repository is known.
+          if (place !== undefined) openMentionedFile(skill.path, undefined);
         }}
       >
         {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
@@ -989,7 +991,11 @@ function tasklessCode(tasks: TasksControl, place: TasklessPlace | undefined): In
   return {
     repository,
     place: { workspaceId, repository },
-    onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit, repositoryReads(place)),
+    onOpenFile: (ref, commit) =>
+      pressTab(
+        { ...tasks, onKeys: tasks.onTabKeys },
+        { kind: TAB_PRESS.FILE, ref, commit, reads: repositoryReads(place) },
+      ),
   };
 }
 
@@ -1047,7 +1053,7 @@ export function paneDoors(
         // Note that code is a link like any other: beside the item it opens as the panel's preview.
         onOpenFile: (ref, commit) =>
           seams.panelFor === task.id
-            ? tasks.sidePanel.onPreviewFile(ref, commit)
+            ? pressTab({ ...tasks, onKeys: tasks.onTabKeys }, { kind: TAB_PRESS.FILE, ref, commit })
             : tasks.onShowFile(task.id, ref, commit),
       },
     };
