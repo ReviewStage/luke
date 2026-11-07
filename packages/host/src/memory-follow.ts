@@ -7,8 +7,8 @@ import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   type MemoryLiveRow,
   memoriesOfLiveRows,
+  WORKSPACE_MEMORIES_READ,
   type WorkspaceMemoriesLiveAnswer,
-  workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
 import {
   type EntityPool,
@@ -134,7 +134,7 @@ function followMemories(
           },
         },
         first,
-        workspaceMemoriesLiveRowsSchema,
+        WORKSPACE_MEMORIES_READ.rows,
         (rows) =>
           Effect.andThen(
             memories.answer(rows.memories),

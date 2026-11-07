@@ -45,7 +45,7 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
-import { accountPreferencesLiveAnswerSchema } from "../account-preferences-live.js";
+import { ACCOUNT_PREFERENCES_READ } from "../account-preferences-live.js";
 import { AGENT_ORIGIN_READ } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
@@ -55,8 +55,8 @@ import {
 import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "../browser-tabs-live.js";
 import { TASK_COMMENTS_READ } from "../description-comment-live.js";
 import { HOSTS_READ } from "../host-live.js";
-import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
-import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
+import { INSTALLED_SKILLS_READ } from "../installed-skill-live.js";
+import { INTEGRATION_STATUSES_READ } from "../integration-live.js";
 import { liveProcedure } from "../live-read.js";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -65,22 +65,22 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_USER_QUERY,
-  macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
 } from "../live-wire.js";
-import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
+import { MAC_COMMANDS_READ } from "../mac-command-live.js";
+import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
+import { SIDEBAR_READ } from "../sidebar-live.js";
 import { TASK_HISTORY_READ } from "../task-history-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
 import { AGENT_PAGES_READ, TASK_PAGES_READ } from "../task-pages-live.js";
 import { TASK_RECORD_READ } from "../task-record-live.js";
-import { workspaceIntegrationsLiveAnswerSchema } from "../workspace-integrations-live.js";
+import { WORKSPACE_INTEGRATIONS_READ } from "../workspace-integrations-live.js";
 import {
-  workspaceInvitationsLiveAnswerSchema,
-  workspaceMembersLiveAnswerSchema,
-  workspacesLiveAnswerSchema,
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
 } from "../workspace-live.js";
 import { hostedProcedure } from "./base.js";
 
@@ -97,7 +97,7 @@ const syncField = EffectSchema.optionalKey(EffectSchema.String);
 const userField = EffectSchema.optionalKey(EffectSchema.String);
 
 /** A live read's own query: whether it polls. */
-const liveReadSchema = EffectSchema.Struct({
+const _liveReadSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -163,7 +163,7 @@ const liveTranscriptSchema = EffectSchema.Struct({
 });
 
 /** The kinds of command a Mac's live read follows, as its held read names them (`macCommandKindsQuery`). */
-const liveMacCommandsSchema = EffectSchema.Struct({
+const _liveMacCommandsSchema = EffectSchema.Struct({
   kinds: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
@@ -241,10 +241,7 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
     .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
-  macCommands: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_MAC_COMMANDS }))
-    .input(liveMacCommandsSchema)
-    .output(EffectSchema.flip(macCommandsLiveAnswerSchema)),
+  [MAC_COMMANDS_READ.name]: liveProcedure(MAC_COMMANDS_READ),
   taskInbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX }))
     .input(liveScopeSchema)
@@ -253,51 +250,20 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
     .input(liveScopeSchema)
     .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
-  sidebar: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_SIDEBAR }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(sidebarLiveAnswerSchema)),
-  workspaces: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(workspacesLiveAnswerSchema)),
-  workspaceMembers: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMBERS }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceMembersLiveAnswerSchema)),
-  workspaceInvitations: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INVITATIONS }),
-    )
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
+  [SIDEBAR_READ.name]: liveProcedure(SIDEBAR_READ),
+  [WORKSPACES_READ.name]: liveProcedure(WORKSPACES_READ),
+  [WORKSPACE_MEMBERS_READ.name]: liveProcedure(WORKSPACE_MEMBERS_READ),
+  [WORKSPACE_INVITATIONS_READ.name]: liveProcedure(WORKSPACE_INVITATIONS_READ),
   [HOSTS_READ.name]: liveProcedure(HOSTS_READ),
-  workspaceMemories: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceMemoriesLiveAnswerSchema)),
-  installedSkills: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INSTALLED_SKILLS }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(installedSkillsLiveAnswerSchema)),
-  workspaceIntegrations: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),
-    )
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceIntegrationsLiveAnswerSchema)),
+  [WORKSPACE_MEMORIES_READ.name]: liveProcedure(WORKSPACE_MEMORIES_READ),
+  [INSTALLED_SKILLS_READ.name]: liveProcedure(INSTALLED_SKILLS_READ),
+  [WORKSPACE_INTEGRATIONS_READ.name]: liveProcedure(WORKSPACE_INTEGRATIONS_READ),
   pullRequestChapters: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),
     )
     .input(livePullRequestChaptersSchema)
     .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
-  integrationStatuses: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
-  accountPreferences: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_ACCOUNT_PREFERENCES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(accountPreferencesLiveAnswerSchema)),
+  [INTEGRATION_STATUSES_READ.name]: liveProcedure(INTEGRATION_STATUSES_READ),
+  [ACCOUNT_PREFERENCES_READ.name]: liveProcedure(ACCOUNT_PREFERENCES_READ),
 };

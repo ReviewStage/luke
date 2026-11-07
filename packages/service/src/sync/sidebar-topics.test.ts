@@ -20,11 +20,11 @@ import {
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@repo/features/task-section-wire";
 import { Clock, Effect, Option } from "effect";
+import { sidebarRead } from "../live/reads/sidebar.js";
 import { openTokenMember } from "../testing/github-app-fake.js";
-import { sidebarLive } from "./live-queries.js";
 
 /**
- * The sidebar's live read (`sidebarLive`) on the migrated capture: each
+ * The sidebar's live read (`sidebarRead`) on the migrated capture: each
  * write that moves an account's sidebar, through its real writer, notifies
  * the account's topic, which the read is woken on, so a window holding the
  * sidebar hears it within a coalesce window rather than at the hold's end.
@@ -58,7 +58,7 @@ const wakesTheSidebar = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const fired = yield* expectTopicsFire(write, topics);
-    const woken = sidebarLive.topics({ userId });
+    const woken = sidebarRead.topics({ userId });
     assert.ok(
       topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id)),
       "the sidebar's read is woken by a topic the write notifies",

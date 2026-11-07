@@ -83,6 +83,7 @@
     "./host-wire": "./src/host-wire.js",
     "./host-release": "./src/host-release.js",
     "./cli-release": "./src/cli-release.js",
+    "./mac-command-live": "./src/mac-command-live.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./sentry-install-wire": "./src/sentry-install-wire.js",
     "./slack-bot-wire": "./src/slack-bot-wire.js",

@@ -20,12 +20,13 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
 import { memberIdOf } from "../accounts/workspace-members.js";
 import { postInboxThread } from "../inbox/inbox-store.js";
+import { workspaceInvitationsRead } from "../live/reads/workspace-invitations.js";
+import { workspaceMembersRead } from "../live/reads/workspace-members.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { workspaceInvitationsLive, workspaceMembersLive } from "./live-queries.js";
 
 /**
- * A workspace's people and its invitations (`workspaceMembersLive`,
- * `workspaceInvitationsLive`) on the migrated capture: each write that moves
+ * A workspace's people and its invitations (`workspaceMembersRead`,
+ * `workspaceInvitationsRead`) on the migrated capture: each write that moves
  * either read, through its real writer, notifies the workspace's topic, which
  * both reads are woken on, so a window holding them hears it within a
  * coalesce window rather than at the hold's end. Memberships and invitations
@@ -40,7 +41,7 @@ import { workspaceInvitationsLive, workspaceMembersLive } from "./live-queries.j
 type WorkspacePlugin = Effect.Success<typeof openWorkspacePlugin>;
 
 /** The live reads a workspace's settings hold, both bound to the reader and the workspace. */
-const WORKSPACE_READS = [workspaceMembersLive, workspaceInvitationsLive];
+const WORKSPACE_READS = [workspaceMembersRead, workspaceInvitationsRead];
 
 const openAccount = (name: string) =>
   Effect.gen(function* () {
