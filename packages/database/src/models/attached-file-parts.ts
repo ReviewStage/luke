@@ -230,3 +230,52 @@ export function receivedPartsOf(
   const mentioned = rest.flatMap((part) => mentionedTextOf(part) ?? []);
   return [...(words.text === "" ? [] : [words.text]), ...mentioned, ...texts, ...marks];
 }
+
+/** The types a developer's file may be, which a file part read back is held to. */
+const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(AGENT_ATTACHMENT_TYPE));
+
+function isAttachmentType(mediaType: string): mediaType is AgentAttachment["mediaType"] {
+  return ATTACHMENT_TYPES.has(mediaType);
+}
+
+/** A file of a developer's line read back from its row: its bytes where the row carries them, and what was kept of an image, whose bytes a kept one's row leaves out. */
+export interface LineFileRead {
+  readonly name: string;
+  readonly mediaType: AgentAttachment["mediaType"];
+  readonly data: string | undefined;
+  readonly kept: KeptImage | undefined;
+}
+
+/** A developer's line read back from the parts the journal keeps for it (`lineParts`). */
+export interface LineRead {
+  readonly text: string;
+  readonly mentioned: string | undefined;
+  readonly files: readonly LineFileRead[];
+}
+
+/**
+ * A developer's line read back from its row's parts, as `lineParts` wrote
+ * them, so it can be handed to the agent again: its words, what it
+ * mentioned, and each file in the order attached. Note that a file of a
+ * type no line carries is passed over, as the wire would refuse it.
+ */
+export function lineRead(parts: readonly UIMessage["parts"][number][]): LineRead {
+  const [words, ...rest] = parts;
+  const files = rest.filter(isFileUIPart).flatMap((part): LineFileRead[] =>
+    isAttachmentType(part.mediaType)
+      ? [
+          {
+            name: part.filename ?? "",
+            mediaType: part.mediaType,
+            data: base64Of(part.url),
+            kept: keptImageOf(part),
+          },
+        ]
+      : [],
+  );
+  return {
+    text: words !== undefined && isTextUIPart(words) ? words.text : "",
+    mentioned: rest.map(mentionedTextOf).find((text) => text !== undefined),
+    files,
+  };
+}

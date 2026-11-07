@@ -201,6 +201,8 @@ async function drawnTab(input: {
   repository?: string;
   /** Takes each message the tab sends, by its words, answering as the service does; none answers it as unanswered. */
   onMessage?: (text: string) => Promise<AgentAgentAnswer>;
+  /** Takes each Try again the tab asks of the service, by the words it carries, answering whether the service took it; none answers it refused. */
+  onRetry?: (words: string) => Promise<boolean>;
   /** Whether Bring your own host is on, which Move to stands behind. */
   ownHost?: boolean;
   /** Takes each copy the tab makes, by its words. */
@@ -255,6 +257,7 @@ async function drawnTab(input: {
     onMessage: (_agentId, text) =>
       input.onMessage?.(text) ??
       Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onRetry: (_agentId, words) => input.onRetry?.(words) ?? Promise.resolve(false),
   });
   // Note that what the agent published is laid over the transcripts' host, which it hands everything else on to.
   const parts = handHostReads({});
@@ -414,17 +417,21 @@ function signInCard(container: ParentNode): HTMLElement | null {
   return container.querySelector<HTMLElement>(".agent-end .ui-banner");
 }
 
-test("a launch its Mac's GitHub sign-in could not start ends on a card naming the Mac and the repository, whose Copy copies the sign-in command and whose Retry sends one line of the developer's own however often pressed", async () => {
+test("a launch its Mac's GitHub sign-in could not start ends on a card naming the Mac and the repository, whose Copy copies the sign-in command and whose Retry asks the service to send again once however often pressed, writing no line of its own", async () => {
   const copied: string[] = [];
   const sent: string[] = [];
+  const retried: string[] = [];
   const tab = await drawnTab({
     ...SIGN_IN_REFUSED,
     repository: "acme/web",
     copied,
-    // Note that the line is never answered, so it stays going, as a launch that takes its time does.
     onMessage: (text) => {
       sent.push(text);
       return new Promise(() => undefined);
+    },
+    onRetry: (words) => {
+      retried.push(words);
+      return Promise.resolve(true);
     },
   });
   const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
@@ -448,9 +455,10 @@ test("a launch its Mac's GitHub sign-in could not start ends on a card naming th
     retry.click();
   });
   await settle();
-  assert.deepEqual(sent, ["Try again"]);
-  assert.equal(tab.lines("Try again").length, 1);
-  assert.equal(signInCard(tab.container), null);
+  assert.deepEqual(retried, ["Try again"]);
+  assert.deepEqual(sent, []);
+  assert.equal(tab.lines("Try again").length, 0);
+  assert.equal(retry.disabled, true, "a Retry the service took is not offered again");
 });
 
 test("the sign-in card's Move to cloud continues the agent in the cloud while Bring your own host is on, and is left out with it off, where an unknown Mac and repository are named as such", async () => {
@@ -555,11 +563,16 @@ test("a failed end line's row ends on Try again where a message carries the agen
   );
 });
 
-test("a turn failed on its sandbox ends on Try again, which sends the agent one line in place of Continue however often pressed", async () => {
+test("a turn failed on its sandbox ends on Try again, which asks the service to send again once however often pressed, writes no line of its own, and stands again where refused", async () => {
+  const retried: string[] = [];
   const sent: string[] = [];
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
     failure: AGENT_FAILURE.SANDBOX,
+    onRetry: (words) => {
+      retried.push(words);
+      return Promise.resolve(false);
+    },
     onMessage: (text) => {
       sent.push(text);
       return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
@@ -577,7 +590,10 @@ test("a turn failed on its sandbox ends on Try again, which sends the agent one 
   });
   await settle();
 
-  assert.deepEqual(sent, ["Try again"]);
+  assert.deepEqual(retried, ["Try again"]);
+  assert.deepEqual(sent, []);
+  assert.equal(tab.lines("Try again").length, 0);
+  assert.equal(press.disabled, false, "a refused Try again is offered again");
 });
 
 test("a message to an ended agent says to continue it in a new one, while a Start refused alike still says to start one", () => {

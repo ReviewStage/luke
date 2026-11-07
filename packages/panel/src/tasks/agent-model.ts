@@ -573,6 +573,9 @@ export const CONTINUE_AGAIN_LABEL = "Continue again";
 /** What the press that sends a failed agent a line again says, on the failed end line where a message carries it on (`endLineOffersTryAgain`). */
 export const TRY_AGAIN_LABEL = "Try again";
 
+/** What Try again says while the service sends again. */
+export const TRYING_AGAIN_LABEL = "Sending again";
+
 /** What the line naming the agents that continued another says before their chips. */
 export const CONTINUED_IN = "Continued in";
 
@@ -662,13 +665,13 @@ const MENDED_BY_CHOICE: ReadonlySet<AgentFailure> = new Set([
 
 /**
  * Whether the failed end line's row ends on Try again, which sends the
- * agent a line of the developer's own (`RETRY_LINE`), as the GitHub sign-in
- * card's Retry does: where a message carries the agent on, its box stands
- * open to send it, and nothing else ends the row. So never where Continue
- * does (`endLineOffersContinue`), on a key the reader mends in Settings, or
- * on a failure a choice mends (`MENDED_BY_CHOICE`). Note that the line
- * hands on, beside its own words, every message the failed launch never
- * took, so the prompt is never typed again.
+ * agent again the lines its failed turn never took, as a launch that failed
+ * before its runner read the prompt leaves it, or, where none was lost, a
+ * line of the developer's own (`RETRY_LINE`), as the GitHub sign-in card's
+ * Retry does: where a message carries the agent on, its box stands open to
+ * send it, and nothing else ends the row. So never where Continue does
+ * (`endLineOffersContinue`), on a key the reader mends in Settings, or on a
+ * failure a choice mends (`MENDED_BY_CHOICE`).
  */
 export function endLineOffersTryAgain(input: {
   readonly status: AgentStatus;
@@ -745,6 +748,9 @@ export const START_FAILED_AWAY = "The agent could not be started.";
 
 /** What the toast says when the service did not stop an agent. */
 export const STOP_FAILED = "The agent could not be stopped. Try again.";
+
+/** What the toast says when the service took no Try again on a failed turn's end line, which then offers it again. */
+export const RETRY_FAILED = "The message could not be sent again.";
 
 /** What the toast says when the service did not rename an agent, whose old name is drawn again. */
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";

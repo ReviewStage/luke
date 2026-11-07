@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
+import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
 import {
   pinAgent,
   readAgent,
@@ -42,6 +43,7 @@ import {
   agentListAnswerSchema,
   agentMessageAnswerSchema,
   agentMessagesAnswerSchema,
+  agentNewestAnswerSchema,
   agentPageAnswerSchema,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
@@ -69,6 +71,7 @@ import {
   taskDeleteAnswerSchema,
 } from "@repo/features/task-wire";
 import { RUN_ON_MAC_OFF, workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
+import { TURN_ORIGIN } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
@@ -82,6 +85,7 @@ import {
   AGENT,
   AGENT_INBOX,
   AGENT_MESSAGES,
+  AGENT_NEWEST,
   AGENT_PICTURE,
   AGENT_STOP,
   AGENT_WORKSPACE_TOOLS,
@@ -979,6 +983,59 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           list: AGENT_STATUS.FAILED,
           transcript: AGENT_STATUS.FAILED,
         });
+      }),
+  );
+
+  it.effect(
+    "Try again on a turn whose launch failed before its runner read the first message hands the harness that message again, under its own line id, and writes no line of its own",
+    () =>
+      Effect.gen(function* () {
+        const agentSessions = fakeAgentSessions();
+        const { owner, agent, ask, target, writer, transcript } = yield* messagedAgent(
+          agentSessions,
+          undefined,
+        );
+        const first = agentSessions.opened.at(-1)?.message;
+        assert.ok(first !== undefined);
+        // The launch fails past the Start's answer as the service writes it: a turn queued and settled failed, the line untaken.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          runtimeTurnId: turnId,
+          origin: TURN_ORIGIN.TYPED,
+        });
+        yield* settleRunnerLostTurns(
+          writer,
+          target.conversationId,
+          yield* Clock.currentTimeMillis,
+          "the sandbox could not be opened",
+        );
+        assert.equal((yield* transcript()).status, AGENT_STATUS.FAILED);
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        readAnswer(
+          agentMessageAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, { text: "Try again", clientKey: randomUUID(), retry: true }),
+          ),
+        );
+
+        assert.deepEqual(
+          agentSessions.sent.map((each) => [each.message.lineId, each.message.message]),
+          [[first.lineId, first.message]],
+        );
+        // Note that the newest page is read, since the line moved and a transcript read past a cursor reads it afresh.
+        const page = readAnswer(
+          agentNewestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
+        );
+        assert.deepEqual(
+          { lines: userTexts(page), status: page.status },
+          { lines: [SNAPSHOT], status: AGENT_STATUS.RUNNING },
+        );
       }),
   );
 

@@ -78,6 +78,7 @@ import {
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
+  RETRY_FAILED,
   SERVERS_FAILED,
   type SentLine,
   START_FAILED_AWAY,
@@ -470,6 +471,12 @@ export interface AgentsControl {
   onRewind: (agentId: string, messageId: string) => Promise<AgentActAnswer>;
   /** Sends one agent a message under the key the composer made. */
   onMessage: MessageSender;
+  /**
+   * A failed turn's Try again: sends again the lines the agent's failed turn
+   * never took, or, where none was lost, the words given as the developer's
+   * own; answers whether the service took it, a refusal said in a toast.
+   */
+  onRetry: (agentId: string, words: string) => Promise<boolean>;
   /** Changes one agent's model and effort for its next step, drawn at once by the host. */
   onChoose: ChoiceWriter;
   /** Switches one agent's MCP servers for its next turn on, drawn at once by the host; a refusal is said in a toast. */
@@ -1407,6 +1414,25 @@ export function useAgents(input: {
     return took;
   };
 
+  // A refused Try again leaves the end line offering it, so it says so in a toast.
+  const onRetry = async (agentId: string, words: string): Promise<boolean> => {
+    const answer = await sendMessage({
+      agentId,
+      text: words,
+      clientKey: crypto.randomUUID(),
+      retry: true,
+    }).catch(agentUnreached);
+    const took = !("failure" in answer);
+    if (!took) {
+      failed(RETRY_FAILED, {
+        surface: FAILURE_SURFACE.AGENT_SEND,
+        cause: answer,
+        about: { agentId },
+      });
+    }
+    return took;
+  };
+
   const onRewind = useCallback(
     (agentId: string, messageId: string): Promise<AgentActAnswer> =>
       sendRewind({ agentId, messageId }).catch(agentUnreached),
@@ -1669,6 +1695,7 @@ export function useAgents(input: {
     onStop,
     onRewind,
     onMessage,
+    onRetry,
     onChoose,
     onSwitchServers,
     addRepository,

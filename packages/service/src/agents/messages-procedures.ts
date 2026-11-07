@@ -395,7 +395,14 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const { txid } = yield* steerMemberWords(writer, context.userId, agent, input.body);
+        const { retry, ...line } = input.body;
+        const { txid } = yield* steerMemberWords(
+          writer,
+          context.userId,
+          agent,
+          line,
+          retry === true,
+        );
         const summary = yield* summaryOf(context.userId, agent);
         // The transaction that wrote the line, which the host waits to see live before it confirms the send.
         return txid === undefined ? { agent: summary } : { agent: summary, txid };

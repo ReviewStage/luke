@@ -12,6 +12,8 @@ import {
   taskNamesOf,
   unarchiveAgentFrom,
 } from "@repo/database/models/agent-store";
+import { type LineFileRead, lineRead } from "@repo/database/models/attached-file-parts";
+import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { sentLineStands } from "@repo/database/models/message-reads";
 import {
   claimRuntimeSession,
@@ -23,6 +25,7 @@ import {
   type AwaitingLineMetadata,
   type ConversationTarget,
   type LineSender,
+  type LostLine,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
@@ -60,6 +63,7 @@ import {
   describeUnreachable,
   SESSION_SEND_OUTCOME,
   SESSION_TURN,
+  type SessionMessage,
   type SessionUnreachable,
   type TypedTurn,
 } from "../sessions/agent-sessions.js";
@@ -283,6 +287,81 @@ const settledEnded = (writer: Effect.Effect<StoreWriter>, agent: Agent, turn: Ag
   );
 
 /**
+ * The runtime of an agent the member may write to, read off its routing row,
+ * or why they may not: the agent gone, a plan whose policy does not admit
+ * them (`writesToAgent`), or an agent on its starter's API key whose starter
+ * keeps none for its model now, refused by name and never moved to another
+ * payer, since our key pays for no coding agent. Note that one on no harness
+ * has ended for good whatever paid for it, which the router refuses it as.
+ */
+const admittedRuntime = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: Agent,
+  routing: Effect.Success<ReturnType<typeof readAgentRouting>>,
+) {
+  if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { runtime, payer } = routing.value;
+  if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const missing =
+    harnessOf(runtime) === undefined
+      ? undefined
+      : yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
+  if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
+  return runtime;
+});
+
+/** What a hand-over to the agent's harness came to past whether it took the words: why it did not, and whether the session the record named had ended. */
+interface HandOverOutcome {
+  refused: HostedRefusal | undefined;
+  ended: boolean;
+}
+
+/**
+ * The words handed to the agent's harness, answering whether it took them,
+ * and writing into `outcome` why it did not and whether the session the
+ * record named had ended. Note that a session that no longer runs, or none
+ * at all, is no refusal: the words open a fresh session over the same
+ * conversation, which claims its record forward from the one that ended, so
+ * no developer has to press Continue.
+ */
+const handedToHarness = (
+  agentSessions: AgentSessions<TypedTurn>,
+  target: ConversationTarget,
+  sessionId: string | undefined,
+  message: SessionMessage<TypedTurn>,
+  outcome: HandOverOutcome,
+) =>
+  Effect.gen(function* () {
+    if (sessionId !== undefined) {
+      const sent = yield* agentSessions
+        .send(sessionId, message)
+        .pipe(Effect.catchTag("SessionUnreachable", unreached));
+      if (sent.outcome === SESSION_SEND_OUTCOME.ACCEPTED) return true;
+      if (sent.outcome === SESSION_SEND_OUTCOME.FAILED) {
+        outcome.refused = failedCallRefusal(sent);
+        return false;
+      }
+      if (sent.outcome !== SESSION_SEND_OUTCOME.RETIRED) {
+        outcome.refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
+        return false;
+      }
+      outcome.ended = true;
+    }
+    const opened = yield* agentSessions
+      .open(message)
+      .pipe(Effect.catchTag("SessionUnreachable", unreached));
+    if (opened.outcome !== SESSION_SEND_OUTCOME.ACCEPTED) {
+      outcome.refused = failedCallRefusal(opened);
+      return false;
+    }
+    // Note that the fresh session claims the record here, still under the conversation's dispatch claim, rather
+    // than only as its own start runs, because a message sent in between would read the ended session,
+    // open a second fresh one, and the newer claim would refuse the first, words and all.
+    yield* claimedFor(target, opened.sessionId);
+    return true;
+  });
+
+/**
  * Why the agent takes no message now, read again as the hand-over runs:
  * its task out of the sender's reach, or the agent archived or gone;
  * nothing while it still takes one.
@@ -356,20 +435,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     },
     { concurrency: "unbounded" },
   );
-  // An agent its starter's plan pays for takes words from those the plan's policy admits, as `admitsPlanWriter` holds,
-  // read off the one routing row the credential and the runtime below read too.
-  const routing = yield* Effect.fromResult(read.routing);
-  if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { runtime, payer } = routing.value;
-  if (!writesToAgent(userId, agent, payer)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // Note that our key pays for no coding agent, so an agent on its starter's API key whose starter
-  // keeps none for its model now is refused by name and never moved to another payer; one on no
-  // harness has ended for good whatever paid for it, which the router below refuses it as.
-  const missing =
-    harnessOf(runtime) === undefined
-      ? undefined
-      : yield* hostedStoreOrUnavailable(messageCredentialMissing(agent, { payer }));
-  if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
+  const runtime = yield* admittedRuntime(userId, agent, yield* Effect.fromResult(read.routing));
   if (yield* Effect.fromResult(read.repeated)) return { outcome: STEER_OUTCOME.REPEATED };
   const held = yield* Effect.fromResult(read.task);
   if (held !== undefined && Option.isNone(held))
@@ -448,8 +514,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   );
   // The harness's refusal is kept beside the dispatch, since the write answers only whether a row landed,
   // and so is whether the session the record named had ended, whose running turn nothing else ends.
-  let refused: HostedRefusal | undefined;
-  let ended = false;
+  const outcome: HandOverOutcome = { refused: undefined, ended: false };
   const message = {
     conversationId: agent.conversationId,
     turn: SESSION_TURN.TYPED,
@@ -457,44 +522,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     // The line's own id, which a native harness's runner names back as it takes the message.
     lineId: sentLineId(line.clientKey),
   };
-  // Note that a session that no longer runs, or none at all, is no refusal: the words open a fresh
-  // session over the same conversation, which claims its record forward from the one that ended, so
-  // no developer has to press Continue.
-  const send = Effect.gen(function* () {
-    if (sessionId !== undefined) {
-      const sent = yield* agentSessions
-        .send(sessionId, message)
-        .pipe(Effect.catchTag("SessionUnreachable", unreached));
-      if (sent.outcome === SESSION_SEND_OUTCOME.ACCEPTED) return true;
-      if (sent.outcome === SESSION_SEND_OUTCOME.FAILED) {
-        refused = failedCallRefusal(sent);
-        return false;
-      }
-      if (sent.outcome !== SESSION_SEND_OUTCOME.RETIRED) {
-        refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
-        return false;
-      }
-      ended = true;
-    }
-    const opened = yield* agentSessions
-      .open(message)
-      .pipe(Effect.catchTag("SessionUnreachable", unreached));
-    if (opened.outcome !== SESSION_SEND_OUTCOME.ACCEPTED) {
-      refused = failedCallRefusal(opened);
-      return false;
-    }
-    // Note that the fresh session claims the record here, still under the conversation's dispatch claim, rather
-    // than only as its own start runs, because a message sent in between would read the ended session,
-    // open a second fresh one, and the newer claim would refuse the first, words and all.
-    yield* claimedFor(target, opened.sessionId);
-    return true;
-  });
+  const send = handedToHarness(agentSessions, target, sessionId, message, outcome);
   // Note that the archive is read again here, under the conversation's dispatch claim, because a plan's
   // archive takes the conversation's row lock the claim was taken under, and reads the line the claim
   // wrote as work under way, so the two never cross.
   const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
     if (refusal === undefined) return send;
-    refused = refusal;
+    outcome.refused = refusal;
     return Effect.succeed(false);
   });
   // The servers the words mention stand for the agent's next turn from just before the harness hears them, and
@@ -530,9 +564,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   if (Result.isFailure(written))
     return yield* Effect.fail(REFUSAL_OF_UNWRITTEN_LINE[written.failure.refusal]);
   // The turn the ended session was running is settled whether or not the fresh session took the words.
-  if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
+  if (outcome.ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))
-    return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
+    return yield* Effect.fail(outcome.refused ?? HOSTED_REFUSAL.UNAVAILABLE);
   const { txid, effect } = written.success.value;
   // A send that raced another under its key found the line standing under the lock, so it sent nothing new.
   const sent =
@@ -568,20 +602,136 @@ export const agentTakingMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * A file of a lost line as its harness is handed it again: its bytes from
+ * the row, or for an image kept beside the conversation, whose row carries
+ * none, from the kept picture; nothing where those are gone.
+ */
+const handedFileOf = (conversationId: string, file: LineFileRead) =>
+  Effect.gen(function* () {
+    const { name, mediaType, kept } = file;
+    if (file.data !== undefined) return [{ name, mediaType, data: file.data, kept }];
+    if (kept === undefined || !("id" in kept)) return [];
+    const picture = yield* readConversationPicture(conversationId, kept.id);
+    return Option.isNone(picture)
+      ? []
+      : [{ name, mediaType, data: Buffer.from(picture.value.bytes).toString("base64"), kept }];
+  });
+
+/**
+ * A lost line as its harness is handed it again, as `steerAgentWritten`
+ * handed it first: its words, what it mentioned as it stood then, its files,
+ * and a teammate's label where a teammate sent it, under the id its row
+ * keeps, which the runner names back as it takes it.
+ */
+const lostLineMessage = (target: ConversationTarget, agent: Agent, line: LostLine) =>
+  Effect.gen(function* () {
+    const read = lineRead(line.parts);
+    const files = yield* Effect.forEach(read.files, (file) =>
+      handedFileOf(target.conversationId, file),
+    );
+    const label =
+      line.sender === MESSAGE_SENDER.MEMBER && line.senderUserId !== null
+        ? yield* teammateLabel(agent, { kind: MESSAGE_SENDER.MEMBER, userId: line.senderUserId })
+        : undefined;
+    const message: SessionMessage<TypedTurn> = {
+      conversationId: target.conversationId,
+      turn: SESSION_TURN.TYPED,
+      message: turnContent(read.text, files.flat(), read.mentioned, label),
+      lineId: line.clientId,
+    };
+    return message;
+  });
+
+/**
+ * The lines of the developer's that the agent's failed turn never took,
+ * handed to its harness again in the order they were written, each as it
+ * was first handed (`lostLineMessage`), so a launch that failed before its
+ * runner read its first message loses none of it: the writer moves each to
+ * the end of the transcript as it goes and puts back one the harness did
+ * not take (`StoreWriter`'s `resendLostLines`). Each hand-over is admitted
+ * as a send is, read as it runs, and only where a line was lost, so a send
+ * to an agent that lost none reads nothing past the one read of its lines.
+ * Answers how many went; fails with the refusal that stopped one, or as an
+ * outage where none was said.
+ */
+export const resendLostLines = /* @__PURE__ */ Effect.fn("web/resendLostLines")(function* (
+  agentSessions: AgentSessions<TypedTurn>,
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  agent: Agent,
+): Effect.fn.Return<number, HostedRefusal, DatabaseServices> {
+  // The member who may not steer the agent resends nothing, and their own words are refused as they go.
+  if (!controlsAgent(userId, agent)) return 0;
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
+  const outcome: HandOverOutcome = { refused: undefined, ended: false };
+  const services = yield* Effect.context<DatabaseServices>();
+  const dispatch = (line: LostLine) =>
+    Effect.gen(function* () {
+      const routing = yield* hostedStoreOrUnavailable(readAgentRouting(userId, agent.id));
+      yield* admittedRuntime(userId, agent, routing);
+      const refusal = yield* hostedStoreOrUnavailable(refusalNow(userId, agent));
+      if (refusal !== undefined) return yield* Effect.fail(refusal);
+      // Read for each line, because the first line's hand-over may open the session the next is sent to.
+      const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
+      if (sessionId === undefined && !(yield* opensUnclaimed(agent))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      }
+      const message = yield* hostedStoreOrUnavailable(lostLineMessage(target, agent, line));
+      return yield* handedToHarness(agentSessions, target, sessionId, message, outcome);
+    }).pipe(
+      Effect.catch((refusal: HostedRefusal) =>
+        Effect.sync(() => {
+          outcome.refused = refusal;
+          return false;
+        }),
+      ),
+      Effect.catchCause((cause) =>
+        Effect.as(
+          Effect.logWarning(`a lost line was not handed over again: ${causeKind(cause)}`),
+          false,
+        ),
+      ),
+      Effect.provide(services),
+    );
+  const resent = yield* hostedStoreOrUnavailable(
+    Effect.flatMap(writer, (write) => write.resendLostLines(target, dispatch)),
+  );
+  if (Result.isFailure(resent)) {
+    return yield* Effect.fail(REFUSAL_OF_UNWRITTEN_LINE[resent.failure.refusal]);
+  }
+  // Note that a resend stopped with no refusal said, as a hand-over past its deadline, is an outage,
+  // because words sent after it would reach the agent ahead of the line it still lost.
+  if (resent.success.stopped) {
+    return yield* Effect.fail(outcome.refused ?? HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return resent.success.taken.length;
+});
+
+/**
  * A member's own words to an agent they reach, as their message box sends
  * them: handed over on the sessions the deployment reaches acting for them,
  * written under their name (`MESSAGE_SENDER.MEMBER`), so a teammate's carry
  * their label, and counted under them once the line is written; a repeat
  * under its key is not counted again. The member MCP server's
- * `message_agent` sends the same way.
+ * `message_agent` sends the same way. The lines the agent's failed turn
+ * never took go ahead of the words (`resendLostLines`), so the agent reads
+ * them in the order they were sent; a retry, the failed turn's Try again,
+ * sends its own words only where none was lost, since the lines are what it
+ * asks to send again.
  */
 export const steerMemberWords = /* @__PURE__ */ Effect.fn("web/steerMemberWords")(function* (
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: Agent,
   line: Omit<SteerLine, "sender">,
+  retry = false,
 ) {
   const agentSessions = yield* routedSessions<TypedTurn>(userId);
+  const resent = yield* resendLostLines(agentSessions, writer, userId, agent);
+  if (retry && resent > 0) {
+    const sent: SteerWritten = { outcome: STEER_OUTCOME.SENT };
+    return sent;
+  }
   const written = yield* steerAgentWritten(agentSessions, writer, userId, agent, {
     ...line,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },

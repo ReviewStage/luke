@@ -17,14 +17,14 @@ import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } fro
 import { sentLineId } from "@repo/wire/host-ids";
 import { TOOL_PART_STATE } from "@repo/wire/ui-messages";
 import { eq } from "drizzle-orm";
-import { Effect, Metric, Option, Ref, Result, Schema } from "effect";
+import { Duration, Effect, Metric, Option, Ref, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { TURN_ABANDON } from "../abandoned-turns.js";
+import { settleRunnerLostTurns, TURN_ABANDON } from "../abandoned-turns.js";
 import { lineSendersOf } from "../agent-store.js";
 import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -547,6 +547,116 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         assert.deepEqual(yield* standingIn(other.conversationId), [
           sentLineId("Rebase the stack."),
         ]);
+      }),
+  );
+
+  it.effect(
+    "a line a failed turn never took is handed over again to its owner's resend alone, never to another account's naming the same conversation",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        yield* writer.writeAwaitingLine(
+          target,
+          { text: "Draft the plan.", clientKey: "plan", sender: { kind: MESSAGE_SENDER.APP } },
+          Effect.succeed(true),
+        );
+        // The launch fails after the line was written, as the service writes it: a turn queued and settled failed.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: turnId,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 1000, "the sandbox failed");
+        const handed: string[] = [];
+        const dispatch = (line: { readonly clientId: string }) =>
+          Effect.sync(() => {
+            handed.push(line.clientId);
+            return true;
+          });
+
+        const other = { userId: `user-${randomUUID()}`, conversationId: target.conversationId };
+        const theirs = yield* writer.resendLostLines(other, dispatch);
+        const handedToOther = [...handed];
+        const owners = yield* writer.resendLostLines(target, dispatch);
+
+        assert.ok(Result.isSuccess(theirs));
+        assert.deepEqual(theirs.success, { taken: [], stopped: false });
+        assert.deepEqual(handedToOther, []);
+        assert.ok(Result.isSuccess(owners));
+        assert.equal(owners.success.taken.length, 1);
+        assert.deepEqual(handed, [sentLineId("plan")]);
+      }),
+  );
+  it.effect(
+    "a resend the runtime refused partway stops there: the lines it took go to the end of the transcript, and the refused line stands where it was, still lost, for the next resend, even once the turn that took the first fails too",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        for (const clientKey of ["first", "second"]) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text: `The ${clientKey} ask.`, clientKey, sender: { kind: MESSAGE_SENDER.APP } },
+            Effect.succeed(true),
+          );
+        }
+        yield* TestClock.adjust(Duration.seconds(1));
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: turnId,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 1000, "the sandbox failed");
+        yield* TestClock.adjust(Duration.seconds(1));
+        const handed: string[] = [];
+        const takesFirstOnly = (line: { readonly clientId: string }) =>
+          Effect.sync(() => {
+            handed.push(line.clientId);
+            return line.clientId === sentLineId("first");
+          });
+        const transcript = Effect.map(
+          listMessagesPast(target.userId, target.conversationId, TOOLS, { seq: 0, revision: 0 }),
+          (page) =>
+            page.read.ok ? page.read.value.map((row) => [row.clientId, row.createdAt]) : [],
+        );
+        const before = yield* transcript;
+
+        const resent = yield* writer.resendLostLines(target, takesFirstOnly);
+        const after = yield* transcript;
+        const again = yield* writer.resendLostLines(target, takesFirstOnly);
+
+        assert.ok(Result.isSuccess(resent));
+        assert.equal(resent.success.stopped, true);
+        assert.equal(resent.success.taken.length, 1);
+        assert.deepEqual(after[0], before[1]);
+        assert.equal(after[1]?.[0], sentLineId("first"));
+        assert.ok(Number(after[1]?.[1]) > Number(before[0]?.[1]), "the line taken is written anew");
+        assert.ok(Result.isSuccess(again));
+        assert.deepEqual(again.success, { taken: [], stopped: true });
+        assert.deepEqual(handed, [sentLineId("first"), sentLineId("second"), sentLineId("second")]);
+
+        // The line taken opens a turn of its own, which fails too, as a launch can again.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const retryTurn = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId: retryTurn,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: retryTurn,
+        });
+        yield* writer.takeAwaitingLine(target, {
+          clientId: sentLineId("first"),
+          turnId: retryTurn,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 3000, "the sandbox failed");
+        handed.length = 0;
+        const afterFailing = yield* writer.resendLostLines(target, takesFirstOnly);
+
+        assert.ok(Result.isSuccess(afterFailing));
+        assert.deepEqual(handed, [sentLineId("second")]);
       }),
   );
 });
