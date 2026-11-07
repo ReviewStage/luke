@@ -10,8 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { SidebarTask } from "../desktop/task-actions.js";
 import { lineWords } from "../testing/actor-line.js";
-import { registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withExperiments } from "../testing/app-state.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -43,7 +42,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), element)));
+  act(() => root.render(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), element)));
   return container;
 }
 

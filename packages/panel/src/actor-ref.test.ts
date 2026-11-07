@@ -8,12 +8,11 @@ import {
   githubLoginActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
 /**
@@ -52,7 +51,7 @@ afterEach(() => {
 function draw(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root?.render(withQueryClient(element)));
   return container;
 }
 

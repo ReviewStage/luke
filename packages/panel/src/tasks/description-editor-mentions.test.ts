@@ -13,14 +13,13 @@ import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handState, registryWith } from "../testing/app-state.js";
+import { handState, writeExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
+import { settledWrites, withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { DescriptionBody } from "./description-body.js";
@@ -42,7 +41,6 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -71,27 +69,21 @@ beforeEach(() => {
 afterEach(async () => {
   await letGoOfWords();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before the test's client is cleared.
   await settledWrites();
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
 /**
  * The plan's page drawn editable with its mentions, its editor opened on
- * Rollout, under the page's mentions where given. Note that it draws on a
- * registry of its own, as the window's root provides one, because the
- * minute a date's chip is said from is an atom: on the one registry every
- * test shares, a test before it would have started that minute on the real
- * clock, and a test that sets the date would read that one instead.
+ * Rollout, under the page's mentions where given.
  */
 async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  registries.push(registry);
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const body = createElement(DescriptionBody, {
     task: task,
     edit: descriptionEditMutation(task.id, () =>
@@ -106,8 +98,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   });
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           Fragment,
           null,

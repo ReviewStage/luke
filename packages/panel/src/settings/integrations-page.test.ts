@@ -28,8 +28,6 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { SettingsPage } from "@repo/ui";
 import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,7 +35,6 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
@@ -48,7 +45,7 @@ import {
   type IntegrationsHeld,
   signedInAs,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
@@ -124,7 +121,6 @@ let integrations: IntegrationsHeld;
 const canceled = new Map<string, IntegrationStatus>();
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 const GRANOLA = INTEGRATION_PROVIDER.GRANOLA;
 
@@ -230,7 +226,6 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
@@ -251,11 +246,11 @@ async function settle(): Promise<void> {
 }
 
 /**
- * The signed-in page once where every provider stands has been read, its
- * atoms under `registry` where one is given, else under one of its own, as
- * the window's root provides its own, and under its title in a settings page's frame where `framed`.
+ * The signed-in page once where every provider stands has been read, on the
+ * test's Query client as the window's root provides its own, and under its
+ * title in a settings page's frame where `framed`.
  */
-async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Promise<HTMLElement> {
+async function mount(framed = false): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -289,7 +284,7 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
         : createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
-  act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
+  act(() => root.render(withQueryClient(page)));
   await settle();
   // Note that a test holding the read back reads its placeholder, so only a read let through is waited on.
   if (!holdReads) await vi.waitFor(() => assert.equal(readSettled(container), true));
@@ -299,23 +294,6 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
 /** Whether the page has drawn where the providers stand, or that it could not read it, rather than its placeholder. */
 function readSettled(page: HTMLElement): boolean {
   return !(page.textContent ?? "").includes("Reading the integrations");
-}
-
-/** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
-function ownRegistry(): AtomRegistry.AtomRegistry {
-  const registry = AtomRegistry.make();
-  registries.push(registry);
-  return registry;
-}
-
-/** A registry whose atoms wait on this clock, as the window's would on its own. */
-function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  serveEffectsOn(Context.make(Clock.Clock, clock));
-  const registry = AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
-  registries.push(registry);
-  return registry;
 }
 
 /** Granola's row as the page draws it. */
@@ -709,10 +687,8 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
 });
 
 test("a sign-in begun on one surface is what every other surface draws at once, and so is its Cancel, with no read between", async () => {
-  const registry = AtomRegistry.make();
-  registries.push(registry);
-  const settings = await mount(registry);
-  const other = await mount(registry);
+  const settings = await mount();
+  const other = await mount();
 
   await pressOnGranola(settings, "Connect");
   assert.deepEqual(granolaRow(other), WAITING);
@@ -829,8 +805,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
-      const registry = registryOn(yield* Clock.Clock);
-      const page = yield* Effect.promise(() => mount(registry));
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+      const page = yield* Effect.promise(() => mount());
       yield* Effect.promise(() => pressOnGranola(page, "Connect"));
 
       yield* TestClock.adjust(SIGN_IN_WAIT);
@@ -852,8 +828,8 @@ it.effect(
   "a Cancel that a sign-in begun again elsewhere overtakes keeps waiting on that one, for its own whole wait",
   () =>
     Effect.gen(function* () {
-      const registry = registryOn(yield* Clock.Clock);
-      const page = yield* Effect.promise(() => mount(registry));
+      serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+      const page = yield* Effect.promise(() => mount());
       yield* Effect.promise(() => pressOnGranola(page, "Connect"));
       yield* TestClock.adjust("2 minutes");
 
@@ -875,8 +851,8 @@ it.effect(
 
 it.effect("a sign-in begun later does not put off the deadline of one begun before it", () =>
   Effect.gen(function* () {
-    const registry = registryOn(yield* Clock.Clock);
-    const page = yield* Effect.promise(() => mount(registry));
+    serveEffectsOn(Context.make(Clock.Clock, yield* Clock.Clock));
+    const page = yield* Effect.promise(() => mount());
     yield* Effect.promise(() => pressOnGranola(page, "Connect"));
     yield* TestClock.adjust("2 minutes");
     const linear =

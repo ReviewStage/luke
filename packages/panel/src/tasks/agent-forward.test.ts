@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState, writeHandedAppState } from "../testing/copy-feedback.js";
 import { useAutoForward } from "./agent-forward.js";
 
 /**
@@ -63,7 +62,7 @@ test("the open tab's agent is forwarded on its own once no other agent is, once 
   await writeHandedAppState();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Shown))));
+  act(() => root.render(withQueryClient(createElement(Shown))));
   await settle();
   assert.deepEqual(sets, []);
 

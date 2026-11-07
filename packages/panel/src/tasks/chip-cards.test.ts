@@ -37,7 +37,6 @@ import type {
   AppStateSnapshot,
 } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
@@ -53,7 +52,7 @@ import {
   holdPages,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
@@ -377,7 +376,7 @@ async function drawn(
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  // Note that the test's Query client is handed the document at once, so the first frame draws on it.
   writeAppState(state);
   const reads = handHostReads({ items: feed });
   fakeActPort({});
@@ -402,8 +401,7 @@ async function drawn(
   });
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MemberDirectory, {
           workspace: ACME,
           readerId: DEAN,

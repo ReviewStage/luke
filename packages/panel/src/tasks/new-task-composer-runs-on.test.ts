@@ -14,7 +14,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -22,7 +21,7 @@ import { useSteadyDoors } from "../steady-door.js";
 import { fakeActPort, quietHold } from "../testing/app-bridge.js";
 import { handBeats, handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
@@ -167,7 +166,6 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   let asked = 0;
   const readModels = () => {
     asked += 1;
@@ -211,7 +209,7 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
       listSide: MENTION_MENU_SIDE.ABOVE,
     });
   }
-  const draw = () => root.render(onRegistry(registry, createElement(Card)));
+  const draw = () => root.render(withQueryClient(createElement(Card)));
   act(draw);
   await settle();
   const letReadsLand = () => {

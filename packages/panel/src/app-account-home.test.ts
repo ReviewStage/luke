@@ -16,7 +16,6 @@ import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -28,7 +27,7 @@ import "./desktop/desktop-settings.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
-import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
 /**
@@ -174,7 +173,7 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
   await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
+  act(() => root?.render(withQueryClient(windowRouter().drawn())));
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();
@@ -195,7 +194,7 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
 test("an account a team invited stays in setup once it connects an agent, until Finish lets it in", async () => {
   await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
+  act(() => root?.render(withQueryClient(windowRouter().drawn())));
   await settle();
   await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
   await deliver(graceInvited(false), 3);

@@ -19,7 +19,6 @@ import { experimentsOn } from "@repo/settings/testing";
 import { draftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -33,8 +32,8 @@ import { type TasksControl, taskRenameMutation } from "../tasks/use-tasks-tab.js
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
-import { onRegistry, startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
+import { handMembers, readExperiments, writeExperiments } from "../testing/app-state.js";
+import { startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
@@ -156,21 +155,18 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** `element` drawn on a registry of its own, so it reads main's document anew, the members the test laid among it. */
+/** `element` drawn on the test's Query client, so it reads main's document anew, the members the test laid among it. */
 function mountReading(element: ReactElement): HTMLElement {
-  return mount(onRegistry(AtomRegistry.make(), element));
+  return mount(withQueryClient(element));
 }
 
-/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu; on `registry` where one is named. */
-function mountDescriptionTab(
-  tasks: TasksControl,
-  registry?: AtomRegistry.AtomRegistry,
-): HTMLElement {
+/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu. */
+function mountDescriptionTab(tasks: TasksControl): HTMLElement {
   const page = createElement(DesktopTasks, {
     looks: NO_LOOKS,
     tasks,
   });
-  return mount(registry === undefined ? withQueryClient(page) : onRegistry(registry, page));
+  return mount(withQueryClient(page));
 }
 
 function sidebarTask(
@@ -1004,7 +1000,8 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
 test("while Descriptions is off the Plan tab's ⋯ offers no Copy description or Version history, and neither chord answers", () => {
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
 
-  openTaskMenu(mountDescriptionTab(tasks, registryWith({})));
+  writeExperiments({});
+  openTaskMenu(mountDescriptionTab(tasks));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
     ["Copy description", "Version history"].filter((item) => offered.includes(item)),

@@ -20,7 +20,6 @@ import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features
 import { SERVER_MENTION_NOTE } from "@repo/ui/agent-servers-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -32,7 +31,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -189,9 +188,7 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(TaskMentions, { value: PAGE, children: node })),
-    ),
+    root.render(withQueryClient(createElement(TaskMentions, { value: PAGE, children: node }))),
   );
   await settle();
   return container;

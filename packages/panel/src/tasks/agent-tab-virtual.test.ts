@@ -16,7 +16,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -24,7 +23,7 @@ import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -217,7 +216,7 @@ async function drawTab(
     onHeld: () => undefined,
     ...(cards === undefined ? {} : { cards }),
   });
-  act(() => root?.render(onRegistry(AtomRegistry.make(), wrap(tab))));
+  act(() => root?.render(withQueryClient(wrap(tab))));
   await act(settled);
   return {
     container,

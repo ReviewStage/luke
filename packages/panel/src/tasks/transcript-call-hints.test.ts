@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import { CALL_KIND } from "@repo/features/turn-rows";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { TARGET_HINT, TOOL_TARGET } from "./tool-call-model.js";
 import { TranscriptOpeningCall, TranscriptSubagent, TranscriptTool } from "./transcript-blocks.js";
@@ -32,12 +31,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `element` drawn into the page, under the window's atoms. */
+/** `element` drawn into the page, on the test's Query client. */
 function drawn(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 

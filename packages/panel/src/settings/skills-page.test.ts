@@ -20,14 +20,13 @@ import {
   NO_KEYS_HELD,
 } from "@repo/host/app-state";
 import type { PortActKind } from "@repo/host/contract";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
@@ -297,7 +296,7 @@ function mount(element: React.ReactElement): void {
   const root = createRoot(container);
   roots.push(root);
   // Note that each mount reads the document afresh, over the bridge this test installed.
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
 }
 
 async function mountPage(shown = workspace()): Promise<void> {

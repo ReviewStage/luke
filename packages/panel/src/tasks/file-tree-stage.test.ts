@@ -2,13 +2,12 @@
 
 import assert from "node:assert/strict";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import type { FolderListing } from "../file-tree/contract.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { landedBundles, onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileTreePane } from "./file-tree-pane.js";
@@ -43,9 +42,8 @@ function draw(element: ReactElement) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const render = (next: ReactElement) =>
-    act(() => root.render(onRegistry(registry, onSideBundles(bundles, next))));
+    act(() => root.render(withQueryClient(onSideBundles(bundles, next))));
   render(element);
   return { container, render };
 }
@@ -127,8 +125,7 @@ test("a tree bundle that failed to load says so with Retry, which imports it aga
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         onSideBundles(
           unloaded,
           createElement(FileTreePane, {

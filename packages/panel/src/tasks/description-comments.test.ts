@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { formatCount } from "@repo/features/number-format";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -14,6 +13,7 @@ import {
   type DescriptionCommentThread,
   type DescriptionCommentWriter,
 } from "@repo/features/description-comment-wire";
+import { formatCount } from "@repo/features/number-format";
 import type { Task } from "@repo/features/task-wire";
 import { pasteCutWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -30,7 +30,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
-import { readExperiments, registryWith } from "../testing/app-state.js";
+import { readExperiments, writeExperiments } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
@@ -40,15 +40,15 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT } from "../testing/desktop-inbox.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
-import type { EditAgents } from "./edit-ref.js";
 import { DescriptionBody } from "./description-body.js";
 import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./description-comments.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
+import type { EditAgents } from "./edit-ref.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
@@ -208,8 +208,8 @@ function drawn(
     ...(reader === undefined ? undefined : { reader: { readerId: reader } }),
     ...(view === "list" && agents !== undefined ? { agents } : undefined),
   });
-  // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  // Note that every page draws afresh, so the editor bundle installed for one is read afresh and no draft another left is held.
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const treeOf = (value: DescriptionCommentsControl) =>
     createElement(
       DescriptionCommentsProvider,
@@ -222,14 +222,14 @@ function drawn(
             : createElement(TaskMentions, { value: mentions, children: page }),
       }),
     );
-  act(() => root.render(onRegistry(registry, treeOf(control))));
+  act(() => root.render(withQueryClient(treeOf(control))));
   // The list stands in the margin's place once the description's Comments toggle is pressed.
   if (view === "list") {
     act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());
   }
   /** Draws the page again on the threads the service now lists. */
   const rethread = (next: readonly DescriptionCommentThread[]) =>
-    act(() => root.render(onRegistry(registry, treeOf({ ...control, threads: next }))));
+    act(() => root.render(withQueryClient(treeOf({ ...control, threads: next }))));
   return { container, asked, started, notes, rethread };
 }
 
@@ -1332,7 +1332,9 @@ async function caretInThread() {
             children: createElement(DescriptionBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              edit: descriptionEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
+              edit: descriptionEditMutation(PLAN.id, () =>
+                Promise.resolve({ saved: true } as const),
+              ),
             }),
           }),
         ),
@@ -1961,12 +1963,11 @@ test("a thread resolved fades out of a page's column where its row stood, out of
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+    writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
     const draw = (threads: readonly DescriptionCommentThread[]) =>
       act(() =>
         root.render(
-          onRegistry(
-            registry,
+          withQueryClient(
             createElement(PageComments, {
               control: {
                 planId: PLAN.id,

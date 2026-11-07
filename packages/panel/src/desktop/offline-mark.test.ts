@@ -3,14 +3,13 @@
 import assert from "node:assert/strict";
 import { HOST_LIVE, type HostLive, IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { OfflineMark } from "./offline-mark.js";
 
 /**
@@ -52,7 +51,7 @@ async function mount(first: AppStateSnapshot): Promise<(next: AppStateSnapshot) 
   });
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(OfflineMark))));
+  await act(async () => root.render(withQueryClient(createElement(OfflineMark))));
   return (next) =>
     act(async () => {
       for (const listener of listeners) listener(deliveryOf(next));

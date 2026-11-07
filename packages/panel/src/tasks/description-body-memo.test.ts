@@ -5,12 +5,11 @@ import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { TimeTicks } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { readExperiments } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { type DescriptionEditSend, descriptionEditMutation } from "./description-edit-mutation.js";
@@ -72,13 +71,10 @@ function draw(task: Task): void {
     document.body.append(container);
     root = createRoot(container);
   }
-  const registry = AtomRegistry.make();
   const shown = root;
   act(() =>
     shown.render(
-      onRegistry(
-        registry,
-        // The window's minute runs, as the panel's `App` runs it.
+      withQueryClient(
         createElement(
           TimeTicks,
           null,

@@ -13,7 +13,6 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
@@ -25,7 +24,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
@@ -207,7 +206,6 @@ function SettingsHarness({
 }
 
 let root: Root | undefined;
-let registry = AtomRegistry.make();
 
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -232,14 +230,13 @@ function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  act(() => root?.render(onRegistry(registry, element)));
+  act(() => root?.render(withQueryClient(element)));
   return container;
 }
 
 /** Draws the mounted root again over `element`, as a new render of the app hands Settings new props. */
 function redraw(element: React.ReactElement): void {
-  act(() => root?.render(onRegistry(registry, element)));
+  act(() => root?.render(withQueryClient(element)));
 }
 
 /** An element's words as a reader hears them, what is hidden from a screen reader left out. */

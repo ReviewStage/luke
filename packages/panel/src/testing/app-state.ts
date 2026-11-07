@@ -91,8 +91,7 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import type * as Atom from "effect/reactivity/Atom";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type { ReactElement, ReactNode } from "react";
 import type { IntegrationServer } from "../live-reads.js";
 import {
   fakeActPort,
@@ -102,7 +101,7 @@ import {
   heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
-import { holdAppStateForFile, writeAppState } from "./copy-feedback.js";
+import { holdAppStateForFile, withQueryClient, writeAppState } from "./copy-feedback.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
@@ -321,21 +320,23 @@ export function readExperiments(experiments: ExperimentChoices): void {
 }
 
 /**
- * A registry for a case that draws under a registry of its own
- * synchronously, the test's Query client holding a document whose settings
- * hold these experiments from its first draw. Note that the document is read
- * again once main's lands, so the bridge must hand the same experiments
- * (`handState`, `readExperiments`) for them to stand. `initialValues` are
- * laid in the registry, as a case's own clock is, and `patch` over the
- * document's slices, as `stateWith` lays it.
+ * Writes a document whose settings hold these experiments into the test's
+ * Query client, `patch` over its slices as `stateWith` lays it, for a case
+ * that draws synchronously and must find them in its first frame. Note that
+ * the document is read again once main's lands, so the bridge must hand the
+ * same experiments (`handState`, `readExperiments`) for them to stand.
  */
-export function registryWith(
+export function writeExperiments(
   experiments: ExperimentChoices,
-  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
   patch: Partial<AppStateSnapshot> = {},
-): AtomRegistry.AtomRegistry {
+): void {
   writeAppState(stateWith(experiments, patch));
-  return AtomRegistry.make({ initialValues });
+}
+
+/** `element` on the test's Query client (`withQueryClient`), its document holding these experiments from the first frame (`writeExperiments`). */
+export function withExperiments(experiments: ExperimentChoices, element: ReactNode): ReactElement {
+  writeExperiments(experiments);
+  return withQueryClient(element);
 }
 
 /** Hands the window main's document on a platform offering `capabilities`, the experiments given on and no other, beside whatever else the bridge already holds. */

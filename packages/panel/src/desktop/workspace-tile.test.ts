@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { AppWorkspacePhotos } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
 /**
@@ -51,9 +50,7 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(WorkspaceTile, { workspace }))),
-  );
+  act(() => root.render(withQueryClient(createElement(WorkspaceTile, { workspace }))));
   return container;
 }
 

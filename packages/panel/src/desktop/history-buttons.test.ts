@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 
 /**
@@ -75,12 +74,7 @@ function mount(steps: readonly HistoryStep[]) {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(HistoryButtons, { history, room: SHELL_ROOM.WIDE }),
-      ),
-    ),
+    root.render(withQueryClient(createElement(HistoryButtons, { history, room: SHELL_ROOM.WIDE }))),
   );
   const back = container.querySelector<HTMLButtonElement>('button[aria-label="Back"]');
   assert.ok(back);

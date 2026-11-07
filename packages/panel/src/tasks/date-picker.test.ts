@@ -8,14 +8,13 @@ import { experimentsOn } from "@repo/settings/testing";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { registryWith } from "../testing/app-state.js";
+import { withExperiments, writeExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
+import { settledWrites, withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { newestToastSays } from "../testing/toast.js";
 import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
@@ -48,14 +47,6 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
-
-/** A registry of the test's own, as the window's root provides one, so words a description left unsaved in one test are not the next one's. */
-function ownRegistry(): AtomRegistry.AtomRegistry {
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  registries.push(registry);
-  return registry;
-}
 
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
@@ -68,9 +59,8 @@ beforeEach(() => {
 afterEach(async () => {
   await letGoOfWords();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before the test's client is cleared.
   await settledWrites();
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
 });
@@ -83,8 +73,8 @@ function drawn(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        ownRegistry(),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           Fragment,
           null,
@@ -115,12 +105,11 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = ownRegistry();
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const draw = (plan: Task) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             Fragment,
             null,

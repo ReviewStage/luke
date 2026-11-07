@@ -26,7 +26,6 @@
  * that does the same for a render that throws.
  */
 
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { LinkPlatform } from "@repo/features/link-open";
 import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
@@ -35,7 +34,6 @@ import { installShownFailureReporter } from "@repo/panel/failure-report";
 import { LiveReadSubscription } from "@repo/panel/live-reads";
 import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
-import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { installSendTracer } from "@repo/panel/send-traces";
 import { followAppState } from "@repo/panel/use-app-state";
 import { ErrorBoundary, RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
@@ -171,13 +169,11 @@ export async function mountWebApp(
   const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
     <ErrorBoundary failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab}>
-      <RegistryContext.Provider value={rendererRegistry}>
-        <QueryProvider>
-          <LiveReadSubscription />
-          <WebAppearance />
-          <PanelRouterProvider router={router} />
-        </QueryProvider>
-      </RegistryContext.Provider>
+      <QueryProvider>
+        <LiveReadSubscription />
+        <WebAppearance />
+        <PanelRouterProvider router={router} />
+      </QueryProvider>
     </ErrorBoundary>,
   );
   // The account's choice of the Mac app is read after the first paint, once per fresh load, and never awaited.

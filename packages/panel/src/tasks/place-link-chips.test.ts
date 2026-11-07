@@ -15,7 +15,6 @@ import {
 } from "@repo/features/workspace-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -23,7 +22,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, signedInAs } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -163,7 +162,7 @@ async function drawn(
     act: (): Promise<FakeActAnswer> =>
       Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined }),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  // Note that the test's Query client is handed the document at once, so the first frame draws on it.
   writeAppState(state);
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
@@ -175,8 +174,7 @@ async function drawn(
   });
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(OpenLinkProvider, {
           value: (link: ReadLink) => opened.push(link.place),
           children: words,

@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@repo/features/task-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { layScrollerOut } from "../testing/scroller.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -75,11 +74,7 @@ test("Home from the last row reaches the first one left undrawn, and ↑ and ↓
   const root = createRoot(container);
   roots.push(root);
   const tasks = tasksControl({ tasks: Array.from({ length: 60 }, (_, at) => task(at + 1)) });
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
-    ),
-  );
+  act(() => root.render(withQueryClient(createElement(DesktopSidebar, sidebarProps(tasks)))));
   // Note that jsdom lays nothing out, so the column is given a view and a length, then scrolled to its end, drawing only the last rows.
   const scroller = container.querySelector<HTMLElement>(
     ".desktop-sidebar [data-slot='scroll-area']",

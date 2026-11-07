@@ -62,13 +62,19 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { askKept } from "../act.js";
-import { handHostReads, handMembers, handState, registryWith } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handMembers,
+  handState,
+  withExperiments,
+  writeExperiments,
+} from "../testing/app-state.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -191,8 +197,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
     github: null,
   };
   const opened = (region: TasksControl["region"]) =>
-    onRegistry(
-      registry,
+    withQueryClient(
       createElement(DesktopTasks, {
         looks: NO_LOOKS,
         tasks: tasksControl({
@@ -205,7 +210,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
         }),
       }),
     );
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
 
@@ -279,8 +284,8 @@ test("a wide task's details with no agent offer New agent at their head, which o
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DesktopTasks, {
           looks: NO_LOOKS,
           tasks: tasksControl({
@@ -444,8 +449,8 @@ async function _narrowTaskInbox(
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DesktopTasks, {
           looks: NO_LOOKS,
           tasks: tasksControl({
@@ -581,8 +586,8 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DesktopTasks, {
           looks: NO_LOOKS,
           tasks: tasksControl({
@@ -655,8 +660,8 @@ test("a sub-task's row opens the task as a sidebar row does, never a link to its
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => linked.push(link) },
@@ -710,12 +715,11 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   const listed = [subTask("t-2", 2, TASK.id), subTask("t-3", 3, other.id)];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const open = (task: Task) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(DesktopTasks, {
             looks: NO_LOOKS,
             tasks: tasksControl({
@@ -792,8 +796,8 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DesktopTasks, {
           looks: NO_LOOKS,
           tasks: tasksControl({
@@ -887,8 +891,8 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
   const draw = (shown: SidePanelTab, more: Partial<TasksControl> = {}) =>
     act(() =>
       root.render(
-        onRegistry(
-          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        withExperiments(
+          experimentsOn(EXPERIMENT.DESCRIPTIONS),
           createElement(DesktopTasks, {
             looks: NO_LOOKS,
             tasks: tasksControl({
@@ -996,8 +1000,8 @@ function standingPageMounted(keeps: boolean) {
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           Fragment,
           null,

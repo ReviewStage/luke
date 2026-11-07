@@ -24,8 +24,8 @@ import { DescriptionBody } from "./tasks/description-body.js";
 import { HISTORY_READ } from "./tasks/use-description-history.js";
 import { VersionView } from "./tasks/version-view.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
-import { registryWith } from "./testing/app-state.js";
-import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
+import { withExperiments } from "./testing/app-state.js";
+import { settleQueries } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { landedBundles, onSideBundles, standInBundles } from "./testing/side-bundles.js";
 
@@ -114,10 +114,7 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-        onSideBundles(bundles, node),
-      ),
+      withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), onSideBundles(bundles, node)),
     ),
   );
   await settle();
@@ -223,8 +220,8 @@ test("while an edited diagram is drawn again, the picture kept is still named fo
   const show = (code: string, previous: string | undefined) =>
     act(() =>
       root.render(
-        onRegistry(
-          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        withExperiments(
+          experimentsOn(EXPERIMENT.DESCRIPTIONS),
           onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
         ),
       ),
@@ -281,8 +278,8 @@ test("a diagram bundle that failed to load says so with Retry, which imports it 
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         onSideBundles(
           unloaded,
           createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }),

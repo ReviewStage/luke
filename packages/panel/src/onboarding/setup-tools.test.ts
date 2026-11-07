@@ -10,13 +10,12 @@ import {
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
 import type { AppHostRead } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToolRows } from "./setup-tools.js";
 
 /**
@@ -29,7 +28,6 @@ import { ToolRows } from "./setup-tools.js";
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 
 /** Where every provider stands at the service: Notion connected, every other one not. */
 function heldRead(): AppHostRead<IntegrationStatusesAnswer> {
@@ -64,7 +62,6 @@ beforeEach(() => {
 
 afterEach(() => {
   if (root !== undefined) act(() => root?.unmount());
-  registry?.dispose();
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
@@ -73,9 +70,7 @@ test("a connected account is named beside its provider, and a tool not connected
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const own = AtomRegistry.make();
-  registry = own;
-  act(() => root?.render(onRegistry(own, createElement(ToolRows))));
+  act(() => root?.render(withQueryClient(createElement(ToolRows))));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

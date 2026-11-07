@@ -5,7 +5,6 @@ import { FEEDBACK_KIND } from "@repo/features/feedback";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@repo/ui";
 import { neverBusyAct } from "@repo/ui/confirm-state";
 import { recordedFailure } from "@repo/ui/testing/reported-failure";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -13,7 +12,7 @@ import { FeedbackDialog } from "./feedback-dialog.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
 import { NewTaskDialog } from "./tasks/new-task-dialog.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
@@ -27,7 +26,6 @@ import { tasksControl } from "./testing/tasks-control.js";
  */
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -38,7 +36,6 @@ afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
@@ -145,10 +142,8 @@ function open({ Owner, role }: Dialog) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const draw = (shown: boolean) =>
-    act(() => root.render(onRegistry(registry, createElement(Owner, { shown }))));
+    act(() => root.render(withQueryClient(createElement(Owner, { shown }))));
   draw(true);
   const opener =
     [...container.querySelectorAll("button")].find((each) => each.textContent === "Open") ??

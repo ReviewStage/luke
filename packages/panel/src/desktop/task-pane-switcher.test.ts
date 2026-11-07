@@ -7,7 +7,6 @@ import type { Task } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { agentTab, draftTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -22,7 +21,7 @@ import { taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { openTaskMenu, taskName } from "../testing/task-menu.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -126,7 +125,6 @@ function mount(
   const root = createRoot(container);
   roots.push(root);
   const narrow = room === SHELL_ROOM.NARROW;
-  const registry = AtomRegistry.make();
   /** The rename door the open task's page offers ⌘K, as it stood at the last draw. */
   let renameOffer: ReturnType<typeof useTaskRenameOffer>;
   function RenameOfferProbe(): null {
@@ -141,9 +139,7 @@ function mount(
   ) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
-          // Note that the shell hands its room to every tab's body, as the window's root does.
+        withQueryClient(
           createElement(
             ShellRoomContext.Provider,
             { value: room },
@@ -380,8 +376,7 @@ test("on a phone a task still read, or one that cannot be, is headed by its way 
     const root = createRoot(container);
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(DesktopTasks, {
             looks: NO_LOOKS,
             room: SHELL_ROOM.NARROW,
@@ -480,7 +475,7 @@ test("on a wide window a refused rename keeps the name typed in the description'
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
+  act(() => root.render(withQueryClient(createElement(RefusingTask))));
   const title = descriptionTitle(container);
   assert.ok(title, "the description's title is drawn");
 

@@ -11,7 +11,6 @@ import {
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -19,7 +18,7 @@ import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, handMembers } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -252,8 +251,7 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
   roots.push(root);
   await act(async () => {
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 3 },
           readerId: "user-dean",
@@ -303,8 +301,7 @@ test("the assignee's menu says it is reading while the members are unread, and n
   roots.push(root);
   await act(async () => {
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 3 },
           readerId: "user-dean",
@@ -341,8 +338,7 @@ test("the assignee's menu says No members match when a search finds nobody", asy
   roots.push(root);
   await act(async () => {
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 1 },
           readerId: "user-dean",
@@ -389,8 +385,7 @@ test("the assignee's menu says the members could not be read, with Retry, never 
   roots.push(root);
   await act(async () => {
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 1 },
           readerId: "user-dean",

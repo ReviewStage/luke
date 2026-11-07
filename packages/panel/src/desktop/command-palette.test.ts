@@ -37,7 +37,6 @@ import { experimentsOn, settingsView } from "@repo/settings/testing";
 import { agentTab, changesTab, fileTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -74,10 +73,11 @@ import {
   handMembers,
   handState,
   holdAutomations,
-  registryWith,
   stateWith,
+  withExperiments,
+  writeExperiments,
 } from "../testing/app-state.js";
-import { onRegistry, withQueryClient, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
@@ -142,8 +142,6 @@ function openPalette(
   page?: { agentId: string; workspaceId: string },
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
   tab: PanelTab = PANEL_TAB.TASKS,
-  /** A registry of its own, so the palette reads main's document anew as the test handed it; the window's shared one where none is given. */
-  registry?: AtomRegistry.AtomRegistry,
   /** The routed place the window stands on, which offers its own links. */
   place?: RoutedPlace,
 ): Sent {
@@ -174,9 +172,7 @@ function openPalette(
     ...fakeActPortCalls(),
     [ACT_KIND.TASKS_TREE]: (payload) => readFiles("planId" in payload ? payload.planId : ""),
   });
-  act(() =>
-    root.render(registry === undefined ? withQueryClient(palette) : onRegistry(registry, palette)),
-  );
+  act(() => root.render(withQueryClient(palette)));
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
@@ -193,7 +189,7 @@ function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null 
 function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const tasks = tasksControl({
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     activeTaskId: DOCUMENT_TASK.id,
@@ -201,8 +197,7 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   return (looked) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             Fragment,
             null,
@@ -955,8 +950,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     });
     act(() =>
       root.render(
-        onRegistry(
-          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        withExperiments(
+          experimentsOn(EXPERIMENT.DESCRIPTIONS),
           createElement(ListedAutomations, { tasks, children: palette }),
         ),
       ),
@@ -1165,6 +1160,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     }),
   });
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   openPalette(
     tasks,
     () =>
@@ -1180,7 +1176,6 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   type("#42");
   const pulls = rows().filter((row) => row.startsWith("#42"));
@@ -1738,13 +1733,11 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   const root = createRoot(host);
   roots.push(root);
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  act(() =>
-    root.render(onRegistry(registry, createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))),
-  );
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  act(() => root.render(withQueryClient(createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))));
   // The document arrives a few microtasks after the window first draws.
   await settle();
-  openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS, registry);
+  openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS);
   type("permanently delete");
   const deleteKeys = rowChord("Permanently delete");
   type("mark done");
@@ -1781,8 +1774,8 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(DesktopTasks, { looks: NO_LOOKS, tasks }),
       ),
     ),
@@ -1906,7 +1899,7 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
       ROUTED_PLACE.AUTOMATIONS,
     ],
   ] as const) {
-    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, place);
+    openPalette(tasks, undefined, undefined, undefined, undefined, place);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1938,7 +1931,7 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   };
   for (const tasks of [onPage(true), onPage(false)]) {
     // The agent's page is the router's, which offers the page's links (`places/routed-places.ts`).
-    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, ROUTED_PLACE.AGENT);
+    openPalette(tasks, undefined, undefined, undefined, undefined, ROUTED_PLACE.AGENT);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1968,7 +1961,6 @@ test("on a person's page ⌘K offers Copy link to profile and ⇧⌘C copies the
         workspaceId: acme?.id,
       },
     }),
-    undefined,
     undefined,
     undefined,
     undefined,
@@ -2063,7 +2055,6 @@ test("on an agent's page in another workspace than the one listed, ⇧⌘C names
     { agentId: LINKED_AGENT, workspaceId: "workspace-beta" },
     undefined,
     undefined,
-    undefined,
     ROUTED_PLACE.AGENT,
   );
   act(() => {
@@ -2098,6 +2089,7 @@ test("People lists the listed workspace's members as every people menu does, the
   membersAnswer(members);
   const opened: string[] = [];
   const base = tasksControl();
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const sent = openPalette(
     tasksControl({
       me: "user-dean",
@@ -2108,7 +2100,6 @@ test("People lists the listed workspace's members as every people menu does, the
     undefined,
     undefined,
     undefined,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -2174,6 +2165,7 @@ test("under All, a query nothing else matches says the repository's files are st
   handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
   fakeActPort({});
   handMembers(() => ({ rows: { members: [] } }));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -2183,7 +2175,6 @@ test("under All, a query nothing else matches says the repository's files are st
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   type("zqx");
@@ -2229,6 +2220,7 @@ test("Files says a failed read with a Retry that reads the repository's files ag
   handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
   fakeActPort({});
   handMembers(() => ({ rows: { members: [] } }));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -2239,7 +2231,6 @@ test("Files says a failed read with a Retry that reads the repository's files ag
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   chooseFilter("Files");
@@ -2285,13 +2276,13 @@ test("People says the members are being read until they answer, and a refused re
       return Promise.resolve();
     },
   });
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   openPalette(
     tasksControl({ me: "user-dean", workspace: ACME }),
     undefined,
     undefined,
     undefined,
     undefined,
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   chooseFilter("People");
   await settle();
@@ -2552,7 +2543,7 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(PinnableTask)),
+      withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), createElement(PinnableTask)),
     ),
   );
 
@@ -2565,7 +2556,7 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   assert.deepEqual(pinRows(), ["Pin task"]);
 });
 
-/** The palette over the task given, under a registry of its own that reads the window's state as handed. */
+/** The palette over the task given, on the test's Query client holding the window's state as handed. */
 async function paletteUnderState(tasks: TasksControl): Promise<void> {
   const host = document.createElement("div");
   document.body.append(host);
@@ -2573,8 +2564,8 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(WindowPalette, {
           available: true,
           tab: PANEL_TAB.TASKS,
@@ -2699,8 +2690,8 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           Fragment,
           null,
@@ -2762,8 +2753,8 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         createElement(
           ShellRoomContext.Provider,
           { value: room },
@@ -3043,13 +3034,13 @@ function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
     tasks: [ROTATION],
     inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: changed }],
   });
+  writeExperiments({});
   openPalette(
     { ...tasks, inboxView: { ...tasks.inboxView, onOpenItem: (choice) => opened.push(choice) } },
     undefined,
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith({}),
   );
   return { deliver: (next: FedInbox) => deliver(fedOf(next)), opened };
 }

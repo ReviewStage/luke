@@ -9,7 +9,6 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@repo/settings/diff-view";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
@@ -22,7 +21,7 @@ import {
 } from "../diff-view/contract.js";
 import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { type DiffListEntry, PierreDiffList } from "./diff-list.js";
@@ -111,8 +110,7 @@ test("while the diff bundle is on its way the list says the changes are being re
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         onSideBundles(
           bundles,
           createElement(PierreDiffList, {
@@ -153,8 +151,7 @@ test("a gap control's hint, once the pointer presses or leaves, is drawn through
     roots.push(root);
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           onSideBundles(
             standInBundles({ diffView: async () => diffView }),
             createElement(PierreDiffList, {

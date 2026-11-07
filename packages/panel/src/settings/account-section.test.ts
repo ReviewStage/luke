@@ -8,8 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { rendererRegistry } from "../renderer-runtime.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { AccountSection } from "./account-section.js";
 
@@ -78,15 +77,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The section drawn with a toast host on the window's own registry, over a Sign out of the given answer. */
+/** The section drawn with a toast host, over a Sign out of the given answer. */
 function mountSection(onSignOut: () => Promise<void>): { container: HTMLElement; root: Root } {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   act(() =>
     root.render(
-      onRegistry(
-        rendererRegistry,
+      withQueryClient(
         createElement(
           Fragment,
           null,

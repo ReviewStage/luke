@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@repo/features/task-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -21,7 +20,7 @@ import { SHELL_ROOM } from "./shell-room.js";
 import { useInboxItemOpenSpan, useInboxOpenSpan } from "./tasks/use-inbox-spans.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeActPortAnswering } from "./testing/app-bridge.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { keyPressed, reportEventTiming } from "./testing/event-timing.js";
 import { tasksControl } from "./testing/tasks-control.js";
@@ -92,12 +91,10 @@ function recorded(): { name: string; startedAt: number; waited: number; measured
 async function sidebarOver(tasks: TasksControl): Promise<(next: TasksControl) => Promise<void>> {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = async (next: TasksControl) => {
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(DesktopSidebar, { ...sidebarProps(next), room: SHELL_ROOM.WIDE }),
         ),
       ),

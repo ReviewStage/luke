@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { pointerCross } from "../testing/pointer-cross.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -66,7 +65,6 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (
     listed: readonly TaskSummary[],
     { folded = false, ...rest }: Partial<TasksControl> & { folded?: boolean } = {},
@@ -75,9 +73,7 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
       tasksControl({ tasks: [...listed], workspaces: [WORKSPACE], workspace: WORKSPACE, ...rest }),
     );
     const sidebar = { ...props.sidebar, collapsed: folded };
-    act(() =>
-      root.render(onRegistry(registry, createElement(DesktopSidebar, { ...props, sidebar }))),
-    );
+    act(() => root.render(withQueryClient(createElement(DesktopSidebar, { ...props, sidebar }))));
   };
   draw(tasks);
   const tasksNav = container.querySelector('nav[aria-label="My tasks"]');

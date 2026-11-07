@@ -7,7 +7,6 @@ import { IMAGE_OPENING, type ImageOpening } from "@repo/ui";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import type { ImageView } from "@repo/ui/image-zoom";
 import { fileTab } from "@repo/ui/tab-strip-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -18,7 +17,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
@@ -60,7 +59,6 @@ const VIDEO: FileChip = {
 const SECOND = shot("second.png");
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   fakeAppBridge({});
@@ -70,7 +68,6 @@ afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
@@ -94,14 +91,11 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const state: ViewerState = { files: [FIRST, SECOND], at: 0, closed: false };
   const draw = () =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             ShellRoomContext.Provider,
             { value: room },
@@ -476,12 +470,9 @@ test("a text file opened over the window is drawn as every code is, numbered fro
   };
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(AttachmentViewer, {
           files: [notes],
           at: 0,
@@ -511,12 +502,9 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   };
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           FindScope,
           { active: true, subject: { task: "task-1", tab: fileTab("plan.md") } },
@@ -608,12 +596,9 @@ test("Copy text puts a text file's words on the clipboard and shows the check", 
   };
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(AttachmentViewer, {
           files: [notes],
           at: 0,
@@ -670,15 +655,13 @@ function textFile(name: string, words: string): FileChip {
 async function openedOver(file: FileChip, bundles: SideBundles): Promise<void> {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const viewer = createElement(AttachmentViewer, {
     files: [file],
     at: 0,
     onAt: () => undefined,
     onClose: () => undefined,
   });
-  act(() => root.render(onRegistry(registry, onSideBundles(bundles, viewer))));
+  act(() => root.render(withQueryClient(onSideBundles(bundles, viewer))));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

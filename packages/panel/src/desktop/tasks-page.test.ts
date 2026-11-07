@@ -23,7 +23,6 @@ import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -33,7 +32,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handMembers, handState, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { layScrollerOut } from "../testing/scroller.js";
@@ -212,7 +211,6 @@ async function mountPage(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = (workspace: Workspace) => {
     const control = tasksControl({
       tasks: tasks.map((each) => ({ ...each, workspaceId: workspace.id })),
@@ -239,8 +237,7 @@ async function mountPage(
       ...overrides,
     });
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           Fragment,
           null,
@@ -328,7 +325,7 @@ test("a row and a card count the threads waiting on the reader, as the sidebar c
   }
   const sidebarRoot = createRoot(document.createElement("div"));
   roots.push(sidebarRoot);
-  act(() => sidebarRoot.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
+  act(() => sidebarRoot.render(withQueryClient(createElement(Sidebar))));
   // Note that the count's words are read as an element's own, since a row's key runs into them.
   const says = (holder: Element | undefined) => {
     for (const each of holder?.querySelectorAll("*") ?? []) {

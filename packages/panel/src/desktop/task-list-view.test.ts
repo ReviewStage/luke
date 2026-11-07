@@ -11,7 +11,6 @@ import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@repo/features/t
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -19,7 +18,7 @@ import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handHostReads, handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -222,8 +221,7 @@ function mountSidebar(
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           Fragment,
           null,
@@ -636,7 +634,6 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const props = sidebarProps(
     tasksControl({
       tasks: [...TASKS],
@@ -649,8 +646,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
   const float = (overlay: (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY]) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(DesktopSidebar, {
             ...props,
             sidebar: { ...props.sidebar, collapsed: true, overlay },
