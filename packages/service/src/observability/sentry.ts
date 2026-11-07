@@ -90,7 +90,7 @@ const TRACES_SAMPLE_RATE = 0.1;
 const SEND_ROOT_SPAN = {
   AGENTS_START: "agents.start",
   AGENTS_START_FROM: "agents.startFrom",
-  TASKS_CREATE: "tasks.create",
+  PLANS_CREATE: "plans.create",
   MESSAGES_SEND: "messages.send",
   MESSAGES_QUEUE: "messages.queue",
   START_AGENT: "web/startAgent",
