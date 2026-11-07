@@ -591,7 +591,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
       }),
   );
   it.effect(
-    "a resend the runtime refused partway stops there: the lines it took go to the end of the transcript, and the refused line stands where it was, still lost, for the next resend",
+    "a resend the runtime refused partway stops there: the lines it took go to the end of the transcript, and the refused line stands where it was, still lost, for the next resend, even once the turn that took the first fails too",
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation(CONVERSATION_KIND.AGENT);
@@ -638,6 +638,25 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         assert.ok(Result.isSuccess(again));
         assert.deepEqual(again.success, { taken: [], stopped: true });
         assert.deepEqual(handed, [sentLineId("first"), sentLineId("second"), sentLineId("second")]);
+
+        // The line taken opens a turn of its own, which fails too, as a launch can again.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const retryTurn = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId: retryTurn,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: retryTurn,
+        });
+        yield* writer.takeAwaitingLine(target, {
+          clientId: sentLineId("first"),
+          turnId: retryTurn,
+        });
+        yield* settleRunnerLostTurns(writer, target.conversationId, 3000, "the sandbox failed");
+        handed.length = 0;
+        const afterFailing = yield* writer.resendLostLines(target, takesFirstOnly);
+
+        assert.ok(Result.isSuccess(afterFailing));
+        assert.deepEqual(handed, [sentLineId("second")]);
       }),
   );
 });

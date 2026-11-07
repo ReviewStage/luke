@@ -417,17 +417,21 @@ function signInCard(container: ParentNode): HTMLElement | null {
   return container.querySelector<HTMLElement>(".agent-end .ui-banner");
 }
 
-test("a launch its Mac's GitHub sign-in could not start ends on a card naming the Mac and the repository, whose Copy copies the sign-in command and whose Retry sends one line of the developer's own however often pressed", async () => {
+test("a launch its Mac's GitHub sign-in could not start ends on a card naming the Mac and the repository, whose Copy copies the sign-in command and whose Retry asks the service to send again once however often pressed, writing no line of its own", async () => {
   const copied: string[] = [];
   const sent: string[] = [];
+  const retried: string[] = [];
   const tab = await drawnTab({
     ...SIGN_IN_REFUSED,
     repository: "acme/web",
     copied,
-    // Note that the line is never answered, so it stays going, as a launch that takes its time does.
     onMessage: (text) => {
       sent.push(text);
       return new Promise(() => undefined);
+    },
+    onRetry: (words) => {
+      retried.push(words);
+      return Promise.resolve(true);
     },
   });
   const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
@@ -451,9 +455,10 @@ test("a launch its Mac's GitHub sign-in could not start ends on a card naming th
     retry.click();
   });
   await settle();
-  assert.deepEqual(sent, ["Try again"]);
-  assert.equal(tab.lines("Try again").length, 1);
-  assert.equal(signInCard(tab.container), null);
+  assert.deepEqual(retried, ["Try again"]);
+  assert.deepEqual(sent, []);
+  assert.equal(tab.lines("Try again").length, 0);
+  assert.equal(retry.disabled, true, "a Retry the service took is not offered again");
 });
 
 test("the sign-in card's Move to cloud continues the agent in the cloud while Bring your own host is on, and is left out with it off, where an unknown Mac and repository are named as such", async () => {

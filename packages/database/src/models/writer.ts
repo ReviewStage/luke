@@ -2110,8 +2110,8 @@ const takenLater = alias(messages, "taken_later");
  * failed turn never took, oldest first: user rows no turn owns and no
  * hand-over withdrew, written before the newest turn was queued where that
  * turn failed and not for its session's end, which a new agent mends, and
- * past every line a turn took, so a line some turn took without the store
- * hearing it is never handed again. A line a turn received under another row
+ * past every line an earlier turn took, so a line some turn took without the
+ * store hearing it is never handed again. A line a turn received under another row
  * (`noReceiptOfLine`) and a line typed into a call are left out, as the take
  * leaves them out.
  */
@@ -2176,6 +2176,8 @@ const findLostLines = SqlSchema.findAll({
                     eq(takenLater.conversationId, messages.conversationId),
                     eq(takenLater.role, MESSAGE_ROLE.USER),
                     isNotNull(takenLater.turnId),
+                    // Note that a line the failed turn itself took counts for nothing, because a resent line moves past the ones still lost.
+                    sql`${takenLater.turnId} <> ${turns.id}`,
                     gt(takenLater.seq, messages.seq),
                   ),
                 ),

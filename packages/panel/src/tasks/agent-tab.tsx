@@ -2634,6 +2634,7 @@ function AgentTabView({
   counts,
   delegationStarts,
   onStop,
+  onRetry,
   onUnarchive,
   onOpenSubagent,
   onOpenTarget,
@@ -2684,6 +2685,8 @@ function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<boolean>;
+  /** A failed launch's Retry on the GitHub sign-in card: sends again the lines it lost, answering whether the service took it. */
+  onRetry: () => Promise<boolean>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
@@ -2786,7 +2789,7 @@ function AgentTabView({
   // lands awaiting its turn moves the page and not the list the summary is read from.
   const pageRuns = transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus);
   const working = agentStillWriting(agent.status) || pageRuns || lineGoing;
-  // Note that the sign-in card's Retry is a line of the developer's own, so the card is offered only where the box stands to send it.
+  // Note that the sign-in card's Retry is offered only where the box stands, as Try again is.
   const signIn: GitHubSignInDoors | undefined =
     pilotNote === undefined &&
     onUnarchive === undefined &&
@@ -2795,7 +2798,7 @@ function AgentTabView({
       ? {
           host: agent.mac?.name,
           repository: published?.repository ?? undefined,
-          onRetry: () => composer.sendWords(RETRY_LINE),
+          onRetry,
           onMoveToCloud,
           copy: copyThroughShell,
         }
@@ -3426,6 +3429,7 @@ function AgentTabBody({
         counts={shown}
         delegationStarts={shown ? transcript.delegations : undefined}
         onStop={() => control.onStop(agent.id)}
+        onRetry={() => control.onRetry(agent.id, RETRY_LINE)}
         onUnarchive={unarchive}
         onOpenSubagent={onOpenSubagent}
         onOpenTarget={onOpenTarget}
