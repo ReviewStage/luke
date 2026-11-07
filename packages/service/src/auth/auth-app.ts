@@ -4,11 +4,8 @@ import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { catchAllButInterrupt, causeKind } from "@repo/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import {
-  type AccountDeletionServices,
-  withAccountDeletionServices,
-} from "../accounts/account-deletion-hooks.js";
 import { readAccountPerson } from "../accounts/account-person.js";
+import { type DeletionServices, withDeletionServices } from "../accounts/deletion-hooks.js";
 import { inviteAcceptReported, signUpReported } from "../accounts/onboarding-events.js";
 import { WelcomeMail } from "../accounts/welcome-mail.js";
 import { SERVER_EVENT } from "../events/server-events.js";
@@ -169,14 +166,14 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | AccountDeletionServices
+  HttpServerRequest.HttpServerRequest | DatabaseServices | DeletionServices
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  // Note that the request's own services are handed to Better Auth's deletion hooks, which it awaits as promises (`account-deletion-hooks.ts`).
-  const services = yield* Effect.context<AccountDeletionServices>();
+  // Note that the request's own services are handed to Better Auth's deletion hooks, which it awaits as promises (`deletion-hooks.ts`).
+  const services = yield* Effect.context<DeletionServices>();
   const { answer, counts } = yield* Effect.promise(() =>
-    withAccountDeletionServices(services, () => withAuthCounts(() => handle(request))),
+    withDeletionServices(services, () => withAuthCounts(() => handle(request))),
   );
   // Note that the counts run once Better Auth has answered, which is once what they count has committed.
   yield* Effect.forEach(counts, (count) => workspaceOfSignUp(count, workspaces), {
@@ -200,7 +197,7 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
 export function authApp(
   handle: WebRequestHandler,
   workspaces: WorkspaceSeams,
-): WebRoutes<DatabaseServices | AccountDeletionServices> {
+): WebRoutes<DatabaseServices | DeletionServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, AUTH_PATH_SET, authPassthrough(handle, workspaces)),
     hostedNotFoundRoute,

@@ -7,7 +7,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { admin, bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
-import { accountDeletionSteps } from "../accounts/account-deletion-hooks.js";
+import { accountDeletionSteps, workspaceDeletionSteps } from "../accounts/deletion-hooks.js";
 import { authDatabaseHooks, authOrganizationHooks } from "./auth-counts.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import {
@@ -37,6 +37,7 @@ import {
   oauthClientRegistration,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
+  workspaceDeletion,
 } from "./auth-policy.js";
 import { CLI_OAUTH_CLIENT, DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 import { supportAccess } from "./support-access.js";
@@ -137,7 +138,10 @@ export const auth = betterAuth({
     // package's own Node transport, with its host resolved once and pinned.
     cimd(memberMcpClientDiscovery(fetchClientMetadataResource)),
     // A workspace is an organization: its members plan together.
-    organization({ ...ORGANIZATION_OPTIONS, organizationHooks: authOrganizationHooks }),
+    organization({
+      ...ORGANIZATION_OPTIONS,
+      organizationHooks: { ...authOrganizationHooks, ...workspaceDeletion(workspaceDeletionSteps) },
+    }),
     // The Mac's own session beside its OAuth token, so the organization
     // endpoints that take a session answer it: minted from the signed-in
     // browser by the Electron plugin, carried as a signed bearer token.

@@ -22,18 +22,16 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { WireValueSchema } from "@repo/wire";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/sql";
+import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
-import { agentTable } from "../schemas/agent.js";
-import { member, user } from "../schemas/auth.js";
+import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
-import { stampConversationsDeleted } from "./soft-delete.js";
 
 /**
  * What the account group reads and writes of an account: what its erasure
@@ -98,32 +96,16 @@ export type AccountSeamEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServic
  * What an account's deletion keeps of its own beside Better Auth's
  * `deleteUser` (`auth-policy.ts`'s `accountDeletion`), which deletes the user
  * row and the workspaces the account is the only member of, every dependent
- * row cascading with them. Two things outlast those rows, so they are read
- * before the delete and settled after it: the eve session each of the
- * account's conversations ran in, a deleted task's too, which is queued for
- * its sandbox's deletion since nothing after the delete names it; and the
- * conversations of the agents in the account's workspaces, which name the
- * account that ran them rather than the workspace, so a deleted workspace's
- * agents of other members leave theirs behind, stamped deleted for the purge
- * as a deleted task's are (`soft-delete.ts`).
+ * row cascading with them. The runtime session each of the account's
+ * conversations ran in, a deleted task's too, outlasts those rows, so it is
+ * read before the delete and queued for its sandbox's deletion after it,
+ * since nothing after the delete names it. A deleted workspace's agents'
+ * conversations are its own delete's to stamp (`auth-policy.ts`'s
+ * `workspaceDeletion`).
  */
 export interface AccountDeletionReach {
-  readonly conversationIds: readonly string[];
   readonly sessionIds: readonly string[];
 }
-
-const findWorkspaceConversations = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: Schema.Struct({ conversationId: Schema.String }),
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ conversationId: agentTable.conversationId })
-        .from(agentTable)
-        .innerJoin(member, eq(member.organizationId, agentTable.organizationId))
-        .where(eq(member.userId, userId)),
-    ),
-});
 
 const findAccountSessions = SqlSchema.findAll({
   Request: Schema.String,
@@ -137,53 +119,20 @@ const findAccountSessions = SqlSchema.findAll({
     ),
 });
 
-const findUnnamedConversations = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: (conversationIds) =>
-    Database.use((db) =>
-      db
-        .select({ id: conversations.id })
-        .from(conversations)
-        .leftJoin(agentTable, eq(agentTable.conversationId, conversations.id))
-        .where(and(inArray(conversations.id, conversationIds), isNull(agentTable.id))),
-    ),
-});
-
 /** What the account's deletion settles once Better Auth has deleted it, read while its rows stand. */
 export function readAccountDeletionReach(
   userId: string,
 ): Effect.Effect<AccountDeletionReach, StoreFailure, DatabaseServices> {
-  return Effect.gen(function* () {
-    const agents = yield* findWorkspaceConversations(userId);
-    const sessions = yield* findAccountSessions(userId);
-    return {
-      conversationIds: agents.map(({ conversationId }) => conversationId),
-      sessionIds: sessionsOf(sessions),
-    };
-  });
+  return Effect.map(findAccountSessions(userId), (sessions) => ({
+    sessionIds: sessionsOf(sessions),
+  }));
 }
 
-/**
- * Settles what the deletion read: each conversation no agent names any more,
- * its workspace gone, is stamped deleted, and each session is queued for its
- * sandbox's deletion. A conversation whose agent still stands, in a
- * workspace others kept, is left as it is.
- */
+/** Settles what the deletion read: each session is queued for its sandbox's deletion. */
 export function settleAccountDeletion(
   reach: AccountDeletionReach,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        if (reach.conversationIds.length > 0) {
-          const unnamed = yield* findUnnamedConversations(reach.conversationIds);
-          yield* stampConversationsDeleted(unnamed.map(({ id }) => id));
-        }
-        yield* queueSessionSandboxes(reach.sessionIds);
-      }),
-    ),
-  );
+  return queueSessionSandboxes(reach.sessionIds);
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */

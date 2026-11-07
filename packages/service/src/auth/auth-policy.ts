@@ -330,7 +330,8 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
  * and `/organization/delete` are shut (`DISABLED_AUTH_PATHS`), and the
  * server calls `auth.api` instead. A workspace is created by a server-only
  * call that names a `userId` and carries no session, and deleted only with
- * the account of its last member (`accountDeletion`).
+ * the account of its last member (`accountDeletion`), its own steps run by
+ * the plugin's hooks (`workspaceDeletion`).
  *
  * An invitation's id is the accept link the service emails the invitee and
  * an owner may also copy and share by hand, so it can travel outside the
@@ -360,7 +361,7 @@ export interface OrganizationDeletionApi {
   }): Promise<unknown>;
 }
 
-/** What the account's deletion does of its own around Better Auth's, as its hooks await it (`accounts/account-deletion-hooks.ts`). */
+/** What the account's deletion does of its own around Better Auth's, as its hooks await it (`accounts/deletion-hooks.ts`). */
 export interface AccountDeletionSteps<Pending> {
   readonly before: (userId: string) => Promise<Pending>;
   readonly after: (userId: string, pending: Pending) => Promise<void>;
@@ -407,6 +408,34 @@ export function accountDeletion<Pending>(
     afterDelete: async (user: { id: string }, request?: Request) => {
       const read = request === undefined ? undefined : pending.get(request);
       if (read !== undefined) await steps.after(user.id, read);
+    },
+  };
+}
+
+/** What a workspace's deletion does of its own around Better Auth's, as its hooks await it (`accounts/deletion-hooks.ts`). */
+export interface WorkspaceDeletionSteps<Pending> {
+  readonly before: (organizationId: string) => Promise<Pending>;
+  readonly after: (pending: Pending) => Promise<void>;
+}
+
+/**
+ * The organization plugin's delete hooks, which every workspace's deletion
+ * runs whoever asked for it: its `beforeDeleteOrganization` runs the
+ * deletion's own steps while the workspace's rows still stand, and its
+ * `afterDeleteOrganization` settles what they read once the plugin has
+ * deleted the workspace. What was read is kept by the workspace's id
+ * between the two, since the plugin hands them nothing else in common.
+ */
+export function workspaceDeletion<Pending>(steps: WorkspaceDeletionSteps<Pending>) {
+  const pending = new Map<string, Pending>();
+  return {
+    beforeDeleteOrganization: async ({ organization }: { organization: { id: string } }) => {
+      pending.set(organization.id, await steps.before(organization.id));
+    },
+    afterDeleteOrganization: async ({ organization }: { organization: { id: string } }) => {
+      const read = pending.get(organization.id);
+      pending.delete(organization.id);
+      if (read !== undefined) await steps.after(read);
     },
   };
 }

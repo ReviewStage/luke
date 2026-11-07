@@ -1,5 +1,5 @@
 /**
- * account-deletion.ts -- what an account's deletion does of its own around Better Auth's `deleteUser`, which its hooks run (`account-deletion-hooks.ts`).
+ * account-deletion.ts -- what an account's deletion does of its own around Better Auth's `deleteUser`, which its hooks run (`deletion-hooks.ts`).
  *
  * Better Auth deletes the account's sessions, sign-in accounts, and user row,
  * every dependent row cascading, and before it the workspaces the account is
@@ -11,11 +11,12 @@
  * on; the analytics person is asked to be erased, since nothing after the
  * delete would still name it; and what the delete leaves to settle is read,
  * the integration grants among it, since an added account's subject is no id
- * the account still names after it. After the delete: the deleted
- * workspaces' agents' conversations are stamped deleted and the account's
- * sandboxes queued (`account-store.ts`), a settling that fails logged since
- * the account is already gone, and every grant is revoked at Vercel Connect,
- * as a Disconnect revokes one, a revoke that fails logged by its word.
+ * the account still names after it. After the delete: the account's
+ * sandboxes are queued (`account-store.ts`), a settling that fails logged
+ * since the account is already gone, and every grant is revoked at Vercel
+ * Connect, as a Disconnect revokes one, a revoke that fails logged by its
+ * word. A deleted workspace's agents' conversations are stamped by its own
+ * delete's hooks (`workspace-deletion.ts`).
  */
 
 import {
@@ -83,10 +84,7 @@ export const afterAccountDeletion = /* @__PURE__ */ Effect.fn("web/afterAccountD
   function* (userId: string, pending: AccountDeletionPending) {
     yield* settleAccountDeletion(pending.reach).pipe(
       Effect.catch((failure) =>
-        Effect.logError(
-          "The account's deletion left its conversations or sandboxes unsettled",
-          failure,
-        ),
+        Effect.logError("The account's deletion left its sandboxes unqueued", failure),
       ),
     );
     yield* revokeIntegrationGrants(userId, pending.grants);

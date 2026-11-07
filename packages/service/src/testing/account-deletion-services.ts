@@ -2,7 +2,7 @@
  * account-deletion-services.ts -- the services an account's deletion hooks run on, for a test of the auth route.
  *
  * The auth route hands each request's services to Better Auth's deletion
- * hooks (`accounts/account-deletion-hooks.ts`), so a test that mounts the
+ * hooks (`accounts/deletion-hooks.ts`), so a test that mounts the
  * route provides them: an environment with no analytics key, so no person is
  * asked to be erased; a Connect that revokes any grant; and no network, so
  * nothing leaves the test.
@@ -24,6 +24,8 @@ export const accountDeletionTestServices = Layer.mergeAll(
     cronSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
+    titleAnthropicApiKey: undefined,
+    previewApiKeys: {},
   }),
   integrationConnectOf(() => ({ ...CONNECTOR_ASKED_NOTHING, revoke: () => Effect.void })),
   noNetwork,

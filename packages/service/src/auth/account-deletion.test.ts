@@ -18,7 +18,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { accountDeletionSteps } from "../accounts/account-deletion-hooks.js";
+import { accountDeletionSteps, workspaceDeletionSteps } from "../accounts/deletion-hooks.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { accountDeletionTestServices } from "../testing/account-deletion-services.js";
 import { authApp } from "./auth-app.js";
@@ -28,6 +28,7 @@ import {
   DISABLED_AUTH_PATHS,
   ORGANIZATION_OPTIONS,
   type OrganizationDeletionApi,
+  workspaceDeletion,
 } from "./auth-policy.js";
 
 /**
@@ -60,7 +61,12 @@ const openAuthRoute = (client: Awaited<ReturnType<typeof openMigratedPglite>>) =
       user: {
         deleteUser: accountDeletion((): OrganizationDeletionApi => auth.api, accountDeletionSteps),
       },
-      plugins: [organization(ORGANIZATION_OPTIONS)],
+      plugins: [
+        organization({
+          ...ORGANIZATION_OPTIONS,
+          organizationHooks: workspaceDeletion(workspaceDeletionSteps),
+        }),
+      ],
     });
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),

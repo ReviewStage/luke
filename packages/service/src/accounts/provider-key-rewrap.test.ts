@@ -190,9 +190,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
         const owner = `user-${randomUUID()}`;
-        yield* db
-          .insert(user)
-          .values({ id: owner, name: "Test User", email: `${owner}@app.test` });
+        yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@app.test` });
         yield* storeKey(
           ring(KEK.ONE),
           owner,
