@@ -49,9 +49,12 @@ function routedHere(link: ShownLink | undefined): link is ReadLink {
   return link !== undefined && "workspace" in link && opensAtItsRoute(link);
 }
 
-/** The address a link is written at now, its path, query, and fragment, as `linkOf` writes it. */
+/** The address a link is written at now, its path, query, and fragment, as `linkOf` writes it, every other key the tab's own query carries kept after its own. */
 function addressOfLink(link: ReadLink): string {
   const url = new URL(linkOf(link.place, link.workspace));
+  for (const [key, value] of new URLSearchParams(location.search)) {
+    if (!url.searchParams.has(key)) url.searchParams.append(key, value);
+  }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

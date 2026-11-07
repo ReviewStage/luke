@@ -41,3 +41,11 @@ test("a tab opened at a link place in an older spelling stands on its link writt
   assert.equal(addressBar(), "/acme/task/7/page/page-1");
   assert.equal(window.history.length, entries, "the older link is replaced, not stepped past");
 });
+
+test("a tab opened at a link place keeps every other key its query carries as it stands on its link written now", () => {
+  openAt(`/acme/plan/${TASK_ID}?ref=mail#Rollout`);
+
+  installPanelDoors();
+
+  assert.equal(addressBar(), `/acme/task/${TASK_ID}?ref=mail#rollout`);
+});
