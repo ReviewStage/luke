@@ -3,13 +3,14 @@
 import assert from "node:assert/strict";
 import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "@repo/features/workspace-tools-wire";
+import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handBeats, handHostReads } from "../testing/app-state.js";
+import { handBeats, handHostReads, handSettings, stateWith } from "../testing/app-state.js";
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { AgentPlace } from "./agent-place.js";
@@ -56,14 +57,22 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's box drawn with `agent` while the beats stand as `ages` says, each device's age, or failed where none is given, and what the box then says. */
+/** An agent's box drawn with `agent` while the beats stand as `ages` says, each device's age, or failed where none is given, and what the box then says; on a Mac whose Settings let no agent run commands where `never`. */
 async function placeOf(
   agent: Pick<AgentSummary, "mac" | "machine">,
   ages: Readonly<Record<string, number>> | undefined,
   runOnMac?: RunOnMacStanding,
+  never = false,
 ): Promise<string> {
   clear();
   fakeActPort({});
+  if (never) {
+    const { run } = stateWith({}, {});
+    handSettings(
+      { macCommands: MAC_COMMAND_MODE.NEVER },
+      { run: { ...run, capabilities: [HOST_CAPABILITY.MAC_COMMANDS] } },
+    );
+  }
   handBeats(ages);
   if (runOnMac !== undefined)
     handHostReads({ workspaceTools: { [AGENT_ID]: { rows: { runOnMac } } } });
@@ -126,8 +135,11 @@ test("an agent in the cloud says Cloud, whatever the beats say", async () => {
 });
 
 /** The `run_on_mac` row the cloud chip's card ends with, once rested on: whose its person chip names and what its dot says. */
-async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (string | null)[]> {
-  await placeOf({}, undefined, runOnMac);
+async function runOnMacRowOf(
+  runOnMac: RunOnMacStanding,
+  never = false,
+): Promise<readonly (string | null)[]> {
+  await placeOf({}, undefined, runOnMac, never);
   restOn(document.querySelector(".ui-chip") ?? assert.fail("the chip stands"));
   await settle();
   const row =
@@ -155,6 +167,18 @@ test("a cloud agent's card names a teammate's Mac, offline where none of theirs 
       reason: RUN_ON_MAC_OFF.MAC_AWAY,
       owner: { userId: "user-charles", name: "Charles Pan" },
     }),
+    ["Charles Pan", "Offline"],
+  );
+});
+
+test("a Mac set to let no agent run commands is off in Settings on the reader's own Mac alone, a teammate's offline", async () => {
+  const away = { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY } as const;
+  assert.deepEqual(
+    await runOnMacRowOf({ ...away, owner: { userId: READER, name: "Ada Lovelace" } }, true),
+    ["You", "Off in Settings"],
+  );
+  assert.deepEqual(
+    await runOnMacRowOf({ ...away, owner: { userId: "user-charles", name: "Charles Pan" } }, true),
     ["Charles Pan", "Offline"],
   );
 });
