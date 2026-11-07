@@ -279,6 +279,9 @@ async function mount(
     },
     /** Stands the window again from what it stored, as a relaunch does, the card open. */
     relaunch: async () => {
+      act(() => {
+        window.dispatchEvent(new Event("pagehide"));
+      });
       act(() => root.unmount());
       root = createRoot(container);
       roots.push(root);
