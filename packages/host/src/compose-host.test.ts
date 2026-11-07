@@ -57,12 +57,13 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
+/** What a standing host answers for an agent's terminals and the client's bootstrap, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
-  return { concerns, terminals };
+  const bootstrap = yield* gateway.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP, {});
+  return { concerns, terminals, bootstrapped: bootstrap.ok };
 });
 
 describe("the host's platform concerns", () => {
@@ -135,6 +136,8 @@ describe("the host's platform concerns", () => {
         ok: false,
         error: { code: GATEWAY_ERROR.REFUSED, message: "signed out" },
       });
+      // The host answers the bootstrap itself, folded in with the composers' methods.
+      assert.equal(asked.bootstrapped, true);
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
