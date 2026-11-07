@@ -1457,7 +1457,7 @@ export function useTasksTab(input: {
   /** Begins a link's read of the service, answering whether it is still the window's to act on (`places/link-reads.ts`). */
   linkReads: LinkRead;
   /** Writes the step a link opens on a task's own place before the window stands there, as one move (`navigation-history.ts`'s `onVisitTask`). */
-  visitTask: (at: TaskAt, step: LinkStep) => void;
+  visitTask: (at: TaskAt, step: LinkStep) => boolean;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -2336,8 +2336,8 @@ export function useTasksTab(input: {
     if (standing) return false;
     // Note that a link's door names what it opens there, so its step is written at once, at its address, with it.
     const step = linking.current;
-    if (step !== undefined && step.taskId === toward) input.visitTask(at, step);
-    else input.taskView.onOpen(at);
+    const visited = step !== undefined && step.taskId === toward && input.visitTask(at, step);
+    if (!visited) input.taskView.onOpen(at);
     return true;
   };
   const standTask = useRef(standTaskPlace);

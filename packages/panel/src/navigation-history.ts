@@ -721,9 +721,11 @@ export interface TaskVisits {
    * Writes the step a link opens on the own place of a task not standing, at
    * `at`, before the window stands there, as one move: at the task's address,
    * or, in a narrow room, at the link of the side panel's tab it opens, with
-   * what it opens in its typed history state.
+   * what it opens in its typed history state. Answers whether it wrote it:
+   * a window holding no step yet, as a link said as the page loads finds it,
+   * writes none, and the door goes to the task as any other door does.
    */
-  onVisitTask: (at: TaskAt, step: LinkStep) => void;
+  onVisitTask: (at: TaskAt, step: LinkStep) => boolean;
 }
 
 /** The window's history with the narrow screens' ways back to their lists, which the root hands the screens. */
@@ -1108,8 +1110,8 @@ function useHistory(input: {
   away: AwayStep | undefined;
   /** Goes back to that step, answering whether one stood there to go to. */
   stepAway: () => boolean;
-  /** Writes the window's step on `to` before it stands there, as its watch would write it once it does (`visitWrite`). */
-  visit: (to: Place) => void;
+  /** Writes the window's step on `to` before it stands there, as its watch would write it once it does (`visitWrite`), answering whether the window held a step to write it after; it writes none where it holds none yet. */
+  visit: (to: Place) => boolean;
 } {
   const { held, place, address, reachable, named, guard, opened, onTaskRoute } = input;
   // Note that the presses read the trail as they land, because a
@@ -1299,7 +1301,9 @@ function useHistory(input: {
 
   // Note that a link's step is written as the window would write it on arriving, read from the presses and opens heard
   // since the last write, so the window arriving there finds it standing and writes nothing more.
-  const visit = (to: Place) => {
+  const visit = (to: Place): boolean => {
+    // Note that a window that has written no step yet, as a link said as the page loads finds it, leaves the loaded entry to its own first write.
+    if (standingOf(held.trail) === undefined) return false;
     const pressed = presses.current !== pressesWritten.current;
     const opens = latest.current.opened !== openedWritten.current;
     const write = visitWrite(
@@ -1312,6 +1316,7 @@ function useHistory(input: {
       latest.current.onTaskRoute,
     );
     if (write !== undefined) own(() => recordTrail(held, write));
+    return true;
   };
 
   // A step back to `to`'s step only, answering whether it was the one behind.
@@ -1828,8 +1833,7 @@ export function useWindowHistory(input: {
         narrow && side?.link !== undefined ? withTaskId(side.link, at.task) : undefined;
       const place = panelLink ?? { kind: LINK_PLACE.TASK, planId: at.task };
       const address = addressOf({ workspace: at.workspace, place });
-      setLinked({ taskId: step.taskId, address });
-      visit(
+      const wrote = visit(
         taskPlace(address, {
           taskId: step.taskId,
           column: step.column,
@@ -1837,6 +1841,8 @@ export function useWindowHistory(input: {
           side: narrow ? undefined : side?.tab,
         }),
       );
+      if (wrote) setLinked({ taskId: step.taskId, address });
+      return wrote;
     },
     lists,
   });

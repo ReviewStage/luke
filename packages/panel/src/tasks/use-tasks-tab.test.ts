@@ -435,8 +435,7 @@ function mount(
       arrivals: usePlaceArrivals(),
       linkReads: useLinkReads(),
       // A link's step is written by the window's history beside the tab, where one stands, else the task's place opens by its own door.
-      visitTask: (at, step) =>
-        windowHistory === undefined ? taskView.onOpen(at) : windowHistory.onVisitTask(at, step),
+      visitTask: (at, step) => windowHistory?.onVisitTask(at, step) ?? false,
     });
     // A link place the router lands on is read by its route and opened as its link is, as the window's root has it.
     useLinkPlaceLandings(openLanded);

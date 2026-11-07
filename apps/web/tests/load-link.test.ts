@@ -2,11 +2,13 @@
 import assert from "node:assert/strict";
 import type { ShownLink } from "@repo/features/link-grammar";
 import { RUN_PROFILE } from "@repo/host/app-state";
+import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { createBrowserHistory } from "@tanstack/react-router";
 import { afterEach, test } from "vitest";
 import { withLoadLink } from "../src/app/load-link";
 import {
   addressBar,
+  drawPanel,
   fixtureBridge,
   installPanelDoors,
   openAt,
@@ -80,4 +82,15 @@ test("a tab opened at an agent's own address says it as a link, which finds wher
     place: { kind: "agent", agentId: AGENT_ID },
   });
   assert.equal(saidAt(`/acme/agent/${AGENT_ID}/changes`), undefined);
+});
+
+test("a tab opened at the address of an agent on a task keeps that entry behind the task's step its link writes", async () => {
+  openAt(`/personal/agent/${FIXTURE_IDS.AGENT}`);
+  const entries = window.history.length;
+
+  installPanelDoors(RUN_PROFILE.AGENT_PAGE);
+  await drawPanel();
+
+  assert.equal(addressBar(), "/personal/task/42");
+  assert.equal(window.history.length, entries + 1, "the loaded entry stands behind the task's");
 });

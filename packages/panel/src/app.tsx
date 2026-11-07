@@ -473,7 +473,7 @@ function AppWindow(): React.JSX.Element {
   const arrivals = usePlaceArrivals();
   const linkReads = useLinkReads();
   // The history's door for a link's step on a task's own place, made after the tab it is handed to, read as a link opens.
-  const visitTask = useRef<TaskVisits["onVisitTask"]>((at) => taskView.onOpen(at));
+  const visitTask = useRef<TaskVisits["onVisitTask"]>(() => false);
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
