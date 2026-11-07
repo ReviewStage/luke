@@ -79,6 +79,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { useLinkReads } from "./places/link-reads.js";
 import { usePlaceArrivals, usePlaceBinding } from "./places/place-binding.js";
 import { ROUTED_PLACE } from "./places/routed-places.js";
 import { forgetAccountReads } from "./query-keys.js";
@@ -468,6 +469,7 @@ function AppWindow(): React.JSX.Element {
   });
   const taskView = useTaskRoute();
   const arrivals = usePlaceArrivals();
+  const linkReads = useLinkReads();
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -498,6 +500,7 @@ function AppWindow(): React.JSX.Element {
     taskView,
     place: routedHere?.place,
     arrivals,
+    linkReads,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =

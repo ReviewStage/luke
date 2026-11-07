@@ -69,6 +69,7 @@ import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
 import { useAgentRoute } from "../agent-route.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
 import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
+import { useCopyLink } from "../links-at-hand.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -76,6 +77,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
+import { useLinkReads } from "../places/link-reads.js";
 import { PLACE_BINDING, usePlaceArrivals, usePlaceBinding } from "../places/place-binding.js";
 import { useWindowPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -316,9 +318,11 @@ function mount(
     inbox: InboxRoute;
     home: HomeRoute;
   }) {
+    // The step's address is the link the window's Copy link places it at, as the window's root hands it.
+    const placed = useCopyLink(tasks, undefined, true, room).placed;
     windowHistory = useWindowHistory({
       known: true,
-      link: undefined,
+      link: placed,
       routed: undefined,
       settingsList: undefined,
       onSettingsList: () => undefined,
@@ -416,6 +420,7 @@ function mount(
       taskView: useTaskRoute(),
       place: here.place,
       arrivals: usePlaceArrivals(),
+      linkReads: useLinkReads(),
     });
     // The place standing and the task bound follow each other, as the window's root keeps them; with no history beside
     // the tab, the task bound's own place stands by its own door rather than as its step is written.
@@ -460,6 +465,8 @@ function mount(
   return {
     /** Where the router's history stands. */
     at: () => held.history.location.pathname,
+    /** How many entries the router's history holds. */
+    entries: () => held.history.length,
     told,
     agentActs,
     shownAgents,
@@ -473,6 +480,8 @@ function mount(
     },
     /** The router arriving at `address`, as a browser's own move lands it. */
     arrive: (address: string) => act(() => held.history.push(address)),
+    /** The router taking `address` in the step's place, as a door that replaces moves it. */
+    replace: (address: string) => act(() => held.history.replace(address)),
     /** The window's history, where the tab was mounted with one. */
     history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
@@ -1088,6 +1097,30 @@ test("in a narrow room Back to a task opens it as it stood, its panel open on th
   assert.deepEqual(panelOf(tab), { open: true, tab: FILE });
 });
 
+test("in a narrow room whose panel shows a worker of the open task, a door to the open task moves nothing", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      tasks: { ...withAgents([RUNNING_AGENT]), workspaces: LISTING.workspaces },
+      room: SHELL_ROOM.NARROW,
+      history: true,
+    },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  act(() =>
+    tab.control().sidePanel.onShow(TASK.id, subagentTab("toolu_1", { agent: AGENT_ID, task: "" })),
+  );
+  await settle();
+  const before = { at: tab.at(), entries: tab.entries() };
+
+  act(() => tab.control().onStandTask());
+  await settle();
+
+  assert.match(before.at, /\/worker\/toolu_1$/u);
+  assert.deepEqual({ at: tab.at(), entries: tab.entries() }, before);
+});
+
 test("in a narrow room a task with no page behind it leaves for Home, not the Board, and Back opens it again", async () => {
   const tab = mount(
     { shown: true, tasks: LISTING, room: SHELL_ROOM.NARROW, history: true },
@@ -1645,6 +1678,93 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
     { taskId: alerts, itemAgentId: AGENT_ID, itemId: unknownId, opened: true },
     "a link to the item standing missing asks the service again",
   );
+});
+
+test.each([
+  [
+    "an Inbox item named by its id alone",
+    ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+    { agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id },
+    { kind: LINK_PLACE.INBOX_ITEM, itemId: "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6" },
+  ],
+  [
+    "a task named by its number",
+    ACT_KIND.TASKS_FIND,
+    { taskId: "alerts" },
+    { kind: LINK_PLACE.TASK, planId: "42" },
+  ],
+  [
+    "an agent named alone",
+    ACT_KIND.AGENTS_PAGE,
+    {
+      agent: {
+        ...RUNNING_AGENT,
+        id: OTHER_TASK_ID,
+        planId: "alerts",
+        automationId: null,
+        workspaceId: ACME.id,
+        repository: null,
+      },
+    },
+    { kind: LINK_PLACE.AGENT, agentId: OTHER_TASK_ID },
+  ],
+] as const)(
+  "a link to %s whose read lands after an Inbox row was chosen leaves the row chosen",
+  async (_read, kind, answer, place: LinkPlace) => {
+    const answers: Array<() => void> = [];
+    const tab = mount(
+      { shown: true, tasks: TWO_WORKSPACES },
+      {
+        [kind]: () => new Promise((resolve) => answers.push(() => resolve(answer))),
+        [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      },
+    );
+    await settle();
+    act(() => tab.control().inboxView.onOpen());
+    act(() => tab.control().onOpenLink({ workspace: "acme", place }));
+    const row = { taskId: "notes", itemId: "thread", opened: true } as const;
+    act(() => tab.control().inboxView.onChoose(row));
+    await act(async () => {
+      await vi.waitFor(() => assert.ok(answers.length > 0));
+      answers[0]?.();
+    });
+    await settle();
+
+    assert.equal(tab.control().inboxView.open, true);
+    assert.deepEqual(tab.control().inboxView.chosen, row);
+  },
+);
+
+test("a link to an Inbox item by its id alone whose read lands after the window replaced its step with another page leaves that page standing", async () => {
+  const answers: Array<() => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    {
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () =>
+        new Promise((resolve) =>
+          answers.push(() =>
+            resolve({ agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id }),
+          ),
+        ),
+    },
+  );
+  await settle();
+  act(() => tab.control().inboxView.onOpen());
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6" },
+    }),
+  );
+  tab.replace("/personal/tasks");
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.();
+  });
+  await settle();
+
+  assert.equal(tab.at(), "/personal/tasks");
+  assert.equal(tab.control().inboxView.open, false);
 });
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {

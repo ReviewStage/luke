@@ -30,6 +30,7 @@ import {
   PERSON_AWAY,
   TASK_AWAY,
   UNKNOWN_WORKSPACE_AWAY,
+  UNMOVED_LINK_READS,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
 import { TasksPage } from "./tasks-page.js";
@@ -129,6 +130,7 @@ async function mount() {
       taskView: TASK_AWAY,
       place: undefined,
       arrivals: NO_ARRIVALS,
+      linkReads: UNMOVED_LINK_READS,
     });
     return createElement(TasksPage, {
       tasks: { ...control, onSelect: (taskId: string) => opened.push(taskId) },

@@ -32,6 +32,8 @@ export interface TaskRoute {
   readonly saved: string | undefined;
   /** Where it stands as the router's history stands at the call, since a door may move the window in the same turn as another. */
   readonly atNow: () => TaskAt | undefined;
+  /** The task the step saved in the entry standing at the call holds, as `saved` reads it. */
+  readonly savedNow: () => string | undefined;
   /** The address step of the workspace the window stands under at the call, whichever place stands. */
   readonly workspaceNow: () => string | undefined;
   /** Opens a task's own place at `at`, a visit after the step standing. */
@@ -61,6 +63,7 @@ export function useTaskRoute(): TaskRoute {
     if (routedPlaceOf(matches, access) !== ROUTED_PLACE.TASK) return undefined;
     return taskAtParams(placeParamsOf(matches));
   };
+  const savedNow = () => savedTaskOf(router.history.location);
   const workspaceNow = () =>
     placeParamsOf(router.matchRoutes(router.history.location.pathname)).workspace;
   const onOpen = (to: TaskAt) => {
@@ -70,5 +73,5 @@ export function useTaskRoute(): TaskRoute {
       params: { workspace: to.workspace, taskId: to.task },
     });
   };
-  return { at, saved, atNow, workspaceNow, onOpen };
+  return { at, saved, atNow, savedNow, workspaceNow, onOpen };
 }

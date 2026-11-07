@@ -483,12 +483,16 @@ export const TASK_AWAY: TaskRoute = {
   at: undefined,
   saved: undefined,
   atNow: () => undefined,
+  savedNow: () => undefined,
   workspaceNow: () => undefined,
   onOpen: ignore,
 };
 
 /** No arrival counted, for a tab drawn with no router, whose window never moves. */
 export const NO_ARRIVALS = (): number => 0;
+
+/** A link read that always stands, for a tab drawn with no router, whose window never moves. */
+export const UNMOVED_LINK_READS = (): (() => boolean) => () => true;
 
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
